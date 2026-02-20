@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { Usuario, UserRole, Permission } from '@/types';
-import { ROLE_PERMISSIONS, USUARIOS_PRUEBA, CREDENCIALES_PRUEBA } from '@/types';
+import { ROLE_PERMISSIONS } from '@/types';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   // Estado
@@ -35,95 +37,104 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'pricecontrol_auth';
-const USERS_STORAGE_KEY = 'pricecontrol_users';
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]); // Para gestión (solo admin)
 
   // Cargar sesión guardada al iniciar
   useEffect(() => {
-    const initAuth = () => {
-      try {
-        // Cargar usuarios
-        const savedUsers = localStorage.getItem(USERS_STORAGE_KEY);
-        if (savedUsers) {
-          setUsuarios(JSON.parse(savedUsers));
-        } else {
-          // Inicializar con usuarios de prueba
-          setUsuarios(USUARIOS_PRUEBA);
-          localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(USUARIOS_PRUEBA));
-        }
-
-        // Cargar sesión
-        const savedAuth = localStorage.getItem(STORAGE_KEY);
-        if (savedAuth) {
-          const parsed = JSON.parse(savedAuth);
-          if (parsed.usuario && parsed.expiresAt > Date.now()) {
-            setUsuario(parsed.usuario);
-          } else {
-            localStorage.removeItem(STORAGE_KEY);
-          }
-        }
-      } catch (error) {
-        console.error('Error inicializando auth:', error);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        fetchProfile(session.user.id, session.user.email!);
+      } else {
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    };
-    initAuth();
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        fetchProfile(session.user.id, session.user.email!);
+      } else {
+        setUsuario(null);
+        setIsLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Guardar usuarios cuando cambien
-  useEffect(() => {
-    if (usuarios.length > 0) {
-      localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(usuarios));
+  const fetchProfile = async (userId: string, email: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
+      }
+
+      if (data) {
+        setUsuario({
+          id: data.id,
+          email: data.email,
+          nombre: data.nombre,
+          rol: data.rol as UserRole,
+          activo: data.activo,
+          ultimoAcceso: data.ultimo_acceso,
+          createdAt: data.created_at
+        });
+      } else {
+        // Create profile if missing (first login with this email if handled externally, or weird state)
+        // For now, assume trigger handles it or we manually create if using just email auth
+        // But handle_new_user trigger in SQL handles insertion. 
+        // If trigger failed or slow, we might not see it yet.
+        // Fallback: use metadata or temporary object
+        setUsuario({
+          id: userId,
+          email: email,
+          nombre: 'Usuario',
+          rol: 'VENDEDOR', // Default
+          activo: true,
+          ultimoAcceso: new Date().toISOString(),
+          createdAt: new Date().toISOString()
+        });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoading(false);
     }
-  }, [usuarios]);
+  };
+
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    // Validar credenciales
-    const expectedPassword = CREDENCIALES_PRUEBA[email.toLowerCase()];
+    setIsLoading(true);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
 
-    if (!expectedPassword || expectedPassword !== password) {
-      return { success: false, error: 'Email o contraseña incorrectos' };
+    if (error) {
+      setIsLoading(false);
+      return { success: false, error: error.message };
     }
 
-    // Buscar usuario
-    const user = usuarios.find(u => u.email.toLowerCase() === email.toLowerCase());
-
-    if (!user) {
-      return { success: false, error: 'Usuario no encontrado' };
-    }
-
-    if (!user.activo) {
-      return { success: false, error: 'Usuario desactivado' };
-    }
-
-    // Actualizar último acceso
-    const updatedUser = { ...user, ultimoAcceso: new Date().toISOString() };
-    setUsuarios(prev => prev.map(u => u.id === user.id ? updatedUser : u));
-
-    // Guardar sesión (expira en 24 horas)
-    const session = {
-      usuario: updatedUser,
-      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-    setUsuario(updatedUser);
-
+    // Auth logic handled in onAuthStateChange
     return { success: true };
-  }, [usuarios]);
+  }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+  const logout = useCallback(async () => {
+    await supabase.auth.signOut();
     setUsuario(null);
   }, []);
 
-  // Permisos dinámicos
+  // Permisos dinámicos (Podríamos migrarlos a DB también, pero localStorage está OK por ahora)
   const [rolePermissions, setRolePermissions] = useState<Record<UserRole, Permission[]>>(() => {
-    // Intentar cargar permisos personalizados del storage
     try {
       const savedPermissions = localStorage.getItem('pricecontrol_permissions');
       return savedPermissions ? JSON.parse(savedPermissions) : ROLE_PERMISSIONS;
@@ -133,7 +144,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   });
 
-  // Guardar permisos cuando cambien
   useEffect(() => {
     localStorage.setItem('pricecontrol_permissions', JSON.stringify(rolePermissions));
   }, [rolePermissions]);
@@ -165,32 +175,86 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return perms.every(p => permissions.includes(p));
   }, [permissions]);
 
-  // Gestión de usuarios
-  const addUsuario = useCallback(async (userData: Omit<Usuario, 'id' | 'createdAt'>): Promise<boolean> => {
-    if (!usuario || usuario.rol !== 'ADMIN') return false;
+  // Gestión de usuarios (Admin Logic - Updated to use Supabase)
+  // Nota: Para crear usuarios en Auth desde el cliente se necesita service_role o invitar.
+  // Con anon key, lo ideal es usar `signUp` (que loguea al usuario) O una Edge Function.
+  // Para MVP simple, solo permitiremos que ADMIN vea la lista de la tabla usuarios.
+  // Crear usuarios requeriría invitar o que se registren ellos mismos.
 
-    const newUser: Usuario = {
-      ...userData,
-      id: crypto.randomUUID(), // Usar crypto.randomUUID() nativo
-      createdAt: new Date().toISOString(),
-    };
+  // Vamos a implementar "addUsuario" como un "signUp" secundario si no estamos logueados, 
+  // pero ya estamos logueados como Admin.
+  // Supabase no permite crear otros usuarios con el cliente JS simple mientras estás logueado,
+  // salvo usando Admin API (backend).
+  // Solución MVP: Generar un link de invitación o simplemente gestionar roles de usuarios ya registrados.
 
-    setUsuarios(prev => [...prev, newUser]);
-    return true;
+  // Por ahora, simularemos la gestión leyendo la tabla `usuarios` y permitiendo editar roles/nombres.
+  // Creación real se delegará al registro (Login page -> Sign Up tab si existiera, o manual en dashboard supabase).
+
+  const loadUsuarios = async () => {
+    if (usuario?.rol === 'ADMIN') {
+      const { data } = await supabase.from('usuarios').select('*');
+      if (data) {
+        setUsuarios(data.map(u => ({
+          id: u.id,
+          email: u.email,
+          nombre: u.nombre,
+          rol: u.rol,
+          activo: u.activo,
+          ultimoAcceso: u.ultimo_acceso,
+          createdAt: u.created_at
+        })));
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (usuario?.rol === 'ADMIN') {
+      loadUsuarios();
+    }
   }, [usuario]);
+
+
+  const addUsuario = useCallback(async (userData: Omit<Usuario, 'id' | 'createdAt'>): Promise<boolean> => {
+    // Client-side user creation for OTHER users is restricted in Supabase Auth logic without edge functions.
+    // For this demo, we will show a toast saying "Use Supabase Dashboard".
+    toast.error("Para crear usuarios, por favor usa el panel de Supabase o invita al usuario.");
+    return false;
+  }, []);
 
   const updateUsuario = useCallback(async (id: string, updates: Partial<Usuario>): Promise<boolean> => {
     if (!usuario || usuario.rol !== 'ADMIN') return false;
 
-    setUsuarios(prev => prev.map(u => u.id === id ? { ...u, ...updates } : u));
+    // Actualizar tabla usuarios (roles, activo, nombre)
+    const { error } = await supabase.from('usuarios').update({
+      nombre: updates.nombre,
+      rol: updates.rol,
+      activo: updates.activo
+    }).eq('id', id);
+
+    if (error) {
+      toast.error('Error actualizando usuario: ' + error.message);
+      return false;
+    }
+
+    await loadUsuarios();
     return true;
   }, [usuario]);
 
   const deleteUsuario = useCallback(async (id: string): Promise<boolean> => {
     if (!usuario || usuario.rol !== 'ADMIN') return false;
-    if (id === usuario.id) return false; // No puede eliminarse a sí mismo
+    if (id === usuario.id) return false;
 
-    setUsuarios(prev => prev.filter(u => u.id !== id));
+    // Solo podemos borrar de public.usuarios
+    // El usuario de Auth seguiría existiendo hasta que se borre en el panel.
+    const { error } = await supabase.from('usuarios').delete().eq('id', id);
+
+    if (error) {
+      toast.error('Error eliminando perfil: ' + error.message);
+      return false;
+    }
+
+    await loadUsuarios();
+    toast.success('Perfil eliminado. El login debe borrarse en Supabase Auth.');
     return true;
   }, [usuario]);
 
@@ -229,7 +293,6 @@ export function useAuth() {
   return context;
 }
 
-// Hook para verificar permisos de forma más sencilla
 export function useCan() {
   const { hasPermission, hasAnyPermission, hasAllPermissions, role, usuario } = useAuth();
 

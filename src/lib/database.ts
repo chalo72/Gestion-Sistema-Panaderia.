@@ -1,8 +1,19 @@
+import { SupabaseDatabase } from './supabase-db';
+
 // Base de datos IndexedDB para PriceControl Pro
+// ... (IndexedDB implementation remains here, renamed to IndexedDBDatabase) ...
+// For brevity, I will output the file content directly in the tool call if possible, 
+// but since I'm in 'write_to_file', I will write the full hybrid adapter.
+
+// However, to avoid huge file duplication in the prompt context, I will use `replace_file_content` 
+// to rename the class and add the factory export. 
+// Wait, I can't use replace_file_content to rewrite the whole structure easily if I want to keep the old code.
+// I will write the new content fully.
 
 const DB_NAME = 'PriceControlDB';
 const DB_VERSION = 6;
 
+// Export interfaces (same as before)
 export interface DBProducto {
   id: string;
   nombre: string;
@@ -144,522 +155,435 @@ export interface DBHistorialPrecio {
   fechaCambio: string;
 }
 
-class PriceControlDatabase {
+// Define Interface for the Database Adapter
+export interface IDatabase {
+  init(): Promise<void>;
+
+  // Productos
+  getAllProductos(): Promise<DBProducto[]>;
+  addProducto(producto: DBProducto): Promise<void>;
+  updateProducto(producto: DBProducto): Promise<void>;
+  deleteProducto(id: string): Promise<void>;
+
+  // Proveedores
+  getAllProveedores(): Promise<DBProveedor[]>;
+  addProveedor(proveedor: DBProveedor): Promise<void>;
+  updateProveedor(proveedor: DBProveedor): Promise<void>;
+  deleteProveedor(id: string): Promise<void>;
+
+  // Precios
+  getAllPrecios(): Promise<DBPrecio[]>;
+  getPreciosByProducto(productoId: string): Promise<DBPrecio[]>;
+  getPreciosByProveedor(proveedorId: string): Promise<DBPrecio[]>;
+  getPrecioByProductoProveedor(productoId: string, proveedorId: string): Promise<DBPrecio | undefined>;
+  addPrecio(precio: DBPrecio): Promise<void>;
+  updatePrecio(precio: DBPrecio): Promise<void>;
+  deletePrecio(id: string): Promise<void>;
+
+  // Pre-Pedidos
+  getAllPrePedidos(): Promise<DBPrePedido[]>;
+  addPrePedido(prepedido: DBPrePedido): Promise<void>;
+  updatePrePedido(prepedido: DBPrePedido): Promise<void>;
+  deletePrePedido(id: string): Promise<void>;
+
+  // Alertas
+  getAllAlertas(): Promise<DBAlerta[]>;
+  addAlerta(alerta: DBAlerta): Promise<void>;
+  updateAlerta(alerta: DBAlerta): Promise<void>;
+  deleteAlerta(id: string): Promise<void>;
+  clearAllAlertas(): Promise<void>;
+
+  // Configuración
+  getConfiguracion(): Promise<DBConfiguracion | undefined>;
+  saveConfiguracion(config: DBConfiguracion): Promise<void>;
+
+  // Inventario
+  getAllInventario(): Promise<DBInventarioItem[]>;
+  getInventarioItemByProducto(productoId: string): Promise<DBInventarioItem | undefined>;
+  updateInventarioItem(item: DBInventarioItem): Promise<void>;
+
+  // Movimientos
+  getAllMovimientos(): Promise<DBMovimientoInventario[]>;
+  addMovimiento(movimiento: DBMovimientoInventario): Promise<void>;
+
+  // Recepciones
+  getAllRecepciones(): Promise<DBRecepcion[]>;
+  addRecepcion(recepcion: DBRecepcion): Promise<void>;
+  updateRecepcion(recepcion: DBRecepcion): Promise<void>;
+
+  // Historial
+  getAllHistorial(): Promise<DBHistorialPrecio[]>;
+  addHistorial(entry: DBHistorialPrecio): Promise<void>;
+  getHistorialByProducto(productoId: string): Promise<DBHistorialPrecio[]>;
+
+  clearAll(): Promise<void>;
+}
+
+class IndexedDBDatabase implements IDatabase {
   private db: IDBDatabase | null = null;
+  // ... (Existing IndexedDB implementation) ...
+  // Re-pasting the exact implementation from previous view_file content to ensure no regression
+  // But omitting for brevity in this task description, will implement in the actual tool call
+
+  // Actually, I can't "omit" in the tool call `write_to_file`. I have to write the whole thing.
+  // Since I have the content from `view_file` (Step 209), I will use that.
 
   async init(): Promise<void> {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         this.db = request.result;
         resolve();
       };
-
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
-
-        // Store de Productos
         if (!db.objectStoreNames.contains('productos')) {
-          const productosStore = db.createObjectStore('productos', { keyPath: 'id' });
-          productosStore.createIndex('categoria', 'categoria', { unique: false });
-          productosStore.createIndex('nombre', 'nombre', { unique: false });
+          const s = db.createObjectStore('productos', { keyPath: 'id' });
+          s.createIndex('categoria', 'categoria', { unique: false });
+          s.createIndex('nombre', 'nombre', { unique: false });
         }
-
-        // Store de Proveedores
         if (!db.objectStoreNames.contains('proveedores')) {
-          const proveedoresStore = db.createObjectStore('proveedores', { keyPath: 'id' });
-          proveedoresStore.createIndex('nombre', 'nombre', { unique: false });
+          const s = db.createObjectStore('proveedores', { keyPath: 'id' });
+          s.createIndex('nombre', 'nombre', { unique: false });
         }
-
-        // Store de Precios
         if (!db.objectStoreNames.contains('precios')) {
-          const preciosStore = db.createObjectStore('precios', { keyPath: 'id' });
-          preciosStore.createIndex('productoId', 'productoId', { unique: false });
-          preciosStore.createIndex('proveedorId', 'proveedorId', { unique: false });
-          preciosStore.createIndex('productoProveedor', ['productoId', 'proveedorId'], { unique: true });
+          const s = db.createObjectStore('precios', { keyPath: 'id' });
+          s.createIndex('productoId', 'productoId', { unique: false });
+          s.createIndex('proveedorId', 'proveedorId', { unique: false });
+          s.createIndex('productoProveedor', ['productoId', 'proveedorId'], { unique: true });
         }
-
-        // Store de Pre-Pedidos
         if (!db.objectStoreNames.contains('prepedidos')) {
-          const prepedidosStore = db.createObjectStore('prepedidos', { keyPath: 'id' });
-          prepedidosStore.createIndex('proveedorId', 'proveedorId', { unique: false });
-          prepedidosStore.createIndex('estado', 'estado', { unique: false });
+          const s = db.createObjectStore('prepedidos', { keyPath: 'id' });
+          s.createIndex('proveedorId', 'proveedorId', { unique: false });
+          s.createIndex('estado', 'estado', { unique: false });
         }
-
-        // Store de Alertas
         if (!db.objectStoreNames.contains('alertas')) {
           const alertasStore = db.createObjectStore('alertas', { keyPath: 'id' });
           alertasStore.createIndex('leida', 'leida', { unique: false });
           alertasStore.createIndex('fecha', 'fecha', { unique: false });
         }
-
-        // Store de Configuración
         if (!db.objectStoreNames.contains('configuracion')) {
           db.createObjectStore('configuracion', { keyPath: 'id' });
         }
-
-        // Store de Inventario
         if (!db.objectStoreNames.contains('inventario')) {
           const inventarioStore = db.createObjectStore('inventario', { keyPath: 'id' });
           inventarioStore.createIndex('productoId', 'productoId', { unique: true });
         }
-
-        // Store de Movimientos
         if (!db.objectStoreNames.contains('movimientos')) {
-          const movimientosStore = db.createObjectStore('movimientos', { keyPath: 'id' });
-          movimientosStore.createIndex('productoId', 'productoId', { unique: false });
-          movimientosStore.createIndex('fecha', 'fecha', { unique: false });
+          const s = db.createObjectStore('movimientos', { keyPath: 'id' });
+          s.createIndex('productoId', 'productoId', { unique: false });
+          s.createIndex('fecha', 'fecha', { unique: false });
         }
-
-        // Store de Recepciones
         if (!db.objectStoreNames.contains('recepciones')) {
-          const recepcionesStore = db.createObjectStore('recepciones', { keyPath: 'id' });
-          recepcionesStore.createIndex('proveedorId', 'proveedorId', { unique: false });
-          recepcionesStore.createIndex('fechaRecepcion', 'fechaRecepcion', { unique: false });
+          const s = db.createObjectStore('recepciones', { keyPath: 'id' });
+          s.createIndex('proveedorId', 'proveedorId', { unique: false });
+          s.createIndex('fechaRecepcion', 'fechaRecepcion', { unique: false });
         }
-
-        // Store de Historial de Precios
         if (!db.objectStoreNames.contains('historialPrecios')) {
-          const historialStore = db.createObjectStore('historialPrecios', { keyPath: 'id' });
-          historialStore.createIndex('productoId', 'productoId', { unique: false });
-          historialStore.createIndex('proveedorId', 'proveedorId', { unique: false });
-          historialStore.createIndex('fechaCambio', 'fechaCambio', { unique: false });
+          const s = db.createObjectStore('historialPrecios', { keyPath: 'id' });
+          s.createIndex('productoId', 'productoId', { unique: false });
+          s.createIndex('proveedorId', 'proveedorId', { unique: false });
+          s.createIndex('fechaCambio', 'fechaCambio', { unique: false });
         }
       };
     });
   }
 
+  // Helper to ensure DB is initialized
+  private async ensureInit() {
+    if (!this.db) await this.init();
+    if (!this.db) throw new Error('Database failed to initialize');
+    return this.db;
+  }
+
+  // --- Implementación de métodos (Copy-paste logic but wrapped) ---
   // Productos
   async getAllProductos(): Promise<DBProducto[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['productos'], 'readonly');
-      const store = transaction.objectStore('productos');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['productos'], 'readonly').objectStore('productos').getAll();
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
     });
   }
-
-  async addProducto(producto: DBProducto): Promise<void> {
-    if (!this.db) await this.init();
+  async addProducto(p: DBProducto): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['productos'], 'readwrite');
-      const store = transaction.objectStore('productos');
-      const request = store.add(producto);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['productos'], 'readwrite').objectStore('productos').add(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
-  async updateProducto(producto: DBProducto): Promise<void> {
-    if (!this.db) await this.init();
+  async updateProducto(p: DBProducto): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['productos'], 'readwrite');
-      const store = transaction.objectStore('productos');
-      const request = store.put(producto);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['productos'], 'readwrite').objectStore('productos').put(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
   async deleteProducto(id: string): Promise<void> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['productos'], 'readwrite');
-      const store = transaction.objectStore('productos');
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['productos'], 'readwrite').objectStore('productos').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
   // Proveedores
   async getAllProveedores(): Promise<DBProveedor[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['proveedores'], 'readonly');
-      const store = transaction.objectStore('proveedores');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['proveedores'], 'readonly').objectStore('proveedores').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async addProveedor(proveedor: DBProveedor): Promise<void> {
-    if (!this.db) await this.init();
+  async addProveedor(p: DBProveedor): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['proveedores'], 'readwrite');
-      const store = transaction.objectStore('proveedores');
-      const request = store.add(proveedor);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['proveedores'], 'readwrite').objectStore('proveedores').add(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
-  async updateProveedor(proveedor: DBProveedor): Promise<void> {
-    if (!this.db) await this.init();
+  async updateProveedor(p: DBProveedor): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['proveedores'], 'readwrite');
-      const store = transaction.objectStore('proveedores');
-      const request = store.put(proveedor);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['proveedores'], 'readwrite').objectStore('proveedores').put(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
   async deleteProveedor(id: string): Promise<void> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['proveedores'], 'readwrite');
-      const store = transaction.objectStore('proveedores');
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['proveedores'], 'readwrite').objectStore('proveedores').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
   // Precios
   async getAllPrecios(): Promise<DBPrecio[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['precios'], 'readonly');
-      const store = transaction.objectStore('precios');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['precios'], 'readonly').objectStore('precios').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async getPreciosByProducto(productoId: string): Promise<DBPrecio[]> {
-    if (!this.db) await this.init();
+  async getPreciosByProducto(pid: string): Promise<DBPrecio[]> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['precios'], 'readonly');
-      const store = transaction.objectStore('precios');
-      const index = store.index('productoId');
-      const request = index.getAll(productoId);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['precios'], 'readonly').objectStore('precios').index('productoId').getAll(pid);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async getPreciosByProveedor(proveedorId: string): Promise<DBPrecio[]> {
-    if (!this.db) await this.init();
+  async getPreciosByProveedor(pid: string): Promise<DBPrecio[]> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['precios'], 'readonly');
-      const store = transaction.objectStore('precios');
-      const index = store.index('proveedorId');
-      const request = index.getAll(proveedorId);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['precios'], 'readonly').objectStore('precios').index('proveedorId').getAll(pid);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async getPrecioByProductoProveedor(productoId: string, proveedorId: string): Promise<DBPrecio | undefined> {
-    if (!this.db) await this.init();
+  async getPrecioByProductoProveedor(pid: string, provId: string): Promise<DBPrecio | undefined> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['precios'], 'readonly');
-      const store = transaction.objectStore('precios');
-      const index = store.index('productoProveedor');
-      const request = index.get([productoId, proveedorId]);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['precios'], 'readonly').objectStore('precios').index('productoProveedor').get([pid, provId]);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async addPrecio(precio: DBPrecio): Promise<void> {
-    if (!this.db) await this.init();
+  async addPrecio(p: DBPrecio): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['precios'], 'readwrite');
-      const store = transaction.objectStore('precios');
-      const request = store.add(precio);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['precios'], 'readwrite').objectStore('precios').add(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
-  async updatePrecio(precio: DBPrecio): Promise<void> {
-    if (!this.db) await this.init();
+  async updatePrecio(p: DBPrecio): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['precios'], 'readwrite');
-      const store = transaction.objectStore('precios');
-      const request = store.put(precio);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['precios'], 'readwrite').objectStore('precios').put(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
   async deletePrecio(id: string): Promise<void> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['precios'], 'readwrite');
-      const store = transaction.objectStore('precios');
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['precios'], 'readwrite').objectStore('precios').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
   // Pre-Pedidos
   async getAllPrePedidos(): Promise<DBPrePedido[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['prepedidos'], 'readonly');
-      const store = transaction.objectStore('prepedidos');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['prepedidos'], 'readonly').objectStore('prepedidos').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async addPrePedido(prepedido: DBPrePedido): Promise<void> {
-    if (!this.db) await this.init();
+  async addPrePedido(p: DBPrePedido): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['prepedidos'], 'readwrite');
-      const store = transaction.objectStore('prepedidos');
-      const request = store.add(prepedido);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['prepedidos'], 'readwrite').objectStore('prepedidos').add(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
-  async updatePrePedido(prepedido: DBPrePedido): Promise<void> {
-    if (!this.db) await this.init();
+  async updatePrePedido(p: DBPrePedido): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['prepedidos'], 'readwrite');
-      const store = transaction.objectStore('prepedidos');
-      const request = store.put(prepedido);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['prepedidos'], 'readwrite').objectStore('prepedidos').put(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
   async deletePrePedido(id: string): Promise<void> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['prepedidos'], 'readwrite');
-      const store = transaction.objectStore('prepedidos');
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['prepedidos'], 'readwrite').objectStore('prepedidos').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
   // Alertas
   async getAllAlertas(): Promise<DBAlerta[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['alertas'], 'readonly');
-      const store = transaction.objectStore('alertas');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['alertas'], 'readonly').objectStore('alertas').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async addAlerta(alerta: DBAlerta): Promise<void> {
-    if (!this.db) await this.init();
+  async addAlerta(a: DBAlerta): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['alertas'], 'readwrite');
-      const store = transaction.objectStore('alertas');
-      const request = store.add(alerta);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').add(a);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
-  async updateAlerta(alerta: DBAlerta): Promise<void> {
-    if (!this.db) await this.init();
+  async updateAlerta(a: DBAlerta): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['alertas'], 'readwrite');
-      const store = transaction.objectStore('alertas');
-      const request = store.put(alerta);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').put(a);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
   async deleteAlerta(id: string): Promise<void> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['alertas'], 'readwrite');
-      const store = transaction.objectStore('alertas');
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
-
   async clearAllAlertas(): Promise<void> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['alertas'], 'readwrite');
-      const store = transaction.objectStore('alertas');
-      const request = store.clear();
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').clear();
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
-  // Configuración
+  // Config
   async getConfiguracion(): Promise<DBConfiguracion | undefined> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['configuracion'], 'readonly');
-      const store = transaction.objectStore('configuracion');
-      const request = store.get('main');
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['configuracion'], 'readonly').objectStore('configuracion').get('main');
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async saveConfiguracion(config: DBConfiguracion): Promise<void> {
-    if (!this.db) await this.init();
+  async saveConfiguracion(c: DBConfiguracion): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['configuracion'], 'readwrite');
-      const store = transaction.objectStore('configuracion');
-      const request = store.put({ ...config, id: 'main' });
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['configuracion'], 'readwrite').objectStore('configuracion').put({ ...c, id: 'main' });
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
   // Inventario
   async getAllInventario(): Promise<DBInventarioItem[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['inventario'], 'readonly');
-      const store = transaction.objectStore('inventario');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['inventario'], 'readonly').objectStore('inventario').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async getInventarioItemByProducto(productoId: string): Promise<DBInventarioItem | undefined> {
-    if (!this.db) await this.init();
+  async getInventarioItemByProducto(pid: string): Promise<DBInventarioItem | undefined> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['inventario'], 'readonly');
-      const store = transaction.objectStore('inventario');
-      const index = store.index('productoId');
-      const request = index.get(productoId);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['inventario'], 'readonly').objectStore('inventario').index('productoId').get(pid);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async updateInventarioItem(item: DBInventarioItem): Promise<void> {
-    if (!this.db) await this.init();
+  async updateInventarioItem(i: DBInventarioItem): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['inventario'], 'readwrite');
-      const store = transaction.objectStore('inventario');
-      const request = store.put(item);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['inventario'], 'readwrite').objectStore('inventario').put(i);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
   // Movimientos
   async getAllMovimientos(): Promise<DBMovimientoInventario[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['movimientos'], 'readonly');
-      const store = transaction.objectStore('movimientos');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['movimientos'], 'readonly').objectStore('movimientos').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
-
-  async addMovimiento(movimiento: DBMovimientoInventario): Promise<void> {
-    if (!this.db) await this.init();
+  async addMovimiento(m: DBMovimientoInventario): Promise<void> {
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['movimientos'], 'readwrite');
-      const store = transaction.objectStore('movimientos');
-      const request = store.add(movimiento);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['movimientos'], 'readwrite').objectStore('movimientos').add(m);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
   // Recepciones
   async getAllRecepciones(): Promise<DBRecepcion[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['recepciones'], 'readonly');
-      const store = transaction.objectStore('recepciones');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['recepciones'], 'readonly').objectStore('recepciones').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+  async addRecepcion(r: DBRecepcion): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['recepciones'], 'readwrite').objectStore('recepciones').add(r);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async updateRecepcion(r: DBRecepcion): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['recepciones'], 'readwrite').objectStore('recepciones').put(r);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
 
-  async addRecepcion(recepcion: DBRecepcion): Promise<void> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['recepciones'], 'readwrite');
-      const store = transaction.objectStore('recepciones');
-      const request = store.add(recepcion);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async updateRecepcion(recepcion: DBRecepcion): Promise<void> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['recepciones'], 'readwrite');
-      const store = transaction.objectStore('recepciones');
-      const request = store.put(recepcion);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  // Historial de Precios
+  // Historial
   async getAllHistorial(): Promise<DBHistorialPrecio[]> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['historialPrecios'], 'readonly');
-      const store = transaction.objectStore('historialPrecios');
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const req = db.transaction(['historialPrecios'], 'readonly').objectStore('historialPrecios').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+  async addHistorial(h: DBHistorialPrecio): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['historialPrecios'], 'readwrite').objectStore('historialPrecios').add(h);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async getHistorialByProducto(pid: string): Promise<DBHistorialPrecio[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['historialPrecios'], 'readonly').objectStore('historialPrecios').index('productoId').getAll(pid);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
     });
   }
 
-  async addHistorial(entry: DBHistorialPrecio): Promise<void> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['historialPrecios'], 'readwrite');
-      const store = transaction.objectStore('historialPrecios');
-      const request = store.add(entry);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async getHistorialByProducto(productoId: string): Promise<DBHistorialPrecio[]> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['historialPrecios'], 'readonly');
-      const store = transaction.objectStore('historialPrecios');
-      const index = store.index('productoId');
-      const request = index.getAll(productoId);
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  // Limpiar toda la base de datos
   async clearAll(): Promise<void> {
-    if (!this.db) await this.init();
+    const db = await this.ensureInit();
     const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios'];
     for (const storeName of stores) {
       await new Promise<void>((resolve, reject) => {
-        const transaction = this.db!.transaction([storeName], 'readwrite');
+        const transaction = db.transaction([storeName], 'readwrite');
         const store = transaction.objectStore(storeName);
         const request = store.clear();
         request.onsuccess = () => resolve();
@@ -669,4 +593,9 @@ class PriceControlDatabase {
   }
 }
 
-export const db = new PriceControlDatabase();
+// Factory to choose which DB to use
+const shouldUseSupabase = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const db: IDatabase = shouldUseSupabase
+  ? new SupabaseDatabase()
+  : new IndexedDBDatabase();
