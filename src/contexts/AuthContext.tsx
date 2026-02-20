@@ -114,18 +114,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
 
-    if (error) {
+      if (error) {
+        setIsLoading(false);
+        return { success: false, error: error.message };
+      }
+
+      if (data.user) {
+        // Cargar el perfil inmediatamente para evitar parpadeos/redirecciones
+        await fetchProfile(data.user.id, data.user.email!);
+        return { success: true };
+      }
+
       setIsLoading(false);
-      return { success: false, error: error.message };
+      return { success: false, error: 'No se pudo obtener la información del usuario.' };
+    } catch (e) {
+      setIsLoading(false);
+      return { success: false, error: (e as Error).message };
     }
-
-    // Auth logic handled in onAuthStateChange
-    return { success: true };
   }, []);
 
   const logout = useCallback(async () => {
