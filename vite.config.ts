@@ -14,8 +14,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
       manifest: {
-        name: 'Kimi Agent: Gestión de Precios',
-        short_name: 'Kimi Gestión',
+        name: 'Gestion Panaderia',
+        short_name: 'Gestion Panaderia',
         description: 'Sistema de control de precios y proveedores para panaderías.',
         theme_color: '#ffffff',
         icons: [
