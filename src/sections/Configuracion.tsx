@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, DollarSign, Activity, Globe } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,21 +7,22 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import type { Configuracion, MonedaCode } from '@/types';
-import { MONEDAS } from '@/types';
+
 
 interface ConfiguracionProps {
   configuracion: Configuracion;
   onUpdateConfiguracion: (updates: Partial<Configuracion>) => void;
+  onSyncWithCloud: () => Promise<void>;
   onClearAllData: () => void;
-  formatCurrency: (value: number) => string;
 }
 
-function Configuracion({
-  configuracion,
-  onUpdateConfiguracion,
-  onClearAllData,
-  formatCurrency,
-}: ConfiguracionProps) {
+function Configuracion(props: ConfiguracionProps) {
+  const {
+    configuracion,
+    onUpdateConfiguracion,
+    onSyncWithCloud,
+    onClearAllData,
+  } = props;
   const [nombreNegocio, setNombreNegocio] = useState('Mi Negocio');
   const [monedaSeleccionada, setMonedaSeleccionada] = useState<MonedaCode>('EUR');
   const [margen, setMargen] = useState('30');
@@ -125,42 +126,44 @@ function Configuracion({
             </CardContent>
           </Card>
 
-          {/* Configuración Financiera (Moneda) */}
-          <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm">
+          {/* Sincronización en la Nube */}
+          <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <DollarSign className="w-5 h-5 text-green-500" />
-                Divisa Base
+                <RefreshCw className="w-5 h-5 text-indigo-500" />
+                Sincronización Cloud
               </CardTitle>
-              <CardDescription>Moneda principal para transacciones y reportes</CardDescription>
+              <CardDescription>Respalda tus datos locales en la base de datos central de Supabase</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {MONEDAS.map((m) => (
-                  <button
-                    key={m.code}
-                    onClick={() => setMonedaSeleccionada(m.code)}
-                    className={`
-                        relative flex flex-col items-center justify-center p-4 rounded-xl border transition-all duration-300
-                        ${monedaSeleccionada === m.code
-                        ? 'border-primary bg-primary/5 shadow-md scale-105 ring-2 ring-primary/20'
-                        : 'border-border/50 hover:border-primary/50 hover:bg-card/80 hover:scale-105'
-                      }
-                    `}
-                  >
-                    <div className={`text-3xl font-bold mb-1 ${monedaSeleccionada === m.code ? 'text-primary' : 'text-muted-foreground'}`}>
-                      {m.simbolo}
-                    </div>
-                    <div className="text-sm font-medium">{m.code}</div>
-                  </button>
-                ))}
-              </div>
-
-              <div className="p-4 rounded-xl bg-muted/30 border border-border/50 flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Vista previa de formato:</span>
-                <div className="flex gap-4 font-mono text-sm">
-                  <span className="bg-background px-3 py-1 rounded border shadow-sm">{formatCurrency(1234567.89)}</span>
+            <CardContent className="space-y-4">
+              <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 flex flex-col md:flex-row items-center justify-between gap-4">
+                <div className="space-y-1 text-center md:text-left">
+                  <span className="text-sm font-semibold text-indigo-400 block">Base de Datos Híbrida</span>
+                  <p className="text-xs text-muted-foreground max-w-sm">
+                    Sincroniza productos, proveedores, precios, inventario y configuración.
+                    Útil después de crear las tablas o al cambiar de dispositivo.
+                  </p>
                 </div>
+                <Button
+                  onClick={async () => {
+                    const id = toast.loading('Sincronizando con Supabase...');
+                    try {
+                      if (onSyncWithCloud) {
+                        await onSyncWithCloud();
+                        toast.success('✨ Datos sincronizados correctamente', { id });
+                      } else {
+                        toast.error('Función de sincronización no disponible', { id });
+                      }
+                    } catch (e) {
+                      toast.error('Error al sincronizar: ' + (e as Error).message, { id });
+                    }
+                  }}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white gap-2 transition-all hover:scale-105 shadow-lg shadow-indigo-600/20"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Sincronizar Ahora
+                </Button>
               </div>
             </CardContent>
           </Card>

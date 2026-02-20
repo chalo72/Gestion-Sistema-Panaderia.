@@ -10,8 +10,7 @@ import type {
     DBInventarioItem,
     DBMovimientoInventario,
     DBRecepcion,
-    DBHistorialPrecio,
-    DBRecepcionItem
+    DBHistorialPrecio
 } from './database';
 
 export class SupabaseDatabase implements IDatabase {
@@ -288,17 +287,17 @@ export class SupabaseDatabase implements IDatabase {
         return {
             id: data.id,
             nombreNegocio: data.nombre_negocio,
+            direccionNegocio: data.direccion_negocio,
+            telefonoNegocio: data.telefono_negocio,
+            emailNegocio: data.email_negocio,
             moneda: data.moneda,
             margenUtilidadDefault: data.margen_utilidad_default,
             impuestoPorcentaje: data.impuesto_porcentaje || 0,
+            umbralAlerta: data.umbral_alerta || 5,
             ajusteAutomatico: data.ajuste_automatico,
             notificarSubidas: data.notificar_subidas,
-            categorias: data.categorias || [],
-            direccionNegocio: '',
-            telefonoNegocio: '',
-            emailNegocio: '',
-            mostrarUtilidadEnLista: true,
-            umbralAlerta: 0 // Default
+            mostrarUtilidadEnLista: data.mostrar_utilidad_en_lista ?? true,
+            categorias: data.categorias || []
         };
     }
 
@@ -306,11 +305,16 @@ export class SupabaseDatabase implements IDatabase {
         const dbConfig = {
             id: 'main',
             nombre_negocio: config.nombreNegocio,
+            direccion_negocio: config.direccionNegocio,
+            telefono_negocio: config.telefonoNegocio,
+            email_negocio: config.emailNegocio,
             moneda: config.moneda,
             margen_utilidad_default: config.margenUtilidadDefault,
             impuesto_porcentaje: config.impuestoPorcentaje,
+            umbral_alerta: config.umbralAlerta,
             ajuste_automatico: config.ajusteAutomatico,
             notificar_subidas: config.notificarSubidas,
+            mostrar_utilidad_en_lista: config.mostrarUtilidadEnLista,
             categorias: config.categorias
         };
         const { error } = await supabase.from('configuracion').upsert(dbConfig);

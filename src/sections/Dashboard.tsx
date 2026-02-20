@@ -3,13 +3,9 @@ import {
   Truck,
   Bell,
   TrendingUp,
-  AlertTriangle,
   ArrowRight,
-  DollarSign,
-  Percent,
   ShoppingCart,
   CheckCircle,
-  Clock,
   Sparkles,
   Warehouse,
   ClipboardCheck,
@@ -37,7 +33,6 @@ interface DashboardProps {
     totalCambiosPrecios: number;
   };
   alertas: AlertaPrecio[];
-  productos: Producto[];
   prepedidos: PrePedido[];
   onMarcarAlertaLeida: (id: string) => void;
   onViewAlertas: () => void;
@@ -63,7 +58,6 @@ const kpiCards = [
 export function Dashboard({
   estadisticas,
   alertas,
-  productos,
   prepedidos,
   onMarcarAlertaLeida,
   onViewAlertas,
@@ -144,8 +138,14 @@ export function Dashboard({
           return (
             <Card
               key={kpi.key}
-              className={`${kpi.gradient} text-white border-0 shadow-2xl ${kpi.shadowColor} overflow-hidden group hover:-translate-y-2 transition-all duration-500 ease-out animate-ag-slide-up`}
+              className={`${kpi.gradient} text-white border-0 shadow-2xl ${kpi.shadowColor} overflow-hidden group hover:-translate-y-2 transition-all duration-500 ease-out animate-ag-slide-up cursor-pointer`}
               style={{ animationDelay: `${index * 100}ms` }}
+              onClick={() => {
+                if (kpi.key === 'productos') onViewProductos();
+                if (kpi.key === 'proveedores') onViewProveedores();
+                if (kpi.key === 'alertas') onViewAlertas();
+                if (kpi.key === 'inventario') onViewInventario();
+              }}
             >
               <div className="absolute -right-6 -top-6 w-32 h-32 bg-white/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
               <div className="absolute -left-6 -bottom-6 w-24 h-24 bg-black/5 rounded-full blur-xl" />
@@ -199,7 +199,7 @@ export function Dashboard({
               </div>
             ) : (
               <div className="divide-y divide-slate-100/50 max-h-[400px] overflow-y-auto">
-                {alertasNoLeidas.slice(0, 6).map((alerta, i) => {
+                {alertasNoLeidas.slice(0, 6).map((alerta) => {
                   const producto = getProductoById(alerta.productoId);
                   const proveedor = getProveedorById(alerta.proveedorId);
 

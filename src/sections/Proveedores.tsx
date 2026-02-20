@@ -11,10 +11,7 @@ import {
   MapPin,
   Package,
   Image as ImageIcon,
-  ExternalLink,
   MessageCircle,
-
-  MoreVertical,
   Star
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
@@ -23,12 +20,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { toast } from 'sonner';
 import type { Producto, Proveedor, PrecioProveedor } from '@/types';
 

@@ -182,6 +182,7 @@ export interface IDatabase {
   addHistorial(entry: DBHistorialPrecio): Promise<void>;
   getHistorialByProducto(productoId: string): Promise<DBHistorialPrecio[]>;
   clearAll(): Promise<void>;
+  syncLocalToCloud?(): Promise<void>;
 }
 
 const DB_NAME = 'PriceControlDB';
@@ -579,10 +580,35 @@ class HybridDatabase implements IDatabase {
     }
   }
 
-  private async syncLocalToCloud() {
-    // In a full implementation, we would have a sync queue.
-    // For now, we just ensure critical data is pushed.
-    console.log('Reconnected. Syncing data...');
+  public async syncLocalToCloud() {
+    if (!this.isOnline) return;
+
+    console.log('🔄 Iniciando sincronización de Local a Nube...');
+    try {
+      // 1. Productos
+      const productos = await this.local.getAllProductos();
+      for (const p of productos) await this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p));
+
+      // 2. Proveedores
+      const proveedores = await this.local.getAllProveedores();
+      for (const p of proveedores) await this.cloud.updateProveedor(p).catch(() => this.cloud.addProveedor(p));
+
+      // 3. Precios
+      const precios = await this.local.getAllPrecios();
+      for (const p of precios) await this.cloud.updatePrecio(p).catch(() => this.cloud.addPrecio(p));
+
+      // 4. Inventario
+      const inventario = await this.local.getAllInventario();
+      for (const i of inventario) await this.cloud.updateInventarioItem(i);
+
+      // 5. Configuración
+      const config = await this.local.getConfiguracion();
+      if (config) await this.cloud.saveConfiguracion(config);
+
+      console.log('✅ Sincronización completada con éxito.');
+    } catch (e) {
+      console.error('❌ Error en sincronización Local a Nube:', e);
+    }
   }
 
   // Implementation Pattern: Read from Local (fast), Write to Both (consistency)

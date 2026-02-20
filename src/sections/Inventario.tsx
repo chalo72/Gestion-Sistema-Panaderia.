@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
-    Package, AlertTriangle, ArrowUpDown, MapPin, Plus, Minus, RotateCcw, Search,
+    Package, AlertTriangle, MapPin, Plus, Minus, Search,
     TrendingDown, TrendingUp, CheckCircle, ClipboardList, Filter, PieChart, Download
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -261,7 +261,7 @@ export function Inventario({
                             { label: 'En Salud', value: stats.ok, icon: CheckCircle, color: 'kpi-emerald', onClick: () => setFiltroEstado('ok'), active: filtroEstado === 'ok' },
                             { label: 'Crítico (Bajo)', value: stats.bajo, icon: TrendingDown, color: 'kpi-amber', onClick: () => setFiltroEstado('bajo'), active: filtroEstado === 'bajo' },
                             { label: 'Agotados', value: stats.agotado, icon: AlertTriangle, color: 'kpi-rose', onClick: () => setFiltroEstado('agotado'), active: filtroEstado === 'agotado' },
-                        ].map((kpi, i) => (
+                        ].map((kpi) => (
                             <Card
                                 key={kpi.label}
                                 className={`group cursor-pointer transition-all duration-300 hover:scale-[1.02] glass-layer-2 border-white/10 ${kpi.active ? 'ring-2 ring-primary bg-primary/5 shadow-lg shadow-primary/5' : ''}`}

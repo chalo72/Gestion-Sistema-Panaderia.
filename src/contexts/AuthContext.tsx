@@ -114,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password
     });
@@ -192,9 +192,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUsuarios = async () => {
     if (usuario?.rol === 'ADMIN') {
-      const { data } = await supabase.from('usuarios').select('*');
-      if (data) {
-        setUsuarios(data.map(u => ({
+      const { data: _data } = await supabase.from('usuarios').select('*');
+      if (_data) {
+        setUsuarios(_data.map((u: any) => ({
           id: u.id,
           email: u.email,
           nombre: u.nombre,
@@ -214,7 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [usuario]);
 
 
-  const addUsuario = useCallback(async (userData: Omit<Usuario, 'id' | 'createdAt'>): Promise<boolean> => {
+  const addUsuario = useCallback(async (_userData: Omit<Usuario, 'id' | 'createdAt'>): Promise<boolean> => {
     // Client-side user creation for OTHER users is restricted in Supabase Auth logic without edge functions.
     // For this demo, we will show a toast saying "Use Supabase Dashboard".
     toast.error("Para crear usuarios, por favor usa el panel de Supabase o invita al usuario.");

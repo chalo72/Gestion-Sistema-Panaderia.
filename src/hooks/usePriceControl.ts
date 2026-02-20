@@ -741,6 +741,16 @@ export function usePriceControl() {
     setHistorial([]);
   }, []);
 
+  // Sincronización Manual
+  const syncWithCloud = useCallback(async () => {
+    if (db.syncLocalToCloud) {
+      await db.syncLocalToCloud();
+      await loadAllData(); // Recargar datos después de sincronizar
+    } else {
+      console.warn('La sincronización en la nube no está disponible.');
+    }
+  }, []);
+
   return {
     // Datos
     productos,
@@ -803,6 +813,9 @@ export function usePriceControl() {
 
     // Configuración
     updateConfiguracion,
+
+    // Sincronización
+    syncWithCloud,
 
     // Formato de moneda
     formatCurrency,

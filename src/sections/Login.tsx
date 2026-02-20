@@ -32,6 +32,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
     if (result.success) {
       onLoginSuccess();
     } else {
+      console.error('Detalles del error de login:', result.error);
       setError(result.error || 'Error al iniciar sesión');
     }
 

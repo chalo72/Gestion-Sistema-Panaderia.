@@ -110,6 +110,7 @@ function AppContent() {
     clearAllData,
     formatCurrency,
     generarSugerenciasPedido,
+    syncWithCloud,
 
     // Getters
     getMejorPrecio,
@@ -152,7 +153,6 @@ function AppContent() {
             <Dashboard
               estadisticas={getEstadisticas()}
               alertas={alertas.slice(0, 5)}
-              productos={productos.slice(0, 5)}
               prepedidos={prepedidos.slice(0, 3)}
               onMarcarAlertaLeida={marcarAlertaLeida}
               onViewAlertas={() => setCurrentView('alertas')}
@@ -299,8 +299,8 @@ function AppContent() {
             <Configuracion
               configuracion={configuracion}
               onUpdateConfiguracion={updateConfiguracion}
+              onSyncWithCloud={syncWithCloud}
               onClearAllData={clearAllData}
-              formatCurrency={formatCurrency}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -321,7 +321,6 @@ function AppContent() {
           <Dashboard
             estadisticas={getEstadisticas()}
             alertas={[]}
-            productos={[]}
             prepedidos={[]}
             onMarcarAlertaLeida={marcarAlertaLeida}
             onViewAlertas={() => { }}
