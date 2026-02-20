@@ -240,8 +240,8 @@ export function Proveedores({
                     )}
                   </div>
                 </div>
-                <div>
-                  <Label className="mb-2 block">Confiabilidad / Calificación</Label>
+                <div className="space-y-2">
+                  <Label className="font-semibold px-1">Confiabilidad / Calificación</Label>
                   <div className="flex items-center gap-1">
                     {[1, 2, 3, 4, 5].map((star) => (
                       <button
@@ -267,10 +267,10 @@ export function Proveedores({
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl">
                     Cancelar
                   </Button>
-                  <Button type="submit">
+                  <Button type="submit" className="btn-gradient-primary rounded-xl">
                     {editingProveedor ? 'Guardar Cambios' : 'Crear Proveedor'}
                   </Button>
                 </div>
@@ -281,110 +281,121 @@ export function Proveedores({
       </div>
 
       {filteredProveedores.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
-              <Truck className="w-8 h-8 opacity-50" />
+        <Card className="glass-card border-dashed py-20 bg-muted/20">
+          <CardContent className="flex flex-col items-center justify-center text-muted-foreground">
+            <div className="w-20 h-20 bg-muted/40 rounded-full flex items-center justify-center mb-6 animate-ag-float">
+              <Truck className="w-10 h-10 opacity-30" />
             </div>
-            <p className="text-lg font-medium">No se encontraron proveedores</p>
-            <p className="text-sm">Intenta con otro término o agrega uno nuevo.</p>
+            <p className="text-xl font-bold text-foreground">Sin resultados</p>
+            <p className="text-sm mt-1">No encontramos ningún aliado que coincida con tu búsqueda.</p>
+            <Button variant="link" onClick={() => setSearchTerm('')} className="mt-4 text-primary">Mostrar todos</Button>
           </CardContent>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredProveedores.map((proveedor) => {
+          {filteredProveedores.map((proveedor, index) => {
             const preciosProveedor = getPreciosByProveedor(proveedor.id);
             return (
-              <Card key={proveedor.id} className="group hover:shadow-lg transition-all duration-300 border-l-4 border-l-transparent hover:border-l-primary">
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="flex items-center gap-3">
-                    <div className="relative">
-                      {proveedor.imagen ? (
-                        <img src={proveedor.imagen} alt={proveedor.nombre} className="w-12 h-12 rounded-full object-cover border-2 border-background shadow-sm" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-lg font-bold border-2 border-background">
-                          {proveedor.nombre.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                      <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></span>
-                    </div>
-                    <div className="space-y-0.5">
-                      <h3 className="font-semibold text-base leading-tight line-clamp-1" title={proveedor.nombre}>{proveedor.nombre}</h3>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Package className="w-3 h-3" /> {preciosProveedor.length} productos
-                      </p>
-                      <div className="flex items-center gap-1 pt-1">
-                        {[1, 2, 3, 4, 5].map(s => (
-                          <Star key={s} className={`w-3 h-3 ${s <= (proveedor.calificacion || 5) ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground/20'}`} />
-                        ))}
-                      </div>
-                    </div>
+              <Card key={proveedor.id} className={`group hover:shadow-2xl transition-all duration-500 glass-layer-2 border-white/10 overflow-hidden hover:-translate-y-2 stagger-${(index % 6) + 1}`}>
+                <div className="absolute top-0 right-0 p-3 flex gap-1 items-center z-10">
+                  <div className="flex items-center gap-0.5 bg-white/40 dark:bg-black/40 backdrop-blur-md px-2 py-0.5 rounded-full border border-white/20 text-[10px] font-black text-amber-500 shadow-sm">
+                    <Star className="w-3 h-3 fill-amber-500" />
+                    {proveedor.calificacion || 5.0}
                   </div>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 -mr-2 text-muted-foreground">
-                        <MoreVertical className="w-4 h-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setViewingProveedor(proveedor)}>
-                        <ExternalLink className="w-4 h-4 mr-2" /> Ver Detalle
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleEdit(proveedor)}>
-                        <Edit2 className="w-4 h-4 mr-2" /> Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-red-600 focus:text-red-600" onClick={() => handleDelete(proveedor.id)}>
-                        <Trash2 className="w-4 h-4 mr-2" /> Eliminar
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                </div>
+
+                <CardHeader className="flex flex-col items-center text-center pt-8 pb-4">
+                  <div className="relative mb-4 group/avatar">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-primary to-accent rounded-full blur-md opacity-0 group-hover/avatar:opacity-40 transition-opacity duration-500"></div>
+                    {proveedor.imagen ? (
+                      <img src={proveedor.imagen} alt={proveedor.nombre} className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-xl relative z-10" />
+                    ) : (
+                      <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 text-white flex items-center justify-center text-3xl font-black border-4 border-white shadow-xl relative z-10">
+                        {proveedor.nombre.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <span className="absolute bottom-1 right-1 w-5 h-5 bg-green-500 border-4 border-white rounded-full z-20 shadow-sm animate-pulse"></span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <h3 className="font-bold text-lg leading-tight line-clamp-1 group-hover:text-primary transition-colors">{proveedor.nombre}</h3>
+                    <p className="text-xs text-muted-foreground font-medium flex items-center justify-center gap-1">
+                      <Package className="w-3 h-3 text-primary" />
+                      {preciosProveedor.length} Productos en Catálogo
+                    </p>
+                  </div>
                 </CardHeader>
 
-                <CardContent className="pt-4 pb-2 text-sm space-y-2.5">
+                <CardContent className="pt-0 pb-6 text-sm space-y-3 px-6">
+                  <div className="h-px bg-gradient-to-r from-transparent via-border to-transparent mb-4"></div>
+
                   {proveedor.contacto && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-6 flex justify-center"><Badge variant="outline" className="text-[10px] h-5 px-1">C</Badge></div>
-                      <span className="truncate">{proveedor.contacto}</span>
+                    <div className="flex items-center gap-3 text-muted-foreground group/info">
+                      <div className="w-8 h-8 rounded-lg bg-primary/5 flex items-center justify-center border border-primary/10 group-hover/info:bg-primary/10 transition-colors">
+                        <Truck className="w-4 h-4 text-primary" />
+                      </div>
+                      <span className="truncate flex-1 font-medium text-foreground/80">{proveedor.contacto}</span>
                     </div>
                   )}
+
                   {proveedor.telefono && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-6 flex justify-center"><Phone className="w-3.5 h-3.5" /></div>
-                      <span className="truncate font-mono text-xs">{proveedor.telefono}</span>
+                    <div className="flex items-center gap-3 text-muted-foreground group/info">
+                      <div className="w-8 h-8 rounded-lg bg-green-500/5 flex items-center justify-center border border-green-500/10 group-hover/info:bg-green-500/10 transition-colors">
+                        <Phone className="w-4 h-4 text-green-600" />
+                      </div>
+                      <span className="truncate flex-1 font-mono text-xs">{proveedor.telefono}</span>
                     </div>
                   )}
-                  {proveedor.email && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <div className="w-6 flex justify-center"><Mail className="w-3.5 h-3.5" /></div>
-                      <span className="truncate text-xs">{proveedor.email}</span>
+
+                  <div className="flex justify-between items-center pt-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-8 px-2 hover:bg-primary/10 rounded-lg"
+                      onClick={() => setViewingProveedor(proveedor)}
+                    >
+                      Ver Detalle
+                    </Button>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-primary/10 rounded-lg"
+                        onClick={() => handleEdit(proveedor)}
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 hover:bg-destructive/10 text-destructive rounded-lg"
+                        onClick={() => handleDelete(proveedor.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                  )}
+                  </div>
                 </CardContent>
 
-                <CardFooter className="pt-2 pb-4 px-4 flex gap-2">
+                <CardFooter className="pt-2 pb-4 px-4 flex gap-2 bg-muted/30">
                   {proveedor.telefono && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1 text-xs h-8 bg-green-50 hover:bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                      className="flex-1 text-xs h-9 rounded-xl bg-white/50 backdrop-blur-sm border-white/20 hover:bg-green-500 hover:text-white hover:border-green-500 transition-all group/wa"
                       onClick={() => window.open(`https://wa.me/${(proveedor.telefono || '').replace(/\D/g, '')}`, '_blank')}
                     >
-                      <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> WhatsApp
+                      <MessageCircle className="w-4 h-4 mr-2 group-hover/wa:animate-bounce" /> WhatsApp
                     </Button>
                   )}
                   {proveedor.email && (
                     <Button
                       variant="outline"
                       size="sm"
-                      className="flex-1 text-xs h-8"
+                      className="flex-1 text-xs h-9 rounded-xl bg-white/50 backdrop-blur-sm border-white/20 hover:border-primary transition-all"
                       onClick={() => window.location.href = `mailto:${proveedor.email}`}
                     >
-                      <Mail className="w-3.5 h-3.5 mr-1.5" /> Email
-                    </Button>
-                  )}
-                  {!proveedor.telefono && !proveedor.email && (
-                    <Button variant="ghost" size="sm" className="w-full text-xs h-8 text-muted-foreground" disabled>
-                      Sin contacto directo
+                      <Mail className="w-4 h-4 mr-2" /> Email
                     </Button>
                   )}
                 </CardFooter>

@@ -220,114 +220,148 @@ export function Inventario({
 
     return (
         <div className="space-y-6 animate-ag-fade-in">
-            {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-foreground">📦 Inventario</h1>
-                    <p className="text-muted-foreground">Control de stock y auditoría</p>
+                    <h1 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-primary animate-ag-gradient-shift">
+                        Centro de Inventario
+                    </h1>
+                    <p className="text-muted-foreground mt-1 flex items-center gap-2">
+                        <Package className="w-4 h-4 text-primary" />
+                        Control total de existencias y flujo de mercancía
+                    </p>
+                </div>
+                <div className="flex items-center gap-3">
+                    <Button variant="outline" className="glass-card gap-2 transition-ag" onClick={handleExportCSV}>
+                        <Download className="w-4 h-4 text-primary" />
+                        Exportar Reporte
+                    </Button>
                 </div>
             </div>
 
-            <Tabs defaultValue="lista" className="w-full">
-                <TabsList className="grid w-full grid-cols-3 lg:w-[600px]">
-                    <TabsTrigger value="lista">Listado General</TabsTrigger>
-                    <TabsTrigger value="auditoria">Auditoría Rápida</TabsTrigger>
-                    <TabsTrigger value="reportes">Reporte de Diferencias</TabsTrigger>
-                </TabsList>
+            <Tabs defaultValue="lista" className="w-full space-y-8">
+                <div className="flex items-center justify-between bg-white/40 dark:bg-black/20 p-2 rounded-2xl backdrop-blur-md border border-white/20 shadow-sm w-fit">
+                    <TabsList className="bg-transparent h-10 p-0 gap-1">
+                        <TabsTrigger value="lista" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-ag">
+                            Vista General
+                        </TabsTrigger>
+                        <TabsTrigger value="auditoria" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-ag">
+                            Auditoría Cíclica
+                        </TabsTrigger>
+                        <TabsTrigger value="reportes" className="rounded-xl px-6 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-ag">
+                            Analítica de Diferencias
+                        </TabsTrigger>
+                    </TabsList>
+                </div>
 
-                <TabsContent value="lista" className="space-y-6 mt-6">
+                <TabsContent value="lista" className="space-y-8 animate-ag-fade-in">
                     {/* KPI Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
                         {[
-                            { label: 'Total Productos', value: stats.total, icon: Package, color: 'kpi-blue', onClick: () => setFiltroEstado('todos') },
-                            { label: 'Stock OK', value: stats.ok, icon: CheckCircle, color: 'kpi-emerald', onClick: () => setFiltroEstado('ok') },
-                            { label: 'Stock Bajo', value: stats.bajo, icon: TrendingDown, color: 'kpi-amber', onClick: () => setFiltroEstado('bajo') },
-                            { label: 'Agotados', value: stats.agotado, icon: AlertTriangle, color: 'kpi-rose', onClick: () => setFiltroEstado('agotado') },
+                            { label: 'Total Sku', value: stats.total, icon: Package, color: 'kpi-blue', onClick: () => setFiltroEstado('todos'), active: filtroEstado === 'todos' },
+                            { label: 'En Salud', value: stats.ok, icon: CheckCircle, color: 'kpi-emerald', onClick: () => setFiltroEstado('ok'), active: filtroEstado === 'ok' },
+                            { label: 'Crítico (Bajo)', value: stats.bajo, icon: TrendingDown, color: 'kpi-amber', onClick: () => setFiltroEstado('bajo'), active: filtroEstado === 'bajo' },
+                            { label: 'Agotados', value: stats.agotado, icon: AlertTriangle, color: 'kpi-rose', onClick: () => setFiltroEstado('agotado'), active: filtroEstado === 'agotado' },
                         ].map((kpi, i) => (
                             <Card
                                 key={kpi.label}
-                                className={`cursor-pointer transition-all hover:scale-[1.02] ${filtroEstado === ['todos', 'ok', 'bajo', 'agotado'][i] ? 'ring-2 ring-primary' : ''}`}
+                                className={`group cursor-pointer transition-all duration-300 hover:scale-[1.02] glass-layer-2 border-white/10 ${kpi.active ? 'ring-2 ring-primary bg-primary/5 shadow-lg shadow-primary/5' : ''}`}
                                 onClick={kpi.onClick}
                             >
-                                <CardContent className="p-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-2.5 rounded-xl ${kpi.color} text-white`}>
+                                <CardContent className="p-6">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className={`p-3 rounded-2xl ${kpi.color} text-white shadow-lg`}>
                                             <kpi.icon className="w-5 h-5" />
                                         </div>
-                                        <div>
-                                            <p className="text-2xl font-bold text-foreground">{kpi.value}</p>
-                                            <p className="text-xs text-muted-foreground">{kpi.label}</p>
+                                        <div className={`text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-full ${kpi.active ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground opacity-50'}`}>
+                                            {kpi.active ? 'Activo' : 'Ver'}
                                         </div>
+                                    </div>
+                                    <div>
+                                        <p className="text-3xl font-black text-foreground">{kpi.value.toString().padStart(2, '0')}</p>
+                                        <p className="text-xs font-bold text-muted-foreground uppercase mt-1">{kpi.label}</p>
                                     </div>
                                 </CardContent>
                             </Card>
                         ))}
                     </div>
 
-                    {/* Búsqueda */}
-                    <div className="flex gap-3">
-                        <div className="relative flex-1">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                            <Input placeholder="Buscar producto..." value={busqueda} onChange={e => setBusqueda(e.target.value)} className="pl-10" />
+                    {/* Búsqueda y Filtros */}
+                    <div className="flex flex-col md:flex-row gap-4 items-center">
+                        <div className="relative flex-1 group w-full">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                            <Input
+                                placeholder="Buscar en el inventario activo..."
+                                value={busqueda}
+                                onChange={e => setBusqueda(e.target.value)}
+                                className="pl-11 h-12 glass-input rounded-2xl border-white/20 shadow-sm"
+                            />
                         </div>
                     </div>
 
                     {/* Tabla principal */}
-                    <Card>
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-lg flex items-center gap-2">
-                                <ArrowUpDown className="w-5 h-5" />
-                                Stock por Producto ({inventarioConProducto.length})
+                    <Card className="glass-card border-white/10 overflow-hidden">
+                        <CardHeader className="bg-muted/30 pb-4 border-b">
+                            <CardTitle className="text-xl font-bold flex items-center gap-3">
+                                <div className="p-2 bg-primary/10 rounded-lg">
+                                    <ClipboardList className="w-5 h-5 text-primary" />
+                                </div>
+                                Gestión de Stock
+                                <Badge variant="secondary" className="ml-2 font-mono">{inventarioConProducto.length}</Badge>
                             </CardTitle>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="p-0">
                             <div className="overflow-x-auto">
                                 <table className="w-full text-sm">
                                     <thead>
-                                        <tr className="border-b text-left text-muted-foreground">
-                                            <th className="pb-3 font-medium">Producto</th>
-                                            <th className="pb-3 font-medium">Categoría</th>
-                                            <th className="pb-3 font-medium text-center">Stock</th>
-                                            <th className="pb-3 font-medium text-center">Mínimo</th>
-                                            <th className="pb-3 font-medium text-center">Estado</th>
-                                            <th className="pb-3 font-medium">Ubicación</th>
-                                            {check('GESTIONAR_INVENTARIO') && <th className="pb-3 font-medium text-right">Acciones</th>}
+                                        <tr className="border-b bg-muted/20 text-left text-muted-foreground uppercase text-[10px] font-black tracking-widest">
+                                            <th className="px-6 py-4 font-bold">Producto</th>
+                                            <th className="px-6 py-4 font-bold">Categoría</th>
+                                            <th className="px-6 py-4 font-bold text-center">Stock Real</th>
+                                            <th className="px-6 py-4 font-bold text-center">Nivel Mínimo</th>
+                                            <th className="px-6 py-4 font-bold text-center">Estado</th>
+                                            {check('GESTIONAR_INVENTARIO') && <th className="px-6 py-4 font-bold text-right">Ajuste</th>}
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        {inventarioConProducto.map(item => {
+                                    <tbody className="divide-y divide-border/40">
+                                        {inventarioConProducto.map((item, idx) => {
                                             const conf = statusConfig[item.status as keyof typeof statusConfig];
                                             const Icon = conf.icon;
                                             return (
-                                                <tr key={item.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
-                                                    <td className="py-3 font-medium text-foreground">{item.producto!.nombre}</td>
-                                                    <td className="py-3">
-                                                        <Badge variant="secondary" className="text-xs">{item.producto!.categoria}</Badge>
+                                                <tr key={item.id} className={`group hover:bg-primary/5 transition-colors stagger-${(idx % 6) + 1} animate-ag-fade-in`}>
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{item.producto!.nombre}</span>
+                                                            <span className="text-[10px] flex items-center gap-1 text-muted-foreground mt-0.5"><MapPin className="w-3 h-3" />{item.ubicacion || 'Sin ubicación'}</span>
+                                                        </div>
                                                     </td>
-                                                    <td className="py-3 text-center font-semibold text-foreground">{item.stockActual}</td>
-                                                    <td className="py-3 text-center text-muted-foreground">{item.stockMinimo}</td>
-                                                    <td className="py-3 text-center">
-                                                        <Badge className={`${conf.color} gap-1`}>
-                                                            <Icon className="w-3 h-3" /> {conf.label}
+                                                    <td className="px-6 py-4">
+                                                        <Badge variant="secondary" className="bg-muted/50 text-[10px] uppercase font-bold text-muted-foreground border-none">
+                                                            {item.producto!.categoria}
                                                         </Badge>
                                                     </td>
-                                                    <td className="py-3 text-muted-foreground">
-                                                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{item.ubicacion || '—'}</span>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className={`text-base font-black ${item.status === 'ok' ? 'text-foreground' : item.status === 'bajo' ? 'text-amber-600' : 'text-destructive'}`}>
+                                                            {item.stockActual}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <span className="text-xs font-medium text-muted-foreground/60 font-mono">{item.stockMinimo}</span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-center">
+                                                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${conf.color}`}>
+                                                            <Icon className="w-3 h-3" /> {conf.label}
+                                                        </div>
                                                     </td>
                                                     {check('GESTIONAR_INVENTARIO') && (
-                                                        <td className="py-3 text-right">
+                                                        <td className="px-6 py-4 text-right">
                                                             <div className="flex gap-1 justify-end">
-                                                                <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                                                                <Button size="icon" variant="outline" className="h-8 w-8 rounded-lg border-primary/20 hover:bg-primary hover:text-white transition-ag"
                                                                     onClick={() => setAjusteModal({ productoId: item.productoId, tipo: 'entrada' })}>
-                                                                    <Plus className="w-3 h-3 mr-1" /> Entrada
+                                                                    <Plus className="w-4 h-4" />
                                                                 </Button>
-                                                                <Button size="sm" variant="outline" className="h-7 px-2 text-xs"
+                                                                <Button size="icon" variant="outline" className="h-8 w-8 rounded-lg border-destructive/20 hover:bg-destructive hover:text-white transition-ag"
                                                                     onClick={() => setAjusteModal({ productoId: item.productoId, tipo: 'salida' })}>
-                                                                    <Minus className="w-3 h-3 mr-1" /> Salida
-                                                                </Button>
-                                                                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs"
-                                                                    onClick={() => setAjusteModal({ productoId: item.productoId, tipo: 'ajuste' })}>
-                                                                    <RotateCcw className="w-3 h-3" />
+                                                                    <Minus className="w-4 h-4" />
                                                                 </Button>
                                                             </div>
                                                         </td>
