@@ -74,7 +74,6 @@ function Configuracion({
     toast.success('♻️ Sistema restablecido correctamente');
   };
 
-  const monedaActual = MONEDAS.find(m => m.code === monedaSeleccionada) || MONEDAS[0];
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto animate-ag-fade-in pb-12">

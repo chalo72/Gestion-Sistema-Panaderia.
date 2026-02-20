@@ -367,7 +367,7 @@ export function Proveedores({
                       variant="outline"
                       size="sm"
                       className="flex-1 text-xs h-8 bg-green-50 hover:bg-green-100 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                      onClick={() => window.open(`https://wa.me/${proveedor.telefono.replace(/\D/g, '')}`, '_blank')}
+                      onClick={() => window.open(`https://wa.me/${(proveedor.telefono || '').replace(/\D/g, '')}`, '_blank')}
                     >
                       <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> WhatsApp
                     </Button>

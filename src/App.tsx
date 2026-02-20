@@ -1,4 +1,4 @@
-import React, { useState, lazy, Suspense } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from '@/components/Sidebar';
 import { PageTransition } from '@/components/PageTransition';
@@ -327,6 +327,9 @@ function AppContent() {
             onViewAlertas={() => { }}
             onViewProductos={() => { }}
             onViewPrePedidos={() => { }}
+            onViewProveedores={() => { }}
+            onViewRecepciones={() => { }}
+            onViewInventario={() => { }}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}

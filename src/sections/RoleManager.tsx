@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
     ROLE_DESCRIPTIONS,
@@ -51,7 +51,7 @@ const ROLES: UserRole[] = ['ADMIN', 'GERENTE', 'COMPRADOR', 'VENDEDOR'];
 
 export default function RoleManager() {
     const { rolePermissions, updateRolePermissions, resetPermissions } = useAuth();
-    const [hasChanges, setHasChanges] = useState(false);
+    // const [hasChanges, setHasChanges] = useState(false);
 
     // Toggle de permiso
     const handleTogglePermission = (role: UserRole, permission: Permission) => {
@@ -66,13 +66,13 @@ export default function RoleManager() {
         }
 
         updateRolePermissions(role, newPermissions);
-        setHasChanges(true); // Marca que hubo cambios (aunque ya se guardan en context/storage al instante, esto es visual)
+        // setHasChanges(true); // Marca que hubo cambios (aunque ya se guardan en context/storage al instante, esto es visual)
     };
 
     const handleReset = () => {
         if (confirm('¿Estás seguro de restaurar los permisos por defecto? Se perderán todas las configuraciones personalizadas.')) {
             resetPermissions();
-            setHasChanges(false);
+            // setHasChanges(false);
         }
     };
 

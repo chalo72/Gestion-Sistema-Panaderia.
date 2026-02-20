@@ -89,8 +89,8 @@ export function Inventario({
             if (!producto) return;
 
             // Buscar costo promedio o último costo
-            const precioCosto = precios.find(p => p.productoId === m.productoId)?.precioCosto || 0;
-            const valorMovimiento = m.cantidad * precioCosto;
+            // const precioCosto = precios.find(p => p.productoId === m.productoId)?.precioCosto || 0; // Unused
+            // const valorMovimiento = m.cantidad * precioCosto; // Unused
 
             // En un ajuste, si el motivo empieza con "Auditoría", asumimos corrección.
             // PERO la API de movimientos no dice si fue positivo o negativo el ajuste explícitamente en el tipo 'ajuste'
@@ -421,7 +421,7 @@ export function Inventario({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {itemsAuditoria.map((item, idx) => (
+                        {itemsAuditoria.map((item) => (
                             <Card key={item.id} className="overflow-hidden border-t-4 border-t-transparent hover:border-t-primary transition-all shadow-sm hover:shadow-md">
                                 <CardContent className="p-4">
                                     <div className="mb-4">
