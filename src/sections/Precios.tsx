@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useCan } from '@/contexts/AuthContext';
 import {
   DollarSign,
   Plus,
@@ -57,6 +58,7 @@ export function Precios({
   getProveedorById,
   formatCurrency: formatCurrencyProp,
 }: PreciosProps) {
+  const { check } = useCan(); // Integración de permisos
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingPrecio, setEditingPrecio] = useState<PrecioProveedor | null>(null);
@@ -120,6 +122,10 @@ export function Precios({
   };
 
   const handleEdit = (precio: PrecioProveedor) => {
+    if (!check('EDITAR_PRECIOS')) {
+      toast.error('No tienes permiso para editar precios');
+      return;
+    }
     setEditingPrecio(precio);
     setFormData({
       productoId: precio.productoId,
@@ -131,6 +137,10 @@ export function Precios({
   };
 
   const handleDelete = (id: string) => {
+    if (!check('EDITAR_PRECIOS')) {
+      toast.error('No tienes permiso para eliminar precios');
+      return;
+    }
     if (confirm('¿Estás seguro de eliminar este precio?')) {
       onDeletePrecio(id);
       toast.success('Precio eliminado correctamente');
@@ -170,90 +180,96 @@ export function Precios({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-gray-900">Precios</h2>
-          <p className="text-gray-500 mt-1">Gestiona y compara precios de proveedores</p>
+          <h2 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">Gestión de Precios</h2>
+          <p className="text-muted-foreground mt-1 flex items-center gap-2">
+            <DollarSign className="w-4 h-4 text-blue-500" />
+            Inteligencia de mercado y comparativa de proveedores
+          </p>
         </div>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nuevo Precio
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editingPrecio ? 'Actualizar Precio' : 'Registrar Precio'}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <Label htmlFor="producto">Producto *</Label>
-                <Select
-                  value={formData.productoId}
-                  onValueChange={(value) => setFormData({ ...formData, productoId: value })}
-                  disabled={!!editingPrecio}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un producto" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {productos.map((producto) => (
-                      <SelectItem key={producto.id} value={producto.id}>
-                        {producto.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="proveedor">Proveedor *</Label>
-                <Select
-                  value={formData.proveedorId}
-                  onValueChange={(value) => setFormData({ ...formData, proveedorId: value })}
-                  disabled={!!editingPrecio}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona un proveedor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {proveedores.map((proveedor) => (
-                      <SelectItem key={proveedor.id} value={proveedor.id}>
-                        {proveedor.nombre}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="precioCosto">Precio de Costo (€) *</Label>
-                <Input
-                  id="precioCosto"
-                  type="number"
-                  step="0.01"
-                  value={formData.precioCosto}
-                  onChange={(e) => setFormData({ ...formData, precioCosto: e.target.value })}
-                  placeholder="0.00"
-                />
-              </div>
-              <div>
-                <Label htmlFor="notas">Notas</Label>
-                <Input
-                  id="notas"
-                  value={formData.notas}
-                  onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
-                  placeholder="Notas opcionales"
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-4">
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit">
-                  {editingPrecio ? 'Actualizar' : 'Guardar'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        {check('EDITAR_PRECIOS') ? (
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={resetForm} className="btn-gradient-primary shadow-lg shadow-blue-600/20">
+                <Plus className="w-4 h-4 mr-2" />
+                Registrar Precio
+              </Button>
+            </DialogTrigger>
+
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>{editingPrecio ? 'Actualizar Precio' : 'Registrar Precio'}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                  <Label htmlFor="producto">Producto *</Label>
+                  <Select
+                    value={formData.productoId}
+                    onValueChange={(value) => setFormData({ ...formData, productoId: value })}
+                    disabled={!!editingPrecio}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un producto" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {productos.map((producto) => (
+                        <SelectItem key={producto.id} value={producto.id}>
+                          {producto.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="proveedor">Proveedor *</Label>
+                  <Select
+                    value={formData.proveedorId}
+                    onValueChange={(value) => setFormData({ ...formData, proveedorId: value })}
+                    disabled={!!editingPrecio}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecciona un proveedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {proveedores.map((proveedor) => (
+                        <SelectItem key={proveedor.id} value={proveedor.id}>
+                          {proveedor.nombre}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="precioCosto">Precio de Costo (€) *</Label>
+                  <Input
+                    id="precioCosto"
+                    type="number"
+                    step="0.01"
+                    value={formData.precioCosto}
+                    onChange={(e) => setFormData({ ...formData, precioCosto: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="notas">Notas</Label>
+                  <Input
+                    id="notas"
+                    value={formData.notas}
+                    onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
+                    placeholder="Notas opcionales"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit">
+                    {editingPrecio ? 'Actualizar' : 'Guardar'}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        ) : null}
       </div>
 
       <Tabs defaultValue="lista" className="w-full">

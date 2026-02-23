@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/database';
 import type {
   Producto,
@@ -12,7 +12,16 @@ import type {
   Categoria,
   InventarioItem,
   MovimientoInventario,
-  Recepcion
+  Receta,
+  IngredienteReceta,
+  Venta,
+  VentaItem,
+  CajaSesion,
+  MetodoPago,
+  Recepcion,
+  Mesa,
+  PedidoActivo,
+  Gasto
 } from '@/types';
 
 import {
@@ -27,10 +36,11 @@ const defaultConfig: Configuracion = {
   notificarSubidas: true,
   umbralAlerta: 5,
   categorias: CATEGORIAS_DEFAULT,
-  moneda: 'EUR',
-  nombreNegocio: 'Mi Negocio',
+  moneda: 'COP',
+  nombreNegocio: 'Dulce Placer',
   impuestoPorcentaje: 0,
   mostrarUtilidadEnLista: true,
+  presupuestoMensual: 0,
 };
 
 export function usePriceControl() {
@@ -46,6 +56,14 @@ export function usePriceControl() {
   const [inventario, setInventario] = useState<InventarioItem[]>([]);
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
   const [recepciones, setRecepciones] = useState<Recepcion[]>([]);
+  const [recetas, setRecetas] = useState<Receta[]>([]);
+  const [ventas, setVentas] = useState<Venta[]>([]);
+  const [sesionesCaja, setSesionesCaja] = useState<CajaSesion[]>([]);
+  const [cajaActiva, setCajaActiva] = useState<CajaSesion | undefined>(undefined);
+  const [ahorros, setAhorros] = useState<any[]>([]); // Estado para ahorros
+  const [mesas, setMesas] = useState<Mesa[]>([]);
+  const [pedidosActivos, setPedidosActivos] = useState<PedidoActivo[]>([]);
+  const [gastos, setGastos] = useState<Gasto[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Inicializar base de datos y cargar datos
@@ -64,39 +82,44 @@ export function usePriceControl() {
 
   const loadAllData = async () => {
     try {
-      const [productosData, proveedoresData, preciosData, prepedidosData, alertasData, configData, inventarioData, movimientosData, recepcionesData, historialData] = await Promise.all([
-        db.getAllProductos(),
-        db.getAllProveedores(),
-        db.getAllPrecios(),
-        db.getAllPrePedidos(),
-        db.getAllAlertas(),
-        db.getConfiguracion(),
-        db.getAllInventario(),
-        db.getAllMovimientos(),
-        db.getAllRecepciones(),
-        db.getAllHistorial(),
-      ]);
-
-      setProductos(productosData);
-      setProveedores(proveedoresData);
-      setPrecios(preciosData);
-      setPrepedidos(prepedidosData);
-      setAlertas(alertasData);
-      setInventario(inventarioData);
-      setMovimientos(movimientosData);
-      setRecepciones(recepcionesData as Recepcion[]);
-      setHistorial(historialData as HistorialPrecio[]);
+      // Cargamos la configuración primero para tener el tema y moneda listos
+      const configData = await db.getConfiguracion();
       if (configData) {
-        // Mezclar con valores por defecto para asegurar que todos los campos existan
         setConfiguracion({
           ...defaultConfig,
           ...configData,
-          // Asegurar que categorías siempre tenga valor
           categorias: configData.categorias || defaultConfig.categorias,
         } as Configuracion);
       }
+
+      // Cargamos el resto en paralelo pero actualizamos según van llegando para mejorar la percepción de velocidad
+      const dataPromises = [
+        db.getAllProductos().then(setProductos),
+        db.getAllProveedores().then(setProveedores),
+        db.getAllPrecios().then(setPrecios),
+        db.getAllPrePedidos().then(setPrepedidos),
+        db.getAllAlertas().then(setAlertas),
+        db.getAllInventario().then(setInventario),
+        db.getAllMovimientos().then(setMovimientos),
+        db.getAllGastos().then(setGastos),
+        db.getAllRecepciones().then((data) => setRecepciones(data as Recepcion[])),
+        db.getAllHistorial().then(setHistorial),
+        db.getAllRecetas().then((data) => setRecetas(data as Receta[])),
+        db.getAllVentas().then(setVentas),
+        db.getAllSesionesCaja().then(setSesionesCaja),
+        db.getSesionCajaActiva().then(setCajaActiva),
+        db.getAllAhorros().then(setAhorros),
+        db.getAllMesas().then(setMesas),
+        db.getAllPedidosActivos().then(setPedidosActivos),
+      ];
+
+      await Promise.all(dataPromises);
+      console.log('⚡ Todas las constantes de datos han sido cargadas y sincronizadas.');
+
     } catch (error) {
-      console.error('Error cargando datos:', error);
+      console.error('❌ Error crítico en la carga asíncrona de datos:', error);
+    } finally {
+      setLoaded(true);
     }
   };
 
@@ -550,6 +573,103 @@ export function usePriceControl() {
     return recepciones.filter(r => r.proveedorId === proveedorId);
   }, [recepciones]);
 
+  // Funciones de Ventas (POS)
+  const registrarVenta = useCallback(async (data: {
+    items: Omit<VentaItem, 'id'>[];
+    metodoPago: MetodoPago;
+    cliente?: string;
+    notas?: string;
+    usuarioId: string;
+  }) => {
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+
+    const itemsConId: VentaItem[] = data.items.map(item => ({
+      ...item,
+      id: crypto.randomUUID(),
+    }));
+
+    const total = itemsConId.reduce((sum, item) => sum + item.subtotal, 0);
+
+    const nuevaVenta: Venta = {
+      id,
+      cajaId: cajaActiva?.id,
+      items: itemsConId,
+      total,
+      metodoPago: data.metodoPago,
+      usuarioId: data.usuarioId,
+      cliente: data.cliente,
+      notas: data.notas,
+      fecha: now,
+    };
+
+    // 1. Guardar en DB
+    await db.addVenta(nuevaVenta);
+    setVentas(prev => [nuevaVenta, ...prev]);
+
+    // 2. Descontar Stock y Registrar Movimientos
+    for (const item of itemsConId) {
+      const producto = productos.find(p => p.id === item.productoId);
+      if (producto) {
+        await onAjustarStock(
+          item.productoId,
+          item.cantidad,
+          'salida',
+          `Venta #${id.slice(0, 8)}`
+        );
+      }
+    }
+
+    // 3. Actualizar Caja si hay una activa
+    if (cajaActiva) {
+      const updatedCaja: CajaSesion = {
+        ...cajaActiva,
+        totalVentas: cajaActiva.totalVentas + total,
+        ventasIds: [...cajaActiva.ventasIds, id],
+      };
+      await db.updateSesionCaja(updatedCaja);
+      setCajaActiva(updatedCaja);
+      setSesionesCaja(prev => prev.map(s => s.id === updatedCaja.id ? updatedCaja : s));
+    }
+
+    return nuevaVenta;
+  }, [cajaActiva, productos, onAjustarStock]);
+
+  // Funciones de Caja
+  const abrirCaja = useCallback(async (usuarioId: string, montoApertura: number) => {
+    const now = new Date().toISOString();
+    const nuevaSesion: CajaSesion = {
+      id: crypto.randomUUID(),
+      usuarioId,
+      fechaApertura: now,
+      montoApertura,
+      totalVentas: 0,
+      ventasIds: [],
+      estado: 'abierta',
+    };
+
+    await db.addSesionCaja(nuevaSesion);
+    setCajaActiva(nuevaSesion);
+    setSesionesCaja(prev => [nuevaSesion, ...prev]);
+    return nuevaSesion;
+  }, []);
+
+  const cerrarCaja = useCallback(async (montoCierre: number) => {
+    if (!cajaActiva) return;
+
+    const updatedCaja: CajaSesion = {
+      ...cajaActiva,
+      fechaCierre: new Date().toISOString(),
+      montoCierre,
+      estado: 'cerrada',
+    };
+
+    await db.updateSesionCaja(updatedCaja);
+    setCajaActiva(undefined);
+    setSesionesCaja(prev => prev.map(s => s.id === updatedCaja.id ? updatedCaja : s));
+    return updatedCaja;
+  }, [cajaActiva]);
+
   // Funciones de Configuración
   const updateConfiguracion = useCallback(async (updates: Partial<Configuracion>) => {
     const newConfig = { ...configuracion, ...updates };
@@ -589,6 +709,65 @@ export function usePriceControl() {
   const getMejorPrecioByProveedor = useCallback((productoId: string, proveedorId: string) => {
     return precios.find(p => p.productoId === productoId && p.proveedorId === proveedorId);
   }, [precios]);
+
+  // Lógica de cálculo de Costo por Receta (Inspiración ERP - Escandallos)
+  const getCostoReceta = useCallback((productoId: string) => {
+    const receta = recetas.find(r => r.productoId === productoId);
+    if (!receta) {
+      // Si no tiene receta, devolver el costo base manual o el mejor precio si es ingrediente
+      const producto = productos.find(p => p.id === productoId);
+      if (producto?.tipo === 'ingrediente') {
+        const mejorPrecio = getMejorPrecio(productoId);
+        return mejorPrecio ? mejorPrecio.precioCosto : (producto.costoBase || 0);
+      }
+      return producto?.costoBase || 0;
+    }
+
+    const costoTotal = receta.ingredientes.reduce((sum, ing) => {
+      const mejorPrecio = getMejorPrecio(ing.productoId);
+      // Si no hay precio de proveedor, usar el costo base manual del ingrediente
+      let costoUnitario = 0;
+      if (mejorPrecio) {
+        costoUnitario = mejorPrecio.precioCosto;
+      } else {
+        const prodIng = productos.find(p => p.id === ing.productoId);
+        costoUnitario = prodIng?.costoBase || 0;
+      }
+      return sum + (costoUnitario * ing.cantidad);
+    }, 0);
+
+    return receta.porcionesResultantes > 0 ? costoTotal / receta.porcionesResultantes : costoTotal;
+  }, [recetas, getMejorPrecio, productos]);
+
+  // Sincronización proactiva de costos de productos elaborados
+  useEffect(() => {
+    const actualizarCostosElaborados = async () => {
+      let huboCambio = false;
+      const nuevosProductos = productos.map(p => {
+        if (p.tipo === 'elaborado') {
+          const nuevoCosto = getCostoReceta(p.id);
+          if (p.costoBase !== nuevoCosto) {
+            huboCambio = true;
+            return { ...p, costoBase: nuevoCosto };
+          }
+        } else if (p.tipo === 'ingrediente') {
+          // También actualizar costo base de ingredientes si hay precio de proveedor
+          const mejorPrecio = getMejorPrecio(p.id);
+          if (mejorPrecio && p.costoBase !== mejorPrecio.precioCosto) {
+            huboCambio = true;
+            return { ...p, costoBase: mejorPrecio.precioCosto };
+          }
+        }
+        return p;
+      });
+
+      if (huboCambio) {
+        setProductos(nuevosProductos);
+      }
+    };
+
+    if (loaded) actualizarCostosElaborados();
+  }, [precios, recetas, loaded]); // Se dispara cuando cambian precios de ingredientes o la receta
 
   // Funciones de Reabastecimiento Inteligente
   const generarSugerenciasPedido = useCallback(async () => {
@@ -670,49 +849,58 @@ export function usePriceControl() {
     return alertas.filter(a => !a.leida);
   }, [alertas]);
 
-  const getEstadisticas = useCallback(() => {
+  // CÁLCULO MEMOIZADO DE ESTADÍSTICAS (MAX PERFORMANCE)
+  const estadisticas = useMemo(() => {
+    console.log('📊 Optimizando Estadísticas...');
     const totalProductos = productos.length;
     const totalProveedores = proveedores.length;
-    const alertasNoLeidas = alertas.filter(a => !a.leida).length;
+    const alertasNoLeidasCount = alertas.filter(a => !a.leida).length;
     const totalPrePedidos = prepedidos.length;
     const prePedidosConfirmados = prepedidos.filter(p => p.estado === 'confirmado').length;
 
-    // Calcular utilidad promedio
-    const productosConPrecio = productos.filter(p => p.precioVenta > 0);
+    // Calcular utilidad promedio con optimización de búsqueda
+    const mejorPrecioCache = new Map<string, number>();
+    productos.forEach(p => {
+      const best = getMejorPrecio(p.id);
+      if (best) mejorPrecioCache.set(p.id, best.precioCosto);
+    });
+
+    const productosConPrecio = productos.filter(p => p.precioVenta > 0 && mejorPrecioCache.has(p.id));
     let utilidadPromedio = 0;
 
     if (productosConPrecio.length > 0) {
       const utilidades = productosConPrecio.map(p => {
-        const mejorPrecio = getMejorPrecio(p.id);
-        if (!mejorPrecio) return 0;
-        const utilidad = ((p.precioVenta - mejorPrecio.precioCosto) / p.precioVenta) * 100;
-        return utilidad;
+        const mejorPrecioCosto = mejorPrecioCache.get(p.id)!;
+        return ((p.precioVenta - mejorPrecioCosto) / p.precioVenta) * 100;
       });
       utilidadPromedio = utilidades.reduce((a, b) => a + b, 0) / utilidades.length;
     }
 
-    // Productos sin precio de proveedor
-    const productosSinPrecio = productos.filter(p => {
-      const preciosProducto = precios.filter(pr => pr.productoId === p.id);
-      return preciosProducto.length === 0;
-    }).length;
+    const productosSinPrecio = productos.filter(p => !mejorPrecioCache.has(p.id)).length;
 
-    // Total en pre-pedidos pendientes
     const totalEnPrePedidos = prepedidos
       .filter(p => p.estado === 'borrador')
       .reduce((sum, p) => sum + p.total, 0);
 
-    // Estadísticas de inventario
     const totalItemsInventario = inventario.length;
     const itemsBajoStock = inventario.filter(inv => inv.stockActual <= inv.stockMinimo).length;
     const totalRecepciones = recepciones.length;
     const recepcionesPendientes = recepciones.filter(r => r.estado === 'en_proceso').length;
     const totalCambiosPrecios = historial.length;
 
+    // Detección Predictiva de Agotamiento
+    const prediccionAgotamiento = inventario.filter(inv => {
+      const movs = movimientos.filter(m => m.productoId === inv.productoId && m.tipo === 'salida');
+      if (movs.length < 3) return false; // Necesitamos datos para predecir
+      const consumoPromedio = movs.reduce((a, b) => a + b.cantidad, 0) / 30; // Consumo diario estimado (últimos 30 días aprox)
+      const diasRestantes = inv.stockActual / (consumoPromedio || 1);
+      return diasRestantes < 7; // Alerta si se agota en menos de 1 semana
+    }).length;
+
     return {
       totalProductos,
       totalProveedores,
-      alertasNoLeidas,
+      alertasNoLeidas: alertasNoLeidasCount,
       utilidadPromedio: Math.round(utilidadPromedio * 100) / 100,
       productosSinPrecio,
       totalPrePedidos,
@@ -723,8 +911,21 @@ export function usePriceControl() {
       totalRecepciones,
       recepcionesPendientes,
       totalCambiosPrecios,
+      itemsEnRiesgo: prediccionAgotamiento,
+      totalRecetas: recetas.length,
+      // Estadísticas de Ventas
+      ventasHoy: ventas.filter(v => v.fecha.startsWith(new Date().toISOString().split('T')[0])).length,
+      ingresosHoy: ventas
+        .filter(v => v.fecha.startsWith(new Date().toISOString().split('T')[0]))
+        .reduce((sum, v) => sum + v.total, 0),
+      ticketPromedio: ventas.length > 0
+        ? ventas.reduce((sum, v) => sum + v.total, 0) / ventas.length
+        : 0,
     };
-  }, [productos, proveedores, alertas, precios, prepedidos, inventario, recepciones, historial, getMejorPrecio]);
+  }, [productos, proveedores, alertas, precios, prepedidos, inventario, recepciones, historial, movimientos, recetas, ventas, getMejorPrecio]);
+
+  // Alias para mantener compatibilidad
+  const getEstadisticas = useCallback(() => estadisticas, [estadisticas]);
 
   // Limpiar todos los datos
   const clearAllData = useCallback(async () => {
@@ -739,17 +940,29 @@ export function usePriceControl() {
     setMovimientos([]);
     setRecepciones([]);
     setHistorial([]);
+    setRecetas([]);
   }, []);
 
   // Sincronización Manual
   const syncWithCloud = useCallback(async () => {
     if (db.syncLocalToCloud) {
-      await db.syncLocalToCloud();
-      await loadAllData(); // Recargar datos después de sincronizar
-    } else {
-      console.warn('La sincronización en la nube no está disponible.');
+      toast.promise(db.syncLocalToCloud(), {
+        loading: 'Subiendo datos a la nube...',
+        success: () => { loadAllData(); return 'Sincronizado correctamente'; },
+        error: 'Error al sincronizar. Revisa tu conexión.'
+      });
     }
-  }, []);
+  }, [loadAllData]);
+
+  const downloadFromCloud = useCallback(async () => {
+    if (db.syncCloudToLocal) {
+      toast.promise(db.syncCloudToLocal(), {
+        loading: 'Descargando datos desde la nube...',
+        success: () => { loadAllData(); return 'Datos actualizados'; },
+        error: 'Error al descargar. ¿Está el proyecto activo?'
+      });
+    }
+  }, [loadAllData]);
 
   return {
     // Datos
@@ -761,13 +974,32 @@ export function usePriceControl() {
     configuracion,
     prepedidos,
     recepciones,
+    estadisticas, // Nuevo export para uso directo sin llamar a función
 
     inventario,
     movimientos,
     loaded,
+    downloadFromCloud,
+    syncWithCloud,
 
     // Datos de ejemplo
     cargarDatosEjemplo,
+
+    // Acciones de Recetas
+    addReceta: async (r: Receta) => {
+      await db.addReceta(r as any);
+      setRecetas(prev => [...prev, r]);
+    },
+    updateReceta: async (r: Receta) => {
+      await db.updateReceta(r as any);
+      setRecetas(prev => prev.map(item => item.id === r.id ? r : item));
+    },
+    deleteReceta: async (id: string) => {
+      await db.deleteReceta(id);
+      setRecetas(prev => prev.filter(r => r.id !== id));
+    },
+    getRecetaByProducto: (pid: string) => recetas.find(r => r.productoId === pid),
+    recetas,
 
     // Acciones de Categorías
     addCategoria,
@@ -809,24 +1041,26 @@ export function usePriceControl() {
     confirmarRecepcion,
     updateRecepcion,
     getRecepcionesByProveedor,
-    generarSugerenciasPedido,
 
     // Configuración
     updateConfiguracion,
 
-    // Sincronización
-    syncWithCloud,
-
-    // Formato de moneda
-    formatCurrency,
-    getMonedaActual,
-    MONEDAS,
+    // Ventas y Caja
+    ventas,
+    sesionesCaja,
+    cajaActiva,
+    registrarVenta,
+    abrirCaja,
+    cerrarCaja,
 
     // Utilidades
+    formatCurrency,
+    getMonedaActual,
     getPreciosByProducto,
     getPreciosByProveedor,
     getMejorPrecio,
     getMejorPrecioByProveedor,
+    generarSugerenciasPedido,
     getProductoById,
     getProveedorById,
     getPrecioByIds,
@@ -834,6 +1068,71 @@ export function usePriceControl() {
     getPrePedidosByProveedor,
     getAlertasNoLeidas,
     getEstadisticas,
+    ahorros,
+    mesas,
+    pedidosActivos,
+    updateMesa: useCallback(async (mesa: Mesa) => {
+      await db.updateMesa(mesa);
+      setMesas(prev => prev.map(m => m.id === mesa.id ? mesa : m));
+    }, []),
+    addPedidoActivo: useCallback(async (pedido: PedidoActivo) => {
+      await db.addPedidoActivo(pedido);
+      setPedidosActivos(prev => [...prev, pedido]);
+    }, []),
+    updatePedidoActivo: useCallback(async (pedido: PedidoActivo) => {
+      await db.updatePedidoActivo(pedido);
+      setPedidosActivos(prev => prev.map(p => p.id === pedido.id ? pedido : p));
+    }, []),
+    deletePedidoActivo: useCallback(async (id: string) => {
+      await db.deletePedidoActivo(id);
+      setPedidosActivos(prev => prev.filter(p => p.id !== id));
+    }, []),
+
+    // Gastos
+    gastos,
+    addGasto: useCallback(async (g: Omit<Gasto, 'id'>) => {
+      const newG = { ...g, id: crypto.randomUUID() };
+      await db.addGasto(newG as any);
+      setGastos(prev => [newG as Gasto, ...prev]);
+    }, []),
+    updateGasto: useCallback(async (id: string, updates: Partial<Gasto>) => {
+      const gasto = gastos.find(g => g.id === id);
+      if (!gasto) return;
+      const updated = { ...gasto, ...updates };
+      await db.updateGasto(updated as any);
+      setGastos(prev => prev.map(g => g.id === id ? updated : g));
+    }, [gastos]),
+    deleteGasto: useCallback(async (id: string) => {
+      await db.deleteGasto(id);
+      setGastos(prev => prev.filter(g => g.id !== id));
+    }, []),
+    generarReporte: useCallback((periodo: string) => {
+      const gastosPeriodo = gastos.filter(g => g.fecha.startsWith(periodo));
+      const ventasPeriodo = ventas.filter(v => v.fecha.startsWith(periodo));
+
+      const totalVentas = ventasPeriodo.reduce((s, v) => s + v.total, 0);
+      const totalGastos = gastosPeriodo.reduce((s, g) => s + g.monto, 0);
+
+      const gastosPorCategoria = gastosPeriodo.reduce((acc, g) => {
+        acc[g.categoria] = (acc[g.categoria] || 0) + g.monto;
+        return acc;
+      }, {} as any);
+
+      return {
+        periodo,
+        totalVentas,
+        totalGastos,
+        utilidadBruta: totalVentas - totalGastos,
+        gastosPorCategoria,
+        ventasPorMetodoPago: ventasPeriodo.reduce((acc, v) => {
+          acc[v.metodoPago] = (acc[v.metodoPago] || 0) + v.total;
+          return acc;
+        }, {} as any)
+      };
+    }, [gastos, ventas]),
+
     clearAllData,
+    loadAllData,
+    MONEDAS,
   };
 }

@@ -1,15 +1,45 @@
 // Tipos para el sistema de control de precios
 
+// Importar nuevos tipos del ecosistema Antigravity
+export * from './product-variants';
+export * from './payment-system';
+export * from './categories';
+
+export type ProductoTipo = 'ingrediente' | 'elaborado';
+
 export interface Producto {
   id: string;
   nombre: string;
   categoria: string;
   descripcion?: string;
   precioVenta: number;
-  margenUtilidad: number; // Porcentaje (ej: 30 = 30%)
+  precioCompra?: number;  // Para productos customizados en POS
+  margenUtilidad: number;
+  tipo: ProductoTipo; // 'ingrediente' para materias primas, 'elaborado' para panes/tortas
+  costoBase?: number;  // Costo calculado si es elaborado, o manual si es ingrediente sin proveedor
   imagen?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface IngredienteReceta {
+  id: string;
+  recetaId: string;
+  productoId: string; // El ID del producto tipo 'ingrediente'
+  cantidad: number;
+  unidad: string; // gr, kg, ml, l, unidad
+  costoCalculado: number; // Precio al momento de la receta o dinámico
+}
+
+export interface Receta {
+  id: string;
+  productoId: string; // El ID del producto tipo 'elaborado'
+  ingredientes: IngredienteReceta[];
+  porcionesResultantes: number;
+  costoTotal: number;
+  costoPorPorcion: number;
+  instrucciones?: string;
+  fechaActualizacion: string;
 }
 
 export interface Categoria {
@@ -120,9 +150,10 @@ export interface Configuracion {
   emailNegocio?: string;
   impuestoPorcentaje: number;
   mostrarUtilidadEnLista: boolean;
+  presupuestoMensual?: number;
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes';
 
 // ============================================
 // SISTEMA DE ROLES Y PERMISOS
@@ -184,6 +215,11 @@ export type Permission =
   // Recepciones
   | 'VER_RECEPCIONES'
   | 'CREAR_RECEPCIONES'
+  // Ventas
+  | 'VER_VENTAS'
+  | 'GESTIONAR_VENTAS'
+  | 'ABRIR_CERRAR_CAJA'
+  | 'VER_FINANZAS'
   // Exportación
   | 'EXPORTAR_DATOS';
 
@@ -200,6 +236,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_DASHBOARD', 'VER_ESTADISTICAS',
     'VER_INVENTARIO', 'GESTIONAR_INVENTARIO',
     'VER_RECEPCIONES', 'CREAR_RECEPCIONES',
+    'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA', 'VER_FINANZAS',
     'EXPORTAR_DATOS',
   ],
   GERENTE: [
@@ -213,6 +250,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_DASHBOARD', 'VER_ESTADISTICAS',
     'VER_INVENTARIO', 'GESTIONAR_INVENTARIO',
     'VER_RECEPCIONES', 'CREAR_RECEPCIONES',
+    'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA', 'VER_FINANZAS',
     'EXPORTAR_DATOS',
   ],
   COMPRADOR: [
@@ -229,6 +267,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_PRODUCTOS',
     'VER_PRECIO_VENTA',
     'VER_DASHBOARD',
+    'VER_VENTAS', 'GESTIONAR_VENTAS',
   ],
 };
 
@@ -240,34 +279,25 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, { nombre: string; descripcion: 
   VENDEDOR: { nombre: 'Vendedor', descripcion: 'Solo visualización de productos y precios', color: '#f59e0b' },
 };
 
-// Usuarios de prueba
+// Usuarios Oficiales - Sistema Blindado 🛡️
 export const USUARIOS_PRUEBA: Usuario[] = [
-  { id: '1', email: 'admin@example.com', nombre: 'Admin', apellido: 'Sistema', rol: 'ADMIN', activo: true, createdAt: new Date().toISOString() },
-  { id: '2', email: 'gerente@example.com', nombre: 'Carlos', apellido: 'García', rol: 'GERENTE', activo: true, createdAt: new Date().toISOString() },
-  { id: '3', email: 'comprador@example.com', nombre: 'María', apellido: 'López', rol: 'COMPRADOR', activo: true, createdAt: new Date().toISOString() },
-  { id: '4', email: 'vendedor@example.com', nombre: 'Juan', apellido: 'Martínez', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() },
+  { id: 'owner-local-id', email: 'Chalo8321@gmail.com', nombre: 'Chalo', apellido: 'Dueño Dulce Placer', rol: 'ADMIN', activo: true, createdAt: new Date().toISOString() },
+  { id: 'guest-local-id', email: 'invitado@dulceplacer.com', nombre: 'Invitado', apellido: 'Dulce Placer', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() },
 ];
 
-// Contraseñas de prueba (en producción estarían hasheadas)
+// Credenciales de Acceso Oficiales 🔐
 export const CREDENCIALES_PRUEBA: Record<string, string> = {
-  'admin@example.com': 'password123',
-  'gerente@example.com': 'password123',
-  'comprador@example.com': 'password123',
-  'vendedor@example.com': 'password123',
+  'Chalo8321@gmail.com': 'admin2026',
+  'invitado@dulceplacer.com': 'invitado123',
 };
 
-// Categorías por defecto
+// Categorías de Panadería por defecto
 export const CATEGORIAS_DEFAULT: Categoria[] = [
-  { id: '1', nombre: 'Electrónica', color: '#3b82f6' },
-  { id: '2', nombre: 'Ropa y Accesorios', color: '#ec4899' },
-  { id: '3', nombre: 'Alimentos y Bebidas', color: '#22c55e' },
-  { id: '4', nombre: 'Hogar y Decoración', color: '#f59e0b' },
-  { id: '5', nombre: 'Ferretería', color: '#6b7280' },
-  { id: '6', nombre: 'Papelería', color: '#8b5cf6' },
-  { id: '7', nombre: 'Salud y Belleza', color: '#14b8a6' },
-  { id: '8', nombre: 'Deportes', color: '#ef4444' },
-  { id: '9', nombre: 'Juguetes', color: '#f97316' },
-  { id: '10', nombre: 'Automotriz', color: '#1e293b' },
+  { id: 'cat-1', nombre: 'Harinas y Materia Prima', color: '#8b5e3c' },
+  { id: 'cat-2', nombre: 'Lácteos y Huevos', color: '#facc15' },
+  { id: 'cat-3', nombre: 'Azúcares y Endulzantes', color: '#3b82f6' },
+  { id: 'cat-4', nombre: 'Levaduras y Aditivos', color: '#10b981' },
+  { id: 'cat-5', nombre: 'Empaques y Desechables', color: '#6366f1' },
 ];
 
 // Datos de ejemplo
@@ -279,16 +309,14 @@ export const DATOS_EJEMPLO = {
     { id: 'prov-4', nombre: 'Mayorista Rodríguez', contacto: 'Ana Rodríguez', telefono: '+34 645 678 901', email: 'ana@mayoristarodriguez.com', direccion: 'Calle Comercio 78, Sevilla', createdAt: new Date().toISOString() },
   ],
   productos: [
-    { id: 'prod-1', nombre: 'Laptop HP 15.6" Pavilion', categoria: 'Electrónica', descripcion: 'Laptop Intel Core i5, 8GB RAM, 512GB SSD', precioVenta: 649.99, margenUtilidad: 30, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-2', nombre: 'Monitor Samsung 27" Full HD', categoria: 'Electrónica', descripcion: 'Monitor LED 27 pulgadas, resolución 1920x1080', precioVenta: 229.99, margenUtilidad: 25, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-3', nombre: 'Teclado Mecánico RGB', categoria: 'Electrónica', descripcion: 'Teclado gaming con switches rojos', precioVenta: 89.99, margenUtilidad: 40, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-4', nombre: 'Camiseta Algodón Premium', categoria: 'Ropa y Accesorios', descripcion: 'Camiseta 100% algodón, varias tallas', precioVenta: 24.99, margenUtilidad: 50, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-5', nombre: 'Zapatillas Deportivas Nike', categoria: 'Ropa y Accesorios', descripcion: 'Zapatillas running, modelo Air Max', precioVenta: 119.99, margenUtilidad: 35, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-6', nombre: 'Café Molido Premium 1kg', categoria: 'Alimentos y Bebidas', descripcion: 'Café 100% arábica, tueste medio', precioVenta: 18.99, margenUtilidad: 45, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-7', nombre: 'Aceite de Oliva Virgen Extra 5L', categoria: 'Alimentos y Bebidas', descripcion: 'Aceite de oliva español, primera presión', precioVenta: 45.99, margenUtilidad: 30, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-8', nombre: 'Lámpara LED de Escritorio', categoria: 'Hogar y Decoración', descripcion: 'Lámpara regulable con puerto USB', precioVenta: 34.99, margenUtilidad: 50, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-9', nombre: 'Set de Herramientas 150 piezas', categoria: 'Ferretería', descripcion: 'Caja de herramientas completa con maletín', precioVenta: 79.99, margenUtilidad: 35, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-    { id: 'prod-10', nombre: 'Resma Papel A4 500 hojas', categoria: 'Papelería', descripcion: 'Papel multifunción 80gr', precioVenta: 5.99, margenUtilidad: 25, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-1', nombre: 'Harina de Trigo Especial', categoria: 'Harinas y Materia Prima', descripcion: 'Harina de fuerza para pan artesanal', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente', costoBase: 1.20, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-2', nombre: 'Azúcar Blanca Refinada', categoria: 'Azúcares y Endulzantes', descripcion: 'Bulto de 50kg', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente', costoBase: 0.85, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-3', nombre: 'Mantequilla Sin Sal', categoria: 'Lácteos y Huevos', descripcion: 'Bloque de 5kg', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente', costoBase: 6.50, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-4', nombre: 'Huevos Grado A', categoria: 'Lácteos y Huevos', descripcion: 'Caja x 30 unidades', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente', costoBase: 4.50, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-5', nombre: 'Levadura Seca Activa', categoria: 'Levaduras y Aditivos', descripcion: 'Paquete de 500g', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente', costoBase: 3.20, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-6', nombre: 'Pan de Bono Tradicional', categoria: 'Panadería Artesanal', descripcion: 'Producto estrella de la casa', precioVenta: 1.50, margenUtilidad: 45, tipo: 'elaborado', costoBase: 0.82, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-7', nombre: 'Croissant De Mantequilla', categoria: 'Panadería Artesanal', descripcion: 'Hojaldre francés auténtico', precioVenta: 2.50, margenUtilidad: 55, tipo: 'elaborado', costoBase: 1.12, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'prod-8', nombre: 'Torta de Chocolate 12p', categoria: 'Pastelería', descripcion: 'Bizcocho húmedo de cacao', precioVenta: 25.00, margenUtilidad: 60, tipo: 'elaborado', costoBase: 10.00, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   ],
   precios: [
     // Laptop HP
@@ -381,4 +409,96 @@ export interface Recepcion {
   observaciones?: string;
   fechaRecepcion: string;
   imagenFactura?: string;
+}
+// ============================================
+// VENTAS (POS)
+// ============================================
+
+export type MetodoPago = 'efectivo' | 'tarjeta' | 'transferencia' | 'otro';
+
+export interface VentaItem {
+  id: string;
+  productoId: string;
+  cantidad: number;
+  precioUnitario: number;
+  subtotal: number;
+}
+
+export interface Venta {
+  id: string;
+  cajaId?: string;
+  items: VentaItem[];
+  total: number;
+  metodoPago: MetodoPago;
+  usuarioId: string;
+  cliente?: string;
+  notas?: string;
+  fecha: string;
+}
+
+export interface CajaSesion {
+  id: string;
+  usuarioId: string;
+  fechaApertura: string;
+  fechaCierre?: string;
+  montoApertura: number;
+  montoCierre?: number;
+  totalVentas: number;
+  ventasIds: string[];
+  estado: 'abierta' | 'cerrada';
+}
+// ============================================
+// MESAS Y PEDIDOS ACTIVOS (Muro de Pedidos)
+// ============================================
+
+export interface Mesa {
+  id: string;
+  numero: string;
+  capacidad: number;
+  estado: 'disponible' | 'ocupada' | 'reservada' | 'mantenimiento';
+  pedidoActivoId?: string;
+}
+
+export interface PedidoActivo {
+  id: string;
+  mesaId?: string;
+  items: VentaItem[];
+  cliente?: string;
+  total: number;
+  estado: 'abierto' | 'preparando' | 'listo' | 'entregado';
+  notas?: string;
+  fechaInicio: string;
+  ultimoCambio: string;
+}
+// ============================================
+// GASTOS Y FACTURACIÓN
+// ============================================
+
+export type GastoCategoria = 'Servicios' | 'Arriendo' | 'Materia Prima' | 'Nómina' | 'Mantenimiento' | 'Otros';
+
+export interface Gasto {
+  id: string;
+  descripcion: string;
+  monto: number;
+  categoria: GastoCategoria;
+  fecha: string;
+  proveedorId?: string;
+  comprobanteUrl?: string; // URL de la imagen de la factura escaneada
+  metodoPago: MetodoPago;
+  usuarioId: string;
+  cajaId?: string; // Si el gasto salió de una caja abierta
+  metadata?: {
+    carpeta: string;
+    nombreArchivo: string;
+    etiquetas: string[];
+  };
+}
+
+export interface ReporteFinanciero {
+  periodo: string; // "2024-02"
+  totalVentas: number;
+  totalGastos: number;
+  utilidadBruta: number;
+  gastosPorCategoria: Record<GastoCategoria, number>;
+  ventasPorMetodoPago: Record<MetodoPago, number>;
 }

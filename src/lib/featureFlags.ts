@@ -37,7 +37,7 @@ const FLAGS: Record<string, FeatureFlag> = {
     },
     EXPORT_PDF: {
         enabled: false,
-        allowedUsers: ['admin@example.com'],
+        allowedUsers: ['Chalo8321@gmail.com'],
         description: 'Exportar reportes a PDF',
     },
     SMART_REPLENISHMENT: {

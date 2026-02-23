@@ -5,8 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TrendingUp, Eye, EyeOff, Users } from 'lucide-react';
-import { ROLE_DESCRIPTIONS, USUARIOS_PRUEBA, CREDENCIALES_PRUEBA } from '@/types';
+import { Eye, EyeOff } from 'lucide-react';
+
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -18,7 +18,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showDemoUsers, setShowDemoUsers] = useState(false);
 
   const { login } = useAuth();
 
@@ -30,7 +29,11 @@ export function Login({ onLoginSuccess }: LoginProps) {
     const result = await login(email, password);
 
     if (result.success) {
-      onLoginSuccess();
+      console.log('✅ Login exitoso, redirigiendo...');
+      // Pequeño retardo para asegurar que el estado de AuthContext se propague
+      setTimeout(() => {
+        onLoginSuccess();
+      }, 100);
     } else {
       console.error('Detalles del error de login:', result.error);
       setError(result.error || 'Error al iniciar sesión');
@@ -39,53 +42,61 @@ export function Login({ onLoginSuccess }: LoginProps) {
     setIsLoading(false);
   };
 
-  const fillDemoCredentials = (demoEmail: string) => {
-    setEmail(demoEmail);
-    setPassword(CREDENCIALES_PRUEBA[demoEmail]);
-    setShowDemoUsers(false);
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Decorative Floating Orbs */}
-      <div className="absolute top-20 left-20 w-72 h-72 bg-blue-600/10 rounded-full blur-3xl animate-ag-orb" />
-      <div className="absolute bottom-20 right-20 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl animate-ag-orb" style={{ animationDelay: '2s' }} />
-      <div className="absolute top-1/2 left-1/3 w-48 h-48 bg-purple-600/8 rounded-full blur-3xl animate-ag-orb" style={{ animationDelay: '4s' }} />
+    <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-4 relative overflow-hidden">
+      {/* Background Deep con LOGO 2 MONUMENTAL TRASLÚCIDO */}
+      <div className="absolute inset-0 bg-gradient-to-b from-slate-900 to-slate-950" />
 
-      <div className="w-full max-w-md relative z-10">
-        {/* Logo */}
-        <div className="text-center mb-8 animate-ag-slide-up">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-5 kpi-blue shadow-2xl shadow-blue-600/30 animate-ag-float">
-            <TrendingUp className="w-10 h-10 text-white" />
+      <div className="absolute inset-0 flex items-center justify-center opacity-[0.08] pointer-events-none overflow-hidden">
+        <img
+          src="/logo.png"
+          alt="Watermark"
+          className="w-[250%] sm:w-[150%] md:w-[1200px] h-auto object-contain"
+          style={{ filter: 'brightness(1.5) blur(2px)' }}
+        />
+      </div>
+
+      <div className="w-full max-w-5xl relative z-10 flex flex-col items-center">
+        {/* Icono Circular Superior */}
+        <div className="mb-6 animate-ag-slide-down stagger-1 relative group">
+          <div className="absolute inset-0 bg-[#ff007f]/20 blur-3xl rounded-full scale-150 group-hover:bg-[#ff007f]/30 transition-all duration-700" />
+          <div className="relative w-28 h-28 md:w-32 md:h-32 rounded-full border-2 border-white/20 p-1 bg-slate-900/50 backdrop-blur-xl shadow-[0_0_30px_rgba(255,0,127,0.2)] overflow-hidden">
+            <img
+              src="/logo.png"
+              alt="Logo Circular"
+              className="w-full h-full object-contain rounded-full transform group-hover:scale-110 transition-transform duration-500"
+            />
           </div>
-          <h1 className="text-4xl font-bold text-white tracking-tight">
-            PriceControl <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Pro</span>
-          </h1>
-          <p className="text-slate-400 mt-2 text-base">Sistema de Gestión de Precios & Proveedores</p>
         </div>
 
-        {/* Login Card */}
-        <div className="animate-ag-slide-up stagger-2">
-          <Card className="border-0 shadow-2xl bg-white/[0.07] backdrop-blur-2xl border border-white/10 overflow-hidden relative">
+        {/* Login Card - AUTO-AJUSTABLE (Celular, Tablet, PC) */}
+        <div className="animate-ag-slide-up stagger-2 w-full max-w-[95%] sm:max-w-[450px] md:max-w-md mx-auto flex-none group">
+          <Card className="border-0 shadow-none bg-black/40 md:bg-transparent backdrop-blur-2xl md:backdrop-blur-md border border-[#b5936d]/40 overflow-hidden relative transition-all duration-500 hover:bg-white/[0.02] hover:border-[#b5936d]/60">
             {/* Top Glow Line */}
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-400/50 to-transparent" />
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-[#b5936d]/50 to-transparent" />
 
-            <CardHeader className="space-y-1 pb-4">
-              <CardTitle className="text-2xl text-center text-white font-bold">Iniciar Sesión</CardTitle>
-              <CardDescription className="text-center text-slate-400">
+            <CardHeader className="space-y-2 pb-6 pt-8 md:pt-6">
+              <CardTitle className="text-3xl md:text-2xl text-center text-white font-black tracking-tight">Iniciar Sesión</CardTitle>
+              <CardDescription className="text-base md:text-sm text-center text-slate-300 md:text-slate-400 px-4">
                 Ingresa tus credenciales para acceder al sistema
               </CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-5">
                 {error && (
-                  <Alert variant="destructive" className="bg-red-500/10 border-red-500/30 text-red-300">
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
+                  <div className="space-y-3">
+                    <Alert variant="destructive" className="bg-red-500/10 border-red-500/30 text-red-300">
+                      <AlertDescription className="flex flex-col gap-2">
+                        <span className="font-bold">Error de Acceso</span>
+                        <span>{error}</span>
+                      </AlertDescription>
+                    </Alert>
+
+                  </div>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-slate-300 font-medium">Email</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="email" className="text-lg md:text-sm text-slate-200 md:text-slate-300 font-bold md:font-medium">Email</Label>
                   <Input
                     id="email"
                     type="email"
@@ -93,12 +104,12 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    className="h-12 bg-white/[0.06] border-white/10 text-white placeholder:text-slate-500 focus:border-blue-500/50 focus:ring-blue-500/20 rounded-xl transition-ag"
+                    className="h-14 md:h-12 bg-white/[0.04] md:bg-transparent border-white/20 text-white text-lg md:text-base placeholder:text-slate-500 rounded-xl transition-ag"
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password" className="text-slate-300 font-medium">Contraseña</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="password" className="text-lg md:text-sm text-slate-200 md:text-slate-300 font-bold md:font-medium">Contraseña</Label>
                   <div className="relative">
                     <Input
                       id="password"
@@ -107,91 +118,44 @@ export function Login({ onLoginSuccess }: LoginProps) {
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       required
-                      className="h-12 bg-white/[0.06] border-white/10 text-white placeholder:text-slate-500 focus:border-blue-500/50 focus:ring-blue-500/20 rounded-xl pr-12 transition-ag"
+                      className="h-14 md:h-12 bg-white/[0.04] md:bg-transparent border-white/20 text-white text-lg md:text-base placeholder:text-slate-500 rounded-xl pr-12 transition-ag"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-ag p-1 rounded-lg hover:bg-white/[0.06]"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 p-2"
                     >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      {showPassword ? <EyeOff className="w-6 h-6 md:w-5 md:h-5" /> : <Eye className="w-6 h-6 md:w-5 md:h-5" />}
                     </button>
                   </div>
                 </div>
 
                 <Button
                   type="submit"
-                  className="w-full h-12 text-base font-semibold btn-gradient-primary rounded-xl"
+                  className="w-full h-14 md:h-12 bg-[#ff007f] hover:bg-[#ff007f]/90 text-white text-xl md:text-base font-black rounded-xl shadow-[0_0_20px_rgba(255,0,127,0.3)] transition-all active:scale-95 mt-4"
                   disabled={isLoading}
                 >
-                  {isLoading ? (
-                    <span className="flex items-center gap-2">
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                      </svg>
-                      Iniciando sesión...
-                    </span>
-                  ) : 'Iniciar Sesión'}
+                  {isLoading ? 'Cargando...' : 'Entrar al Sistema'}
                 </Button>
               </form>
-
-              {/* Demo Users Toggle */}
-              <div className="mt-6 pt-6 border-t border-white/[0.06]">
-                <button
-                  type="button"
-                  onClick={() => setShowDemoUsers(!showDemoUsers)}
-                  className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 w-full justify-center transition-ag"
-                >
-                  <Users className="w-4 h-4" />
-                  {showDemoUsers ? 'Ocultar usuarios de prueba' : 'Ver usuarios de prueba'}
-                </button>
-
-                {showDemoUsers && (
-                  <div className="mt-4 space-y-2 animate-ag-fade-in">
-                    <p className="text-xs text-slate-500 text-center mb-3">
-                      Todos tienen contraseña: <strong className="text-slate-400">password123</strong>
-                    </p>
-                    {USUARIOS_PRUEBA.map((user, i) => (
-                      <button
-                        key={user.id}
-                        type="button"
-                        onClick={() => fillDemoCredentials(user.email)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-xl border border-white/[0.06] hover:bg-white/[0.06] transition-ag text-left animate-ag-fade-in stagger-${i + 1}`}
-                      >
-                        <div
-                          className="w-3 h-3 rounded-full shadow-lg"
-                          style={{
-                            backgroundColor: ROLE_DESCRIPTIONS[user.rol].color,
-                            boxShadow: `0 0 10px ${ROLE_DESCRIPTIONS[user.rol].color}50`
-                          }}
-                        />
-                        <div className="flex-1">
-                          <p className="font-medium text-sm text-white">{user.nombre} {user.apellido}</p>
-                          <p className="text-xs text-slate-500">{user.email}</p>
-                        </div>
-                        <span
-                          className="text-xs px-2.5 py-1 rounded-full font-medium"
-                          style={{
-                            backgroundColor: `${ROLE_DESCRIPTIONS[user.rol].color}20`,
-                            color: ROLE_DESCRIPTIONS[user.rol].color
-                          }}
-                        >
-                          {ROLE_DESCRIPTIONS[user.rol].nombre}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* Footer */}
-        <p className="text-center text-slate-600 text-sm mt-8 animate-ag-fade-in stagger-4">
-          © 2026 PriceControl Pro. Todos los derechos reservados.
-        </p>
+        {/* Footer Responsivo */}
+        <div className="flex flex-col items-center gap-4 mt-8 px-6 text-center animate-ag-fade-in stagger-4">
+          <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.1)]">
+            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" />
+            <span className="text-[10px] md:text-xs font-black text-emerald-400 tracking-widest uppercase">
+              Servidor Local Detectado (WiFi)
+            </span>
+          </div>
+
+          <p className="text-slate-500 text-sm font-medium">
+            © 2026 Panaderia Dulce Placer. <br className="md:hidden" />
+            <span className="text-[#ff007f]/50 italic">Sistema Premium 100% Offline.</span>
+          </p>
+        </div>
       </div>
     </div>
   );

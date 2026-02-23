@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
     Package, AlertTriangle, MapPin, Plus, Minus, Search,
-    TrendingDown, TrendingUp, CheckCircle, ClipboardList, Filter, PieChart, Download
+    TrendingDown, TrendingUp, CheckCircle, ClipboardList, Filter, PieChart, Download, Wand2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -231,6 +231,13 @@ export function Inventario({
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <Button
+                        onClick={handleGenerarSugerencias}
+                        className="btn-gradient-secondary shadow-lg shadow-amber-600/20 gap-2"
+                    >
+                        <Wand2 className="w-4 h-4" />
+                        Reponer Stock (IA)
+                    </Button>
                     <Button variant="outline" className="glass-card gap-2 transition-ag" onClick={handleExportCSV}>
                         <Download className="w-4 h-4 text-primary" />
                         Exportar Reporte
@@ -318,7 +325,7 @@ export function Inventario({
                                             <th className="px-6 py-4 font-bold">Categoría</th>
                                             <th className="px-6 py-4 font-bold text-center">Stock Real</th>
                                             <th className="px-6 py-4 font-bold text-center">Nivel Mínimo</th>
-                                            <th className="px-6 py-4 font-bold text-center">Estado</th>
+                                            <th className="px-6 py-4 font-bold text-center">Estado / Riesgo</th>
                                             {check('GESTIONAR_INVENTARIO') && <th className="px-6 py-4 font-bold text-right">Ajuste</th>}
                                         </tr>
                                     </thead>
@@ -326,11 +333,25 @@ export function Inventario({
                                         {inventarioConProducto.map((item, idx) => {
                                             const conf = statusConfig[item.status as keyof typeof statusConfig];
                                             const Icon = conf.icon;
+
+                                            // Lógica predictiva local para fila
+                                            const movs = movimientos.filter(m => m.productoId === item.productoId && m.tipo === 'salida');
+                                            const consumoPromedio = movs.length >= 3 ? movs.reduce((a, b) => a + b.cantidad, 0) / 30 : 0;
+                                            const diasRestantes = consumoPromedio > 0 ? item.stockActual / consumoPromedio : Infinity;
+                                            const enRiesgoPredictivo = diasRestantes < 7 && item.status === 'ok';
+
                                             return (
-                                                <tr key={item.id} className={`group hover:bg-primary/5 transition-colors stagger-${(idx % 6) + 1} animate-ag-fade-in`}>
+                                                <tr key={item.id} className="group hover:bg-primary/5 transition-colors animate-ag-fade-in">
                                                     <td className="px-6 py-4">
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{item.producto!.nombre}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">{item.producto!.nombre}</span>
+                                                                {enRiesgoPredictivo && (
+                                                                    <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-600 border-amber-200 font-bold animate-pulse">
+                                                                        {"AGOTAMIENTO < 7d"}
+                                                                    </Badge>
+                                                                )}
+                                                            </div>
                                                             <span className="text-[10px] flex items-center gap-1 text-muted-foreground mt-0.5"><MapPin className="w-3 h-3" />{item.ubicacion || 'Sin ubicación'}</span>
                                                         </div>
                                                     </td>
@@ -348,8 +369,15 @@ export function Inventario({
                                                         <span className="text-xs font-medium text-muted-foreground/60 font-mono">{item.stockMinimo}</span>
                                                     </td>
                                                     <td className="px-6 py-4 text-center">
-                                                        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${conf.color}`}>
-                                                            <Icon className="w-3 h-3" /> {conf.label}
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${conf.color}`}>
+                                                                <Icon className="w-3 h-3" /> {conf.label}
+                                                            </div>
+                                                            {consumoPromedio > 0 && item.stockActual > 0 && (
+                                                                <span className="text-[9px] text-muted-foreground font-medium italic">
+                                                                    Dura aprox. {Math.round(diasRestantes)} días
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </td>
                                                     {check('GESTIONAR_INVENTARIO') && (
@@ -369,6 +397,7 @@ export function Inventario({
                                                 </tr>
                                             );
                                         })}
+
                                         {inventarioConProducto.length === 0 && (
                                             <tr>
                                                 <td colSpan={7} className="py-12 text-center text-muted-foreground">

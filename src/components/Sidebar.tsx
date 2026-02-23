@@ -4,14 +4,18 @@ import {
   Truck,
   Bell,
   Settings,
-  TrendingUp,
   ShoppingCart,
   Users,
   DollarSign,
   Warehouse,
   ClipboardCheck,
   Menu,
-  Shield
+  Shield,
+  ChefHat,
+  Utensils,
+  Wallet,
+  PiggyBank,
+  BarChart3
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -60,32 +64,39 @@ export function Sidebar({
   const [open, setOpen] = useState(false);
 
   const allMenuItems: MenuItem[] = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
-    { id: 'productos', label: 'Productos', icon: Package, permission: 'VER_PRODUCTOS' },
-    { id: 'proveedores', label: 'Proveedores', icon: Truck, permission: 'VER_PROVEEDORES' },
-    { id: 'precios', label: 'Precios', icon: DollarSign, permission: 'VER_PRECIOS' },
-    { id: 'inventario', label: 'Inventario', icon: Warehouse, permission: 'VER_INVENTARIO' },
-    { id: 'prepedidos', label: 'Pre-Pedidos', icon: ShoppingCart, permission: 'VER_PREPEDIDOS' },
-    { id: 'recepciones', label: 'Recepciones', icon: ClipboardCheck, permission: 'VER_RECEPCIONES' },
-    { id: 'alertas', label: 'Alertas', icon: Bell, permission: 'VER_ALERTAS' },
-    { id: 'usuarios', label: 'Usuarios', icon: Users, permission: 'VER_USUARIOS' },
-    { id: 'roles', label: 'Gestión de Roles', icon: Shield, permission: 'VER_USUARIOS' }, // Reutilizamos permiso de usuarios por simplicidad
+    { id: 'dashboard', label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+    { id: 'ventas', label: 'Ventas / POS', icon: ShoppingCart, permission: 'VER_VENTAS' },
+    { id: 'caja', label: 'Control de Caja', icon: Wallet, permission: 'ABRIR_CERRAR_CAJA' },
+    { id: 'gastos', label: 'Egresos y Facturas', icon: DollarSign, permission: 'VER_FINANZAS' },
+    { id: 'reportes', label: 'Análisis Financiero', icon: BarChart3, permission: 'VER_FINANZAS' },
+    { id: 'ahorro', label: 'Mis Ahorros', icon: PiggyBank, permission: 'VER_FINANZAS' },
+    { id: 'productos', label: 'Catálogo de Productos', icon: Package, permission: 'VER_PRODUCTOS' },
+    { id: 'inventario', label: 'Inventario de Materias', icon: Warehouse, permission: 'VER_INVENTARIO' },
+    { id: 'recetas', label: 'Recetas y Escandallos', icon: ChefHat, permission: 'VER_PRODUCTOS' },
+    { id: 'prepedidos', label: 'Órdenes de Compra', icon: ShoppingCart, permission: 'VER_PREPEDIDOS' },
+    { id: 'proveedores', label: 'Mis Proveedores', icon: Truck, permission: 'VER_PROVEEDORES' },
+    { id: 'precios', label: 'Historial de Precios', icon: DollarSign, permission: 'VER_PRECIOS' },
+    { id: 'recepciones', label: 'Entrada de Mercancía', icon: ClipboardCheck, permission: 'VER_RECEPCIONES' },
+    { id: 'alertas', label: 'Alertas de Costos', icon: Bell, permission: 'VER_ALERTAS' },
+    { id: 'usuarios', label: 'Equipo de Trabajo', icon: Users, permission: 'VER_USUARIOS' },
+    { id: 'roles', label: 'Seguridad y Roles', icon: Shield, permission: 'VER_USUARIOS' },
     { id: 'configuracion', label: 'Configuración', icon: Settings, permission: 'VER_CONFIGURACION' },
   ];
 
   const menuItems = allMenuItems.filter(item => check(item.permission as any));
 
-  const SidebarContent = () => (
+  const renderSidebarContent = () => (
     <div className="flex flex-col h-full w-full bg-[#0f172a] text-white">
       {/* Logo */}
       <div className="flex-none p-6 border-b border-white/[0.06]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center kpi-blue shadow-lg shadow-blue-500/25 animate-ag-float">
-            <TrendingUp className="w-6 h-6 text-white" />
+          <div className="w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-transparent drop-shadow-[0_0_10px_rgba(255,0,127,0.3)] animate-ag-float">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-white tracking-tight">PriceControl</h1>
-            <p className="text-xs text-slate-400 font-medium">v5.0 • {role}</p>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-sm font-bold text-white tracking-tight leading-tight">Gestion Panaderia</h1>
+            <h1 className="text-sm font-extrabold text-[#ff007f] tracking-tight leading-tight">Dulce Placer</h1>
+            <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">v5.0 • {role}</p>
           </div>
         </div>
       </div>
@@ -152,7 +163,7 @@ export function Sidebar({
       {/* Footer */}
       <div className="flex-none p-4 border-t border-white/[0.06] bg-[#0f172a]">
         <div className="text-xs text-slate-500 text-center space-y-1">
-          <p className="font-medium text-slate-400">PriceControl Pro</p>
+          <p className="font-semibold text-[#ff007f]/80">Panaderia Dulce Placer</p>
           <p>Ctrl+K para buscar</p>
         </div>
       </div>
@@ -168,7 +179,7 @@ export function Sidebar({
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="p-0 w-72 border-r border-white/10 bg-[#0f172a] flex flex-col">
-          <SidebarContent />
+          {renderSidebarContent()}
         </SheetContent>
       </Sheet>
     );
@@ -176,7 +187,7 @@ export function Sidebar({
 
   return (
     <aside className="fixed left-0 top-0 h-full w-64 border-r border-white/10 bg-[#0f172a] z-50 hidden md:block">
-      <SidebarContent />
+      {renderSidebarContent()}
     </aside>
   );
 }

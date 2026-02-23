@@ -323,12 +323,32 @@ export default function Recepciones({
                     </Card>
 
                     {/* Checklist de Productos */}
-                    <Card className="lg:col-span-2">
-                        <CardHeader className="flex flex-row items-center justify-between">
-                            <CardTitle>Checklist de Recepción</CardTitle>
+                    <Card className="lg:col-span-2 shadow-2xl border-white/10 glass-card">
+                        <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/50">
+                            <div>
+                                <CardTitle>Checklist de Recepción</CardTitle>
+                                <p className="text-xs text-muted-foreground mt-1">Verifica el estado físico de cada producto</p>
+                            </div>
                             <div className="flex gap-2">
+                                {newRecepcion.items.length > 0 && (
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="text-[10px] font-black h-8 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
+                                        onClick={() => {
+                                            setNewRecepcion(prev => ({
+                                                ...prev,
+                                                items: prev.items.map(i => ({ ...i, productoOk: true, embalajeOk: true, cantidadOk: true }))
+                                            }));
+                                            toast.success('Todos los items marcados como OK');
+                                        }}
+                                    >
+                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                        MARCAR TODO OK
+                                    </Button>
+                                )}
                                 <select
-                                    className="text-sm p-2 rounded-md border bg-background w-48"
+                                    className="text-sm p-2 rounded-md border bg-background w-48 h-8"
                                     onChange={(e) => {
                                         if (e.target.value) {
                                             handleAddItem(e.target.value);
@@ -343,71 +363,77 @@ export default function Recepciones({
                                 </select>
                             </div>
                         </CardHeader>
-                        <CardContent>
+                        <CardContent className="pt-6">
                             <div className="space-y-4">
                                 {newRecepcion.items.length === 0 ? (
-                                    <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-xl">
-                                        <Package className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                                        <p>Agrega productos para verificar su estado</p>
+                                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-2xl bg-slate-50/50">
+                                        <Package className="w-12 h-12 mx-auto mb-4 opacity-20 text-blue-500" />
+                                        <p className="font-medium">No hay productos en la lista</p>
+                                        <p className="text-xs">Usa el buscador o vincula un pre-pedido para comenzar</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
                                         {newRecepcion.items.map((item) => (
-                                            <div key={item.id} className="p-4 border rounded-xl bg-card hover:shadow-sm transition-all space-y-3">
-                                                <div className="flex items-start justify-between">
-                                                    <div>
-                                                        <h4 className="font-medium">{getProductoById(item.productoId)?.nombre}</h4>
-                                                        <p className="text-xs text-muted-foreground">SKU: {item.productoId.slice(0, 8)}</p>
+                                            <div key={item.id} className="p-4 border rounded-2xl bg-white/50 hover:bg-white transition-all shadow-sm hover:shadow-md border-white/20">
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                                                            <Package className="w-5 h-5" />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="font-bold text-slate-800">{getProductoById(item.productoId)?.nombre}</h4>
+                                                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter">SKU: {item.productoId.slice(0, 8)}</p>
+                                                        </div>
                                                     </div>
-                                                    <Button variant="ghost" size="sm" onClick={() => setNewRecepcion(prev => ({ ...prev, items: prev.items.filter(i => i.id !== item.id) }))}>
-                                                        <X className="w-4 h-4 text-muted-foreground" />
+                                                    <Button variant="ghost" size="icon" className="rounded-xl hover:bg-red-50 hover:text-red-500" onClick={() => setNewRecepcion(prev => ({ ...prev, items: prev.items.filter(i => i.id !== item.id) }))}>
+                                                        <X className="w-4 h-4" />
                                                     </Button>
                                                 </div>
 
                                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                    <div>
-                                                        <Label className="text-xs">Cant. Recibida</Label>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Recibido</Label>
                                                         <Input
                                                             type="number"
                                                             min="0"
                                                             value={item.cantidadRecibida}
                                                             onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseInt(e.target.value) })}
-                                                            className="h-8"
+                                                            className="h-10 rounded-xl font-bold bg-white"
                                                         />
                                                     </div>
-                                                    <div>
-                                                        <Label className="text-xs">Costo Unit.</Label>
+                                                    <div className="space-y-1.5">
+                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Costo Factura</Label>
                                                         <Input
                                                             type="number"
                                                             min="0"
                                                             step="0.01"
                                                             value={item.precioFacturado}
                                                             onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) })}
-                                                            className="h-8"
+                                                            className="h-10 rounded-xl font-bold bg-white"
                                                         />
                                                     </div>
                                                     <div className="col-span-2 flex items-end gap-2">
                                                         <div
-                                                            className={`flex-1 p-2 rounded-md text-xs border cursor-pointer text-center transition-colors ${item.embalajeOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}
+                                                            className={`flex-1 h-10 flex items-center justify-center rounded-xl text-[10px] font-black border cursor-pointer transition-all ${item.embalajeOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm shadow-emerald-200/50' : 'bg-red-50 border-red-200 text-red-700'}`}
                                                             onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })}
                                                         >
-                                                            Embalaje {item.embalajeOk ? 'OK' : 'Mal'}
+                                                            {item.embalajeOk ? '✓ EMBALAJE OK' : '✗ EMBALAJE MAL'}
                                                         </div>
                                                         <div
-                                                            className={`flex-1 p-2 rounded-md text-xs border cursor-pointer text-center transition-colors ${item.productoOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-red-50 border-red-200 text-red-700'}`}
+                                                            className={`flex-1 h-10 flex items-center justify-center rounded-xl text-[10px] font-black border cursor-pointer transition-all ${item.productoOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm shadow-emerald-200/50' : 'bg-red-50 border-red-200 text-red-700'}`}
                                                             onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
                                                         >
-                                                            Estado {item.productoOk ? 'OK' : 'Mal'}
+                                                            {item.productoOk ? '✓ ESTADO OK' : '✗ ESTADO MAL'}
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 {(!item.embalajeOk || !item.productoOk) && (
                                                     <Input
-                                                        placeholder="Detalle del problema (ej: Caja rota, Golpeado)"
+                                                        placeholder="Describe la incidencia detalladamente..."
                                                         value={item.observaciones || ''}
                                                         onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
-                                                        className="h-8 text-xs border-red-200 bg-red-50/50"
+                                                        className="h-10 mt-3 text-xs border-red-200 bg-red-50 placeholder:text-red-300 rounded-xl"
                                                     />
                                                 )}
                                             </div>
@@ -419,19 +445,20 @@ export default function Recepciones({
                     </Card>
                 </div>
 
-                <div className="fixed bottom-0 left-64 right-0 p-4 bg-background border-t flex justify-end gap-3 z-50">
-                    <div className="mr-auto text-sm text-muted-foreground flex items-center gap-2">
-                        <InfoBadge label="Total Items" value={newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0).toString()} />
-                        <InfoBadge label="Total Importe" value={formatCurrency(newRecepcion.items.reduce((s, i) => s + (i.cantidadRecibida * i.precioFacturado), 0))} />
+                <div className="fixed bottom-0 left-64 right-0 p-4 bg-white/80 backdrop-blur-xl border-t flex justify-end gap-4 z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.05)]">
+                    <div className="mr-auto text-sm text-muted-foreground flex items-center gap-4">
+                        <InfoBadge label="Items" value={newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0).toString()} />
+                        <InfoBadge label="Total" value={formatCurrency(newRecepcion.items.reduce((s, i) => s + (i.cantidadRecibida * i.precioFacturado), 0))} />
                     </div>
-                    <Button variant="outline" onClick={() => setView('list')}>Cancelar</Button>
-                    <Button onClick={handleSave} className="gap-2">
-                        <CheckCircle className="w-4 h-4" /> Confirmar Recepción
+                    <Button variant="ghost" onClick={() => setView('list')} className="rounded-xl font-bold">Cancelar</Button>
+                    <Button onClick={handleSave} className="gap-2 btn-gradient-primary shadow-lg shadow-blue-600/20 px-8 rounded-xl font-bold">
+                        <CheckCircle className="w-5 h-5" /> Finalizar Recepción
                     </Button>
                 </div>
             </div>
         );
     }
+
 
     if (view === 'details' && selectedRecepcion) {
         // Buscar pre-pedido vinculado

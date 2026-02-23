@@ -10,7 +10,9 @@ import type {
     DBInventarioItem,
     DBMovimientoInventario,
     DBRecepcion,
-    DBHistorialPrecio
+    DBHistorialPrecio,
+    DBVenta,
+    DBCajaSesion
 } from './database';
 
 export class SupabaseDatabase implements IDatabase {
@@ -29,18 +31,65 @@ export class SupabaseDatabase implements IDatabase {
 
     async addProducto(producto: DBProducto): Promise<void> {
         const dbProducto = this.mapProductoToDB(producto);
-        const { error } = await supabase.from('productos').insert(dbProducto);
+        const { error } = await supabase.from('productos').upsert(dbProducto);
         if (error) throw error;
     }
 
     async updateProducto(producto: DBProducto): Promise<void> {
-        const dbProducto = this.mapProductoToDB(producto);
-        const { error } = await supabase.from('productos').update(dbProducto).eq('id', producto.id);
-        if (error) throw error;
+        await this.addProducto(producto); // Reutilizamos upsert
     }
 
     async deleteProducto(id: string): Promise<void> {
         const { error } = await supabase.from('productos').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Recetas ---
+    async getAllRecetas(): Promise<any[]> {
+        const { data, error } = await supabase.from('recetas').select('*');
+        if (error) throw error;
+        return data.map(r => ({
+            id: r.id,
+            productoId: r.producto_id,
+            ingredientes: r.ingredientes || [],
+            porcionesResultantes: r.porciones_resultantes,
+            instrucciones: r.instrucciones,
+            fechaActualizacion: r.fecha_actualizacion
+        }));
+    }
+
+    async getRecetaByProducto(productoId: string): Promise<any | undefined> {
+        const { data, error } = await supabase.from('recetas').select('*').eq('producto_id', productoId).maybeSingle();
+        if (error) throw error;
+        if (!data) return undefined;
+        return {
+            id: data.id,
+            productoId: data.producto_id,
+            ingredientes: data.ingredientes || [],
+            porcionesResultantes: data.porciones_resultantes,
+            instrucciones: data.instrucciones,
+            fechaActualizacion: data.fecha_actualizacion
+        };
+    }
+
+    async addReceta(receta: any): Promise<void> {
+        const { error } = await supabase.from('recetas').upsert({
+            id: receta.id,
+            producto_id: receta.productoId,
+            ingredientes: receta.ingredientes,
+            porciones_resultantes: receta.porcionesResultantes,
+            instrucciones: receta.instrucciones,
+            fecha_actualizacion: receta.fechaActualizacion
+        });
+        if (error) throw error;
+    }
+
+    async updateReceta(receta: any): Promise<void> {
+        await this.addReceta(receta);
+    }
+
+    async deleteReceta(id: string): Promise<void> {
+        const { error } = await supabase.from('recetas').delete().eq('id', id);
         if (error) throw error;
     }
 
@@ -60,7 +109,7 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async addProveedor(proveedor: DBProveedor): Promise<void> {
-        const { error } = await supabase.from('proveedores').insert({
+        const { error } = await supabase.from('proveedores').upsert({
             id: proveedor.id,
             nombre: proveedor.nombre,
             contacto: proveedor.contacto,
@@ -73,14 +122,7 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async updateProveedor(proveedor: DBProveedor): Promise<void> {
-        const { error } = await supabase.from('proveedores').update({
-            nombre: proveedor.nombre,
-            contacto: proveedor.contacto,
-            telefono: proveedor.telefono,
-            email: proveedor.email,
-            direccion: proveedor.direccion
-        }).eq('id', proveedor.id);
-        if (error) throw error;
+        await this.addProveedor(proveedor);
     }
 
     async deleteProveedor(id: string): Promise<void> {
@@ -118,13 +160,12 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async addPrecio(precio: DBPrecio): Promise<void> {
-        const { error } = await supabase.from('precios').insert(this.mapPrecioToDB(precio));
+        const { error } = await supabase.from('precios').upsert(this.mapPrecioToDB(precio));
         if (error) throw error;
     }
 
     async updatePrecio(precio: DBPrecio): Promise<void> {
-        const { error } = await supabase.from('precios').update(this.mapPrecioToDB(precio)).eq('id', precio.id);
-        if (error) throw error;
+        await this.addPrecio(precio);
     }
 
     async deletePrecio(id: string): Promise<void> {
@@ -485,6 +526,128 @@ export class SupabaseDatabase implements IDatabase {
         }));
     }
 
+    // --- Ventas ---
+    async getAllVentas(): Promise<DBVenta[]> {
+        const { data, error } = await supabase.from('ventas').select('*');
+        if (error) throw error;
+        return data.map(this.mapVentaFromDB);
+    }
+
+    async addVenta(venta: DBVenta): Promise<void> {
+        const { error } = await supabase.from('ventas').upsert(this.mapVentaToDB(venta));
+        if (error) throw error;
+    }
+
+    async getVentasByCaja(cajaId: string): Promise<DBVenta[]> {
+        const { data, error } = await supabase.from('ventas').select('*').eq('caja_id', cajaId);
+        if (error) throw error;
+        return data.map(this.mapVentaFromDB);
+    }
+
+    // --- Caja ---
+    async getAllSesionesCaja(): Promise<DBCajaSesion[]> {
+        const { data, error } = await supabase.from('caja').select('*');
+        if (error) throw error;
+        return data.map(this.mapCajaFromDB);
+    }
+
+    async getSesionCajaActiva(): Promise<DBCajaSesion | undefined> {
+        const { data, error } = await supabase.from('caja').select('*').eq('estado', 'abierta').maybeSingle();
+        if (error) throw error;
+        return data ? this.mapCajaFromDB(data) : undefined;
+    }
+
+    async addSesionCaja(sesion: DBCajaSesion): Promise<void> {
+        const { error } = await supabase.from('caja').upsert(this.mapCajaToDB(sesion));
+        if (error) throw error;
+    }
+
+    async updateSesionCaja(sesion: DBCajaSesion): Promise<void> {
+        await this.addSesionCaja(sesion);
+    }
+
+    // --- Ahorros ---
+    async getAllAhorros(): Promise<any[]> {
+        const { data, error } = await supabase.from('ahorros').select('*');
+        if (error) return [];
+        return data;
+    }
+    async addAhorro(ahorro: any): Promise<void> {
+        await supabase.from('ahorros').upsert(ahorro);
+    }
+    async updateAhorro(ahorro: any): Promise<void> {
+        await this.addAhorro(ahorro);
+    }
+    async deleteAhorro(id: string): Promise<void> {
+        await supabase.from('ahorros').delete().eq('id', id);
+    }
+
+    // --- Mesas ---
+    async getAllMesas(): Promise<any[]> {
+        const { data, error } = await supabase.from('mesas').select('*');
+        if (error) return [];
+        return data;
+    }
+    async updateMesa(mesa: any): Promise<void> {
+        await supabase.from('mesas').upsert(mesa);
+    }
+
+    // --- Pedidos Activos ---
+    async getAllPedidosActivos(): Promise<any[]> {
+        const { data, error } = await supabase.from('pedidos_activos').select('*');
+        if (error) return [];
+        return data;
+    }
+    async addPedidoActivo(pedido: any): Promise<void> {
+        await supabase.from('pedidos_activos').upsert(pedido);
+    }
+    async updatePedidoActivo(pedido: any): Promise<void> {
+        await this.addPedidoActivo(pedido);
+    }
+    async deletePedidoActivo(id: string): Promise<void> {
+        await supabase.from('pedidos_activos').delete().eq('id', id);
+    }
+
+    // --- Gastos ---
+    async getAllGastos(): Promise<any[]> {
+        const { data, error } = await supabase.from('gastos').select('*');
+        if (error) return [];
+        return data.map(g => ({
+            id: g.id,
+            descripcion: g.descripcion,
+            monto: g.monto,
+            categoria: g.categoria,
+            fecha: g.fecha,
+            proveedorId: g.proveedor_id,
+            comprobanteUrl: g.comprobante_url,
+            metodoPago: g.metodo_pago,
+            usuarioId: g.usuario_id,
+            cajaId: g.caja_id,
+            metadata: g.metadata
+        }));
+    }
+    async addGasto(gasto: any): Promise<void> {
+        await supabase.from('gastos').upsert({
+            id: gasto.id,
+            descripcion: gasto.descripcion,
+            monto: gasto.monto,
+            categoria: gasto.categoria,
+            fecha: gasto.fecha,
+            proveedor_id: gasto.proveedorId,
+            comprobante_url: gasto.comprobanteUrl,
+            metodo_pago: gasto.metodoPago,
+            usuario_id: gasto.usuarioId,
+            caja_id: gasto.cajaId,
+            metadata: gasto.metadata
+        });
+    }
+    async updateGasto(gasto: any): Promise<void> {
+        await this.addGasto(gasto);
+    }
+    async deleteGasto(id: string): Promise<void> {
+        await supabase.from('gastos').delete().eq('id', id);
+    }
+
     async clearAll(): Promise<void> {
         // Not implemented for safety in cloud
         console.warn('clearAll called on Supabase DB - operation ignored for safety');
@@ -499,6 +662,8 @@ export class SupabaseDatabase implements IDatabase {
             descripcion: p.descripcion,
             precioVenta: p.precio_venta,
             margenUtilidad: p.margen_utilidad,
+            tipo: p.tipo || 'ingrediente',
+            costoBase: p.costo_base || 0,
             createdAt: p.created_at,
             updatedAt: p.updated_at
         };
@@ -512,6 +677,8 @@ export class SupabaseDatabase implements IDatabase {
             descripcion: p.descripcion,
             precio_venta: p.precioVenta,
             margen_utilidad: p.margenUtilidad,
+            tipo: p.tipo,
+            costo_base: p.costoBase,
             created_at: p.createdAt,
             updated_at: p.updatedAt
         };
@@ -536,6 +703,62 @@ export class SupabaseDatabase implements IDatabase {
             precio_costo: p.precioCosto,
             fecha_actualizacion: p.fechaActualizacion,
             notas: p.notas
+        };
+    }
+
+    private mapVentaFromDB(v: any): DBVenta {
+        return {
+            id: v.id,
+            cajaId: v.caja_id,
+            items: v.items || [],
+            total: v.total,
+            metodoPago: v.metodo_pago,
+            usuarioId: v.usuario_id,
+            cliente: v.cliente,
+            notas: v.notas,
+            fecha: v.fecha
+        };
+    }
+
+    private mapVentaToDB(v: DBVenta): any {
+        return {
+            id: v.id,
+            caja_id: v.cajaId,
+            items: v.items,
+            total: v.total,
+            metodo_pago: v.metodoPago,
+            usuario_id: v.usuarioId,
+            cliente: v.cliente,
+            notas: v.notas,
+            fecha: v.fecha
+        };
+    }
+
+    private mapCajaFromDB(c: any): DBCajaSesion {
+        return {
+            id: c.id,
+            usuarioId: c.usuario_id,
+            fechaApertura: c.fecha_apertura,
+            fechaCierre: c.fecha_cierre,
+            montoApertura: c.monto_apertura,
+            montoCierre: c.monto_cierre,
+            totalVentas: c.total_ventas,
+            ventasIds: c.ventas_ids || [],
+            estado: c.estado
+        };
+    }
+
+    private mapCajaToDB(c: DBCajaSesion): any {
+        return {
+            id: c.id,
+            usuario_id: c.usuarioId,
+            fecha_apertura: c.fechaApertura,
+            fecha_cierre: c.fechaCierre,
+            monto_apertura: c.montoApertura,
+            monto_cierre: c.montoCierre,
+            total_ventas: c.totalVentas,
+            ventas_ids: c.ventasIds,
+            estado: c.estado
         };
     }
 }

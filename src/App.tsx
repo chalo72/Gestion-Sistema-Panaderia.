@@ -1,4 +1,4 @@
-import { useState, lazy, Suspense } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Sidebar } from '@/components/Sidebar';
 import { PageTransition } from '@/components/PageTransition';
@@ -6,7 +6,7 @@ import { Login } from '@/sections/Login';
 import type { ViewType } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
-import { LogOut, User, TrendingUp, AlertTriangle } from 'lucide-react';
+import { LogOut, User, AlertTriangle, ShoppingCart } from 'lucide-react';
 import { usePriceControl } from '@/hooks/usePriceControl';
 import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
 
@@ -22,6 +22,12 @@ const Configuracion = lazy(() => import('@/sections/Configuracion'));
 const PrePedidos = lazy(() => import('@/sections/PrePedidos'));
 const Usuarios = lazy(() => import('@/sections/Usuarios'));
 const RoleManager = lazy(() => import('@/sections/RoleManager'));
+const Recetas = lazy(() => import('@/sections/Recetas'));
+const Ventas = lazy(() => import('@/sections/Ventas'));
+const ControlCaja = lazy(() => import('@/sections/ControlCaja'));
+const Ahorros = lazy(() => import('@/sections/Ahorros'));
+const Gastos = lazy(() => import('@/sections/Gastos'));
+const Reportes = lazy(() => import('@/sections/Reportes'));
 
 // Skeleton para durante la carga de secciones
 function SectionSkeleton() {
@@ -64,12 +70,16 @@ function UnauthorizedState() {
 
 // Componente interno que usa el contexto de auth
 function AppContent() {
-  console.log("AppContent mounting...");
+  // 1. Estados iniciales (Hooks)
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
-  const { isAuthenticated, isLoading: authLoading, logout, usuario, hasPermission } = useAuth();
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
+  // 2. Contextos y Hooks de Control (Hooks)
+  const auth = useAuth();
+  const { isAuthenticated, isLoading: authLoading, logout, usuario, hasPermission } = auth;
+
+  const priceControl = usePriceControl();
   const {
-    // Datos
     productos,
     proveedores,
     precios,
@@ -81,8 +91,6 @@ function AppContent() {
     movimientos,
     recepciones,
     historial,
-
-    // Acciones y utilidades
     addProducto,
     updateProducto,
     deleteProducto,
@@ -111,8 +119,6 @@ function AppContent() {
     formatCurrency,
     generarSugerenciasPedido,
     syncWithCloud,
-
-    // Getters
     getMejorPrecio,
     getPreciosByProducto,
     getPreciosByProveedor,
@@ -122,25 +128,74 @@ function AppContent() {
     getAlertasNoLeidas,
     getEstadisticas,
     getPrecioByIds,
-  } = usePriceControl();
+    recetas,
+    addReceta,
+    updateReceta,
+    deleteReceta,
+    getRecetaByProducto,
+    ventas,
+    sesionesCaja,
+    cajaActiva,
+    registrarVenta,
+    abrirCaja,
+    cerrarCaja,
+    ahorros,
+    mesas,
+    pedidosActivos,
+    gastos,
+    addGasto,
+    updateGasto,
+    deleteGasto,
+    generarReporte,
+    loadAllData,
+  } = priceControl;
 
+  // 3. Efectos de Sincronización y Registro (Hooks) - SIEMPRE ANTES DE RETORNOS CONDICIONALES
+  useEffect(() => {
+    console.log('📱 AppState Update:', {
+      isAuthenticated,
+      authLoading,
+      dataLoaded,
+      usuario: usuario?.email,
+      view: currentView,
+      online: isOnline
+    });
+  }, [isAuthenticated, authLoading, dataLoaded, usuario, currentView, isOnline]);
+
+  useEffect(() => {
+    if (isAuthenticated && dataLoaded) {
+      console.log("⚡ Modo Local de Alta Velocidad Activo");
+    }
+  }, [isAuthenticated, dataLoaded]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // 4. Lógica de UI
   const isLoading = authLoading || !dataLoaded;
 
-  // Loading state
+  // 5. Retornos Condicionales (NO LLAMAR HOOKS DESPUÉS DE ESTE PUNTO)
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
         <div className="text-center animate-ag-fade-in">
-          <div className="w-16 h-16 kpi-blue rounded-2xl flex items-center justify-center mx-auto mb-4 animate-ag-float shadow-2xl shadow-blue-600/30">
-            <TrendingUp className="w-8 h-8 text-white" />
+          <div className="w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 bg-transparent drop-shadow-[0_0_15px_rgba(255,0,127,0.4)] animate-ag-float">
+            <img src="logo_panaderia.png" alt="Loading" className="w-full h-full object-contain" />
           </div>
-          <p className="text-slate-400 font-medium">Cargando PriceControl Pro...</p>
+          <p className="text-[#ff007f] font-black uppercase tracking-[0.3em] opacity-80 italic text-sm">Dulce Placer...</p>
         </div>
       </div>
     );
   }
 
-  // Login
   if (!isAuthenticated) {
     return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
   }
@@ -161,9 +216,12 @@ function AppContent() {
               onViewProveedores={() => setCurrentView('proveedores')}
               onViewRecepciones={() => setCurrentView('recepciones')}
               onViewInventario={() => setCurrentView('inventario')}
+              onViewVentas={() => setCurrentView('ventas')}
+              onViewAhorros={() => setCurrentView('ahorro')}
               getProveedorById={getProveedorById}
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
+              mesas={mesas}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -274,6 +332,8 @@ function AppContent() {
               onAjustarStock={onAjustarStock}
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
+              onGenerarSugerencias={generarSugerenciasPedido}
+              onViewPrePedidos={() => setCurrentView('prepedidos')}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -316,22 +376,111 @@ function AppContent() {
             <RoleManager />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
+      case 'recetas':
+        return hasPermission('VER_PRODUCTOS') ? (
+          <SectionErrorBoundary sectionName="Escandallos / Recetas">
+            <Recetas
+              productos={productos}
+              recetas={recetas}
+              getMejorPrecio={getMejorPrecio}
+              addReceta={addReceta}
+              updateReceta={updateReceta}
+              deleteReceta={deleteReceta}
+              formatCurrency={formatCurrency}
+              getProductoById={getProductoById}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'ventas':
+        return hasPermission('VER_VENTAS') ? (
+          <SectionErrorBoundary sectionName="Ventas / POS">
+            <Ventas
+              productos={productos}
+              inventario={inventario}
+              ventas={ventas}
+              cajaActiva={cajaActiva}
+              onRegistrarVenta={registrarVenta}
+              onAbrirCaja={abrirCaja}
+              onCerrarCaja={cerrarCaja}
+              formatCurrency={formatCurrency}
+              usuario={usuario}
+              categorias={configuracion.categorias}
+              mesas={mesas}
+              pedidosActivos={pedidosActivos}
+              onUpdateMesa={priceControl.updateMesa}
+              onAddPedidoActivo={priceControl.addPedidoActivo}
+              onUpdatePedidoActivo={priceControl.updatePedidoActivo}
+              onDeletePedidoActivo={priceControl.deletePedidoActivo}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'caja':
+        return hasPermission('ABRIR_CERRAR_CAJA') ? (
+          <SectionErrorBoundary sectionName="Control de Caja">
+            <ControlCaja
+              sesiones={sesionesCaja}
+              ventas={ventas}
+              cajaActiva={cajaActiva}
+              formatCurrency={formatCurrency}
+              getProductoById={getProductoById}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'ahorro':
+        return hasPermission('VER_FINANZAS') ? (
+          <SectionErrorBoundary sectionName="Mis Ahorros">
+            <Ahorros
+              ventas={ventas}
+              ahorros={ahorros}
+              formatCurrency={formatCurrency}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'gastos':
+        return hasPermission('VER_FINANZAS') ? (
+          <SectionErrorBoundary sectionName="Egresos y Facturas">
+            <Gastos
+              gastos={gastos}
+              proveedores={proveedores}
+              cajaActiva={cajaActiva}
+              onAddGasto={priceControl.addGasto}
+              onUpdateGasto={priceControl.updateGasto}
+              onDeleteGasto={priceControl.deleteGasto}
+              formatCurrency={formatCurrency}
+              usuario={usuario}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'reportes':
+        return hasPermission('VER_FINANZAS') ? (
+          <SectionErrorBoundary sectionName="Análisis Financiero">
+            <Reportes
+              ventas={ventas}
+              gastos={gastos}
+              formatCurrency={formatCurrency}
+              generarReporte={generarReporte}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
       default:
         return hasPermission('VER_DASHBOARD') ? (
           <Dashboard
             estadisticas={getEstadisticas()}
-            alertas={[]}
-            prepedidos={[]}
+            alertas={alertas}
+            prepedidos={prepedidos}
             onMarcarAlertaLeida={marcarAlertaLeida}
-            onViewAlertas={() => { }}
-            onViewProductos={() => { }}
-            onViewPrePedidos={() => { }}
-            onViewProveedores={() => { }}
-            onViewRecepciones={() => { }}
-            onViewInventario={() => { }}
+            onViewAlertas={() => setCurrentView('alertas')}
+            onViewProductos={() => setCurrentView('productos')}
+            onViewPrePedidos={() => setCurrentView('prepedidos')}
+            onViewProveedores={() => setCurrentView('proveedores')}
+            onViewRecepciones={() => setCurrentView('recepciones')}
+            onViewInventario={() => setCurrentView('inventario')}
+            onViewVentas={() => setCurrentView('ventas')}
+            onViewAhorros={() => setCurrentView('ahorro')}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
+            mesas={mesas}
           />
         ) : <UnauthorizedState />;
     }
@@ -359,19 +508,43 @@ function AppContent() {
               <User className="w-4 h-4 text-white" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-foreground">{usuario?.nombre} {usuario?.apellido}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-foreground">{usuario?.nombre} {usuario?.apellido}</p>
+                {isOnline ? (
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
+                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">Nube</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-md animate-pulse">
+                    <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                    <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tighter">Local</span>
+                  </div>
+                )}
+              </div>
               <p className="text-xs text-muted-foreground">{usuario?.rol}</p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={logout}
-            className="gap-2 text-muted-foreground hover:text-destructive transition-ag"
-          >
-            <LogOut className="w-4 h-4" />
-            Cerrar Sesión
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentView('ventas')}
+              className="gap-2 border-[#ff007f]/30 text-[#ff007f] hover:bg-[#ff007f]/10 shadow-sm shadow-[#ff007f]/5 font-bold animate-ag-fade-in"
+            >
+              <ShoppingCart className="w-4 h-4" />
+              POS / Ventas
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="gap-2 text-muted-foreground hover:text-destructive transition-ag"
+            >
+              <LogOut className="w-4 h-4" />
+              Cerrar Sesión
+            </Button>
+          </div>
         </div>
         <div className="p-4 md:p-8">
           <PageTransition viewKey={currentView}>

@@ -24,21 +24,23 @@ function Configuracion(props: ConfiguracionProps) {
     onClearAllData,
   } = props;
   const [nombreNegocio, setNombreNegocio] = useState('Mi Negocio');
-  const [monedaSeleccionada, setMonedaSeleccionada] = useState<MonedaCode>('EUR');
+  const [monedaSeleccionada, setMonedaSeleccionada] = useState<MonedaCode>('COP');
   const [margen, setMargen] = useState('30');
   const [impuesto, setImpuesto] = useState('0');
   const [autoAjuste, setAutoAjuste] = useState(true);
   const [notificaciones, setNotificaciones] = useState(true);
+  const [presupuesto, setPresupuesto] = useState('0');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
   useEffect(() => {
     if (configuracion) {
       setNombreNegocio(configuracion.nombreNegocio || 'Mi Negocio');
-      setMonedaSeleccionada(configuracion.moneda || 'EUR');
+      setMonedaSeleccionada(configuracion.moneda || 'COP');
       setMargen((configuracion.margenUtilidadDefault || 30).toString());
       setImpuesto((configuracion.impuestoPorcentaje || 0).toString());
       setAutoAjuste(configuracion.ajusteAutomatico !== false);
       setNotificaciones(configuracion.notificarSubidas !== false);
+      setPresupuesto((configuracion.presupuestoMensual || 0).toString());
     }
   }, [configuracion]);
 
@@ -62,6 +64,7 @@ function Configuracion(props: ConfiguracionProps) {
         impuestoPorcentaje: parseFloat(impuesto) || 0,
         ajusteAutomatico: autoAjuste,
         notificarSubidas: notificaciones,
+        presupuestoMensual: parseFloat(presupuesto) || 0,
       });
       toast.success('✨ Configuración actualizada y protegida');
     } catch (error) {
@@ -177,7 +180,7 @@ function Configuracion(props: ConfiguracionProps) {
             <CardHeader className="bg-primary/5 border-b border-primary/10">
               <CardTitle className="flex items-center gap-2 text-primary">
                 <Activity className="w-5 h-5" />
-                Reglas de Negocio
+                Reglas y Presupuestos
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6 pt-6">
@@ -205,6 +208,22 @@ function Configuracion(props: ConfiguracionProps) {
                         className="border-primary/10 focus:border-primary/50"
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="presupuesto" className="text-sm font-bold text-indigo-600">Presupuesto Mensual de Gastos</Label>
+                    <div className="relative group">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
+                      <Input
+                        id="presupuesto"
+                        type="number"
+                        value={presupuesto}
+                        onChange={(e) => setPresupuesto(e.target.value)}
+                        placeholder="Ej. 5000"
+                        className="pl-10 border-indigo-200 focus:border-indigo-500 bg-indigo-50/30"
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground italic">El sistema te alertará si los gastos del mes superan este monto.</p>
                   </div>
                 </div>
 

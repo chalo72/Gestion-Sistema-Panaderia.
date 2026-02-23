@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronUp,
   Save,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import type { Producto, Proveedor, PrecioProveedor, Categoria } from '@/types';
+// Importar nuevos componentes Antigravity
+import { ProductVariantEditor } from '@/components/ProductVariantEditor';
+import { PaymentProcessor } from '@/components/PaymentProcessor';
+import { FinancialDashboard } from '@/components/FinancialDashboard';
+import { CategoryBrowser } from '@/components/CategoryBrowser';
 
 interface ProductosProps {
   productos: Producto[];
@@ -824,7 +830,81 @@ export function Productos({
           )}
         </CardContent>
       </Card>
-    </div >
+
+      {/* 🎆 NUEVA SECCIÓN: FEATURES ANTIGRAVITY */}
+      <Card className="backdrop-blur-xl bg-white/50 dark:bg-gray-900/50 border border-white/20 dark:border-gray-700/20 rounded-2xl shadow-lg">
+        <CardHeader className="border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <Sparkles className="w-6 h-6 text-purple-500" />
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">✨ Features Antigravity</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Variantes, Pagos, Categorías Premium y más</p>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-6">
+          <Tabs defaultValue="variantes" className="w-full">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
+              <TabsTrigger value="variantes" className="gap-2">
+                <Palette className="w-4 h-4" />
+                Variantes
+              </TabsTrigger>
+              <TabsTrigger value="pagos" className="gap-2">
+                <TrendingUp className="w-4 h-4" />
+                Pagos
+              </TabsTrigger>
+              <TabsTrigger value="categorias" className="gap-2">
+                <Tag className="w-4 h-4" />
+                Categorías
+              </TabsTrigger>
+              <TabsTrigger value="finanzas" className="gap-2">
+                <Package className="w-4 h-4" />
+                Finanzas
+              </TabsTrigger>
+            </TabsList>
+
+            {/* Tab: Variantes */}
+            <TabsContent value="variantes" className="space-y-4">
+              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-700/30">
+                <p className="text-sm text-blue-600 dark:text-blue-400">
+                  <strong>📸 Variantes de Productos:</strong> Crea tallas, colores, combos y variantes personalizadas con SKU único, precios diferenciales y múltiples fotos.
+                </p>
+              </div>
+              <ProductVariantEditor />
+            </TabsContent>
+
+            {/* Tab: Pagos */}
+            <TabsContent value="pagos" className="space-y-4">
+              <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-700/30">
+                <p className="text-sm text-green-600 dark:text-green-400">
+                  <strong>💳 Sistema de Pagos Inteligente:</strong> Efectivo, tarjeta, transferencia, E-Wallet y crédito. Manejo completo de carteras digitales y deudas.
+                </p>
+              </div>
+              <PaymentProcessor />
+            </TabsContent>
+
+            {/* Tab: Categorías */}
+            <TabsContent value="categorias" className="space-y-4">
+              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-700/30">
+                <p className="text-sm text-purple-600 dark:text-purple-400">
+                  <strong>🎨 Navegador de Categorías:</strong> Estructura jerárquica de categorías y subcategorías con fácil reordenamiento y edición.
+                </p>
+              </div>
+              <CategoryBrowser isEditable={true} />
+            </TabsContent>
+
+            {/* Tab: Finanzas */}
+            <TabsContent value="finanzas" className="space-y-4">
+              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-700/30">
+                <p className="text-sm text-amber-600 dark:text-amber-400">
+                  <strong>📊 Dashboard Financiero:</strong> KPI en tiempo real: ventas, ingresos, órdenes activas, crédito pendiente y ticket promedio.
+                </p>
+              </div>
+              <FinancialDashboard />
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>    </div>
   );
 }
 
