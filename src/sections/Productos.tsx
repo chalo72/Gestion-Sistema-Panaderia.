@@ -15,7 +15,22 @@ import {
   ChevronUp,
   Save,
   Image as ImageIcon,
-  Sparkles
+  Sparkles,
+  // Iconos premium adicionales para estilo Yimi
+  Crown,
+  Star,
+  Gem,
+  Zap,
+  Award,
+  Shield,
+  Heart,
+  Coffee,
+  Croissant,
+  Wheat,
+  ChefHat,
+  Utensils,
+  Cookie,
+  BirthdayCake
 } from 'lucide-react';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -262,11 +277,23 @@ export function Productos({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold text-gray-900">Productos</h2>
-          <p className="text-gray-500 mt-1">Gestiona tu catálogo y precios de proveedores</p>
-        </div>
+      {/* Header Premium con estilo Yimi */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-gray-900 dark:via-orange-950 dark:to-amber-950 p-6 border border-amber-200 dark:border-orange-800/30 shadow-lg">
+        <div className="flex items-center justify-between relative z-10">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-orange-400 to-amber-400 rounded-full blur-lg opacity-30 animate-pulse"></div>
+              <ChefHat className="h-10 w-10 text-orange-600 dark:text-orange-400 relative z-10" />
+            </div>
+            <div>
+              <h2 className="text-4xl font-bold tracking-tight bg-gradient-to-r from-orange-600 to-amber-600 bg-clip-text text-transparent">
+                Gestión de Productos
+              </h2>
+              <p className="text-orange-700 dark:text-orange-300 text-sm mt-1">
+                Control premium de inventario con tecnología Yimi
+              </p>
+            </div>
+          </div>
         <div className="flex gap-2">
           {check('CREAR_PRODUCTOS') && (
             <Dialog open={isCategoriaDialogOpen} onOpenChange={setIsCategoriaDialogOpen}>
@@ -843,34 +870,48 @@ export function Productos({
           </div>
         </CardHeader>
         <CardContent className="pt-6">
+          {/* Tabs Premium con Glassmorphism */}
           <Tabs defaultValue="variantes" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-6">
-              <TabsTrigger value="variantes" className="gap-2">
-                <Palette className="w-4 h-4" />
-                Variantes
+            <TabsList className="grid w-full grid-cols-4 mb-8 bg-white/40 dark:bg-gray-800/40 backdrop-blur-md rounded-2xl border border-white/30 dark:border-gray-700/30 p-2 shadow-lg">
+              <TabsTrigger value="variantes" className="gap-2 rounded-xl py-3 px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-blue-500 data-[state=active]:to-cyan-500 data-[state=active]:text-white transition-all duration-300">
+                <Gem className="w-5 h-5" />
+                <span className="font-semibold">Variantes</span>
               </TabsTrigger>
-              <TabsTrigger value="pagos" className="gap-2">
-                <TrendingUp className="w-4 h-4" />
-                Pagos
+              <TabsTrigger value="pagos" className="gap-2 rounded-xl py-3 px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-emerald-500 data-[state=active]:to-green-500 data-[state=active]:text-white transition-all duration-300">
+                <Crown className="w-5 h-5" />
+                <span className="font-semibold">Pagos</span>
               </TabsTrigger>
-              <TabsTrigger value="categorias" className="gap-2">
-                <Tag className="w-4 h-4" />
-                Categorías
+              <TabsTrigger value="categorias" className="gap-2 rounded-xl py-3 px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-purple-500 data-[state=active]:to-violet-500 data-[state=active]:text-white transition-all duration-300">
+                <Award className="w-5 h-5" />
+                <span className="font-semibold">Categorías</span>
               </TabsTrigger>
-              <TabsTrigger value="finanzas" className="gap-2">
-                <Package className="w-4 h-4" />
-                Finanzas
+              <TabsTrigger value="finanzas" className="gap-2 rounded-xl py-3 px-4 data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-yellow-500 data-[state=active]:text-white transition-all duration-300">
+                <TrendingUp className="w-5 h-5" />
+                <span className="font-semibold">Finanzas</span>
               </TabsTrigger>
             </TabsList>
 
-            {/* Tab: Variantes */}
-            <TabsContent value="variantes" className="space-y-4">
-              <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-700/30">
-                <p className="text-sm text-blue-600 dark:text-blue-400">
-                  <strong>📸 Variantes de Productos:</strong> Crea tallas, colores, combos y variantes personalizadas con SKU único, precios diferenciales y múltiples fotos.
+            {/* Tab: Variantes - Estilo Glassmorphism Premium */}
+            <TabsContent value="variantes" className="space-y-6">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-blue-50/70 via-cyan-50/50 to-blue-100/70 dark:from-blue-950/30 dark:via-cyan-950/20 dark:to-blue-900/30 p-6 border border-blue-200/50 dark:border-cyan-700/30 backdrop-blur-sm shadow-xl">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-cyan-400 rounded-full blur-md opacity-40"></div>
+                    <Gem className="h-8 w-8 text-blue-600 dark:text-cyan-400 relative z-10" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-blue-900 dark:text-cyan-300">Gestión de Variantes Premium</h3>
+                    <p className="text-blue-700 dark:text-cyan-400 text-sm">Control total sobre tallas, colores y ediciones especiales</p>
+                  </div>
+                </div>
+                <p className="text-blue-600 dark:text-cyan-500 text-sm leading-relaxed">
+                  Crea variantes únicas con SKU inteligente, precios diferenciales y gestión de inventario avanzada. 
+                  Perfecto para ediciones limitadas y productos exclusivos de tu panadería.
                 </p>
               </div>
-              <ProductVariantEditor />
+              <div className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-gray-700/30 shadow-lg overflow-hidden">
+                <ProductVariantEditor />
+              </div>
             </TabsContent>
 
             {/* Tab: Pagos */}
@@ -891,31 +932,57 @@ export function Productos({
               />
             </TabsContent>
 
-            {/* Tab: Categorías */}
-            <TabsContent value="categorias" className="space-y-4">
-              <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-100 dark:border-purple-700/30">
-                <p className="text-sm text-purple-600 dark:text-purple-400">
-                  <strong>🎨 Navegador de Categorías:</strong> Estructura jerárquica de categorías y subcategorías con fácil reordenamiento y edición.
+            {/* Tab: Categorías - Estilo Organizado Premium */}
+            <TabsContent value="categorias" className="space-y-6">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-purple-50/70 via-violet-50/50 to-indigo-50/70 dark:from-purple-950/30 dark:via-violet-950/20 dark:to-indigo-950/30 p-6 border border-purple-200/50 dark:border-violet-700/30 backdrop-blur-sm shadow-xl">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-purple-400 to-violet-400 rounded-full blur-md opacity-40"></div>
+                    <Award className="h-8 w-8 text-purple-600 dark:text-violet-400 relative z-10" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-purple-900 dark:text-violet-300">Organización Inteligente</h3>
+                    <p className="text-purple-700 dark:text-violet-400 text-sm">Estructura jerárquica premium para tu catálogo</p>
+                  </div>
+                </div>
+                <p className="text-purple-600 dark:text-violet-500 text-sm leading-relaxed">
+                  Gestiona categorías y subcategorías con control total. 
+                  Reorganiza, edita y crea estructuras personalizadas para productos especiales de tu panadería.
                 </p>
               </div>
-              <CategoryBrowser 
-                categories={categorias}
-                subcategories={[]}
-                selectedCategory={undefined}
-                onSelectCategory={(categoryId) => console.log('Categoría seleccionada:', categoryId)}
-                onAddCategory={(category) => onAddCategoria(category.nombre, category.color)}
-                isEditable={true}
-              />
+              <div className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-gray-700/30 shadow-lg overflow-hidden">
+                <CategoryBrowser 
+                  categories={categorias}
+                  subcategories={[]}
+                  selectedCategory={undefined}
+                  onSelectCategory={(categoryId) => console.log('Categoría seleccionada:', categoryId)}
+                  onAddCategory={(category) => onAddCategoria(category.nombre, category.color)}
+                  isEditable={true}
+                />
+              </div>
             </TabsContent>
 
-            {/* Tab: Finanzas */}
-            <TabsContent value="finanzas" className="space-y-4">
-              <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-100 dark:border-amber-700/30">
-                <p className="text-sm text-amber-600 dark:text-amber-400">
-                  <strong>📊 Dashboard Financiero:</strong> KPI en tiempo real: ventas, ingresos, órdenes activas, crédito pendiente y ticket promedio.
+            {/* Tab: Finanzas - Estilo Executive Dashboard */}
+            <TabsContent value="finanzas" className="space-y-6">
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-50/70 via-yellow-50/50 to-orange-50/70 dark:from-amber-950/30 dark:via-yellow-950/20 dark:to-orange-950/30 p-6 border border-amber-200/50 dark:border-yellow-700/30 backdrop-blur-sm shadow-xl">
+                <div className="flex items-center gap-4 mb-3">
+                  <div className="relative">
+                    <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-yellow-400 rounded-full blur-md opacity-40"></div>
+                    <TrendingUp className="h-8 w-8 text-amber-600 dark:text-yellow-400 relative z-10" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold text-amber-900 dark:text-yellow-300">Dashboard Ejecutivo</h3>
+                    <p className="text-amber-700 dark:text-yellow-400 text-sm">Métricas financieras en tiempo real</p>
+                  </div>
+                </div>
+                <p className="text-amber-600 dark:text-yellow-500 text-sm leading-relaxed">
+                  Visualiza KPI clave: ventas totales, ingresos, órdenes activas, crédito pendiente y ticket promedio. 
+                  Toma decisiones informadas con datos actualizados al instante.
                 </p>
               </div>
-              <FinancialDashboard />
+              <div className="bg-white/60 dark:bg-gray-900/40 backdrop-blur-md rounded-2xl border border-white/20 dark:border-gray-700/30 shadow-lg overflow-hidden">
+                <FinancialDashboard />
+              </div>
             </TabsContent>
           </Tabs>
         </CardContent>
