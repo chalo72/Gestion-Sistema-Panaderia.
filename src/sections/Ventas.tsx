@@ -38,6 +38,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { PaymentProcessor } from '@/components/PaymentProcessor';
 import type {
     Producto,
     InventarioItem,

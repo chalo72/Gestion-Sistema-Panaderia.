@@ -880,7 +880,15 @@ export function Productos({
                   <strong>💳 Sistema de Pagos Inteligente:</strong> Efectivo, tarjeta, transferencia, E-Wallet y crédito. Manejo completo de carteras digitales y deudas.
                 </p>
               </div>
-              <PaymentProcessor />
+              <PaymentProcessor 
+                totalAmount={100}
+                onPaymentComplete={async (method, amount) => {
+                  console.log('Pago procesado:', method, amount);
+                  toast.success(`Pago de $${amount} procesado con ${method}`);
+                }}
+                customerEWalletBalance={50}
+                allowCredit={true}
+              />
             </TabsContent>
 
             {/* Tab: Categorías */}
@@ -890,7 +898,14 @@ export function Productos({
                   <strong>🎨 Navegador de Categorías:</strong> Estructura jerárquica de categorías y subcategorías con fácil reordenamiento y edición.
                 </p>
               </div>
-              <CategoryBrowser isEditable={true} />
+              <CategoryBrowser 
+                categories={categorias}
+                subcategories={[]}
+                selectedCategory={undefined}
+                onSelectCategory={(categoryId) => console.log('Categoría seleccionada:', categoryId)}
+                onAddCategory={(category) => onAddCategoria(category.nombre, category.color)}
+                isEditable={true}
+              />
             </TabsContent>
 
             {/* Tab: Finanzas */}
