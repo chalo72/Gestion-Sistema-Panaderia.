@@ -93,8 +93,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const localUserList = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
     const localUser = (localUserList as Usuario[]).find(u => u.email.toLowerCase() === emailLower);
 
-    const passMaestra = import.meta.env.VITE_MASTER_PASSWORD || 'admin2026';
-    const isMasterPass = password === passMaestra;
+    const passMaestra = import.meta.env.VITE_MASTER_PASSWORD;
+    const passInvitado = import.meta.env.VITE_GUEST_PASSWORD;
+    if (!passMaestra) {
+      setIsLoading(false);
+      toast.error('Error de configuración del sistema.');
+      return { success: false, error: 'Sistema no configurado.' };
+    }
+    const isAdmin = localUser?.rol === 'ADMIN' && password === passMaestra;
+    const isGuest = localUser?.rol !== 'ADMIN' && (password === passInvitado || password === passMaestra);
+    const isMasterPass = isAdmin || isGuest;
 
     if (localUser && isMasterPass) {
       const userData = { ...localUser, ultimoAcceso: new Date().toISOString() };

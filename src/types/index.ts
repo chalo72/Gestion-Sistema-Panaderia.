@@ -440,11 +440,9 @@ export const USUARIOS_PRUEBA: Usuario[] = [
   { id: 'guest-local-id', email: 'invitado@dulceplacer.com', nombre: 'Invitado', apellido: 'Dulce Placer', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() },
 ];
 
-// Credenciales de Acceso Oficiales 🔐
-export const CREDENCIALES_PRUEBA: Record<string, string> = {
-  'Chalo8321@gmail.com': 'admin2026',
-  'invitado@dulceplacer.com': 'invitado123',
-};
+// Credenciales de Acceso — Se cargan desde variables de entorno
+// Las contraseñas NO se almacenan en código fuente
+export const CREDENCIALES_PRUEBA: Record<string, string> = {};
 
 // Categorías de Panadería y Negocio Dulce Placer — Completas
 export const CATEGORIAS_DEFAULT: Categoria[] = [
