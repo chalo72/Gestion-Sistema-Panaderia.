@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev:electron": "vite build && electron .",
+    "update-version": "node scripts/update-version.js",
+    "build": "npm run update-version && tsc -b && vite build",
+    "build:electron": "npm run update-version && tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview",
     "host": "vite --host"
   },
+  "main": "electron/main.js",
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -44,6 +48,7 @@
     "cmdk": "^1.1.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
+    "html5-qrcode": "^2.3.8",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.562.0",
     "next-themes": "^0.4.6",
@@ -55,8 +60,12 @@
     "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
+    "tesseract.js": "^7.0.0",
     "vaul": "^1.1.2",
-    "zod": "^4.3.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.3.5",
+    "better-sqlite3": "^9.2.2",
+    "electron-store": "^8.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

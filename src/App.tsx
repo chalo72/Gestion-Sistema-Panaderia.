@@ -1,33 +1,47 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { Sidebar } from '@/components/Sidebar';
-import { PageTransition } from '@/components/PageTransition';
-import { Login } from '@/sections/Login';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { PageTransition } from '@/components/layout/PageTransition';
+import { Login } from '@/pages/Login';
 import type { ViewType } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
-import { LogOut, User, AlertTriangle, ShoppingCart } from 'lucide-react';
+import { LogOut, User, AlertTriangle, ShoppingCart, Settings, Unlock, Lock, Plus, Minus } from 'lucide-react';
 import { usePriceControl } from '@/hooks/usePriceControl';
-import { SectionErrorBoundary } from '@/components/SectionErrorBoundary';
+import { useAutoUpdate } from '@/hooks/useAutoUpdate';
+import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
+import { GlobalActionSystem } from '@/components/GlobalActionSystem';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
 
-// Lazy loading de secciones (below-the-fold)
-const Dashboard = lazy(() => import('@/sections/Dashboard'));
-const Productos = lazy(() => import('@/sections/Productos'));
-const Proveedores = lazy(() => import('@/sections/Proveedores'));
-const Precios = lazy(() => import('@/sections/Precios'));
-const Inventario = lazy(() => import('@/sections/Inventario'));
-const Recepciones = lazy(() => import('@/sections/Recepciones'));
-const Alertas = lazy(() => import('@/sections/Alertas'));
-const Configuracion = lazy(() => import('@/sections/Configuracion'));
-const PrePedidos = lazy(() => import('@/sections/PrePedidos'));
-const Usuarios = lazy(() => import('@/sections/Usuarios'));
-const RoleManager = lazy(() => import('@/sections/RoleManager'));
-const Recetas = lazy(() => import('@/sections/Recetas'));
-const Ventas = lazy(() => import('@/sections/Ventas'));
-const ControlCaja = lazy(() => import('@/sections/ControlCaja'));
-const Ahorros = lazy(() => import('@/sections/Ahorros'));
-const Gastos = lazy(() => import('@/sections/Gastos'));
-const Reportes = lazy(() => import('@/sections/Reportes'));
+// Modales de Caja (Movidos al global)
+import { AperturaCajaModal } from '@/components/ventas/AperturaCajaModal';
+import { CierreCajaModal } from '@/components/ventas/CierreCajaModal';
+import { CajaMovimientosModal } from '@/components/ventas/CajaMovimientosModal';
+
+
+import Dashboard from '@/pages/Dashboard';
+import Productos from '@/pages/Productos';
+import { Ventas } from '@/pages/Ventas';
+import { ControlCaja } from '@/pages/ControlCaja';
+import Produccion from '@/pages/Produccion';
+import Usuarios from '@/pages/Usuarios';
+import Reportes from '@/pages/Reportes';
+
+const Inventario = lazy(() => import('@/pages/Inventario'));
+const Configuracion = lazy(() => import('@/pages/Configuracion'));
+const Proveedores = lazy(() => import('@/pages/Proveedores'));
+const Precios = lazy(() => import('@/pages/Precios'));
+const Recepciones = lazy(() => import('@/pages/Recepciones'));
+const Alertas = lazy(() => import('@/pages/Alertas'));
+const PrePedidos = lazy(() => import('@/pages/PrePedidos'));
+const RoleManager = lazy(() => import('@/pages/RoleManager'));
+const Recetas = lazy(() => import('@/pages/Recetas'));
+const Ahorros = lazy(() => import('@/pages/Ahorros'));
+const Gastos = lazy(() => import('@/pages/Gastos'));
+const HistorialVentas = lazy(() => import('@/pages/HistorialVentas'));
+const CargaMasiva = lazy(() => import('@/pages/CargaMasiva'));
+const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial'));
 
 // Skeleton para durante la carga de secciones
 function SectionSkeleton() {
@@ -70,13 +84,24 @@ function UnauthorizedState() {
 
 // Componente interno que usa el contexto de auth
 function AppContent() {
+  console.log("🎨 AppContent rendering...");
   // 1. Estados iniciales (Hooks)
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [showAperturaModal, setShowAperturaModal] = useState(false);
+  const [showCierreModal, setShowCierreModal] = useState(false);
+  const [movementModal, setMovementModal] = useState<{ isOpen: boolean; tipo: 'entrada' | 'salida' }>({
+    isOpen: false,
+    tipo: 'entrada'
+  });
 
   // 2. Contextos y Hooks de Control (Hooks)
   const auth = useAuth();
   const { isAuthenticated, isLoading: authLoading, logout, usuario, hasPermission } = auth;
+  
+  // ✅ Auto-actualización del sistema
+  const { currentVersion, updateAvailable, isUpdating } = useAutoUpdate();
 
   const priceControl = usePriceControl();
   const {
@@ -132,7 +157,6 @@ function AppContent() {
     addReceta,
     updateReceta,
     deleteReceta,
-    getRecetaByProducto,
     ventas,
     sesionesCaja,
     cajaActiva,
@@ -144,23 +168,35 @@ function AppContent() {
     pedidosActivos,
     gastos,
     addGasto,
-    updateGasto,
-    deleteGasto,
     generarReporte,
-    loadAllData,
+    produccion,
+    addOrdenProduccion,
+    updateOrdenProduccion,
+    finalizarProduccion,
+    formulaciones,
+    modelosPan,
+    addFormulacion,
+    updateFormulacion,
+    deleteFormulacion,
+    addModeloPan,
+    updateModeloPan,
+    deleteModeloPan,
+    updateMesa,
+    addMesa,
+    deleteMesa,
+    addPedidoActivo,
+    updatePedidoActivo,
+    deletePedidoActivo,
+    registrarMovimientoCaja,
   } = priceControl;
 
-  // 3. Efectos de Sincronización y Registro (Hooks) - SIEMPRE ANTES DE RETORNOS CONDICIONALES
+  // 3. Efectos de Sincronización (Hooks)
   useEffect(() => {
-    console.log('📱 AppState Update:', {
-      isAuthenticated,
-      authLoading,
-      dataLoaded,
-      usuario: usuario?.email,
-      view: currentView,
-      online: isOnline
-    });
-  }, [isAuthenticated, authLoading, dataLoaded, usuario, currentView, isOnline]);
+    // Log simplificado y seguro
+    if (isAuthenticated) {
+      console.log('📱 App Ready - View:', currentView);
+    }
+  }, [isAuthenticated, currentView]);
 
   useEffect(() => {
     if (isAuthenticated && dataLoaded) {
@@ -179,18 +215,49 @@ function AppContent() {
     };
   }, []);
 
-  // 4. Lógica de UI
-  const isLoading = authLoading || !dataLoaded;
+  // 4. Lógica de UI - Fail-Safe Antigravity
+  const [showForceLoad, setShowForceLoad] = useState(false);
+  const [isForceLoaded, setIsForceLoaded] = useState(false);
+  const isLoading = (authLoading || !dataLoaded) && !isForceLoaded;
 
-  // 5. Retornos Condicionales (NO LLAMAR HOOKS DESPUÉS DE ESTE PUNTO)
+  useEffect(() => {
+    let timer: any;
+    if (isLoading && !isForceLoaded) {
+      timer = setTimeout(() => {
+        setShowForceLoad(true);
+        console.warn("⚠️ [Nexus-Volt] Carga demorada. Activando modo de emergencia.");
+      }, 5000); // 5 segundos de cortesía
+    }
+    return () => clearTimeout(timer);
+  }, [isLoading, isForceLoaded]);
+
+  // 5. Retornos Condicionales
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
         <div className="text-center animate-ag-fade-in">
-          <div className="w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 bg-transparent drop-shadow-[0_0_15px_rgba(255,0,127,0.4)] animate-ag-float">
+          <div className="w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 bg-transparent drop-shadow-[0_0_20px_rgba(255,0,127,0.5)] animate-ag-float">
             <img src="logo_panaderia.png" alt="Loading" className="w-full h-full object-contain" />
           </div>
-          <p className="text-[#ff007f] font-black uppercase tracking-[0.3em] opacity-80 italic text-sm">Dulce Placer...</p>
+          <div className="space-y-4">
+            <p className="text-[#ff007f] font-black uppercase tracking-[0.4em] animate-pulse italic text-sm">Dulce Placer...</p>
+            <div className="w-48 h-1 bg-white/5 rounded-full mx-auto overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 animate-ag-shimmer w-1/2" />
+            </div>
+
+            {showForceLoad && (
+              <div className="pt-8 flex flex-col items-center gap-4 animate-ag-fade-in">
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest max-w-xs opacity-60">Sincronización demorada en el Nexus. ¿Quieres forzar la entrada?</p>
+                <Button
+                  onClick={() => setIsForceLoaded(true)}
+                  variant="outline"
+                  className="h-10 px-8 rounded-xl border-[#ff007f]/30 text-[#ff007f] hover:bg-[#ff007f]/10 font-black uppercase text-[10px] tracking-widest transition-all"
+                >
+                  Forzar Entrada al Sistema
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -404,13 +471,18 @@ function AppContent() {
               onCerrarCaja={cerrarCaja}
               formatCurrency={formatCurrency}
               usuario={usuario}
-              categorias={configuracion.categorias}
+              categorias={Array.isArray(configuracion.categorias) ? configuracion.categorias : []}
+              onRegistrarMovimientoCaja={registrarMovimientoCaja}
               mesas={mesas}
               pedidosActivos={pedidosActivos}
-              onUpdateMesa={priceControl.updateMesa}
-              onAddPedidoActivo={priceControl.addPedidoActivo}
-              onUpdatePedidoActivo={priceControl.updatePedidoActivo}
-              onDeletePedidoActivo={priceControl.deletePedidoActivo}
+              onUpdateMesa={updateMesa}
+              onAddPedidoActivo={addPedidoActivo}
+              onUpdatePedidoActivo={updatePedidoActivo}
+              onDeletePedidoActivo={deletePedidoActivo}
+              onUpdateProducto={updateProducto}
+              onAjustarStock={onAjustarStock}
+              onAddMesa={addMesa}
+              onDeleteMesa={deleteMesa}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -423,6 +495,12 @@ function AppContent() {
               cajaActiva={cajaActiva}
               formatCurrency={formatCurrency}
               getProductoById={getProductoById}
+              registrarMovimientoCaja={registrarMovimientoCaja}
+              usuario={usuario}
+              productos={productos}
+              categorias={Array.isArray(configuracion.categorias) ? configuracion.categorias : []}
+              onAbrirCaja={abrirCaja}
+              onCerrarCaja={cerrarCaja}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -447,7 +525,7 @@ function AppContent() {
               onUpdateGasto={priceControl.updateGasto}
               onDeleteGasto={priceControl.deleteGasto}
               formatCurrency={formatCurrency}
-              usuario={usuario}
+              usuario={usuario!}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -459,7 +537,75 @@ function AppContent() {
               gastos={gastos}
               formatCurrency={formatCurrency}
               generarReporte={generarReporte}
+              productos={productos}
+              categorias={Array.isArray(configuracion.categorias) ? configuracion.categorias : []}
             />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'produccion': // Added new case for Produccion
+        return hasPermission('VER_PRODUCCION') ? (
+          <SectionErrorBoundary sectionName="Producción">
+            <Produccion
+              produccion={produccion}
+              productos={productos}
+              recetas={recetas}
+              inventario={inventario}
+              proveedores={proveedores}
+              formulaciones={formulaciones}
+              modelosPan={modelosPan}
+              addOrdenProduccion={addOrdenProduccion}
+              updateOrdenProduccion={updateOrdenProduccion}
+              finalizarProduccion={finalizarProduccion}
+              addFormulacion={addFormulacion}
+              updateFormulacion={updateFormulacion}
+              deleteFormulacion={deleteFormulacion}
+              addModeloPan={addModeloPan}
+              updateModeloPan={updateModeloPan}
+              deleteModeloPan={deleteModeloPan}
+              getProductoById={getProductoById}
+              getMejorPrecio={getMejorPrecio}
+              formatCurrency={formatCurrency}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'historial-ventas':
+        return hasPermission('VER_VENTAS') ? (
+          <SectionErrorBoundary sectionName="Historial de Ventas">
+            <HistorialVentas
+              ventas={ventas}
+              productos={productos}
+              sesionesCaja={sesionesCaja}
+              formatCurrency={formatCurrency}
+              getProductoById={getProductoById}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'cargamasiva':
+        return hasPermission('CREAR_PRODUCTOS') ? (
+          <SectionErrorBoundary sectionName="Carga Masiva">
+            <CargaMasiva
+              productos={productos}
+              proveedores={proveedores}
+              categorias={configuracion.categorias}
+              onAddProducto={addProducto}
+              onAddProveedor={addProveedor}
+              onAddCategoria={addCategoria}
+              formatCurrency={formatCurrency}
+            />
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'listapreciosproincial':
+        return hasPermission('VER_PRODUCTOS') ? (
+          <SectionErrorBoundary sectionName="Lista de Precios Provincial">
+            <Suspense fallback={<SectionSkeleton />}>
+              <ListaPreciosProvincial
+                productos={productos}
+                inventario={inventario}
+                categorias={Array.isArray(configuracion.categorias) ? configuracion.categorias : []}
+                formatCurrency={formatCurrency}
+                onAddProducto={addProducto}
+              />
+            </Suspense>
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
       default:
@@ -491,7 +637,7 @@ function AppContent() {
       <Sidebar
         currentView={currentView}
         onViewChange={setCurrentView}
-        alertasNoLeidas={getAlertasNoLeidas().length}
+        alertasNoLeidas={Array.isArray(getAlertasNoLeidas()) ? getAlertasNoLeidas().length : 0}
         productos={productos}
         proveedores={proveedores}
         precios={precios}
@@ -499,61 +645,170 @@ function AppContent() {
         getPreciosByProducto={getPreciosByProducto}
         getProveedorById={getProveedorById}
         formatCurrency={formatCurrency}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
-      <main className="flex-1 w-full md:w-auto md:ml-64 transition-all duration-300">
-        {/* Header Premium */}
-        <div className="bg-card/80 backdrop-blur-lg border-b border-border/50 px-4 md:px-8 py-3 flex items-center justify-between sticky top-0 z-40 pl-14 md:pl-8">
+      <main className={cn(
+        "flex-1 w-full md:w-auto transition-all duration-300 h-screen flex flex-col bg-background overflow-hidden",
+        isSidebarCollapsed ? "md:ml-20" : "md:ml-64"
+      )}>
+        {/* Header (Restaurado) */}
+        <header className="flex-none bg-white dark:bg-slate-900 border-b border-border px-4 md:px-8 py-4 flex items-center justify-between z-40">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 kpi-violet rounded-xl flex items-center justify-center shadow-md shadow-violet-500/20">
-              <User className="w-4 h-4 text-white" />
+            <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center border border-border">
+              <User className="w-5 h-5 text-slate-500" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-foreground">{usuario?.nombre} {usuario?.apellido}</p>
+                <p className="text-base font-bold text-foreground">{usuario?.nombre} {usuario?.apellido}</p>
                 {isOnline ? (
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
-                    <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_rgba(16,185,129,0.5)]" />
-                    <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">Nube</span>
-                  </div>
+                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 bg-emerald-50/50">Online</Badge>
                 ) : (
-                  <div className="flex items-center gap-1 px-1.5 py-0.5 bg-amber-500/10 border border-amber-500/20 rounded-md animate-pulse">
-                    <div className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
-                    <span className="text-[10px] font-bold text-amber-600 uppercase tracking-tighter">Local</span>
-                  </div>
+                  <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 bg-amber-50/50 grayscale">Offline</Badge>
                 )}
               </div>
-              <p className="text-xs text-muted-foreground">{usuario?.rol}</p>
+              <p className="text-xs text-muted-foreground font-medium">{usuario?.rol}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* Control de Caja Antigravity Premium */}
+            <div className="hidden lg:flex items-center gap-3 mr-4 pr-4 border-r border-slate-200/50 dark:border-slate-800/50">
+              {cajaActiva ? (
+                <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/50 p-1 rounded-2xl border border-slate-100 dark:border-slate-700/50">
+                  {/* Píldora de Estado */}
+                  <div
+                    onClick={() => setShowCierreModal(true)}
+                    className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white dark:hover:bg-slate-700 rounded-xl transition-all group shadow-sm active:scale-95"
+                  >
+                    <div className="relative flex items-center justify-center">
+                      <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)] animate-pulse" />
+                      <div className="absolute w-2.5 h-2.5 rounded-full bg-emerald-500/40 animate-ping" />
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter leading-none">Caja Activa</span>
+                      <span className="text-xs font-black text-slate-900 dark:text-white leading-none mt-1 uppercase">
+                        {formatCurrency(cajaActiva.totalVentas)}
+                      </span>
+                    </div>
+                    <Lock className="w-3.5 h-3.5 text-slate-300 group-hover:text-amber-500 transition-colors ml-1" />
+                  </div>
+
+                  {/* Botones de Movimiento Rápidos */}
+                  <div className="flex items-center gap-1 border-l border-slate-200 dark:border-slate-700 pl-1">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setMovementModal({ isOpen: true, tipo: 'entrada' })}
+                      title="Registrar Entrada"
+                      className="h-8 w-8 p-0 text-emerald-600 hover:bg-emerald-100 hover:text-emerald-700 rounded-lg transition-all active:scale-90"
+                    >
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setMovementModal({ isOpen: true, tipo: 'salida' })}
+                      title="Registrar Salida"
+                      className="h-8 w-8 p-0 text-rose-600 hover:bg-rose-100 hover:text-rose-700 rounded-lg transition-all active:scale-90"
+                    >
+                      <Minus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button
+                  onClick={() => setShowAperturaModal(true)}
+                  className="h-10 px-5 bg-slate-900 hover:bg-emerald-600 text-white rounded-xl gap-2 text-xs font-black uppercase tracking-widest shadow-xl shadow-slate-900/10 transition-all hover:-translate-y-0.5 active:scale-95"
+                >
+                  <Unlock className="w-4 h-4" />
+                  Abrir Turno
+                </Button>
+              )}
+            </div>
+
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentView('ventas')}
-              className="gap-2 border-[#ff007f]/30 text-[#ff007f] hover:bg-[#ff007f]/10 shadow-sm shadow-[#ff007f]/5 font-bold animate-ag-fade-in"
+              className="hidden sm:flex gap-2 border-primary/20 text-primary hover:bg-primary/5 font-bold text-xs px-5 h-10 rounded-xl"
             >
               <ShoppingCart className="w-4 h-4" />
-              POS / Ventas
+              Ver POS
             </Button>
             <Button
               variant="ghost"
               size="sm"
               onClick={logout}
-              className="gap-2 text-muted-foreground hover:text-destructive transition-ag"
+              className="gap-2 text-muted-foreground hover:text-destructive font-bold text-xs h-10"
             >
               <LogOut className="w-4 h-4" />
-              Cerrar Sesión
             </Button>
           </div>
-        </div>
-        <div className="p-4 md:p-8">
-          <PageTransition viewKey={currentView}>
-            <Suspense fallback={<SectionSkeleton />}>
-              {renderView()}
-            </Suspense>
-          </PageTransition>
+        </header>
+
+        {/* Scrollable Content Area */}
+        <div className={cn(
+          "flex-1 w-full overflow-x-hidden",
+          currentView === 'ventas' ? "overflow-hidden" : "overflow-y-auto scrollbar-thin scrollbar-thumb-slate-200 dark:scrollbar-thumb-slate-800"
+        )}>
+          <div className={cn(
+            "w-full h-full",
+            currentView === 'ventas' ? "" : "px-4 md:px-8 py-6"
+          )}>
+            <PageTransition viewKey={currentView} className="h-full w-full">
+              <Suspense fallback={<SectionSkeleton />}>
+                <div className="w-full h-full">
+                  {renderView()}
+                </div>
+              </Suspense>
+            </PageTransition>
+          </div>
         </div>
       </main>
+
+      {/* Botón flotante de accesos directos eliminado a petición del usuario */}
+      {/* 
+      {isAuthenticated && dataLoaded && (
+        <GlobalActionSystem
+          onViewChange={setCurrentView}
+          categorias={configuracion.categorias || []}
+          proveedores={proveedores}
+          onAddProducto={addProducto}
+          onAddGasto={addGasto}
+          recetas={recetas}
+          inventario={inventario}
+          productos={productos}
+          onAddOrdenProduccion={addOrdenProduccion}
+          formatCurrency={formatCurrency}
+          usuarioId={usuario?.id || 'anon'}
+        />
+      )}
+      */}
+
+      {/* Modales de Caja Globales */}
+      <AperturaCajaModal
+        isOpen={showAperturaModal}
+        onClose={() => setShowAperturaModal(false)}
+        onAbrir={abrirCaja}
+      />
+
+      <CierreCajaModal
+        isOpen={showCierreModal}
+        onClose={() => setShowCierreModal(false)}
+        onCerrar={cerrarCaja}
+        cajaActiva={cajaActiva}
+        formatCurrency={formatCurrency}
+      />
+
+      <CajaMovimientosModal
+        isOpen={movementModal.isOpen}
+        onOpenChange={(open) => setMovementModal(prev => ({ ...prev, isOpen: open }))}
+        tipo={movementModal.tipo}
+        onSubmit={async (monto, motivo) => {
+          await registrarMovimientoCaja(monto, movementModal.tipo, motivo, usuario?.id || 'anon');
+        }}
+      />
+
       <Toaster />
     </div>
   );

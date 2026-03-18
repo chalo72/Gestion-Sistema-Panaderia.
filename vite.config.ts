@@ -5,6 +5,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  base: "/Panaderia-Dulce-Placer/",
   plugins: [
     react(),
     VitePWA({
@@ -19,8 +20,8 @@ export default defineConfig({
         background_color: '#0f172a',
         display: 'standalone',
         orientation: 'portrait',
-        start_url: '/',
-        scope: '/',
+        start_url: '/Panaderia-Dulce-Placer/',
+        scope: '/Panaderia-Dulce-Placer/',
         icons: [
           {
             src: '/logo.png',
@@ -78,5 +79,11 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  server: {
+    port: 5173,
+    host: '0.0.0.0', // Escucha en TODAS las interfaces
+    strictPort: true,
+    open: false,
   },
 });

@@ -10,6 +10,38 @@
   <link rel="icon" type="image/png" href="/logo_panaderia.png" />
   <link rel="apple-touch-icon" href="/logo_panaderia.png" />
   <title>Panaderia Dulce Placer</title>
+  <style>
+    body {
+      background-color: #0f172a;
+      margin: 0;
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      font-family: sans-serif;
+    }
+
+    #root:empty::before {
+      content: "Cargando Sistema Antigravity...";
+      font-weight: bold;
+      letter-spacing: 0.1em;
+      opacity: 0.5;
+    }
+  </style>
+  <script>
+    console.log("🚀 Antigravity Boot Probe: index.html loaded");
+    window.onerror = (m, s, l, c, e) => {
+      console.error("❌ CRITICAL BOOT ERROR:", m, s, l);
+      document.body.innerHTML = `
+        <div style="padding: 20px; text-align: center;">
+          <h1 style="color: #ff007f;">Error de Carga</h1>
+          <p style="opacity: 0.7;">${m}</p>
+          <p style="font-size: 10px; opacity: 0.4;">${s} (Línea ${l})</p>
+        </div>
+      `;
+    };
+  </script>
 </head>
 
 <body>

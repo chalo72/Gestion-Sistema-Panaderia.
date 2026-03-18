@@ -316,8 +316,12 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async clearAllAlertas(): Promise<void> {
-        const { error } = await supabase.from('alertas').delete().neq('id', '00000000-0000-0000-0000-000000000000'); // Hack to delete all
-        if (error) throw error;
+        const { data: allAlertas } = await supabase.from('alertas').select('id');
+        if (allAlertas && allAlertas.length > 0) {
+            const ids = allAlertas.map(a => a.id);
+            const { error } = await supabase.from('alertas').delete().in('id', ids);
+            if (error) throw error;
+        }
     }
 
     // --- Configuración ---

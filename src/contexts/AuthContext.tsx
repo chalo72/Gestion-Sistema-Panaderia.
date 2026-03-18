@@ -93,8 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const localUserList = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
     const localUser = (localUserList as Usuario[]).find(u => u.email.toLowerCase() === emailLower);
 
-    const passMaestra = 'admin2026';
-    const isMasterPass = password === passMaestra || password === 'password123';
+    const passMaestra = import.meta.env.VITE_MASTER_PASSWORD || 'admin2026';
+    const isMasterPass = password === passMaestra;
 
     if (localUser && isMasterPass) {
       const userData = { ...localUser, ultimoAcceso: new Date().toISOString() };
@@ -136,25 +136,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const permissions = usuario ? rolePermissions[usuario.rol] : [];
 
-  // Sincronización Automática de Permisos (para que aparezcan nuevas funciones sin borrar localStorage)
+  // Sincronización Automática de Permisos - Optimizado para evitar bucles
   useEffect(() => {
-    if (usuario) {
+    if (usuario && rolePermissions) {
       const currentRole = usuario.rol;
-      const defaultRolePerms = ROLE_PERMISSIONS[currentRole];
-      const savedRolePerms = rolePermissions[currentRole];
+      const defaultRolePerms = ROLE_PERMISSIONS[currentRole] || [];
+      const savedRolePerms = rolePermissions[currentRole] || [];
 
-      // Verificamos si faltan permisos que están en el código pero no en localStorage
+      // Solo actualizar si faltan permisos del sistema base
       const missingPerms = defaultRolePerms.filter(p => !savedRolePerms.includes(p));
 
       if (missingPerms.length > 0) {
-        console.log(`🔄 Sincronizando permisos faltantes para ${currentRole}:`, missingPerms);
+        console.log(`🔄 [Nexus-Volt] Sincronizando permisos faltantes para ${currentRole}:`, missingPerms);
+        const updatedPerms = [...new Set([...savedRolePerms, ...missingPerms])];
+
         setRolePermissions(prev => ({
           ...prev,
-          [currentRole]: [...new Set([...savedRolePerms, ...missingPerms])]
+          [currentRole]: updatedPerms
         }));
       }
     }
-  }, [usuario, rolePermissions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [usuario?.rol]); // Solo re-accionar si el ROL del usuario cambia
 
   const hasPermission = useCallback((permission: Permission): boolean => permissions.includes(permission), [permissions]);
   const hasAnyPermission = useCallback((perms: Permission[]): boolean => perms.some(p => permissions.includes(p)), [permissions]);

@@ -21,8 +21,13 @@ import type {
   Recepcion,
   Mesa,
   PedidoActivo,
-  Gasto
+  Gasto,
+  OrdenProduccion,
+  MovimientoCaja
 } from '@/types';
+import { toast } from 'sonner';
+
+import { safeNumber, safeString } from '@/lib/safe-utils';
 
 import {
   CATEGORIAS_DEFAULT,
@@ -64,6 +69,7 @@ export function usePriceControl() {
   const [mesas, setMesas] = useState<Mesa[]>([]);
   const [pedidosActivos, setPedidosActivos] = useState<PedidoActivo[]>([]);
   const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [produccion, setProduccion] = useState<OrdenProduccion[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Inicializar base de datos y cargar datos
@@ -71,28 +77,188 @@ export function usePriceControl() {
     const initDB = async () => {
       try {
         await db.init();
-        await loadAllData();
+        // Cargar datos CRÍTICOS primero
+        await loadCriticalData();
+        setLoaded(true);
+        
+        // Cargar datos secundarios en background SIN BLOQUEAR
+        loadSecondaryDataInBackground();
       } catch (error) {
         console.error('Error inicializando base de datos:', error);
+        setLoaded(true);
       }
-      setLoaded(true);
     };
     initDB();
   }, []);
+
+  // ⚡ DATOS CRÍTICOS = Mostrar UI rápido (Productos, Precios, Config)
+  const loadCriticalData = async () => {
+    try {
+      // Config + Productos + Precios en paralelo
+      const [configData, productos, proveedores, precios] = await Promise.all([
+        db.getConfiguracion(),
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllPrecios(),
+      ]);
+
+      let finalConfig = configData ? {
+        ...defaultConfig,
+        ...configData,
+        categorias: configData.categorias || defaultConfig.categorias,
+      } as Configuracion : defaultConfig;
+
+      // Validar categorías
+      const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
+        cDef => !finalConfig.categorias.map(c => c.nombre).includes(cDef.nombre)
+      );
+
+      if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
+        const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
+          const catDefault = CATEGORIAS_DEFAULT.find(cd => cd.nombre === catExistente.nombre);
+          return catDefault && !catExistente.icono ? { ...catExistente, icono: catDefault.icono } : catExistente;
+        });
+        finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
+        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+      }
+
+      setConfiguracion(finalConfig);
+      setProductos(productos);
+      setProveedores(proveedores);
+      setPrecios(precios);
+
+      // Auto-seed si no hay datos
+      const categoriasValidas = CATEGORIAS_DEFAULT.map(c => c.nombre);
+      const tieneProductosReales = productos.some(p => categoriasValidas.includes(p.categoria));
+      
+      if (productos.length === 0 || !tieneProductosReales) {
+        await autoSeedData();
+      }
+    } catch (error) {
+      console.error('Error cargando datos críticos:', error);
+    }
+  };
+
+  // 🌱 Auto-seed PARALELIZADO
+  const autoSeedData = async () => {
+    try {
+      const [productosEnDB, provsEnDB, ventasEnDB, recepcionesEnDB] = await Promise.all([
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllVentas(),
+        db.getAllRecepciones(),
+      ]);
+
+      const productosInvalidos = productosEnDB.filter(p => 
+        !CATEGORIAS_DEFAULT.map(c => c.nombre).includes(p.categoria)
+      );
+
+      // Limpiar productos obsoletos en paralelo
+      if (productosInvalidos.length > 0) {
+        await Promise.allSettled(
+          productosInvalidos.map(p => db.deleteProducto(p.id).catch(() => {}))
+        );
+      }
+
+      // Agregar proveedores, productos, precios EN PARALELO (no secuencial)
+      const proveedoresParaAgregar = DATOS_EJEMPLO.proveedores.filter(
+        prov => !provsEnDB.some(p => p.id === prov.id)
+      );
+      
+      await Promise.all([
+        Promise.allSettled(proveedoresParaAgregar.map(p => db.addProveedor(p as Proveedor).catch(() => {}))),
+        Promise.allSettled(DATOS_EJEMPLO.productos.map(p => db.addProducto(p as Producto).catch(() => {}))),
+        Promise.allSettled(DATOS_EJEMPLO.precios.map(p => db.addPrecio(p as PrecioProveedor).catch(() => {}))),
+        ventasEnDB.length === 0 ? Promise.allSettled(DATOS_EJEMPLO.ventas?.map(v => db.addVenta(v as any).catch(() => {})) ?? []) : Promise.resolve(),
+        recepcionesEnDB.length === 0 ? Promise.allSettled(DATOS_EJEMPLO.recepciones?.map(r => db.addRecepcion(r as any).catch(() => {})) ?? []) : Promise.resolve(),
+      ]);
+
+      // Actualizar estado LOCAL después del seed (SIN re-queries)
+      setProductos(DATOS_EJEMPLO.productos as Producto[]);
+      setProveedores(DATOS_EJEMPLO.proveedores as Proveedor[]);
+      setPrecios(DATOS_EJEMPLO.precios as PrecioProveedor[]);
+    } catch (error) {
+      console.error('Error en auto-seed:', error);
+    }
+  };
+
+  // 📦 DATOS SECUNDARIOS = Cargar en background
+  const loadSecondaryDataInBackground = async () => {
+    try {
+      const [alertas, inventario, movimientos, gastos, recepciones, historial, recetas, ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, produccion] = await Promise.all([
+        db.getAllAlertas(),
+        db.getAllInventario(),
+        db.getAllMovimientos(),
+        db.getAllGastos(),
+        db.getAllRecepciones(),
+        db.getAllHistorial(),
+        db.getAllRecetas(),
+        db.getAllVentas(),
+        db.getAllSesionesCaja(),
+        db.getSesionCajaActiva(),
+        db.getAllAhorros(),
+        db.getAllMesas(),
+        db.getAllPedidosActivos(),
+        db.getAllOrdenesProduccion(),
+      ]);
+
+      setAlertas(alertas);
+      setInventario(inventario);
+      setMovimientos(movimientos);
+      setGastos(gastos);
+      setRecepciones(recepciones as Recepcion[]);
+      setHistorial(historial);
+      setRecetas(recetas as Receta[]);
+      setVentas(ventas);
+      setSesionesCaja(sesionesCaja);
+      setCajaActiva(cajaActiva);
+      setAhorros(ahorros);
+      setMesas(mesas);
+      setPedidosActivos(pedidosActivos);
+      setProduccion(produccion);
+    } catch (error) {
+      console.error('Error cargando datos secundarios:', error);
+    }
+  };
 
   const loadAllData = async () => {
     try {
       // Cargamos la configuración primero para tener el tema y moneda listos
       const configData = await db.getConfiguracion();
+      let finalConfig = defaultConfig;
+
       if (configData) {
-        setConfiguracion({
+        finalConfig = {
           ...defaultConfig,
           ...configData,
           categorias: configData.categorias || defaultConfig.categorias,
-        } as Configuracion);
+        } as Configuracion;
       }
 
-      // Cargamos el resto en paralelo pero actualizamos según van llegando para mejorar la percepción de velocidad
+      // [Nexus-Volt] Category Sanitizer v2: Asegurar TODAS las categorías de negocio
+      const categoriasRequeridas = CATEGORIAS_DEFAULT.map(c => c.nombre);
+      const categoriasExistentes = finalConfig.categorias.map(c => c.nombre);
+      const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
+        cDef => !categoriasExistentes.includes(cDef.nombre)
+      );
+
+      if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
+        console.log(`🧹 [Nexus-Volt] Detectadas ${categoriasNuevas.length} categorías nuevas. Sincronizando catálogo Dulce Placer...`);
+        // Actualizar categorías existentes con icono si lo perdieron, y agregar nuevas
+        const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
+          const catDefault = CATEGORIAS_DEFAULT.find(cd => cd.nombre === catExistente.nombre);
+          if (catDefault && !catExistente.icono) {
+            return { ...catExistente, icono: catDefault.icono };
+          }
+          return catExistente;
+        });
+        finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
+        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+      }
+
+      setConfiguracion(finalConfig);
+
+      // Cargamos el resto en paralelo pero actualizamos según van llegando
       const dataPromises = [
         db.getAllProductos().then(setProductos),
         db.getAllProveedores().then(setProveedores),
@@ -111,9 +277,10 @@ export function usePriceControl() {
         db.getAllAhorros().then(setAhorros),
         db.getAllMesas().then(setMesas),
         db.getAllPedidosActivos().then(setPedidosActivos),
+        db.getAllOrdenesProduccion().then(setProduccion),
       ];
 
-      await Promise.all(dataPromises);
+      await Promise.allSettled(dataPromises);
       console.log('⚡ Todas las constantes de datos han sido cargadas y sincronizadas.');
 
     } catch (error) {
@@ -123,27 +290,38 @@ export function usePriceControl() {
     }
   };
 
-  // Cargar datos de ejemplo
+  // Cargar datos de ejemplo (OPTIMIZADO - Sin bucles secuenciales)
   const cargarDatosEjemplo = useCallback(async () => {
     try {
-      // Agregar proveedores
-      for (const proveedor of DATOS_EJEMPLO.proveedores) {
-        await db.addProveedor(proveedor as Proveedor);
-      }
-      // Agregar productos
-      for (const producto of DATOS_EJEMPLO.productos) {
-        await db.addProducto(producto as Producto);
-      }
-      // Agregar precios
-      for (const precio of DATOS_EJEMPLO.precios) {
-        await db.addPrecio(precio as PrecioProveedor);
-      }
+      // Agregar TODO en PARALELO
+      await Promise.all([
+        Promise.allSettled(DATOS_EJEMPLO.proveedores.map(p => db.addProveedor(p as Proveedor).catch(() => {}))),
+        Promise.allSettled(DATOS_EJEMPLO.productos.map(p => db.addProducto(p as Producto).catch(() => {}))),
+        Promise.allSettled(DATOS_EJEMPLO.precios.map(p => db.addPrecio(p as PrecioProveedor).catch(() => {}))),
+        DATOS_EJEMPLO.ventas ? Promise.allSettled(DATOS_EJEMPLO.ventas.map(v => db.addVenta(v as any).catch(() => {}))) : Promise.resolve(),
+        DATOS_EJEMPLO.recepciones ? Promise.allSettled(DATOS_EJEMPLO.recepciones.map(r => db.addRecepcion(r as any).catch(() => {}))) : Promise.resolve(),
+      ]);
+      
       // Guardar categorías
       await db.saveConfiguracion({ ...configuracion, categorias: CATEGORIAS_DEFAULT, id: 'main' });
 
-      await loadAllData();
+      // Recargar datos críticos localmente
+      const [productos, proveedores, precios] = await Promise.all([
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllPrecios(),
+      ]);
+      setProductos(productos);
+      setProveedores(proveedores);
+      setPrecios(precios);
+
+      // Cargar resto en background
+      loadSecondaryDataInBackground();
+      
+      toast.success('Datos de ejemplo cargados correctamente');
     } catch (error) {
       console.error('Error cargando datos de ejemplo:', error);
+      toast.error('Error al cargar datos de ejemplo');
     }
   }, [configuracion]);
 
@@ -164,6 +342,12 @@ export function usePriceControl() {
   const deleteCategoria = useCallback(async (id: string) => {
     const newCategorias = configuracion.categorias.filter(c => c.id !== id);
     const newConfig = { ...configuracion, categorias: newCategorias };
+    await db.saveConfiguracion({ ...newConfig, id: 'main' });
+    setConfiguracion(newConfig);
+  }, [configuracion]);
+
+  const updateConfiguracion = useCallback(async (updates: Partial<Configuracion>) => {
+    const newConfig = { ...configuracion, ...updates };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
     setConfiguracion(newConfig);
   }, [configuracion]);
@@ -488,7 +672,7 @@ export function usePriceControl() {
       cantidad,
       motivo,
       fecha: now,
-      usuario: 'Usuario Actual', // TODO: Usar usuario real del contexto si es posible, o pasarlo como argumento
+      usuario: motivo ? `${motivo.split(':')[0]}` : 'Sistema', // Nombre del usuario se pasa desde el componente que llama
     };
 
     await db.addMovimiento(movimiento);
@@ -635,6 +819,43 @@ export function usePriceControl() {
     return nuevaVenta;
   }, [cajaActiva, productos, onAjustarStock]);
 
+  // Función para formatear moneda
+  const formatCurrency = useCallback((value: any) => {
+    try {
+      if (value === null || value === undefined) return '€0.00';
+
+      let numValue: number;
+      if (typeof value === 'number') {
+        numValue = value;
+      } else if (typeof value === 'object') {
+        numValue = 0;
+      } else {
+        try {
+          const n = Number(value);
+          numValue = isNaN(n) ? 0 : n;
+        } catch {
+          numValue = 0;
+        }
+      }
+
+      if (isNaN(numValue)) return '€0.00';
+
+      const monedaConfig = MONEDAS.find(m => m.code === (configuracion.moneda || 'COP')) || MONEDAS[0];
+      return new Intl.NumberFormat(monedaConfig.locale, {
+        style: 'currency',
+        currency: monedaConfig.code,
+      }).format(numValue);
+    } catch (error) {
+      console.error('Error en formatCurrency:', error, value);
+      return '€0.00';
+    }
+  }, [configuracion.moneda]);
+
+  // Función para obtener la moneda actual
+  const getMonedaActual = useCallback(() => {
+    return MONEDAS.find(m => m.code === configuracion.moneda) || MONEDAS[0];
+  }, [configuracion.moneda]);
+
   // Funciones de Caja
   const abrirCaja = useCallback(async (usuarioId: string, montoApertura: number) => {
     const now = new Date().toISOString();
@@ -645,6 +866,7 @@ export function usePriceControl() {
       montoApertura,
       totalVentas: 0,
       ventasIds: [],
+      movimientos: [],
       estado: 'abierta',
     };
 
@@ -670,26 +892,34 @@ export function usePriceControl() {
     return updatedCaja;
   }, [cajaActiva]);
 
-  // Funciones de Configuración
-  const updateConfiguracion = useCallback(async (updates: Partial<Configuracion>) => {
-    const newConfig = { ...configuracion, ...updates };
-    await db.saveConfiguracion({ ...newConfig, id: 'main' });
-    setConfiguracion(newConfig);
-  }, [configuracion]);
+  const registrarMovimientoCaja = useCallback(async (monto: number, tipo: 'entrada' | 'salida', motivo: string, usuarioId: string) => {
+    if (!cajaActiva) {
+      toast.error('Debe haber una caja abierta para registrar movimientos');
+      return;
+    }
 
-  // Función para formatear moneda
-  const formatCurrency = useCallback((value: number) => {
-    const monedaConfig = MONEDAS.find(m => m.code === configuracion.moneda) || MONEDAS[0];
-    return new Intl.NumberFormat(monedaConfig.locale, {
-      style: 'currency',
-      currency: monedaConfig.code,
-    }).format(value);
-  }, [configuracion.moneda]);
+    const movimiento: MovimientoCaja = {
+      id: crypto.randomUUID(),
+      cajaId: cajaActiva.id,
+      tipo,
+      monto,
+      motivo,
+      fecha: new Date().toISOString(),
+      usuarioId
+    };
 
-  // Función para obtener la moneda actual
-  const getMonedaActual = useCallback(() => {
-    return MONEDAS.find(m => m.code === configuracion.moneda) || MONEDAS[0];
-  }, [configuracion.moneda]);
+    const updatedCaja: CajaSesion = {
+      ...cajaActiva,
+      movimientos: [...(cajaActiva.movimientos || []), movimiento]
+    };
+
+    await db.updateSesionCaja(updatedCaja);
+    setCajaActiva(updatedCaja);
+    setSesionesCaja(prev => prev.map(s => s.id === updatedCaja.id ? updatedCaja : s));
+
+    toast.success(`${tipo === 'entrada' ? 'Entrada' : 'Salida'} de caja registrada: ${formatCurrency(monto)}`);
+    return movimiento;
+  }, [cajaActiva, formatCurrency]);
 
   // Funciones de utilidad
   const getPreciosByProducto = useCallback((productoId: string) => {
@@ -740,34 +970,44 @@ export function usePriceControl() {
   }, [recetas, getMejorPrecio, productos]);
 
   // Sincronización proactiva de costos de productos elaborados
+  // SE OPTIMIZA: Se añade una guarda para evitar loops infinitos y se usa una comparación profunda
   useEffect(() => {
+    if (!loaded) return;
+
     const actualizarCostosElaborados = async () => {
       let huboCambio = false;
       const nuevosProductos = productos.map(p => {
         if (p.tipo === 'elaborado') {
           const nuevoCosto = getCostoReceta(p.id);
-          if (p.costoBase !== nuevoCosto) {
+          // Usar una pequeña tolerancia para floating point
+          if (Math.abs((p.costoBase || 0) - nuevoCosto) > 0.01) {
             huboCambio = true;
-            return { ...p, costoBase: nuevoCosto };
+            return { ...p, costoBase: nuevoCosto, updatedAt: new Date().toISOString() };
           }
         } else if (p.tipo === 'ingrediente') {
-          // También actualizar costo base de ingredientes si hay precio de proveedor
           const mejorPrecio = getMejorPrecio(p.id);
-          if (mejorPrecio && p.costoBase !== mejorPrecio.precioCosto) {
+          if (mejorPrecio && Math.abs((p.costoBase || 0) - mejorPrecio.precioCosto) > 0.01) {
             huboCambio = true;
-            return { ...p, costoBase: mejorPrecio.precioCosto };
+            return { ...p, costoBase: mejorPrecio.precioCosto, updatedAt: new Date().toISOString() };
           }
         }
         return p;
       });
 
       if (huboCambio) {
+        console.log("♻️ [Nexus-Volt] Sincronizando costos base detectados...");
         setProductos(nuevosProductos);
+        // Persistir individualmente para evitar re-escritura masiva lenta
+        for (const p of nuevosProductos.filter((_, i) => nuevosProductos[i] !== productos[i])) {
+          await db.updateProducto(p);
+        }
       }
     };
 
-    if (loaded) actualizarCostosElaborados();
-  }, [precios, recetas, loaded]); // Se dispara cuando cambian precios de ingredientes o la receta
+    // Usar un timeout pequeño para evitar disparos en ráfaga durante la carga inicial
+    const timer = setTimeout(actualizarCostosElaborados, 1000);
+    return () => clearTimeout(timer);
+  }, [precios, recetas, loaded]); // productos NO debe estar aquí para evitar el loop directo
 
   // Funciones de Reabastecimiento Inteligente
   const generarSugerenciasPedido = useCallback(async () => {
@@ -870,17 +1110,23 @@ export function usePriceControl() {
 
     if (productosConPrecio.length > 0) {
       const utilidades = productosConPrecio.map(p => {
-        const mejorPrecioCosto = mejorPrecioCache.get(p.id)!;
-        return ((p.precioVenta - mejorPrecioCosto) / p.precioVenta) * 100;
+        try {
+          const mejorPrecioCosto = safeNumber(mejorPrecioCache.get(p.id));
+          const precioVenta = safeNumber(p.precioVenta);
+          if (precioVenta === 0) return 0;
+          return ((precioVenta - mejorPrecioCosto) / precioVenta) * 100;
+        } catch {
+          return 0;
+        }
       });
-      utilidadPromedio = utilidades.reduce((a, b) => a + b, 0) / utilidades.length;
+      utilidadPromedio = utilidades.reduce((a, b) => a + safeNumber(b), 0) / utilidades.length;
     }
 
     const productosSinPrecio = productos.filter(p => !mejorPrecioCache.has(p.id)).length;
 
     const totalEnPrePedidos = prepedidos
       .filter(p => p.estado === 'borrador')
-      .reduce((sum, p) => sum + p.total, 0);
+      .reduce((sum, p) => sum + safeNumber(p.total), 0);
 
     const totalItemsInventario = inventario.length;
     const itemsBajoStock = inventario.filter(inv => inv.stockActual <= inv.stockMinimo).length;
@@ -890,11 +1136,15 @@ export function usePriceControl() {
 
     // Detección Predictiva de Agotamiento
     const prediccionAgotamiento = inventario.filter(inv => {
-      const movs = movimientos.filter(m => m.productoId === inv.productoId && m.tipo === 'salida');
-      if (movs.length < 3) return false; // Necesitamos datos para predecir
-      const consumoPromedio = movs.reduce((a, b) => a + b.cantidad, 0) / 30; // Consumo diario estimado (últimos 30 días aprox)
-      const diasRestantes = inv.stockActual / (consumoPromedio || 1);
-      return diasRestantes < 7; // Alerta si se agota en menos de 1 semana
+      try {
+        const movs = movimientos.filter(m => m.productoId === inv.productoId && m.tipo === 'salida');
+        if (movs.length < 3) return false;
+        const consumoPromedio = movs.reduce((a, b) => a + safeNumber(b.cantidad), 0) / 30;
+        const diasRestantes = safeNumber(inv.stockActual) / (consumoPromedio || 1);
+        return diasRestantes < 7;
+      } catch {
+        return false;
+      }
     }).length;
 
     return {
@@ -914,12 +1164,12 @@ export function usePriceControl() {
       itemsEnRiesgo: prediccionAgotamiento,
       totalRecetas: recetas.length,
       // Estadísticas de Ventas
-      ventasHoy: ventas.filter(v => v.fecha.startsWith(new Date().toISOString().split('T')[0])).length,
+      ventasHoy: ventas.filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0])).length,
       ingresosHoy: ventas
-        .filter(v => v.fecha.startsWith(new Date().toISOString().split('T')[0]))
-        .reduce((sum, v) => sum + v.total, 0),
+        .filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0]))
+        .reduce((sum, v) => sum + safeNumber(v.total), 0),
       ticketPromedio: ventas.length > 0
-        ? ventas.reduce((sum, v) => sum + v.total, 0) / ventas.length
+        ? ventas.reduce((sum, v) => sum + safeNumber(v.total), 0) / ventas.length
         : 0,
     };
   }, [productos, proveedores, alertas, precios, prepedidos, inventario, recepciones, historial, movimientos, recetas, ventas, getMejorPrecio]);
@@ -964,6 +1214,137 @@ export function usePriceControl() {
     }
   }, [loadAllData]);
 
+  // Funciones de Producción
+  const addOrdenProduccion = useCallback(async (data: Omit<OrdenProduccion, 'id' | 'fechaInicio' | 'estado'>) => {
+    const orden: OrdenProduccion = {
+      ...data,
+      id: crypto.randomUUID(),
+      fechaInicio: new Date().toISOString(),
+      estado: 'planeado',
+    };
+    await db.addOrdenProduccion(orden as any);
+    setProduccion(prev => [...prev, orden]);
+    return orden;
+  }, []);
+
+  const updateOrdenProduccion = useCallback(async (id: string, updates: Partial<OrdenProduccion>) => {
+    const orden = produccion.find(o => o.id === id);
+    if (!orden) return;
+    const updatedOrden = { ...orden, ...updates };
+    await db.updateOrdenProduccion(updatedOrden as any);
+    setProduccion(prev => prev.map(o => o.id === id ? updatedOrden : o));
+  }, [produccion]);
+
+  const finalizarProduccion = useCallback(async (id: string, cantidadCompletada: number) => {
+    const orden = produccion.find(o => o.id === id);
+    if (!orden || orden.estado === 'completado') return;
+
+    // 1. Obtener receta
+    const receta = recetas.find(r => r.productoId === orden.productoId);
+    if (!receta) {
+      toast.error('No hay receta definida para este producto. No se pueden descontar insumos.');
+    } else {
+      // 2. Descontar ingredientes
+      for (const ingrediente of receta.ingredientes) {
+        const cantidadTotal = (ingrediente.cantidad / receta.porcionesResultantes) * cantidadCompletada;
+        await onAjustarStock(
+          ingrediente.productoId,
+          cantidadTotal,
+          'salida',
+          `Producción Lote: ${orden.lote || 'N/A'} - Orden: ${orden.id.slice(0, 8)}`
+        );
+      }
+    }
+
+    // 3. Cargar producto terminado
+    await onAjustarStock(
+      orden.productoId,
+      cantidadCompletada,
+      'entrada',
+      `Producción Finalizada Lote: ${orden.lote || 'N/A'}`
+    );
+
+    // 4. Actualizar orden
+    const updatedOrden: OrdenProduccion = {
+      ...orden,
+      cantidadCompletada,
+      estado: 'completado',
+      fechaFin: new Date().toISOString()
+    };
+    await db.updateOrdenProduccion(updatedOrden as any);
+    setProduccion(prev => prev.map(o => o.id === id ? updatedOrden : o));
+
+    toast.success(`Producción de ${cantidadCompletada} unidades completada y stock actualizado.`);
+  }, [produccion, recetas, onAjustarStock]);
+
+  // Estados para Formulaciones y Modelos de Pan
+  const [formulaciones, setFormulaciones] = useState<import('@/types').FormulacionBase[]>([]);
+  const [modelosPan, setModelosPan] = useState<import('@/types').ModeloPan[]>([]);
+
+  // Cargar formulaciones y modelos desde localStorage
+  useEffect(() => {
+    const savedFormulaciones = localStorage.getItem('formulaciones');
+    const savedModelos = localStorage.getItem('modelosPan');
+    if (savedFormulaciones) setFormulaciones(JSON.parse(savedFormulaciones));
+    if (savedModelos) setModelosPan(JSON.parse(savedModelos));
+  }, []);
+
+  // Persistir formulaciones
+  useEffect(() => {
+    if (formulaciones.length > 0 || localStorage.getItem('formulaciones')) {
+      localStorage.setItem('formulaciones', JSON.stringify(formulaciones));
+    }
+  }, [formulaciones]);
+
+  // Persistir modelos
+  useEffect(() => {
+    if (modelosPan.length > 0 || localStorage.getItem('modelosPan')) {
+      localStorage.setItem('modelosPan', JSON.stringify(modelosPan));
+    }
+  }, [modelosPan]);
+
+  // Funciones CRUD para Formulaciones
+  const addFormulacion = useCallback(async (data: Omit<import('@/types').FormulacionBase, 'id'>) => {
+    const formulacion: import('@/types').FormulacionBase = {
+      ...data,
+      id: crypto.randomUUID(),
+    };
+    setFormulaciones(prev => [...prev, formulacion]);
+    toast.success('Formulación creada');
+    return formulacion;
+  }, []);
+
+  const updateFormulacion = useCallback(async (id: string, updates: Partial<import('@/types').FormulacionBase>) => {
+    setFormulaciones(prev => prev.map(f => f.id === id ? { ...f, ...updates, fechaActualizacion: new Date().toISOString() } : f));
+    toast.success('Formulación actualizada');
+  }, []);
+
+  const deleteFormulacion = useCallback(async (id: string) => {
+    setFormulaciones(prev => prev.filter(f => f.id !== id));
+    toast.success('Formulación eliminada');
+  }, []);
+
+  // Funciones CRUD para Modelos de Pan
+  const addModeloPan = useCallback(async (data: Omit<import('@/types').ModeloPan, 'id'>) => {
+    const modelo: import('@/types').ModeloPan = {
+      ...data,
+      id: crypto.randomUUID(),
+    };
+    setModelosPan(prev => [...prev, modelo]);
+    toast.success('Modelo de pan creado');
+    return modelo;
+  }, []);
+
+  const updateModeloPan = useCallback(async (id: string, updates: Partial<import('@/types').ModeloPan>) => {
+    setModelosPan(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+    toast.success('Modelo actualizado');
+  }, []);
+
+  const deleteModeloPan = useCallback(async (id: string) => {
+    setModelosPan(prev => prev.filter(m => m.id !== id));
+    toast.success('Modelo eliminado');
+  }, []);
+
   return {
     // Datos
     productos,
@@ -978,6 +1359,9 @@ export function usePriceControl() {
 
     inventario,
     movimientos,
+    produccion,
+    formulaciones,
+    modelosPan,
     loaded,
     downloadFromCloud,
     syncWithCloud,
@@ -1036,6 +1420,19 @@ export function usePriceControl() {
     // Acciones de Inventario
     onAjustarStock,
 
+    // Acciones de Producción
+    addOrdenProduccion,
+    updateOrdenProduccion,
+    finalizarProduccion,
+
+    // Acciones de Formulaciones y Modelos
+    addFormulacion,
+    updateFormulacion,
+    deleteFormulacion,
+    addModeloPan,
+    updateModeloPan,
+    deleteModeloPan,
+
     // Acciones de Recepciones
     addRecepcion,
     confirmarRecepcion,
@@ -1052,6 +1449,7 @@ export function usePriceControl() {
     registrarVenta,
     abrirCaja,
     cerrarCaja,
+    registrarMovimientoCaja,
 
     // Utilidades
     formatCurrency,
@@ -1074,6 +1472,14 @@ export function usePriceControl() {
     updateMesa: useCallback(async (mesa: Mesa) => {
       await db.updateMesa(mesa);
       setMesas(prev => prev.map(m => m.id === mesa.id ? mesa : m));
+    }, []),
+    addMesa: useCallback(async (mesa: Mesa) => {
+      await db.updateMesa(mesa); // put = upsert
+      setMesas(prev => [...prev, mesa]);
+    }, []),
+    deleteMesa: useCallback(async (id: string) => {
+      await db.deleteMesa(id);
+      setMesas(prev => prev.filter(m => m.id !== id));
     }, []),
     addPedidoActivo: useCallback(async (pedido: PedidoActivo) => {
       await db.addPedidoActivo(pedido);

@@ -14,6 +14,20 @@ export interface DBProducto {
   updatedAt: string;
 }
 
+export interface DBOrdenProduccion {
+  id: string;
+  productoId: string;
+  cantidadPlaneada: number;
+  cantidadCompletada: number;
+  estado: 'planeado' | 'en_proceso' | 'completado' | 'cancelado';
+  fechaInicio: string;
+  fechaFin?: string;
+  usuarioId: string;
+  notas?: string;
+  lote?: string;
+  costoEstimadoTotal: number;
+}
+
 export interface DBReceta {
   id: string;
   productoId: string;
@@ -274,6 +288,7 @@ export interface IDatabase {
   // Mesas
   getAllMesas(): Promise<any[]>;
   updateMesa(mesa: any): Promise<void>;
+  deleteMesa(id: string): Promise<void>;
 
   // Pedidos Activos
   getAllPedidosActivos(): Promise<any[]>;
@@ -287,6 +302,19 @@ export interface IDatabase {
   updateGasto(gasto: DBGasto): Promise<void>;
   deleteGasto(id: string): Promise<void>;
 
+  // Producción
+  getAllOrdenesProduccion(): Promise<DBOrdenProduccion[]>;
+  addOrdenProduccion(orden: DBOrdenProduccion): Promise<void>;
+  updateOrdenProduccion(orden: DBOrdenProduccion): Promise<void>;
+  deleteOrdenProduccion(id: string): Promise<void>;
+
+  // Facturas Escaneadas (Archivo de Imágenes)
+  getAllFacturasEscaneadas(): Promise<any[]>;
+  addFacturaEscaneada(factura: any): Promise<void>;
+  deleteFacturaEscaneada(id: string): Promise<void>;
+  getFacturasEscaneadasByProveedor(proveedorId: string): Promise<any[]>;
+  getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string): Promise<any[]>;
+
   clearAll(): Promise<void>;
 
   syncLocalToCloud?(): Promise<void>;
@@ -294,20 +322,30 @@ export interface IDatabase {
 }
 
 const DB_NAME = 'PriceControlDB';
-const DB_VERSION = 11; // Incrementado para incluir gastos y facturación
+const DB_VERSION = 12; // Incrementado para incluir producción
 
 class IndexedDBDatabase implements IDatabase {
   private db: IDBDatabase | null = null;
 
   async init(): Promise<void> {
+    console.log("💽 IndexedDB: Starting init...");
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onerror = () => reject(request.error);
+      const request = indexedDB.open('PriceControlDB', 12);
+      request.onblocked = () => {
+        console.warn("⚠️ IndexedDB: Connection blocked! Please close other tabs of this app.");
+        alert("⚠️ Por favor, cierra otras pestañas de la aplicación para actualizar la base de datos.");
+      };
+      request.onerror = () => {
+        console.error("❌ IndexedDB: Error opening DB", request.error);
+        reject(request.error);
+      };
       request.onsuccess = () => {
+        console.log("✅ IndexedDB: DB opened successfully");
         this.db = request.result;
         resolve();
       };
       request.onupgradeneeded = (event) => {
+        console.log("🔄 IndexedDB: Upgrade needed...");
         const db = (event.target as IDBOpenDBRequest).result;
         if (!db.objectStoreNames.contains('productos')) {
           const s = db.createObjectStore('productos', { keyPath: 'id' });
@@ -389,6 +427,19 @@ class IndexedDBDatabase implements IDatabase {
           s.createIndex('categoria', 'categoria', { unique: false });
           s.createIndex('fecha', 'fecha', { unique: false });
           s.createIndex('cajaId', 'cajaId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('produccion')) {
+          const s = db.createObjectStore('produccion', { keyPath: 'id' });
+          s.createIndex('estado', 'estado', { unique: false });
+          s.createIndex('productoId', 'productoId', { unique: false });
+          s.createIndex('fechaInicio', 'fechaInicio', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('facturas_escaneadas')) {
+          const s = db.createObjectStore('facturas_escaneadas', { keyPath: 'id' });
+          s.createIndex('proveedorId', 'proveedorId', { unique: false });
+          s.createIndex('fechaEscaneo', 'fechaEscaneo', { unique: false });
+          s.createIndex('fechaFactura', 'fechaFactura', { unique: false });
+          s.createIndex('recepcionId', 'recepcionId', { unique: false });
         }
       };
     });
@@ -801,6 +852,13 @@ class IndexedDBDatabase implements IDatabase {
       req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
+  async deleteMesa(id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['mesas'], 'readwrite').objectStore('mesas').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
 
   // Pedidos Activos Implementation
   async getAllPedidosActivos(): Promise<any[]> {
@@ -862,9 +920,80 @@ class IndexedDBDatabase implements IDatabase {
     });
   }
 
+  // Producción Implementation
+  async getAllOrdenesProduccion(): Promise<DBOrdenProduccion[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['produccion'], 'readonly').objectStore('produccion').getAll();
+      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
+    });
+  }
+  async addOrdenProduccion(orden: DBOrdenProduccion): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['produccion'], 'readwrite').objectStore('produccion').add(orden);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async updateOrdenProduccion(orden: DBOrdenProduccion): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['produccion'], 'readwrite').objectStore('produccion').put(orden);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async deleteOrdenProduccion(id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['produccion'], 'readwrite').objectStore('produccion').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
+  // === FACTURAS ESCANEADAS ===
+  async getAllFacturasEscaneadas(): Promise<any[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['facturas_escaneadas'], 'readonly').objectStore('facturas_escaneadas').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+
+  async addFacturaEscaneada(factura: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['facturas_escaneadas'], 'readwrite').objectStore('facturas_escaneadas').add(factura);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
+  async deleteFacturaEscaneada(id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['facturas_escaneadas'], 'readwrite').objectStore('facturas_escaneadas').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getFacturasEscaneadasByProveedor(proveedorId: string): Promise<any[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(['facturas_escaneadas'], 'readonly');
+      const store = tx.objectStore('facturas_escaneadas');
+      const index = store.index('proveedorId');
+      const req = index.getAll(proveedorId);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string): Promise<any[]> {
+    const all = await this.getAllFacturasEscaneadas();
+    return all.filter(f => f.fechaEscaneo >= fechaInicio && f.fechaEscaneo <= fechaFin);
+  }
+
   async clearAll(): Promise<void> {
     const db = await this.ensureInit();
-    const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios', 'recetas', 'ventas', 'caja', 'ahorros', 'mesas', 'pedidos_activos', 'gastos'];
+    const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios', 'recetas', 'ventas', 'caja', 'ahorros', 'mesas', 'pedidos_activos', 'gastos', 'produccion'];
     for (const storeName of stores) {
       await new Promise<void>((resolve, reject) => {
         const transaction = db.transaction([storeName], 'readwrite');
@@ -1176,8 +1305,10 @@ class HybridDatabase implements IDatabase {
   async getAllMesas() { return this.local.getAllMesas(); }
   async updateMesa(m: any) {
     await this.local.updateMesa(m);
-    // Para simplificar, asumimos que mesas se sincronizan si existen en cloud, sino fallará silenciosamente
     if (this.isOnline) await (this.cloud as any).updateMesa?.(m).catch(() => { });
+  }
+  async deleteMesa(id: string) {
+    await this.local.deleteMesa(id);
   }
 
   // Pedidos Activos Hybrid
@@ -1209,6 +1340,28 @@ class HybridDatabase implements IDatabase {
     await this.local.deleteGasto(id);
     if (this.isOnline) await this.cloud.deleteGasto(id).catch(console.error);
   }
+
+  // Producción Hybrid
+  async getAllOrdenesProduccion() { return this.local.getAllOrdenesProduccion(); }
+  async addOrdenProduccion(o: DBOrdenProduccion) {
+    await this.local.addOrdenProduccion(o);
+    if (this.isOnline) await (this.cloud as any).addOrdenProduccion?.(o).catch(() => { });
+  }
+  async updateOrdenProduccion(o: DBOrdenProduccion) {
+    await this.local.updateOrdenProduccion(o);
+    if (this.isOnline) await (this.cloud as any).updateOrdenProduccion?.(o).catch(() => { });
+  }
+  async deleteOrdenProduccion(id: string) {
+    await this.local.deleteOrdenProduccion(id);
+    if (this.isOnline) await (this.cloud as any).deleteOrdenProduccion?.(id).catch(() => { });
+  }
+
+  // Facturas Escaneadas Hybrid (Solo local - las imágenes son pesadas para sync)
+  async getAllFacturasEscaneadas() { return this.local.getAllFacturasEscaneadas(); }
+  async addFacturaEscaneada(f: any) { await this.local.addFacturaEscaneada(f); }
+  async deleteFacturaEscaneada(id: string) { await this.local.deleteFacturaEscaneada(id); }
+  async getFacturasEscaneadasByProveedor(proveedorId: string) { return this.local.getFacturasEscaneadasByProveedor(proveedorId); }
+  async getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string) { return this.local.getFacturasEscaneadasByFecha(fechaInicio, fechaFin); }
 
   async clearAll() { await this.local.clearAll(); }
 }
