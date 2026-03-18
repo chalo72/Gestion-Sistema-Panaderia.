@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 
-const SERVIDOR_URL = import.meta.env.VITE_UPDATE_SERVER_URL || 'http://192.168.1.100:5173';
+const SERVIDOR_URL = import.meta.env.VITE_UPDATE_SERVER_URL || 'http://192.168.1.102:5173';
 const CHECK_INTERVAL = 30000; // Verificar cada 30 segundos
 
 interface VersionInfo {
