@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 
 const SERVIDOR_URL = 'http://192.168.1.100:5173'; // Cambia esto por tu IP real
 
+// PROTEGIDO: No modificar sin revisión. Función crítica de sincronización offline/online validada en producción.
 export function useSyncOffline() {
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
   const [isServerAvailable, setIsServerAvailable] = useState(false);

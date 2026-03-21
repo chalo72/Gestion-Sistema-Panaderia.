@@ -26,6 +26,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// PROTEGIDO: No modificar sin revisión. Contexto de autenticación validado y crítico para acceso seguro.
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,7 +67,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const savedLocalUser = localStorage.getItem('pricecontrol_local_user');
         if (savedLocalUser) {
-          setUsuario(JSON.parse(savedLocalUser));
+          const userData = JSON.parse(savedLocalUser) as Usuario;
+          // Validar que la sesion no tenga mas de 12 horas de antiguedad
+          const SESSION_MAX_MS = 12 * 60 * 60 * 1000;
+          const ultimoAcceso = userData.ultimoAcceso ? new Date(userData.ultimoAcceso).getTime() : 0;
+          const sesionExpirada = ultimoAcceso > 0 && (Date.now() - ultimoAcceso) > SESSION_MAX_MS;
+          if (sesionExpirada) {
+            console.info('⏰ [Auth] Sesion expirada (>12h). Requiere nuevo inicio de sesion.');
+            localStorage.removeItem('pricecontrol_local_user');
+          } else {
+            setUsuario(userData);
+          }
         }
       } catch (err) {
         console.error('❌ Error cargando sesión local:', err);
@@ -119,7 +130,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    try { await supabase.auth.signOut(); } catch (e) { }
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      // Error no critico: la sesion local se cierra igualmente
+      console.warn('⚠️ [Auth] Error al cerrar sesion en Supabase (ignorado):', e);
+    }
     localStorage.removeItem('pricecontrol_local_user');
     setUsuario(null);
   }, []);

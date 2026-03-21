@@ -84,7 +84,6 @@ function UnauthorizedState() {
 
 // Componente interno que usa el contexto de auth
 function AppContent() {
-  console.log("🎨 AppContent rendering...");
   // 1. Estados iniciales (Hooks)
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -101,7 +100,7 @@ function AppContent() {
   const { isAuthenticated, isLoading: authLoading, logout, usuario, hasPermission } = auth;
   
   // ✅ Auto-actualización del sistema
-  const { currentVersion, updateAvailable, isUpdating } = useAutoUpdate();
+  const { currentVersion, updateAvailable, newVersion, isUpdating, aplicarActualizacion } = useAutoUpdate();
 
   const priceControl = usePriceControl();
   const {
@@ -192,14 +191,14 @@ function AppContent() {
 
   // 3. Efectos de Sincronización (Hooks)
   useEffect(() => {
-    // Log simplificado y seguro
-    if (isAuthenticated) {
+    // Solo en desarrollo
+    if (import.meta.env.DEV && isAuthenticated) {
       console.log('📱 App Ready - View:', currentView);
     }
   }, [isAuthenticated, currentView]);
 
   useEffect(() => {
-    if (isAuthenticated && dataLoaded) {
+    if (import.meta.env.DEV && isAuthenticated && dataLoaded) {
       console.log("⚡ Modo Local de Alta Velocidad Activo");
     }
   }, [isAuthenticated, dataLoaded]);
@@ -499,7 +498,7 @@ function AppContent() {
               usuario={usuario}
               productos={productos}
               categorias={Array.isArray(configuracion.categorias) ? configuracion.categorias : []}
-              onAbrirCaja={abrirCaja}
+              onAbrirCaja={(monto) => abrirCaja(usuario?.id || 'admin', monto)}
               onCerrarCaja={cerrarCaja}
             />
           </SectionErrorBoundary>
@@ -610,24 +609,26 @@ function AppContent() {
         ) : <UnauthorizedState />;
       default:
         return hasPermission('VER_DASHBOARD') ? (
-          <Dashboard
-            estadisticas={getEstadisticas()}
-            alertas={alertas}
-            prepedidos={prepedidos}
-            onMarcarAlertaLeida={marcarAlertaLeida}
-            onViewAlertas={() => setCurrentView('alertas')}
-            onViewProductos={() => setCurrentView('productos')}
-            onViewPrePedidos={() => setCurrentView('prepedidos')}
-            onViewProveedores={() => setCurrentView('proveedores')}
-            onViewRecepciones={() => setCurrentView('recepciones')}
-            onViewInventario={() => setCurrentView('inventario')}
-            onViewVentas={() => setCurrentView('ventas')}
-            onViewAhorros={() => setCurrentView('ahorro')}
-            getProveedorById={getProveedorById}
-            getProductoById={getProductoById}
-            formatCurrency={formatCurrency}
-            mesas={mesas}
-          />
+          <SectionErrorBoundary sectionName="Dashboard">
+            <Dashboard
+              estadisticas={getEstadisticas()}
+              alertas={alertas.slice(0, 5)}
+              prepedidos={prepedidos.slice(0, 3)}
+              onMarcarAlertaLeida={marcarAlertaLeida}
+              onViewAlertas={() => setCurrentView('alertas')}
+              onViewProductos={() => setCurrentView('productos')}
+              onViewPrePedidos={() => setCurrentView('prepedidos')}
+              onViewProveedores={() => setCurrentView('proveedores')}
+              onViewRecepciones={() => setCurrentView('recepciones')}
+              onViewInventario={() => setCurrentView('inventario')}
+              onViewVentas={() => setCurrentView('ventas')}
+              onViewAhorros={() => setCurrentView('ahorro')}
+              getProveedorById={getProveedorById}
+              getProductoById={getProductoById}
+              formatCurrency={formatCurrency}
+              mesas={mesas}
+            />
+          </SectionErrorBoundary>
         ) : <UnauthorizedState />;
     }
   };
@@ -652,6 +653,24 @@ function AppContent() {
         "flex-1 w-full md:w-auto transition-all duration-300 h-screen flex flex-col bg-background overflow-hidden",
         isSidebarCollapsed ? "md:ml-20" : "md:ml-64"
       )}>
+        {/* Banner de actualización — no interrumpe, solo avisa */}
+        {updateAvailable && (
+          <div className="flex-none bg-emerald-600 text-white px-4 py-2 flex items-center justify-between gap-4 z-50">
+            <div className="flex items-center gap-2 text-sm">
+              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <span className="font-bold">Nueva versión disponible {newVersion ? `(v${newVersion})` : ''}</span>
+              <span className="text-emerald-100 hidden sm:inline">— Actualiza cuando termines lo que estás haciendo</span>
+            </div>
+            <button
+              onClick={aplicarActualizacion}
+              disabled={isUpdating}
+              className="flex-none bg-white text-emerald-700 text-xs font-black px-3 py-1 rounded-lg hover:bg-emerald-50 active:scale-95 transition-all"
+            >
+              {isUpdating ? 'Actualizando...' : 'Actualizar ahora'}
+            </button>
+          </div>
+        )}
+
         {/* Header (Restaurado) */}
         <header className="flex-none bg-white dark:bg-slate-900 border-b border-border px-4 md:px-8 py-4 flex items-center justify-between z-40">
           <div className="flex items-center gap-3">
@@ -789,7 +808,7 @@ function AppContent() {
       <AperturaCajaModal
         isOpen={showAperturaModal}
         onClose={() => setShowAperturaModal(false)}
-        onAbrir={abrirCaja}
+        onAbrir={(monto) => abrirCaja(usuario?.id || 'admin', monto)}
       />
 
       <CierreCajaModal

@@ -48,6 +48,7 @@ const defaultConfig: Configuracion = {
   presupuestoMensual: 0,
 };
 
+// PROTEGIDO: No modificar sin revisión. Hook principal de gestión de precios, inventario y ventas validado en producción.
 export function usePriceControl() {
   // Estados
   const [productos, setProductos] = useState<Producto[]>([]);

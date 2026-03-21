@@ -100,15 +100,20 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  body {
+
+  html, body, #root {
+    min-height: 100vh;
+    height: 100%;
+    width: 100vw;
     margin: 0;
     padding: 0;
-    overflow: hidden;
-    min-height: 100vh;
+    box-sizing: border-box;
     font-size: 1rem;
-    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background: linear-gradient(135deg, #0b1120 0%, #1e193a 100%) !important;
+    color: #f1f5f9;
+    overflow-x: hidden;
   }
 
   /* Custom Scrollbar (Antigravity Zero-G) 🚀 */

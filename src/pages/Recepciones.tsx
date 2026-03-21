@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useCan } from '@/contexts/AuthContext';
+import { useCan, useAuth } from '@/contexts/AuthContext';
 import {
     Upload, CheckCircle, X, Plus, Calendar,
     Search, Eye, Download, Image as ImageIcon,
@@ -41,6 +41,7 @@ export default function Recepciones({
     formatCurrency
 }: RecepcionesProps) {
     const { check } = useCan();
+    const { usuario } = useAuth();
     const [view, setView] = useState<'list' | 'new' | 'details' | 'galeria'>('list');
     const [selectedRecepcion, setSelectedRecepcion] = useState<Recepcion | null>(null);
     const [busqueda, setBusqueda] = useState('');
@@ -338,7 +339,7 @@ export default function Recepciones({
                 totalFactura: total,
                 items: newRecepcion.items,
                 estado: 'en_proceso',
-                recibidoPor: 'Usuario Actual',
+                recibidoPor: usuario?.nombre || usuario?.email || 'Sistema',
                 fechaRecepcion: new Date().toISOString(),
                 imagenFactura: newRecepcion.imagenFactura || undefined,
                 observaciones: newRecepcion.observaciones

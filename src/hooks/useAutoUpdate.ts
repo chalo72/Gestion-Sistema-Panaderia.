@@ -1,121 +1,119 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { toast } from 'sonner';
 
-const SERVIDOR_URL = import.meta.env.VITE_UPDATE_SERVER_URL || 'http://192.168.1.102:5173';
-const CHECK_INTERVAL = 30000; // Verificar cada 30 segundos
+const CHECK_INTERVAL = 60_000;       // Verifica cada 60 segundos
+const IDLE_TIMEOUT   = 2 * 60_000;   // 2 minutos sin actividad → actualiza
+const STORAGE_KEY    = 'dp_build_timestamp';
 
-interface VersionInfo {
-  version: string;
-  timestamp: number;
-  changes?: string[];
+function recargar() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => {
+      Promise.all(regs.map(r => r.update())).finally(() => window.location.reload());
+    });
+  } else {
+    window.location.reload();
+  }
 }
 
+/**
+ * Actualización automática no-disruptiva.
+ *
+ * Cuando detecta una nueva versión espera el momento oportuno:
+ *   1. Si el usuario minimiza la app o cambia de pestaña → recarga inmediata.
+ *   2. Si lleva 2 minutos sin tocar nada → recarga silenciosa.
+ *
+ * Nunca interrumpe una venta, un arqueo ni ningún flujo activo.
+ */
 export function useAutoUpdate() {
-  const [currentVersion, setCurrentVersion] = useState<VersionInfo | null>(null);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  const performUpdateRef = useRef<((version: VersionInfo) => Promise<void>) | null>(null);
+  const [updateAvailable, setUpdateAvailable]   = useState(false);
+  const [newVersion, setNewVersion]             = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion]     = useState<string | null>(null);
+  const [isUpdating, setIsUpdating]             = useState(false);
 
-  // Obtener versión actual guardada localmente
-  useEffect(() => {
-    const saved = localStorage.getItem('app_version');
-    if (saved) {
-      setCurrentVersion(JSON.parse(saved));
-    } else {
-      // Primera vez: guardar versión inicial
-      const initialVersion: VersionInfo = {
-        version: '1.0.0',
-        timestamp: Date.now(),
-      };
-      localStorage.setItem('app_version', JSON.stringify(initialVersion));
-      setCurrentVersion(initialVersion);
-    }
-  }, []);
+  const savedTimestampRef  = useRef(parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10));
+  const pendingUpdateRef   = useRef(false);   // ¿hay update esperando?
+  const idleTimerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Descargar e instalar actualización
-  const performUpdate = useCallback(async (newVersion: VersionInfo) => {
+  // ── Aplicar la actualización ────────────────────────────────────
+  const aplicarActualizacion = useCallback(() => {
+    if (!pendingUpdateRef.current) return;
     setIsUpdating(true);
-    try {
-      toast.loading('Descargando actualización...');
-
-      // Descargar archivos actualizados del servidor
-      const response = await fetch(`${SERVIDOR_URL}/api/files`, {
-        method: 'GET'
-      });
-
-      if (!response.ok) throw new Error('Error descargando actualizaciones');
-
-      const files = await response.json();
-
-      // Guardar en localStorage (para PWA offline)
-      localStorage.setItem('app_files_cache', JSON.stringify(files));
-      localStorage.setItem('app_version', JSON.stringify(newVersion));
-
-      toast.success('✅ Actualización descargada');
-      console.log('✅ Actualización instalada:', newVersion.version);
-
-      // Recargar la app después de 2 segundos
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-
-    } catch (_error) {
-      console.error('Error en actualización:', _error);
-      toast.error('Error descargando actualización');
-      setIsUpdating(false);
-    }
+    recargar();
   }, []);
 
-  performUpdateRef.current = performUpdate;
+  // ── Reiniciar el temporizador de inactividad ────────────────────
+  const resetIdleTimer = useCallback(() => {
+    if (!pendingUpdateRef.current) return;           // Sin update pendiente → no hacer nada
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    idleTimerRef.current = setTimeout(() => {
+      aplicarActualizacion();                        // 2 min sin actividad → actualiza
+    }, IDLE_TIMEOUT);
+  }, [aplicarActualizacion]);
 
-  // Verificar si hay actualizaciones disponibles
+  // ── Cuando llega una nueva versión → armar los disparadores ────
+  const activarModoPendiente = useCallback((version: string) => {
+    pendingUpdateRef.current = true;
+    setUpdateAvailable(true);
+    setNewVersion(version);
+
+    // Disparador 1: app en background (minimizada o pestaña oculta)
+    const handleVisibility = () => {
+      if (document.hidden) aplicarActualizacion();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    // Disparador 2: inactividad del usuario
+    const eventos: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'];
+    eventos.forEach(e => window.addEventListener(e, resetIdleTimer, { passive: true }));
+
+    // Arrancar el timer de inactividad desde ya
+    resetIdleTimer();
+
+    // Cleanup al desmontar
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      eventos.forEach(e => window.removeEventListener(e, resetIdleTimer));
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, [aplicarActualizacion, resetIdleTimer]);
+
+  // ── Verificar si hay nueva versión en el servidor ───────────────
   const checkForUpdates = useCallback(async () => {
+    if (pendingUpdateRef.current) return;   // Ya hay una pendiente, no verificar de nuevo
     try {
-      const response = await fetch(`${SERVIDOR_URL}/api/version`, {
-        method: 'GET',
-        cache: 'no-store'
+      const res = await fetch('/version.json', {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache' }
       });
+      if (!res.ok) return;
 
-      if (!response.ok) return; // Servidor no disponible
+      const data = await res.json();
+      const serverTimestamp: number = data.timestamp ?? 0;
+      const version: string         = data.version   ?? '';
 
-      const serverVersion: VersionInfo = await response.json();
+      setCurrentVersion(version);
 
-      // Comparar versiones
-      if (currentVersion && serverVersion.timestamp > currentVersion.timestamp) {
-        console.log('📦 Nueva versión disponible:', serverVersion.version);
-        setUpdateAvailable(true);
-        
-        // Mostrar notificación
-        toast('Actualización disponible', {
-          description: 'Haz click para actualizar',
-          action: {
-            label: 'Actualizar',
-            onClick: () => performUpdateRef.current?.(serverVersion)
-          },
-          duration: 10000
-        });
+      if (savedTimestampRef.current === 0) {
+        savedTimestampRef.current = serverTimestamp;
+        localStorage.setItem(STORAGE_KEY, String(serverTimestamp));
+        return;
+      }
+
+      if (serverTimestamp > savedTimestampRef.current) {
+        console.log(`[AutoUpdate] Nueva versión: ${version} — esperando momento oportuno`);
+        localStorage.setItem(STORAGE_KEY, String(serverTimestamp));
+        savedTimestampRef.current = serverTimestamp;
+        activarModoPendiente(version);
       }
     } catch {
-      console.log('No se pudo verificar actualizaciones (servidor offline)');
+      // Servidor offline — ignorar
     }
-  }, [currentVersion]);
+  }, [activarModoPendiente]);
 
-  // Verificar periodicamente
   useEffect(() => {
-    // Primera verificación inmediata
     checkForUpdates();
-
-    // Luego cada 30 segundos
     const interval = setInterval(checkForUpdates, CHECK_INTERVAL);
-
     return () => clearInterval(interval);
   }, [checkForUpdates]);
 
-  return {
-    currentVersion,
-    updateAvailable,
-    isUpdating,
-    checkForUpdates,
-    performUpdate
-  };
+  return { currentVersion, updateAvailable, newVersion, isUpdating, aplicarActualizacion };
 }

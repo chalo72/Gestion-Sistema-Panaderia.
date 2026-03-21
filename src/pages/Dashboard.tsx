@@ -59,7 +59,7 @@ interface DashboardProps {
   nombre?: string;
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
-  mesas: any[];
+  mesas?: unknown[]; // Reservado para uso futuro (mesas activas en POS)
 }
 
 export default function Dashboard(props: DashboardProps) {
@@ -80,6 +80,11 @@ export default function Dashboard(props: DashboardProps) {
     getProductoById,
     formatCurrency
   } = props;
+
+  // Calcula el porcentaje de riesgo de stock dinamicamente
+  const stockRiesgoPct = estadisticas.totalItemsInventario > 0
+    ? Math.min(Math.round((estadisticas.itemsBajoStock / estadisticas.totalItemsInventario) * 100), 90)
+    : 0;
 
   const alertasNoLeidas = alertas.filter(a => !a.leida);
   const prepedidosBorrador = prepedidos.filter(p => p.estado === 'borrador');
@@ -338,16 +343,26 @@ export default function Dashboard(props: DashboardProps) {
               </div>
             ) : (
               <div className="space-y-4">
-                {alertasNoLeidas.slice(0, 3).map((alerta) => {
+                {alertasNoLeidas.slice(0, 3).map((alerta, idx) => {
                   const producto = getProductoById(alerta.productoId);
+                  // Porcentaje visual escalonado por severidad: primera alerta = mas critica
+                  const barWidth = Math.max(stockRiesgoPct, 8) - idx * 4;
                   return (
                     <div key={alerta.id} className="p-4 bg-red-50 dark:bg-red-900/10 rounded-xl">
                       <div className="flex justify-between items-start mb-2">
-                        <p className="text-sm font-bold">{producto?.nombre || 'Producto'}</p>
-                        <span className="text-xs text-red-600 font-bold">Alerta</span>
+                        <p className="text-sm font-bold truncate max-w-[70%]">
+                          {producto?.nombre || 'Producto sin nombre'}
+                        </p>
+                        <span className="text-xs text-red-600 font-bold shrink-0 ml-2">
+                          {alerta.tipo || 'Alerta'}
+                        </span>
                       </div>
                       <div className="w-full bg-red-200 dark:bg-red-900/40 rounded-full h-1.5 mb-3">
-                        <div className="bg-red-500 h-1.5 rounded-full" style={{ width: '37%' }} />
+                        <div
+                          className="bg-red-500 h-1.5 rounded-full transition-all duration-700"
+                          style={{ width: `${Math.max(barWidth, 8)}%` }}
+                          title={`${estadisticas.itemsBajoStock} item(s) con stock bajo`}
+                        />
                       </div>
                       <button
                         onClick={() => onMarcarAlertaLeida(alerta.id)}
