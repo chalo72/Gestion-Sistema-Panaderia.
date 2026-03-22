@@ -33,6 +33,7 @@ import { Badge } from '@/components/ui/badge';
 import type { Venta, Gasto, ReporteFinanciero, Producto, Categoria } from '@/types';
 import { cn } from '@/lib/utils';
 import { HistorialVentasCategoria } from '@/components/ventas/HistorialVentasCategoria';
+import { exportCSV, getExportFilename } from '@/lib/exportUtils';
 
 interface ReportesProps {
     ventas: Venta[];
@@ -130,28 +131,53 @@ export default function Reportes({
     ];
 
     return (
-        <div className="space-y-6 animate-ag-fade-in">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card/40 p-6 rounded-[2.5rem] border border-white/5 backdrop-blur-xl">
-                <div>
-                    <h2 className="text-3xl font-black text-foreground tracking-tighter uppercase italic leading-none mb-2">Análisis Financiero</h2>
-                    <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] font-black bg-indigo-500/10 text-indigo-500 border-indigo-500/20 uppercase tracking-widest">
-                            <CalendarDays className="w-3 h-3 mr-1.5" /> Reporte de {new Date().toLocaleString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase()}
-                        </Badge>
-                        <Badge variant="outline" className="text-[10px] font-black bg-emerald-500/10 text-emerald-500 border-emerald-500/20 uppercase tracking-widest">
-                            <Activity className="w-3 h-3 mr-1.5" /> Datos en Tiempo Real
-                        </Badge>
+        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+                        <BarChart className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    </div>
+                    <div>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white">Análisis Financiero</h2>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Reporte de {new Date().toLocaleString('es-ES', { month: 'long', year: 'numeric' })} · Tiempo real</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Badge variant="outline" className="h-12 px-6 rounded-2xl bg-white/5 border-white/10 text-muted-foreground font-black uppercase text-[10px] cursor-pointer hover:bg-white/10 transition-all">
-                        Exportar PDF
+                    <Badge
+                        variant="outline"
+                        className="h-12 px-6 rounded-2xl bg-white/5 border-white/10 text-muted-foreground font-black uppercase text-[10px] cursor-pointer hover:bg-white/10 transition-all"
+                        onClick={() => exportCSV(
+                            ventas.map(v => ({
+                                fecha: new Date(v.fecha).toLocaleDateString('es-CO'),
+                                total: v.total,
+                                metodo: v.metodoPago,
+                                items: v.items?.length ?? 0,
+                            })),
+                            getExportFilename('reporte-ventas'),
+                            { fecha: 'Fecha', total: 'Total', metodo: 'Método Pago', items: 'Productos' }
+                        )}
+                    >
+                        Exportar CSV Ventas
                     </Badge>
-                    <Badge variant="outline" className="h-12 px-6 rounded-2xl bg-indigo-600 border-none text-white font-black uppercase text-[10px] shadow-lg shadow-indigo-600/20 cursor-pointer hover:bg-indigo-700 transition-all">
-                        Configurar Objetivos
+                    <Badge
+                        variant="outline"
+                        className="h-12 px-6 rounded-2xl bg-indigo-600 border-none text-white font-black uppercase text-[10px] shadow-lg shadow-indigo-600/20 cursor-pointer hover:bg-indigo-700 transition-all"
+                        onClick={() => exportCSV(
+                            gastos.map(g => ({
+                                fecha: new Date(g.fecha).toLocaleDateString('es-CO'),
+                                descripcion: g.descripcion,
+                                categoria: g.categoria,
+                                monto: g.monto,
+                                metodo: g.metodoPago,
+                            })),
+                            getExportFilename('reporte-gastos'),
+                            { fecha: 'Fecha', descripcion: 'Descripción', categoria: 'Categoría', monto: 'Monto', metodo: 'Método' }
+                        )}
+                    >
+                        Exportar CSV Gastos
                     </Badge>
                 </div>
-            </div>
+            </header>
 
             <Tabs defaultValue="resumen" className="w-full">
                 <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-14 p-1 mb-6 flex items-center justify-start max-w-fit">

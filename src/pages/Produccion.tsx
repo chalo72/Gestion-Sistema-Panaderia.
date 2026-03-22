@@ -61,6 +61,7 @@ interface ProduccionProps {
     getProductoById: (id: string) => Producto | undefined;
     getMejorPrecio: (productoId: string) => any;
     formatCurrency: (val: number) => string;
+    onNavigateTo?: (view: string) => void;
 }
 
 export function Produccion({
@@ -82,10 +83,10 @@ export function Produccion({
     deleteModeloPan,
     getProductoById,
     getMejorPrecio,
-    formatCurrency
+    formatCurrency,
+    onNavigateTo
 }: ProduccionProps) {
     const [showPlanModal, setShowPlanModal] = useState(false);
-    const [selectedOrder, setSelectedOrder] = useState<OrdenProduccion | null>(null);
     const [activeTab, setActiveTab] = useState('ordenes');
 
     // Filtrar órdenes por estado
@@ -328,8 +329,8 @@ export function Produccion({
                         getMejorPrecio={getMejorPrecio}
                         formatCurrency={formatCurrency}
                         onGenerarPedido={(items) => {
-                            // TODO: Integrar con módulo de compras
                             toast.success(`Pedido generado con ${items.length} insumos`);
+                            if (onNavigateTo) onNavigateTo('prepedidos');
                         }}
                     />
                 </TabsContent>

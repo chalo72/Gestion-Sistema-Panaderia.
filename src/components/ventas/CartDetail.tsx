@@ -20,17 +20,16 @@ interface CartDetailProps {
     // Identificador de la pestaña activa
     activeTabLabel?: string;
     activeTabTipo?: 'venta-rapida' | 'mesa';
+    onLiberarMesa?: () => void;
 }
 
 export function CartDetail({
     cart, onUpdateQuantity, onRemoveFromCart, onClearCart,
     onProcessPayment, formatCurrency, cajaActiva, usuario, cliente, setCliente,
-    activeTabLabel, activeTabTipo,
+    activeTabLabel, activeTabTipo, onLiberarMesa,
 }: CartDetailProps) {
 
     const [billeteRecibido, setBilleteRecibido] = useState('');
-    const [showDailyReport, setShowDailyReport] = useState(false);
-    const [showAperturaModal, setShowAperturaModal] = useState(false);
 
     const totalCart = useMemo(() => cart.reduce((sum, item) => {
         return sum + (safeNumber(item.producto?.precioVenta) * (item.cantidad || 0));
@@ -112,12 +111,23 @@ export function CartDetail({
                                     </div>
 
                                     <div className="flex items-center gap-2 mt-3">
-                                        <div className="flex items-center bg-slate-100 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800">
-                                            <button className="h-8 w-8 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-all active:scale-75" onClick={() => onUpdateQuantity(item.producto.id, -1)}>
+                                        <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                                            <button className="h-8 w-8 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition-all active:scale-75 rounded-l-xl" onClick={() => onUpdateQuantity(item.producto.id, -1)}>
                                                 <Minus className="w-3.5 h-3.5" />
                                             </button>
-                                            <span className="w-8 text-center text-xs font-black tabular-nums">{item.cantidad}</span>
-                                            <button className="h-8 w-8 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 transition-all active:scale-75" onClick={() => onUpdateQuantity(item.producto.id, 1)}>
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                value={item.cantidad}
+                                                onChange={e => {
+                                                    const val = parseInt(e.target.value);
+                                                    if (!isNaN(val) && val > 0) {
+                                                        onUpdateQuantity(item.producto.id, val - item.cantidad);
+                                                    }
+                                                }}
+                                                className="w-10 text-center text-sm font-black tabular-nums bg-transparent border-none outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                            />
+                                            <button className="h-8 w-8 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition-all active:scale-75 rounded-r-xl" onClick={() => onUpdateQuantity(item.producto.id, 1)}>
                                                 <Plus className="w-3.5 h-3.5" />
                                             </button>
                                         </div>
@@ -173,24 +183,29 @@ export function CartDetail({
                     <div className="grid grid-cols-2 gap-2">
                         <Button
                             variant="outline"
-                            disabled={cart.length === 0 && !isMesa}
+                            disabled={cart.length === 0}
                             onClick={() => onProcessPayment('efectivo', 'credito')}
                             className="h-12 rounded-xl border-2 border-slate-100 dark:border-slate-800 text-slate-500 font-bold uppercase text-[9px] tracking-widest"
                         >
                             {cart.length === 0 ? 'Vacío' : 'Fiado / Nota'}
                         </Button>
-                        <Button
-                            disabled={cart.length === 0 && !isMesa}
-                            onClick={() => onProcessPayment('efectivo', 'efectivo')}
-                            className={cn(
-                                "h-12 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all active:scale-95",
-                                cart.length === 0
-                                    ? "bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20"
-                                    : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20"
-                            )}
-                        >
-                            {cart.length === 0 && isMesa ? 'Liberar Mesa' : 'Finalizar Venta'}
-                        </Button>
+                        {isMesa && cart.length === 0 ? (
+                            // Botón dedicado para liberar mesa sin consumo
+                            <Button
+                                onClick={onLiberarMesa}
+                                className="h-12 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all active:scale-95 bg-amber-500 hover:bg-amber-600 text-white"
+                            >
+                                Liberar Mesa
+                            </Button>
+                        ) : (
+                            <Button
+                                disabled={cart.length === 0}
+                                onClick={() => onProcessPayment('efectivo', 'efectivo')}
+                                className="h-12 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all active:scale-95 bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20"
+                            >
+                                Finalizar Venta
+                            </Button>
+                        )}
                     </div>
                 </div>
             </div>

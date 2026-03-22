@@ -110,50 +110,45 @@ export function Usuarios() {
   };
 
   return (
-    <div className="space-y-8 animate-ag-fade-in pb-10">
-      {/* Premium Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-card/40 p-8 rounded-[3rem] border border-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden">
-        <div className="space-y-2 relative z-10">
-          <h1 className="text-4xl font-black text-foreground flex items-center gap-4 tracking-tighter uppercase italic">
-            <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-500/30">
-              <Users className="w-8 h-8 text-white" />
-            </div>
-            Gestión de Entidades
-          </h1>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="text-[10px] font-black bg-indigo-500/10 text-indigo-500 border-indigo-500/20 uppercase tracking-widest px-3 py-1">
-              <Activity className="w-3 h-3 mr-2" /> {usuarios.length} Usuarios Activos
-            </Badge>
-            <span className="text-muted-foreground font-black text-[10px] uppercase tracking-widest opacity-40 italic">Control de Accesos Nexus Protocol</span>
+    <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+      {/* Header */}
+      <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+            <Users className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div>
+            <h1 className="text-xl font-black text-slate-900 dark:text-white">Usuarios del Sistema</h1>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">{usuarios.length} activos · Dulce Placer</p>
           </div>
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button
-              className="h-14 px-8 bg-indigo-600 hover:bg-indigo-500 text-white rounded-[1.5rem] shadow-[0_15px_30px_-5px_rgba(79,70,229,0.4)] gap-3 font-black uppercase tracking-widest text-xs border-none relative z-10 hover:scale-105 active:scale-95 transition-all"
+              className="h-10 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs"
               onClick={() => {
                 setEditingUser(null);
                 setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true });
               }}
             >
               <UserPlus className="w-5 h-5" />
-              Sincronizar Nuevo Usuario
+              Nuevo Usuario
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-md bg-slate-900/95 border-slate-800 backdrop-blur-2xl text-white rounded-[3rem]">
+          <DialogContent className="sm:max-w-md rounded-2xl">
             <DialogHeader>
-              <DialogTitle className="text-2xl font-black uppercase tracking-tighter italic">
-                {editingUser ? 'Modificar Entidad' : 'Nueva Identidad'}
+              <DialogTitle className="text-lg font-black">
+                {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
               </DialogTitle>
-              <DialogDescription className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">
-                Configuración de credenciales y permisos de nivel de rol
+              <DialogDescription>
+                Completa los datos del usuario
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-6 py-4">
+            <form onSubmit={handleSubmit} className="space-y-4 py-3">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1">Protocolo Email</Label>
+                  <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1">Email</Label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500/50" />
                     <Input
@@ -161,7 +156,7 @@ export function Usuarios() {
                       type="email"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="h-12 pl-12 bg-slate-950/50 border-slate-800 text-sm font-bold rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="h-10 pl-12 rounded-xl border border-slate-200 dark:border-slate-700 mt-1"
                       placeholder="usuario@dulceplacer.com"
                       required
                     />
@@ -174,7 +169,7 @@ export function Usuarios() {
                       id="nombre"
                       value={formData.nombre}
                       onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
-                      className="h-12 bg-slate-950/50 border-slate-800 text-sm font-bold rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="h-10 rounded-xl border border-slate-200 dark:border-slate-700 mt-1"
                       required
                     />
                   </div>
@@ -184,20 +179,20 @@ export function Usuarios() {
                       id="apellido"
                       value={formData.apellido}
                       onChange={(e) => setFormData({ ...formData, apellido: e.target.value })}
-                      className="h-12 bg-slate-950/50 border-slate-800 text-sm font-bold rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className="h-10 rounded-xl border border-slate-200 dark:border-slate-700 mt-1"
                     />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="rol" className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1">Nivel de Acceso (Rol)</Label>
+                  <Label htmlFor="rol" className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1">Rol</Label>
                   <Select
                     value={formData.rol}
                     onValueChange={(value: UserRole) => setFormData({ ...formData, rol: value })}
                   >
-                    <SelectTrigger className="h-12 bg-slate-950/50 border-slate-800 text-sm font-bold rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all">
+                    <SelectTrigger className="h-10 rounded-xl border border-slate-200 dark:border-slate-700">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-900 border-slate-800 text-white rounded-xl">
+                    <SelectContent className="rounded-xl">
                       <SelectItem value="ADMIN" className="font-bold uppercase text-[10px] tracking-widest">Administrador</SelectItem>
                       <SelectItem value="GERENTE" className="font-bold uppercase text-[10px] tracking-widest">Gerente</SelectItem>
                       <SelectItem value="COMPRADOR" className="font-bold uppercase text-[10px] tracking-widest">Comprador</SelectItem>
@@ -205,28 +200,27 @@ export function Usuarios() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-center gap-3 p-4 bg-indigo-500/5 rounded-xl border border-indigo-500/10">
+                <div className="flex items-center gap-2">
                   <input
                     type="checkbox"
                     id="activo"
                     checked={formData.activo}
                     onChange={(e) => setFormData({ ...formData, activo: e.target.checked })}
-                    className="w-5 h-5 rounded-lg border-slate-700 bg-slate-950 text-indigo-600 focus:ring-indigo-500"
+                    className="w-4 h-4 rounded text-indigo-600"
                   />
-                  <Label htmlFor="activo" className="mb-0 text-[10px] font-black uppercase tracking-widest cursor-pointer">Estado de Activación de Cuenta</Label>
+                  <Label htmlFor="activo" className="mb-0 text-[10px] font-black uppercase tracking-widest cursor-pointer">Usuario activo</Label>
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" className="w-full h-14 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-600/20 border-none">
-                  {editingUser ? 'Sincronizar Cambios' : 'Confirmar Nueva Entidad'}
+                <Button type="submit" className="w-full h-10 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm">
+                  {editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
                 </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
 
-        <div className="absolute -top-24 -right-24 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px]" />
-      </div>
+      </header>
 
       {/* Modern Search */}
       <div className="relative group max-w-2xl mx-auto px-4">

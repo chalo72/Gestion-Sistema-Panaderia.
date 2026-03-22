@@ -303,7 +303,7 @@ export interface Configuracion {
   presupuestoMensual?: number;
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores';
 
 // ============================================
 // SISTEMA DE ROLES Y PERMISOS
@@ -927,6 +927,10 @@ export interface CajaSesion {
   ventasIds: string[];
   movimientos: MovimientoCaja[];
   estado: 'abierta' | 'cerrada';
+  // Sistema multi-caja Dulce Placer
+  cajaNombre?: string;
+  turno?: 'Mañana' | 'Tarde' | 'Noche';
+  vendedoraNombre?: string;
 }
 // ============================================
 // MESAS Y PEDIDOS ACTIVOS (Muro de Pedidos)
@@ -984,4 +988,52 @@ export interface ReporteFinanciero {
   utilidadBruta: number;
   gastosPorCategoria: Record<GastoCategoria, number>;
   ventasPorMetodoPago: Record<MetodoPago, number>;
+}
+
+// ============================================================
+// CRÉDITOS A CLIENTES
+// ============================================================
+export interface CreditoCliente {
+  id: string;
+  clienteNombre: string;
+  clienteTelefono?: string;
+  monto: number;              // Monto total del crédito
+  saldo: number;              // Saldo pendiente
+  descripcion: string;        // Qué se fió / por qué
+  fecha: string;              // Fecha del crédito
+  fechaVencimiento?: string;  // Fecha límite de pago
+  estado: 'activo' | 'pagado' | 'vencido';
+  pagos: PagoCredito[];
+  usuarioId: string;
+  createdAt: string;
+}
+
+export interface PagoCredito {
+  id: string;
+  creditoId: string;
+  monto: number;
+  fecha: string;
+  metodoPago: MetodoPago;
+  nota?: string;
+}
+
+// ============================================================
+// TRABAJADORES / EMPLEADOS
+// ============================================================
+export type TrabajadorEstado = 'activo' | 'inactivo' | 'vacaciones';
+export type TrabajadorRol = 'panadero' | 'vendedor' | 'cajero' | 'repartidor' | 'administrador' | 'otro';
+
+export interface Trabajador {
+  id: string;
+  nombre: string;
+  cedula?: string;
+  telefono?: string;
+  email?: string;
+  rol: TrabajadorRol;
+  salarioBase: number;
+  fechaIngreso: string;
+  estado: TrabajadorEstado;
+  horario?: string;           // ej: "Lun-Vie 7am-3pm"
+  observaciones?: string;
+  createdAt: string;
 }

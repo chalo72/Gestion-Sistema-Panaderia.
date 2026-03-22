@@ -24,7 +24,7 @@ export function InventoryReports({
     return (
         <div className="space-y-10 animate-ag-fade-in">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <Card className="rounded-[2.5rem] border-none bg-rose-50 dark:bg-rose-900/10 shadow-2xl overflow-hidden relative border border-rose-100 dark:border-rose-900/20">
+                <Card className="rounded-3xl bg-rose-50 dark:bg-rose-900/10 border border-rose-100 dark:border-rose-900/20 shadow-sm overflow-hidden relative">
                     <CardHeader className="p-10 pb-4">
                         <CardTitle className="text-2xl font-black flex items-center gap-4 text-rose-700 dark:text-rose-400 uppercase tracking-tight">
                             <div className="p-3 bg-white dark:bg-gray-900 rounded-2xl shadow-xl">
@@ -45,7 +45,7 @@ export function InventoryReports({
                     <div className="absolute -bottom-10 -right-10 w-48 h-48 bg-rose-600/5 rounded-full blur-3xl" />
                 </Card>
 
-                <Card className="rounded-[2.5rem] border-none bg-emerald-50 dark:bg-emerald-900/10 shadow-2xl overflow-hidden relative border border-emerald-100 dark:border-emerald-900/20">
+                <Card className="rounded-3xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/20 shadow-sm overflow-hidden relative">
                     <CardHeader className="p-10 pb-4">
                         <CardTitle className="text-2xl font-black flex items-center gap-4 text-emerald-700 dark:text-emerald-400 uppercase tracking-tight">
                             <div className="p-3 bg-white dark:bg-gray-900 rounded-2xl shadow-xl">
@@ -68,7 +68,7 @@ export function InventoryReports({
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-10">
-                <Card className="lg:col-span-2 rounded-[2.5rem] border-none bg-white/40 dark:bg-gray-900/40 backdrop-blur-xl shadow-2xl">
+                <Card className="lg:col-span-2 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm">
                     <CardHeader className="p-8 border-b border-gray-100 dark:border-gray-800/50">
                         <CardTitle className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">🚨 Críticos de Desperdicio</CardTitle>
                         <CardDescription className="text-[10px] font-black uppercase tracking-widest opacity-50">Top 5 productos con mayores fugas de capital</CardDescription>
@@ -76,7 +76,7 @@ export function InventoryReports({
                     <CardContent className="p-8 space-y-4">
                         {reporteStats.topPerdidas.length > 0 ? (
                             reporteStats.topPerdidas.map((item, idx) => (
-                                <div key={idx} className="flex items-center justify-between p-5 rounded-[1.75rem] bg-white/60 dark:bg-gray-950/40 border-none shadow-sm hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
+                                <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-800/40 transition-all duration-200">
                                     <div className="flex items-center gap-6">
                                         <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/30 flex items-center justify-center text-rose-600 font-black text-xl shadow-inner border border-rose-100/50">
                                             {idx + 1}
@@ -102,7 +102,7 @@ export function InventoryReports({
                 </Card>
 
                 <div className="space-y-8">
-                    <Card className="rounded-[2.5rem] border-none bg-white dark:bg-gray-900/40 shadow-xl p-8 border border-white/20">
+                    <Card className="rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm p-8">
                         <div className="flex justify-between items-center mb-6">
                             <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Resumen Analítico</span>
                             <PieChart className="w-5 h-5 text-indigo-500" />
@@ -137,7 +137,7 @@ export function InventoryReports({
                     <Button
                         variant="outline"
                         onClick={onExportCSV}
-                        className="w-full h-16 rounded-[2rem] border-2 border-indigo-600/20 text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-xs hover:bg-indigo-50 dark:hover:bg-indigo-950 gap-4 shadow-xl transition-all"
+                        className="w-full h-12 rounded-xl border border-indigo-200 dark:border-indigo-800/40 text-indigo-600 dark:text-indigo-400 font-black uppercase tracking-widest text-xs hover:bg-indigo-50 dark:hover:bg-indigo-950/30 gap-3 transition-all"
                     >
                         <Download className="w-5 h-5" />
                         Exportar Historial Completo

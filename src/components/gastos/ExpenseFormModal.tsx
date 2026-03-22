@@ -40,8 +40,8 @@ export function ExpenseFormModal({
 }: ExpenseFormModalProps) {
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl rounded-[3rem] p-0 overflow-hidden border-none shadow-3xl bg-white dark:bg-gray-950">
-                <div className="bg-rose-600 p-8 text-white relative">
+            <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-950">
+                <div className="bg-rose-600 p-5 text-white relative">
                     <div className="flex items-center gap-4">
                         <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md border border-white/20">
                             {isScanning ? <Camera className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
@@ -65,19 +65,19 @@ export function ExpenseFormModal({
                     </Button>
                 </div>
 
-                <div className="p-10 space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4 md:col-span-2">
+                <div className="p-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1 md:col-span-2">
                             <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Descripción del Gasto</Label>
                             <Input
                                 value={formData.descripcion || ''}
                                 onChange={(e) => setFormData({ ...formData, descripcion: e.target.value })}
                                 placeholder="Ej: Pago de Luz local, Harina 50kg..."
-                                className="h-16 text-xl font-black rounded-2xl bg-slate-50 dark:bg-gray-800 border-none shadow-inner px-6"
+                                className="h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3"
                             />
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="space-y-1">
                             <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Monto Total</Label>
                             <div className="relative">
                                 <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500" />
@@ -85,18 +85,18 @@ export function ExpenseFormModal({
                                     type="number"
                                     value={formData.monto || ''}
                                     onChange={(e) => setFormData({ ...formData, monto: parseFloat(e.target.value) })}
-                                    className="h-14 pl-12 text-2xl font-black rounded-2xl bg-slate-50 dark:bg-gray-800 border-none shadow-inner"
+                                    className="h-10 pl-9 rounded-xl border border-slate-200 dark:border-slate-700"
                                 />
                             </div>
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="space-y-1">
                             <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Categoría</Label>
                             <Select
                                 value={formData.categoria}
                                 onValueChange={(val) => setFormData({ ...formData, categoria: val as GastoCategoria })}
                             >
-                                <SelectTrigger className="h-14 rounded-2xl bg-slate-50 dark:bg-gray-800 border-none font-black text-xs uppercase tracking-widest">
+                                <SelectTrigger className="h-10 rounded-xl border border-slate-200 dark:border-slate-700">
                                     <SelectValue placeholder="Otros" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -110,23 +110,23 @@ export function ExpenseFormModal({
                             </Select>
                         </div>
 
-                        <div className="space-y-4">
-                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Fecha Operación</Label>
+                        <div className="space-y-1">
+                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Fecha</Label>
                             <Input
                                 type="date"
                                 value={formData.fecha?.split('T')[0] || ''}
                                 onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-                                className="h-14 rounded-2xl bg-slate-50 dark:bg-gray-800 border-none font-bold shadow-inner"
+                                className="h-10 rounded-xl border border-slate-200 dark:border-slate-700"
                             />
                         </div>
 
-                        <div className="space-y-4">
+                        <div className="space-y-1">
                             <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Método de Pago</Label>
                             <Select
                                 value={formData.metodoPago}
                                 onValueChange={(val) => setFormData({ ...formData, metodoPago: val as MetodoPago })}
                             >
-                                <SelectTrigger className="h-14 rounded-2xl bg-slate-50 dark:bg-gray-800 border-none font-black text-xs uppercase tracking-widest">
+                                <SelectTrigger className="h-10 rounded-xl border border-slate-200 dark:border-slate-700">
                                     <SelectValue placeholder="Efectivo" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -138,10 +138,10 @@ export function ExpenseFormModal({
                         </div>
                     </div>
 
-                    <div className="pt-6 flex gap-4">
+                    <div className="pt-2 flex gap-3">
                         <Button
                             variant="ghost"
-                            className="h-16 flex-1 rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] opacity-50"
+                            className="h-10 flex-1 rounded-xl font-bold text-sm"
                             onClick={() => onOpenChange(false)}
                         >
                             Descartar
@@ -149,7 +149,7 @@ export function ExpenseFormModal({
                         <Button
                             disabled={isSaving}
                             onClick={onSubmit}
-                            className="h-16 flex-[2] bg-rose-600 hover:bg-rose-700 text-white rounded-[1.5rem] font-black uppercase tracking-widest text-xs shadow-2xl shadow-rose-600/30 border-none"
+                            className="h-10 flex-[2] bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-bold text-sm"
                         >
                             {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirmar Egreso'}
                         </Button>

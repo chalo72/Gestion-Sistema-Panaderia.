@@ -84,7 +84,7 @@ export function ExpenseList({
 
                     return (
                         <Card key={gasto.id} className="group overflow-hidden border-none bg-white/40 dark:bg-black/20 backdrop-blur-xl rounded-[2.5rem] shadow-xl hover:shadow-2xl transition-all duration-300 hover:-translate-y-1 border-l-8 border-l-rose-500/20 hover:border-l-rose-500">
-                            <CardContent className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                            <CardContent className="p-5 sm:p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
                                 <div className="flex items-center gap-6 flex-1">
                                     <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:rotate-12", `bg-${catInfo.color}-50 dark:bg-${catInfo.color}-900/20`)}>
                                         <Icon className={cn("w-7 h-7", `text-${catInfo.color}-600`)} />
@@ -109,9 +109,9 @@ export function ExpenseList({
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-8 pl-20 md:pl-0">
+                                <div className="flex items-center gap-4 sm:gap-8 pl-0">
                                     <div className="text-right">
-                                        <p className="text-3xl font-black text-rose-600 dark:text-rose-400 tabular-nums tracking-tighter">
+                                        <p className="text-xl sm:text-3xl font-black text-rose-600 dark:text-rose-400 tabular-nums tracking-tighter">
                                             -{formatCurrency(gasto.monto)}
                                         </p>
                                         <Badge variant="outline" className="text-[8px] font-black uppercase tracking-tighter mt-1 opacity-50 px-2 border-slate-200 dark:border-slate-800">

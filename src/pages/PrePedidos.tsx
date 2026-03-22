@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Package,
   ShoppingCart,
@@ -79,6 +79,14 @@ export default function PrePedidos({
   const [selectedProductoId, setSelectedProductoId] = useState('');
   const [cantidad, setCantidad] = useState(1);
 
+  // Mantener selectedPrePedido sincronizado con cambios en la prop prepedidos
+  useEffect(() => {
+    if (selectedPrePedido) {
+      const updated = prepedidos.find(p => p.id === selectedPrePedido.id);
+      if (updated) setSelectedPrePedido(updated);
+    }
+  }, [prepedidos]);
+
   const totalActual = useMemo(() => {
     if (!selectedPrePedido) return 0;
     return selectedPrePedido.items.reduce((sum, item) => sum + item.subtotal, 0);
@@ -139,10 +147,6 @@ export default function PrePedidos({
     setSelectedProductoId('');
     setCantidad(1);
     setIsAddItemModalOpen(false);
-
-    // Auto-update local state
-    const updated = prepedidos.find(p => p.id === selectedPrePedido.id);
-    if (updated) setSelectedPrePedido(updated);
   };
 
   const handleUpdateItemCantidad = (itemId: string, nuevaCantidad: number) => {
@@ -334,7 +338,7 @@ export default function PrePedidos({
   }
 
   return (
-    <div className="space-y-8 animate-ag-fade-in p-2 md:p-6 bg-slate-50/50 dark:bg-black/20 rounded-[3rem]">
+    <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
       <PrePedidoHeader
         onAddPrePedido={() => { setIsCreateModalOpen(true); }}
         onGenerarSugerencias={async () => {

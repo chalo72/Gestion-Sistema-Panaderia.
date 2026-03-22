@@ -256,8 +256,8 @@ export default function CargaMasiva({
           newProveedorId = proveedorExistente.id;
         }
       }
-      // Use the ID to avoid unused variable warning
-      console.log('Proveedor ID:', newProveedorId || 'No proveedor');
+      // Usar la variable para evitar warning de variable no utilizada
+      void (newProveedorId);
       
       // Crear categorías nuevas
       const categoriasNuevas = new Set<string>();

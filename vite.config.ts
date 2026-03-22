@@ -66,9 +66,16 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,ico,woff2}'],
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
-        skipWaiting: true,
-        clientsClaim: true,
+        skipWaiting: true,       // Nuevo SW toma control sin esperar
+        clientsClaim: true,      // Nuevo SW reclama todos los clientes inmediatamente
+        // Limpiar caches viejos al activar nuevo SW
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
+          {
+            // version.json: siempre desde red para detectar nuevas versiones
+            urlPattern: /\/version\.json$/i,
+            handler: 'NetworkOnly',
+          },
           {
             urlPattern: /.*/i,
             handler: 'NetworkFirst',

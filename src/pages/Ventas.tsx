@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
     Plus,
     Minus,
@@ -113,6 +113,9 @@ export function Ventas(props: VentasProps) {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastVenta, setLastVenta] = useState<Venta | null>(null);
     const [showDailyReport, setShowDailyReport] = useState(false);
+    const [showAperturaModal, setShowAperturaModal] = useState(false);
+    const [showCierreModal, setShowCierreModal] = useState(false);
+    const [movimientoCaja, setMovimientoCaja] = useState<{ tipo: 'entrada' | 'salida' } | null>(null);
 
     // ==========================================
     // SISTEMA DE PESTAÑAS MÚLTIPLES
@@ -182,6 +185,13 @@ export function Ventas(props: VentasProps) {
         if (!cajaActiva) {
             toast.error('Debe abrir caja antes de realizar ventas');
             setShowAperturaModal(true);
+            return;
+        }
+        // Validar stock disponible antes de agregar
+        const itemEnInventario = inventario.find(i => i.productoId === producto.id);
+        const cantidadEnCarrito = cart.find(i => i.producto.id === producto.id)?.cantidad || 0;
+        if (itemEnInventario && itemEnInventario.stockActual <= cantidadEnCarrito) {
+            toast.warning(`Stock insuficiente: solo ${itemEnInventario.stockActual} unidades disponibles`);
             return;
         }
         updateActiveCart(prev => {
@@ -277,6 +287,41 @@ export function Ventas(props: VentasProps) {
         }
     }, [tabs, activeTabId]);
 
+    // Sincronizar carrito de mesa con PedidoActivo en DB
+    useEffect(() => {
+        const mesaTabs = tabs.filter(t => t.tipo === 'mesa' && t.mesaId);
+        mesaTabs.forEach(tab => {
+            const mesa = mesas.find(m => m.id === tab.mesaId);
+            if (!mesa?.pedidoActivoId) return;
+            const pedido = pedidosActivos.find(p => p.id === mesa.pedidoActivoId);
+            if (!pedido) return;
+            const tabState = tabCarts[tab.id];
+            if (!tabState) return;
+
+            const nuevosItems = tabState.cart.map(item => ({
+                id: `${pedido.id}-${item.producto.id}`,
+                productoId: item.producto.id,
+                cantidad: item.cantidad,
+                precioUnitario: item.producto.precioVenta,
+                subtotal: item.producto.precioVenta * item.cantidad
+            }));
+            const nuevoTotal = nuevosItems.reduce((s, i) => s + i.subtotal, 0);
+
+            // Solo actualizar si hay cambios reales
+            const itemsIguales = JSON.stringify(pedido.items) === JSON.stringify(nuevosItems);
+            if (!itemsIguales) {
+                onUpdatePedidoActivo({
+                    ...pedido,
+                    items: nuevosItems,
+                    total: nuevoTotal,
+                    cliente: tabState.cliente || pedido.cliente,
+                    ultimoCambio: new Date().toISOString()
+                });
+            }
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tabCarts]);
+
     // ==========================================
     // ACCIONES DE MESAS
     // ==========================================
@@ -301,8 +346,8 @@ export function Ventas(props: VentasProps) {
                 ultimoCambio: new Date().toISOString()
             };
             onAddPedidoActivo(nuevoPedido).then(() => {
-                onUpdateMesa({ ...mesa, estado: 'ocupada', pedidoActivoId: nuevoPedido.id });
-
+                return onUpdateMesa({ ...mesa, estado: 'ocupada', pedidoActivoId: nuevoPedido.id });
+            }).then(() => {
                 // Crear pestaña nueva si no existe
                 const existingTab = tabs.find(t => t.id === mesaTabId);
                 if (!existingTab) {
@@ -317,11 +362,12 @@ export function Ventas(props: VentasProps) {
                         [mesaTabId]: { cart: [], cliente: `Mesa ${mesa.numero}` }
                     }));
                 }
-
                 // Activar la pestaña de la mesa
                 setActiveTabId(mesaTabId);
                 setViewMode('pos');
                 toast.success(`Mesa ${mesa.numero} abierta — pestaña creada`);
+            }).catch(() => {
+                toast.error(`Error al abrir la mesa ${mesa.numero}`);
             });
         } else {
             // Mesa ocupada: abrir la pestaña existente o crear una con los datos del pedido
@@ -365,6 +411,16 @@ export function Ventas(props: VentasProps) {
 
     const handleFinalizarVenta = async () => {
         if (cart.length === 0) return;
+        // Validación de dinero suficiente (segunda barrera además del disabled)
+        if (tipoTransaccion !== 'credito' && metodoPago === 'efectivo' && safeNumber(dineroRecibido) < totalCart) {
+            toast.error('El dinero recibido es insuficiente');
+            return;
+        }
+        // Validar nombre de cliente para crédito
+        if (tipoTransaccion === 'credito' && !cliente.trim()) {
+            toast.error('Ingresa el nombre del cliente para el fiado');
+            return;
+        }
         try {
             setIsProcessing(true);
             const totalToPay = totalCart;
@@ -375,12 +431,12 @@ export function Ventas(props: VentasProps) {
                     precioUnitario: safeNumber(item.producto.precioVenta),
                     subtotal: safeNumber(item.producto.precioVenta) * item.cantidad
                 })),
-                metodoPago: tipoTransaccion === 'credito' ? 'credito' : metodoPago,
-                cliente,
+                metodoPago: tipoTransaccion === 'credito' ? 'credito' as MetodoPago : metodoPago,
+                cliente: cliente.trim() || 'Cliente Anónimo',
                 usuarioId: usuario?.id || 'anon',
                 tipoTransaccion,
                 dineroRecibido: tipoTransaccion === 'credito' ? totalToPay : safeNumber(dineroRecibido),
-                vueltas: tipoTransaccion === 'credito' ? 0 : (safeNumber(dineroRecibido) - totalToPay),
+                vueltas: tipoTransaccion === 'credito' ? 0 : Math.max(0, safeNumber(dineroRecibido) - totalToPay),
                 fecha: new Date().toISOString()
             };
 
@@ -418,6 +474,24 @@ export function Ventas(props: VentasProps) {
         }
     };
 
+    // Liberar mesa sin procesar venta (carrito vacío o salida sin consumo)
+    const handleLiberarMesa = async () => {
+        const currentTab = tabs.find(t => t.id === activeTabId);
+        if (!currentTab?.mesaId) return;
+        const mesa = mesas.find(m => m.id === currentTab.mesaId);
+        if (!mesa) return;
+        try {
+            if (mesa.pedidoActivoId) {
+                await onDeletePedidoActivo(mesa.pedidoActivoId);
+            }
+            await onUpdateMesa({ ...mesa, estado: 'disponible', pedidoActivoId: undefined });
+            handleCloseTab(activeTabId);
+            toast.success(`Mesa ${mesa.numero} liberada`);
+        } catch {
+            toast.error('Error al liberar la mesa');
+        }
+    };
+
     // Encontrar la pestaña activa para pasarle info al CartDetail
     const activeTab = tabs.find(t => t.id === activeTabId);
 
@@ -431,9 +505,13 @@ export function Ventas(props: VentasProps) {
                     formatCurrency={formatCurrency}
                     tabs={tabs}
                     activeTabId={activeTabId}
-                    onSelectTab={setActiveTabId}
+                    onSelectTab={handleSelectTab}
                     onCloseTab={handleCloseTab}
                     onAddVentaRapida={handleAddVentaRapida}
+                    cajaActiva={!!cajaActiva}
+                    onCerrarCaja={() => setShowCierreModal(true)}
+                    onMovimientoEntrada={() => setMovimientoCaja({ tipo: 'entrada' })}
+                    onMovimientoSalida={() => setMovimientoCaja({ tipo: 'salida' })}
                 />
             </div>
 
@@ -482,6 +560,7 @@ export function Ventas(props: VentasProps) {
                         setCliente={setCliente}
                         activeTabLabel={activeTab?.label}
                         activeTabTipo={activeTab?.tipo}
+                        onLiberarMesa={handleLiberarMesa}
                     />
                 </div>
             </div>
@@ -629,6 +708,39 @@ export function Ventas(props: VentasProps) {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* Modal de Cierre de Caja */}
+            <CierreCajaModal
+                isOpen={showCierreModal}
+                onClose={() => setShowCierreModal(false)}
+                onCerrar={async (monto) => {
+                    await onCerrarCaja(monto);
+                    setShowCierreModal(false);
+                }}
+                cajaActiva={cajaActiva}
+                formatCurrency={formatCurrency}
+            />
+
+            {/* Modal de Movimientos de Caja (Entrada/Salida) */}
+            <CajaMovimientosModal
+                isOpen={!!movimientoCaja}
+                onOpenChange={(open) => { if (!open) setMovimientoCaja(null); }}
+                tipo={movimientoCaja?.tipo || 'entrada'}
+                onSubmit={async (monto, motivo) => {
+                    await onRegistrarMovimientoCaja(monto, movimientoCaja!.tipo, motivo, usuario?.id || 'anon');
+                    setMovimientoCaja(null);
+                }}
+            />
+
+            {/* Modal de Apertura de Caja — CRÍTICO: faltaba renderizarse */}
+            <AperturaCajaModal
+                isOpen={showAperturaModal}
+                onClose={() => setShowAperturaModal(false)}
+                onAbrir={async (montoApertura: number) => {
+                    await onAbrirCaja(usuario?.id || 'anon', montoApertura);
+                    setShowAperturaModal(false);
+                }}
+            />
 
             {/* Modal de Resumen Diario */}
             <Dialog open={showDailyReport} onOpenChange={setShowDailyReport}>

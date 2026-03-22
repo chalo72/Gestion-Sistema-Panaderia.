@@ -19,7 +19,9 @@ import {
   History,
   ChevronRight,
   ChevronLeft as ChevronLeftIcon,
-  Upload
+  Upload,
+  CreditCard,
+  UserCircle2
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -53,6 +55,12 @@ interface MenuItem {
   permission: string;
 }
 
+interface MenuGroup {
+  section: string;
+  emoji: string;
+  items: MenuItem[];
+}
+
 export function Sidebar({
   currentView,
   onViewChange,
@@ -71,31 +79,77 @@ export function Sidebar({
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
 
-  const allMenuItems: MenuItem[] = [
-    { id: 'dashboard', label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
-    { id: 'ventas', label: 'Ventas / POS', icon: ShoppingCart, permission: 'VER_VENTAS' },
-    { id: 'historial-ventas', label: 'Historial de Ventas', icon: History, permission: 'VER_VENTAS' },
-    { id: 'productos', label: 'Productos', icon: Package, permission: 'VER_PRODUCTOS' },
-    { id: 'listapreciosproincial', label: 'Lista de Precios', icon: DollarSign, permission: 'VER_PRODUCTOS' },
-    { id: 'caja', label: 'Control de Caja', icon: Wallet, permission: 'ABRIR_CERRAR_CAJA' },
-    { id: 'produccion', label: 'Producción de Pan', icon: Utensils, permission: 'VER_PRODUCTOS' },
-    { id: 'recetas', label: 'Recetas Técnicas', icon: ChefHat, permission: 'VER_PRODUCTOS' },
-    { id: 'gastos', label: 'Egresos y Facturas', icon: DollarSign, permission: 'VER_FINANZAS' },
-    { id: 'reportes', label: 'Análisis Financiero', icon: BarChart3, permission: 'VER_FINANZAS' },
-    { id: 'ahorro', label: 'Mis Ahorros', icon: PiggyBank, permission: 'VER_FINANZAS' },
-    { id: 'inventario', label: 'Stock Crítico', icon: Package, permission: 'VER_INVENTARIO' },
-    { id: 'prepedidos', label: 'Órdenes de Compra', icon: ShoppingCart, permission: 'VER_PREPEDIDOS' },
-    { id: 'proveedores', label: 'Mis Aliados', icon: Truck, permission: 'VER_PROVEEDORES' },
-    { id: 'precios', label: 'Historial de Costos', icon: DollarSign, permission: 'VER_PRECIOS' },
-    { id: 'recepciones', label: 'Entrada de Mercancía', icon: ClipboardCheck, permission: 'VER_RECEPCIONES' },
-    { id: 'alertas', label: 'Alertas de Costos', icon: Bell, permission: 'VER_ALERTAS' },
-    { id: 'usuarios', label: 'Equipo de Trabajo', icon: Users, permission: 'VER_USUARIOS' },
-    { id: 'roles', label: 'Seguridad y Roles', icon: Shield, permission: 'VER_USUARIOS' },
-    { id: 'configuracion', label: 'Configuración', icon: Settings, permission: 'VER_CONFIGURACION' },
-    { id: 'cargamasiva', label: 'Carga Masiva', icon: Upload, permission: 'CREAR_PRODUCTOS' },
+  const allMenuGroups: MenuGroup[] = [
+    {
+      section: 'Inicio',
+      emoji: '🏠',
+      items: [
+        { id: 'dashboard', label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+      ],
+    },
+    {
+      section: 'Operación Diaria',
+      emoji: '💰',
+      items: [
+        { id: 'ventas',          label: 'Ventas / POS',         icon: ShoppingCart, permission: 'VER_VENTAS' },
+        { id: 'historial-ventas',label: 'Historial de Ventas',  icon: History,      permission: 'VER_VENTAS' },
+        { id: 'caja',            label: 'Control de Caja',      icon: Wallet,       permission: 'ABRIR_CERRAR_CAJA' },
+        { id: 'creditos',        label: 'Créditos a Clientes',  icon: CreditCard,   permission: 'VER_FINANZAS' },
+      ],
+    },
+    {
+      section: 'Producción',
+      emoji: '🍞',
+      items: [
+        { id: 'produccion', label: 'Producción de Pan',  icon: Utensils,  permission: 'VER_PRODUCTOS' },
+        { id: 'recetas',    label: 'Recetas Técnicas',   icon: ChefHat,   permission: 'VER_PRODUCTOS' },
+        { id: 'inventario', label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
+      ],
+    },
+    {
+      section: 'Compras',
+      emoji: '🛒',
+      items: [
+        { id: 'proveedores',  label: 'Gestión de Proveedores', icon: Truck,          permission: 'VER_PROVEEDORES' },
+        { id: 'prepedidos',   label: 'Órdenes de Compra',      icon: ShoppingCart,   permission: 'VER_PREPEDIDOS' },
+        { id: 'recepciones',  label: 'Entrada de Mercancía',   icon: ClipboardCheck, permission: 'VER_RECEPCIONES' },
+      ],
+    },
+    {
+      section: 'Costos y Finanzas',
+      emoji: '📊',
+      items: [
+        { id: 'precios',   label: 'Historial de Costos',  icon: DollarSign, permission: 'VER_PRECIOS' },
+        { id: 'alertas',   label: 'Alertas de Costos',    icon: Bell,       permission: 'VER_ALERTAS' },
+        { id: 'gastos',    label: 'Egresos y Facturas',   icon: DollarSign, permission: 'VER_FINANZAS' },
+        { id: 'reportes',  label: 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_FINANZAS' },
+        { id: 'ahorro',    label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
+      ],
+    },
+    {
+      section: 'Catálogo',
+      emoji: '🗂️',
+      items: [
+        { id: 'productos',   label: 'Productos',    icon: Package, permission: 'VER_PRODUCTOS' },
+        { id: 'cargamasiva', label: 'Carga Masiva', icon: Upload,  permission: 'CREAR_PRODUCTOS' },
+      ],
+    },
+    {
+      section: 'Administración',
+      emoji: '👥',
+      items: [
+        { id: 'trabajadores',  label: 'Trabajadores',       icon: UserCircle2, permission: 'VER_USUARIOS' },
+        { id: 'usuarios',      label: 'Equipo de Trabajo',  icon: Users,       permission: 'VER_USUARIOS' },
+        { id: 'roles',         label: 'Seguridad y Roles',  icon: Shield,      permission: 'VER_USUARIOS' },
+        { id: 'configuracion', label: 'Configuración',      icon: Settings,    permission: 'VER_CONFIGURACION' },
+      ],
+    },
   ];
 
-  const menuItems = allMenuItems.filter(item => check(item.permission as any));
+  // Filtrar por permisos — omitir secciones vacías
+  const menuGroups = allMenuGroups
+    .map(g => ({ ...g, items: g.items.filter(i => check(i.permission as any)) }))
+    .filter(g => g.items.length > 0);
 
   const renderSidebarContent = () => (
     <div className="flex flex-col h-full w-full bg-[#0f172a] text-white overflow-hidden">
@@ -148,53 +202,66 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Menu Items */}
-        <ul className="space-y-1">
-          {menuItems.map((item, index) => {
-            const Icon = item.icon;
-            const isActive = currentView === item.id;
+        {/* Menu por secciones */}
+        <nav className="space-y-1">
+          {menuGroups.map((group, gi) => (
+            <div key={group.section}>
+              {/* Separador entre secciones (no antes de la primera) */}
+              {gi > 0 && (
+                <div className="border-t border-white/[0.06] my-2" />
+              )}
 
-            return (
-              <li key={item.id} className={`animate - ag - fade -in stagger - ${index + 1} `}>
-                <button
-                  type="button"
-                  title={isCollapsed ? item.label : undefined}
-                  onClick={() => {
-                    onViewChange(item.id);
-                    if (isMobile) setOpen(false);
-                  }}
-                  className={cn(
-                    "w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300 group relative",
-                    isCollapsed && !isMobile ? "px-2 justify-center" : "",
-                    isActive
-                      ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20"
-                      : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
-                  )}
-                >
-                  <div className={cn(
-                    "w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 shrink-0",
-                    isActive
-                      ? "bg-white/20"
-                      : "bg-white/[0.04] group-hover:bg-white/[0.08]"
-                  )}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  {(!isCollapsed || isMobile) && (
-                    <span className="font-medium text-sm truncate animate-ag-fade-in">{item.label}</span>
-                  )}
-                  {(!isCollapsed || isMobile) && item.id === 'alertas' && alertasNoLeidas > 0 && (
-                    <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-ag-pulse-glow">
-                      {alertasNoLeidas}
-                    </span>
-                  )}
-                  {isActive && !isCollapsed && (
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-l-full" />
-                  )}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+              {/* Etiqueta de sección — oculta cuando está colapsado */}
+              {(!isCollapsed || isMobile) && (
+                <p className="px-3 pt-1 pb-1.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 select-none">
+                  {group.emoji} {group.section}
+                </p>
+              )}
+
+              {/* Items del grupo */}
+              <ul className="space-y-0.5">
+                {group.items.map((item, index) => {
+                  const Icon = item.icon;
+                  const isActive = currentView === item.id;
+                  return (
+                    <li key={item.id} style={{ animationDelay: `${(gi * 5 + index) * 30}ms` }}>
+                      <button
+                        type="button"
+                        title={isCollapsed && !isMobile ? item.label : undefined}
+                        onClick={() => { onViewChange(item.id); if (isMobile) setOpen(false); }}
+                        className={cn(
+                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 group relative",
+                          isCollapsed && !isMobile ? "px-2 justify-center" : "",
+                          isActive
+                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20"
+                            : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0",
+                          isActive ? "bg-white/20" : "bg-white/[0.04] group-hover:bg-white/[0.08]"
+                        )}>
+                          <Icon className="w-3.5 h-3.5" />
+                        </div>
+                        {(!isCollapsed || isMobile) && (
+                          <span className="font-medium text-[13px] truncate">{item.label}</span>
+                        )}
+                        {(!isCollapsed || isMobile) && item.id === 'alertas' && alertasNoLeidas > 0 && (
+                          <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-ag-pulse-glow">
+                            {alertasNoLeidas}
+                          </span>
+                        )}
+                        {isActive && (!isCollapsed || isMobile) && (
+                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-l-full" />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
       </div>
 
       {/* Footer */}

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
     PiggyBank,
     TrendingUp,
@@ -19,7 +19,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { Venta } from '@/types';
 
 interface AhorrosProps {
@@ -28,34 +32,68 @@ interface AhorrosProps {
     formatCurrency: (value: number) => string;
 }
 
+interface MetaAhorro {
+    id: string;
+    nombre: string;
+    monto: number;
+    plazo: string;
+    creadaEn: string;
+}
+
 export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProps) {
     const totalRecaudado = useMemo(() => ventas.reduce((acc, v) => acc + v.total, 0), [ventas]);
     const ahorroEstimado = totalRecaudado * 0.15;
     const metaAhorro = 5000000;
     const porcentajeMeta = Math.min((ahorroEstimado / metaAhorro) * 100, 100);
 
+    const [showMetaModal, setShowMetaModal] = useState(false);
+    const [metas, setMetas] = useState<MetaAhorro[]>(() => {
+        try {
+            return JSON.parse(localStorage.getItem('dp_metas_ahorro') || '[]');
+        } catch { return []; }
+    });
+    const [formMeta, setFormMeta] = useState({ nombre: '', monto: '', plazo: '' });
+
+    const handleGuardarMeta = () => {
+        if (!formMeta.nombre.trim() || !formMeta.monto) {
+            toast.error('Completa el nombre y el monto objetivo');
+            return;
+        }
+        const nueva: MetaAhorro = {
+            id: crypto.randomUUID(),
+            nombre: formMeta.nombre.trim(),
+            monto: parseFloat(formMeta.monto),
+            plazo: formMeta.plazo,
+            creadaEn: new Date().toISOString(),
+        };
+        const actualizadas = [...metas, nueva];
+        setMetas(actualizadas);
+        localStorage.setItem('dp_metas_ahorro', JSON.stringify(actualizadas));
+        setFormMeta({ nombre: '', monto: '', plazo: '' });
+        setShowMetaModal(false);
+        toast.success(`Meta "${nueva.nombre}" creada por ${formatCurrency(nueva.monto)}`);
+    };
+
     return (
-        <div className="space-y-8 h-full flex flex-col animate-ag-fade-in p-2 md:p-6 bg-slate-50/50 dark:bg-black/20 rounded-[3rem]">
-            {/* Premium Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-4 p-8 glass-card rounded-[2.5rem] bg-emerald-50/30 dark:bg-emerald-950/20 border-emerald-100 dark:border-emerald-900/30 shadow-xl relative overflow-hidden">
-                <div className="flex items-center gap-6 relative z-10">
-                    <div className="w-16 h-16 bg-gradient-to-br from-emerald-600 to-teal-800 rounded-2xl flex items-center justify-center shadow-2xl shadow-emerald-600/30">
-                        <PiggyBank className="h-8 w-8 text-white" />
+        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+            {/* Header */}
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                        <PiggyBank className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                     </div>
                     <div>
-                        <h1 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white uppercase">
-                            Mis <span className="text-emerald-600 dark:text-emerald-400">Ahorros</span>
-                        </h1>
-                        <p className="text-muted-foreground font-black text-[10px] uppercase tracking-[0.3em] mt-1 opacity-60">Proyección estratégica de capital nutritivo</p>
+                        <h1 className="text-xl font-black text-slate-900 dark:text-white">Mis Ahorros</h1>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Proyección estratégica de capital · Dulce Placer</p>
                     </div>
                 </div>
-
-                <Button className="h-14 px-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-[1.5rem] shadow-xl shadow-emerald-500/20 gap-3 font-black uppercase tracking-widest text-xs transition-all hover:scale-105 active:scale-95 border-none relative z-10">
-                    <Plus className="w-5 h-5" /> Nueva Meta de Crecimiento
+                <Button
+                    onClick={() => setShowMetaModal(true)}
+                    className="h-10 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl gap-2 font-black uppercase tracking-widest text-xs"
+                >
+                    <Plus className="w-4 h-4" /> Nueva Meta
                 </Button>
-
-                <div className="absolute -top-10 -right-10 w-48 h-48 bg-emerald-400/5 rounded-full blur-3xl" />
-            </div>
+            </header>
 
             {/* Main Goal Card - High Visual Impact */}
             <Card className="bg-slate-900 text-white border-none shadow-3xl shadow-emerald-500/10 rounded-[3rem] overflow-hidden relative group min-h-[400px] flex items-center">
@@ -105,7 +143,7 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-6 w-full md:w-auto shrink-0">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full md:w-auto shrink-0">
                             {[
                                 { icon: TrendingUp, label: 'Mensual', value: '+12.5%', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
                                 { icon: ShieldCheck, label: 'Reserva', value: '100%', color: 'text-blue-400', bg: 'bg-blue-500/10' },
@@ -218,6 +256,51 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                     </Card>
                 ))}
             </div>
+
+            {/* Modal: Nueva Meta de Crecimiento */}
+            <Dialog open={showMetaModal} onOpenChange={setShowMetaModal}>
+                <DialogContent className="rounded-3xl">
+                    <DialogHeader>
+                        <DialogTitle className="font-black uppercase tracking-tight">Nueva Meta de Ahorro</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Nombre de la meta *</Label>
+                            <Input
+                                placeholder="ej: Horno industrial, Vitrina nueva..."
+                                value={formMeta.nombre}
+                                onChange={e => setFormMeta(p => ({ ...p, nombre: e.target.value }))}
+                                className="mt-1"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Monto objetivo *</Label>
+                            <Input
+                                type="number"
+                                placeholder="ej: 3000000"
+                                value={formMeta.monto}
+                                onChange={e => setFormMeta(p => ({ ...p, monto: e.target.value }))}
+                                className="mt-1"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Plazo (opcional)</Label>
+                            <Input
+                                placeholder="ej: Diciembre 2026"
+                                value={formMeta.plazo}
+                                onChange={e => setFormMeta(p => ({ ...p, plazo: e.target.value }))}
+                                className="mt-1"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setShowMetaModal(false)}>Cancelar</Button>
+                        <Button onClick={handleGuardarMeta} className="bg-emerald-600 hover:bg-emerald-700 text-white">
+                            Guardar Meta
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

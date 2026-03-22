@@ -34,7 +34,7 @@ export function ProductCard({
             className="group relative overflow-hidden border-none bg-white/40 dark:bg-gray-950/40 backdrop-blur-2xl rounded-[2.5rem] shadow-xl hover:shadow-3xl transition-all duration-700 hover:-translate-y-4 cursor-pointer border border-white/40 dark:border-gray-800/20 active:scale-95"
             onClick={() => onExpand(producto.id)}
         >
-            <div className="h-48 bg-slate-100 dark:bg-gray-900 relative overflow-hidden">
+            <div className="h-36 sm:h-48 bg-slate-100 dark:bg-gray-900 relative overflow-hidden">
                 {producto.imagen ? (
                     <img src={producto.imagen} alt={producto.nombre} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110" />
                 ) : (
@@ -57,7 +57,7 @@ export function ProductCard({
                 </div>
             </div>
 
-            <CardContent className="p-10 pt-8">
+            <CardContent className="p-5 sm:p-10 pt-5 sm:pt-8">
                 <div className="flex items-start justify-between mb-8">
                     <div className="space-y-3">
                         <h3 className="font-black text-2xl uppercase tracking-tighter text-slate-800 dark:text-white line-clamp-1 group-hover:text-amber-600 transition-colors duration-500">{producto.nombre}</h3>
@@ -65,7 +65,7 @@ export function ProductCard({
                             ID: {producto.id.slice(0, 8)}
                         </p>
                     </div>
-                    <div className="flex gap-2 translate-x-4 opacity-0 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-500">
+                    <div className="flex gap-2 sm:translate-x-4 sm:opacity-0 sm:group-hover:opacity-100 sm:group-hover:translate-x-0 transition-all duration-500">
                         {checkPermission('EDITAR_PRODUCTOS') && (
                             <Button size="icon" variant="ghost" className="h-12 w-12 rounded-2xl bg-indigo-50 dark:bg-gray-800/80 hover:bg-indigo-600 hover:text-white text-indigo-600 transition-all shadow-lg" onClick={(e) => { e.stopPropagation(); onEdit(producto); }}>
                                 <Edit2 className="w-4 h-4" />

@@ -57,13 +57,13 @@ export function ProductHeader({
 
                 {checkPermission('CREAR_PRODUCTOS') && (
                     <>
-                        <Button
-                            variant="outline"
+                        <button
                             onClick={onManageCategories}
-                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold border-slate-200 dark:border-slate-700 hover:border-primary hover:text-primary transition-all h-11 text-sm"
+                            style={{ color: '#475569' }}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-semibold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-orange-400 hover:text-orange-500 transition-all h-11 text-sm"
                         >
                             <Tag className="w-4 h-4" /> Categorías
-                        </Button>
+                        </button>
                         <Button
                             onClick={onAddProduct}
                             className="flex items-center gap-2 bg-primary hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-primary/20 transition-all h-11 text-sm"

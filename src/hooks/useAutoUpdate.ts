@@ -1,74 +1,92 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
-const CHECK_INTERVAL = 60_000;       // Verifica cada 60 segundos
-const IDLE_TIMEOUT   = 2 * 60_000;   // 2 minutos sin actividad → actualiza
+const CHECK_INTERVAL = 30_000;       // Verifica cada 30 segundos
 const STORAGE_KEY    = 'dp_build_timestamp';
 
-function recargar() {
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(regs => {
-      Promise.all(regs.map(r => r.update())).finally(() => window.location.reload());
-    });
-  } else {
-    window.location.reload();
-  }
-}
-
 /**
- * Actualización automática no-disruptiva.
+ * Actualización automática real — sin clic del usuario.
  *
- * Cuando detecta una nueva versión espera el momento oportuno:
- *   1. Si el usuario minimiza la app o cambia de pestaña → recarga inmediata.
- *   2. Si lleva 2 minutos sin tocar nada → recarga silenciosa.
+ * Mecanismo dual:
+ *   1. Service Worker controllerchange:
+ *      Cuando el nuevo SW toma el control (skipWaiting ya activo en vite.config),
+ *      el evento 'controllerchange' se dispara y recargamos la página en ese instante.
+ *      Esto garantiza que cada build nuevo se aplique automáticamente.
  *
- * Nunca interrumpe una venta, un arqueo ni ningún flujo activo.
+ *   2. Polling de version.json (respaldo):
+ *      Por si el SW no está disponible (modo web normal), compara timestamps
+ *      y recarga al detectar versión nueva + 2 minutos de inactividad o tab oculto.
  */
 export function useAutoUpdate() {
-  const [updateAvailable, setUpdateAvailable]   = useState(false);
-  const [newVersion, setNewVersion]             = useState<string | null>(null);
-  const [currentVersion, setCurrentVersion]     = useState<string | null>(null);
-  const [isUpdating, setIsUpdating]             = useState(false);
+  const [updateAvailable, setUpdateAvailable] = useState(false);
+  const [newVersion, setNewVersion]           = useState<string | null>(null);
+  const [currentVersion, setCurrentVersion]   = useState<string | null>(null);
+  const [isUpdating, setIsUpdating]           = useState(false);
 
-  const savedTimestampRef  = useRef(parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10));
-  const pendingUpdateRef   = useRef(false);   // ¿hay update esperando?
-  const idleTimerRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savedTimestampRef = useRef(parseInt(localStorage.getItem(STORAGE_KEY) || '0', 10));
+  const pendingUpdateRef  = useRef(false);
+  const idleTimerRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reloadingRef      = useRef(false); // Evitar recargas dobles
 
-  // ── Aplicar la actualización ────────────────────────────────────
-  const aplicarActualizacion = useCallback(() => {
-    if (!pendingUpdateRef.current) return;
+  // ── Recarga limpia ────────────────────────────────────────────────
+  const recargar = useCallback(() => {
+    if (reloadingRef.current) return;
+    reloadingRef.current = true;
     setIsUpdating(true);
-    recargar();
+    window.location.reload();
   }, []);
 
-  // ── Reiniciar el temporizador de inactividad ────────────────────
+  // ── 1. Service Worker controllerchange (mecanismo principal) ──────
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+
+    // Registrar el listener ANTES de que cambie el controller
+    const handleControllerChange = () => {
+      // El nuevo SW tomó el control — recargar para usar los nuevos archivos
+      recargar();
+    };
+
+    navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+
+    // También forzar update del SW registrado para que detecte nuevas versiones
+    navigator.serviceWorker.ready.then(reg => {
+      // Verificar actualizaciones cada CHECK_INTERVAL ms
+      const interval = setInterval(() => reg.update(), CHECK_INTERVAL);
+      return () => clearInterval(interval);
+    });
+
+    return () => {
+      navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+    };
+  }, [recargar]);
+
+  // ── 2. Polling version.json (respaldo para modo web sin SW) ───────
+  const aplicarActualizacion = useCallback(() => {
+    if (!pendingUpdateRef.current) return;
+    recargar();
+  }, [recargar]);
+
   const resetIdleTimer = useCallback(() => {
-    if (!pendingUpdateRef.current) return;           // Sin update pendiente → no hacer nada
+    if (!pendingUpdateRef.current) return;
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => {
-      aplicarActualizacion();                        // 2 min sin actividad → actualiza
-    }, IDLE_TIMEOUT);
+    idleTimerRef.current = setTimeout(aplicarActualizacion, 2 * 60_000);
   }, [aplicarActualizacion]);
 
-  // ── Cuando llega una nueva versión → armar los disparadores ────
   const activarModoPendiente = useCallback((version: string) => {
     pendingUpdateRef.current = true;
     setUpdateAvailable(true);
     setNewVersion(version);
 
-    // Disparador 1: app en background (minimizada o pestaña oculta)
+    // Tab oculto → recargar de inmediato
     const handleVisibility = () => {
       if (document.hidden) aplicarActualizacion();
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
-    // Disparador 2: inactividad del usuario
+    // Inactividad 2 min → recargar
     const eventos: (keyof WindowEventMap)[] = ['mousemove', 'keydown', 'touchstart', 'click', 'scroll'];
     eventos.forEach(e => window.addEventListener(e, resetIdleTimer, { passive: true }));
-
-    // Arrancar el timer de inactividad desde ya
     resetIdleTimer();
 
-    // Cleanup al desmontar
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       eventos.forEach(e => window.removeEventListener(e, resetIdleTimer));
@@ -76,9 +94,8 @@ export function useAutoUpdate() {
     };
   }, [aplicarActualizacion, resetIdleTimer]);
 
-  // ── Verificar si hay nueva versión en el servidor ───────────────
   const checkForUpdates = useCallback(async () => {
-    if (pendingUpdateRef.current) return;   // Ya hay una pendiente, no verificar de nuevo
+    if (pendingUpdateRef.current) return;
     try {
       const res = await fetch('/version.json', {
         cache: 'no-store',
@@ -99,7 +116,6 @@ export function useAutoUpdate() {
       }
 
       if (serverTimestamp > savedTimestampRef.current) {
-        console.log(`[AutoUpdate] Nueva versión: ${version} — esperando momento oportuno`);
         localStorage.setItem(STORAGE_KEY, String(serverTimestamp));
         savedTimestampRef.current = serverTimestamp;
         activarModoPendiente(version);

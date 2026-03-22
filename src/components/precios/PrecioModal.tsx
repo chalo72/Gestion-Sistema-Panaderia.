@@ -30,18 +30,18 @@ export function PrecioModal({
 }: PrecioModalProps) {
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl rounded-[3rem] p-0 overflow-hidden border-none shadow-3xl bg-white dark:bg-gray-950">
-                <div className="bg-blue-600 p-8 text-white relative">
+            <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden border border-slate-200 dark:border-slate-700 bg-white dark:bg-gray-950">
+                <div className="bg-blue-600 p-5 text-white relative">
                     <div className="flex items-center gap-4">
                         <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md border border-white/20">
                             <DollarSign className="w-6 h-6" />
                         </div>
                         <div>
                             <DialogTitle className="text-2xl font-black uppercase tracking-tight">
-                                {isEditing ? 'Ajuste de Inteligencia' : 'Registro de Mercado'}
+                                {isEditing ? 'Editar Precio' : 'Nuevo Precio'}
                             </DialogTitle>
                             <DialogDescription className="text-white/60 font-bold text-[10px] uppercase tracking-widest">
-                                Entrada masiva de datos de costos de aliados
+                                Registra el precio de costo del proveedor
                             </DialogDescription>
                         </div>
                     </div>
@@ -55,16 +55,16 @@ export function PrecioModal({
                     </Button>
                 </div>
 
-                <form onSubmit={onSubmit} className="p-10 space-y-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Producto / SKU *</Label>
+                <form onSubmit={onSubmit} className="p-6 space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Producto *</Label>
                             <Select
                                 value={formData.productoId}
                                 onValueChange={(val) => setFormData({ ...formData, productoId: val })}
                                 disabled={isEditing}
                             >
-                                <SelectTrigger className="h-14 rounded-2xl bg-slate-50 dark:bg-gray-800 border-none font-black text-[10px] uppercase tracking-widest">
+                                <SelectTrigger className="h-10 rounded-xl border border-slate-200 dark:border-slate-700">
                                     <SelectValue placeholder="Seleccionar..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-2xl border-none shadow-2xl">
@@ -80,14 +80,14 @@ export function PrecioModal({
                             </Select>
                         </div>
 
-                        <div className="space-y-4">
-                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Aliado / Proveedor *</Label>
+                        <div className="space-y-1">
+                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Proveedor *</Label>
                             <Select
                                 value={formData.proveedorId}
                                 onValueChange={(val) => setFormData({ ...formData, proveedorId: val })}
                                 disabled={isEditing}
                             >
-                                <SelectTrigger className="h-14 rounded-2xl bg-slate-50 dark:bg-gray-800 border-none font-black text-[10px] uppercase tracking-widest">
+                                <SelectTrigger className="h-10 rounded-xl border border-slate-200 dark:border-slate-700">
                                     <SelectValue placeholder="Seleccionar..." />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-2xl border-none shadow-2xl">
@@ -104,8 +104,8 @@ export function PrecioModal({
                         </div>
                     </div>
 
-                    <div className="space-y-4">
-                        <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Precio de Costo de Entrada (€) *</Label>
+                    <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Precio de Costo *</Label>
                         <div className="relative group">
                             <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 opacity-50" />
                             <Input
@@ -114,30 +114,30 @@ export function PrecioModal({
                                 value={formData.precioCosto}
                                 onChange={(e) => setFormData({ ...formData, precioCosto: e.target.value })}
                                 placeholder="0.00"
-                                className="h-16 pl-12 text-2xl font-black bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner focus:ring-2 focus:ring-blue-500 transition-all"
+                                className="h-10 pl-9 rounded-xl border border-slate-200 dark:border-slate-700"
                             />
                         </div>
                     </div>
 
-                    <div className="space-y-4">
-                        <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Contexto / Observaciones</Label>
+                    <div className="space-y-1">
+                        <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Notas (opcional)</Label>
                         <div className="relative group">
-                            <AlignLeft className="absolute left-4 top-4 w-4 h-4 text-slate-400 opacity-50" />
+                            <AlignLeft className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 opacity-50" />
                             <Input
                                 value={formData.notas}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                                 placeholder="Ej: Precio por volumen bajo, promoción temporal..."
-                                className="h-14 pl-12 font-bold bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner"
+                                className="h-10 pl-9 rounded-xl border border-slate-200 dark:border-slate-700"
                             />
                         </div>
                     </div>
 
-                    <div className="pt-6 flex gap-4">
-                        <Button type="button" variant="ghost" className="h-16 flex-1 rounded-2xl font-black uppercase tracking-widest text-[10px] opacity-40 hover:opacity-100" onClick={() => onOpenChange(false)}>
+                    <div className="pt-2 flex gap-3">
+                        <Button type="button" variant="ghost" className="h-10 flex-1 rounded-xl font-bold text-sm" onClick={() => onOpenChange(false)}>
                             Descartar
                         </Button>
-                        <Button type="submit" className="h-16 flex-[2] bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-2xl shadow-blue-600/30 border-none">
-                            {isEditing ? 'Actualizar Registro' : 'Inyectar Datos'}
+                        <Button type="submit" className="h-10 flex-[2] bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-sm">
+                            {isEditing ? 'Actualizar Precio' : 'Guardar Precio'}
                         </Button>
                     </div>
                 </form>

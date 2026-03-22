@@ -227,7 +227,7 @@ export default function Productos({
                         <p className="text-base text-slate-400 mt-1">Agrega tu primer producto para comenzar.</p>
                     </div>
                 ) : vistaActual === 'cuadricula' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
                         {filteredProductos.map(producto => {
                             const mp = getMejorPrecio(producto.id);
                             const cb = Number(mp?.precioCosto || 0);
@@ -242,6 +242,7 @@ export default function Productos({
                 ) : (
                     /* TABLA VISTA LISTA — TEXTO GRANDE */
                     <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 text-sm font-bold uppercase tracking-wider">
@@ -355,6 +356,7 @@ export default function Productos({
                                 })}
                             </tbody>
                         </table>
+                        </div>
                         <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-between items-center">
                             <p className="text-sm font-semibold text-slate-500">Mostrando {filteredProductos.length} de {productos.length} productos</p>
                             <div className="flex gap-2 text-sm text-slate-400">
@@ -368,7 +370,7 @@ export default function Productos({
 
             <ProductFormModal isOpen={isDialogOpen} onOpenChange={setIsDialogOpen} editingProducto={editingProducto}
                 categorias={categorias} proveedores={proveedores} formData={formData} setFormData={setFormData}
-                onSubmit={handleSubmit} formatCurrency={formatCurrency} />
+                onSubmit={handleSubmit} formatCurrency={formatCurrency} onAddCategoria={onAddCategoria} />
             <ProductCategoryManager isOpen={isCategoriaDialogOpen} onOpenChange={setIsCategoriaDialogOpen}
                 categorias={categorias} onDeleteCategoria={onDeleteCategoria} onAddCategoria={handleHandleAddCategoria}
                 nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} coloresPreset={COLORES_PRESET} />

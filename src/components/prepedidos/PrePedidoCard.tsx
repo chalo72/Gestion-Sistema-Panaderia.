@@ -44,7 +44,7 @@ export function PrePedidoCard({
                 </Badge>
             </div>
 
-            <CardContent className="p-8 pt-10">
+            <CardContent className="p-5 sm:p-8 pt-7 sm:pt-10">
                 <div className="flex items-start gap-5 mb-8">
                     <div className="w-14 h-14 bg-white/60 dark:bg-gray-800/60 rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500">
                         <Store className="w-7 h-7 text-indigo-500" />

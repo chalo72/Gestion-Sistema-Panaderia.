@@ -42,6 +42,8 @@ const Gastos = lazy(() => import('@/pages/Gastos'));
 const HistorialVentas = lazy(() => import('@/pages/HistorialVentas'));
 const CargaMasiva = lazy(() => import('@/pages/CargaMasiva'));
 const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial'));
+const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
+const Trabajadores = lazy(() => import('@/pages/Trabajadores'));
 
 // Skeleton para durante la carga de secciones
 function SectionSkeleton() {
@@ -187,6 +189,15 @@ function AppContent() {
     updatePedidoActivo,
     deletePedidoActivo,
     registrarMovimientoCaja,
+    creditosClientes,
+    addCreditoCliente,
+    updateCreditoCliente,
+    deleteCreditoCliente,
+    registrarPagoCredito,
+    trabajadores,
+    addTrabajador,
+    updateTrabajador,
+    deleteTrabajador,
   } = priceControl;
 
   // 3. Efectos de Sincronización (Hooks)
@@ -323,9 +334,12 @@ function AppContent() {
               onAddProveedor={addProveedor}
               onUpdateProveedor={updateProveedor}
               onDeleteProveedor={deleteProveedor}
+              onAddProducto={addProducto}
+              onAddOrUpdatePrecio={addOrUpdatePrecio}
               getPreciosByProveedor={getPreciosByProveedor}
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
+              onNavigateTo={setCurrentView}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -564,6 +578,7 @@ function AppContent() {
               getProductoById={getProductoById}
               getMejorPrecio={getMejorPrecio}
               formatCurrency={formatCurrency}
+              onNavigateTo={setCurrentView}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -574,6 +589,8 @@ function AppContent() {
               ventas={ventas}
               productos={productos}
               sesionesCaja={sesionesCaja}
+              proveedores={proveedores}
+              precios={precios}
               formatCurrency={formatCurrency}
               getProductoById={getProductoById}
             />
@@ -594,15 +611,35 @@ function AppContent() {
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
       case 'listapreciosproincial':
-        return hasPermission('VER_PRODUCTOS') ? (
-          <SectionErrorBoundary sectionName="Lista de Precios Provincial">
+        // Ruta absorbida por Inventario (tab Precios + Stock)
+        setCurrentView('inventario');
+        return null;
+      case 'creditos':
+        return hasPermission('VER_FINANZAS') ? (
+          <SectionErrorBoundary sectionName="Créditos a Clientes">
             <Suspense fallback={<SectionSkeleton />}>
-              <ListaPreciosProvincial
-                productos={productos}
-                inventario={inventario}
-                categorias={Array.isArray(configuracion.categorias) ? configuracion.categorias : []}
+              <CreditosClientes
+                creditosClientes={creditosClientes}
+                onAddCreditoCliente={addCreditoCliente}
+                onUpdateCreditoCliente={updateCreditoCliente}
+                onDeleteCreditoCliente={deleteCreditoCliente}
+                onRegistrarPagoCredito={registrarPagoCredito}
                 formatCurrency={formatCurrency}
-                onAddProducto={addProducto}
+                usuario={usuario!}
+              />
+            </Suspense>
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'trabajadores':
+        return hasPermission('VER_USUARIOS') ? (
+          <SectionErrorBoundary sectionName="Trabajadores">
+            <Suspense fallback={<SectionSkeleton />}>
+              <Trabajadores
+                trabajadores={trabajadores}
+                onAddTrabajador={addTrabajador}
+                onUpdateTrabajador={updateTrabajador}
+                onDeleteTrabajador={deleteTrabajador}
+                formatCurrency={formatCurrency}
               />
             </Suspense>
           </SectionErrorBoundary>

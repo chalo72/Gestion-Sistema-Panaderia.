@@ -84,7 +84,7 @@ export function PrecioHistory({
                         <Badge className="bg-blue-600 text-white border-none rounded-xl px-3 py-1 font-black text-[9px] uppercase tracking-widest">Live Feed</Badge>
                     </div>
 
-                    <ScrollArea className="h-[600px] p-8">
+                    <ScrollArea className="h-[360px] sm:h-[500px] lg:h-[600px] p-8">
                         {historialFiltrado.length === 0 ? (
                             <div className="py-40 text-center opacity-20">
                                 <History className="w-20 h-20 mx-auto mb-4" />

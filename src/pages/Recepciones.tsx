@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { db } from '@/lib/database';
 import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada } from '@/types';
+import { procesarImagenFactura } from '@/lib/ocr-service';
 
 interface RecepcionesProps {
     recepciones: Recepcion[];
@@ -146,92 +147,104 @@ export default function Recepciones({
     });
 
     const fileInputRef = useRef<HTMLInputElement>(null);
-    
+    // Ref para guardar el File original (necesario para OCR real)
+    const imagenFileRef = useRef<File | null>(null);
+
     // === ESTADO PARA ESCANEO OCR ===
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
     const [scanStep, setScanStep] = useState('');
 
-    // === FUNCIÓN DE ESCANEO OCR CON IA ===
+    // === FUNCIÓN DE ESCANEO OCR REAL (Tesseract.js) ===
     const handleScanFactura = async () => {
-        if (!newRecepcion.imagenFactura) {
+        if (!imagenFileRef.current) {
             toast.error('Primero sube una imagen de la factura');
             return;
         }
 
         setIsScanning(true);
         setScanProgress(0);
-        
-        // Simulación de proceso OCR con pasos
-        const pasos = [
-            { texto: 'Preparando imagen...', progreso: 10 },
-            { texto: 'Detectando texto con IA...', progreso: 30 },
-            { texto: 'Identificando proveedor...', progreso: 50 },
-            { texto: 'Extrayendo productos y cantidades...', progreso: 70 },
-            { texto: 'Calculando totales...', progreso: 90 },
-            { texto: '¡Completado!', progreso: 100 },
-        ];
+        setScanStep('Iniciando OCR real con Tesseract.js...');
 
-        for (const paso of pasos) {
-            setScanStep(paso.texto);
-            setScanProgress(paso.progreso);
-            await new Promise(r => setTimeout(r, 600));
+        try {
+            const resultado = await procesarImagenFactura(
+                imagenFileRef.current,
+                (progreso) => {
+                    setScanProgress(progreso);
+                    if (progreso < 30) setScanStep('Preparando imagen...');
+                    else if (progreso < 60) setScanStep('Detectando texto...');
+                    else if (progreso < 85) setScanStep('Extrayendo productos y precios...');
+                    else setScanStep('Finalizando análisis...');
+                }
+            );
+
+            // Buscar proveedor real por nombre si OCR detectó uno
+            const proveedorMatch = resultado.proveedor
+                ? proveedores.find(p =>
+                    p.nombre.toLowerCase().includes(
+                        resultado.proveedor!.nombre.toLowerCase().substring(0, 5)
+                    )
+                  )
+                : undefined;
+
+            // Convertir productos detectados por OCR a items de recepción
+            const itemsEscaneados: RecepcionItem[] = resultado.productos
+                .map(prod => {
+                    // Buscar producto real en la lista por nombre similar
+                    const productoReal = productos.find(p =>
+                        p.nombre.toLowerCase().includes(prod.nombre.toLowerCase().substring(0, 4)) ||
+                        prod.nombre.toLowerCase().includes(p.nombre.toLowerCase().substring(0, 4))
+                    );
+                    if (!productoReal) return null;
+                    return {
+                        id: crypto.randomUUID(),
+                        productoId: productoReal.id,
+                        cantidadEsperada: prod.cantidad || 1,
+                        cantidadRecibida: prod.cantidad || 1,
+                        precioEsperado: prod.precioUnitario || productoReal.precio || 0,
+                        precioFacturado: prod.precioUnitario || productoReal.precio || 0,
+                        embalajeOk: true,
+                        productoOk: true,
+                        cantidadOk: true,
+                        modeloOk: true,
+                        defectuosos: 0,
+                        observaciones: ''
+                    };
+                })
+                .filter((item): item is RecepcionItem => item !== null);
+
+            const numFactura = resultado.numeroFactura || `F-${Date.now().toString().slice(-6)}`;
+
+            setNewRecepcion(prev => ({
+                ...prev,
+                proveedorId: proveedorMatch?.id || prev.proveedorId,
+                numeroFactura: numFactura,
+                fechaFactura: resultado.fechaFactura || prev.fechaFactura,
+                items: itemsEscaneados.length > 0 ? itemsEscaneados : prev.items
+            }));
+
+            setScanProgress(100);
+            setScanStep('¡Completado!');
+
+            if (itemsEscaneados.length === 0) {
+                toast.warning('OCR completado — no se detectaron productos coincidentes. Agrega los ítems manualmente.');
+            } else {
+                toast.success(
+                    <div className="flex flex-col gap-1">
+                        <span className="font-semibold">✨ Factura escaneada exitosamente</span>
+                        <span className="text-sm text-muted-foreground">
+                            {itemsEscaneados.length} productos detectados • {proveedorMatch?.nombre || 'Revisa el proveedor'}
+                        </span>
+                    </div>
+                );
+            }
+        } catch (err) {
+            toast.error('Error al procesar la imagen. Ingresa los datos manualmente.');
+        } finally {
+            setIsScanning(false);
+            setScanProgress(0);
+            setScanStep('');
         }
-
-        // Simular detección inteligente basada en productos existentes
-        // En producción, esto se conectaría a un servicio OCR real (Google Vision, Azure, etc.)
-        const productosDelProveedor = productos.filter(p => 
-            p.tipo === 'ingrediente' || p.categoria === 'Insumos'
-        ).slice(0, Math.floor(Math.random() * 3) + 2);
-
-        // Si no hay productos de tipo ingrediente, usar algunos productos al azar
-        const productosAUsar = productosDelProveedor.length > 0 
-            ? productosDelProveedor 
-            : productos.slice(0, Math.floor(Math.random() * 4) + 2);
-
-        // Generar items escaneados
-        const itemsEscaneados: RecepcionItem[] = productosAUsar.map((prod, idx) => {
-            const cantidad = Math.floor(Math.random() * 20) + 5;
-            const precioBase = prod.precio || Math.floor(Math.random() * 50000) + 5000;
-            return {
-                id: crypto.randomUUID(),
-                productoId: prod.id,
-                cantidadEsperada: cantidad,
-                cantidadRecibida: cantidad,
-                precioEsperado: precioBase,
-                precioFacturado: precioBase,
-                embalajeOk: true,
-                productoOk: true,
-                cantidadOk: true,
-                modeloOk: true,
-                defectuosos: 0,
-                observaciones: ''
-            };
-        });
-
-        // Detectar proveedor (simular reconocimiento)
-        const proveedorDetectado = proveedores[Math.floor(Math.random() * proveedores.length)];
-        const numFactura = `F-${Date.now().toString().slice(-6)}`;
-
-        setNewRecepcion(prev => ({
-            ...prev,
-            proveedorId: proveedorDetectado?.id || prev.proveedorId,
-            numeroFactura: numFactura,
-            items: itemsEscaneados
-        }));
-
-        setIsScanning(false);
-        setScanProgress(0);
-        setScanStep('');
-
-        toast.success(
-            <div className="flex flex-col gap-1">
-                <span className="font-semibold">✨ Factura escaneada exitosamente</span>
-                <span className="text-sm text-muted-foreground">
-                    {itemsEscaneados.length} productos detectados • {proveedorDetectado?.nombre || 'Proveedor identificado'}
-                </span>
-            </div>
-        );
     };
 
     // Vincular pre-pedido: auto-rellena items esperados
@@ -282,6 +295,8 @@ export default function Recepciones({
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
+            // Guardar el File original para OCR real
+            imagenFileRef.current = file;
             const reader = new FileReader();
             reader.onloadend = () => {
                 setNewRecepcion(prev => ({ ...prev, imagenFactura: reader.result as string }));

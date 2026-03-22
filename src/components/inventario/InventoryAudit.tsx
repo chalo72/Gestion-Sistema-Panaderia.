@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 import type { Categoria } from '@/types';
 
 interface InventoryAuditProps {
@@ -29,7 +30,7 @@ export function InventoryAudit({
 }: InventoryAuditProps) {
     return (
         <div className="space-y-8 animate-ag-fade-in">
-            <Card className="rounded-[2.5rem] border-none bg-indigo-600/10 dark:bg-indigo-950/20 p-8 shadow-inner overflow-hidden relative">
+            <Card className="rounded-[2.5rem] bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-800/30 p-8 overflow-hidden relative shadow-sm">
                 <div className="flex items-start gap-6 relative z-10">
                     <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-indigo-600/40 transform rotate-6">
                         <ClipboardList className="w-8 h-8 text-white" />
@@ -49,7 +50,7 @@ export function InventoryAudit({
                 <div className="w-full max-w-sm space-y-3">
                     <Label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50 ml-1">Focalizar Categoría</Label>
                     <Select value={categoriaAuditoria} onValueChange={setCategoriaAuditoria}>
-                        <SelectTrigger className="h-14 rounded-2xl bg-white/60 dark:bg-gray-800/40 border-none shadow-xl font-black uppercase text-[10px] tracking-widest px-6">
+                        <SelectTrigger className="h-12 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 font-black uppercase text-[10px] tracking-widest px-5">
                             <SelectValue placeholder="Seleccionar..." />
                         </SelectTrigger>
                         <SelectContent className="rounded-2xl border-none shadow-2xl">
@@ -67,7 +68,7 @@ export function InventoryAudit({
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 {items.map((item) => (
-                    <Card key={item.id} className="group overflow-hidden border-none bg-white/60 dark:bg-black/20 backdrop-blur-md rounded-[2.5rem] shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 border-t-8 border-t-transparent hover:border-t-indigo-600/20">
+                    <Card key={item.id} className="group overflow-hidden bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-3xl shadow-sm hover:shadow-md transition-all duration-300 hover:-translate-y-1">
                         <CardContent className="p-8">
                             <div className="mb-6">
                                 <Badge variant="outline" className="mb-3 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg border-indigo-200 text-indigo-500">
@@ -95,7 +96,7 @@ export function InventoryAudit({
                                 <div className="flex-1 relative">
                                     <Input
                                         type="number"
-                                        className="text-center font-black text-2xl h-14 bg-white dark:bg-gray-950 border-none rounded-2xl shadow-inner focus:ring-2 focus:ring-indigo-500 transition-all"
+                                        className="text-center font-black text-2xl h-12 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all"
                                         value={auditValues[item.id] ?? ''}
                                         placeholder={item.stockActual.toString()}
                                         onChange={(e) => {
@@ -134,7 +135,7 @@ export function InventoryAudit({
             </div>
 
             {items.length === 0 && (
-                <div className="text-center py-20 rounded-[3rem] bg-white/40 dark:bg-gray-900/40 border-none backdrop-blur-sm">
+                <div className="text-center py-20 rounded-3xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
                     <Filter className="w-16 h-16 mx-auto mb-6 opacity-10 text-indigo-500" />
                     <p className="text-[11px] font-black uppercase tracking-[0.3em] opacity-30">No se encontraron ítems para auditar</p>
                 </div>

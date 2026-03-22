@@ -89,7 +89,7 @@ export function PlanProduccionModal({
                 productoId: selectedProductoId,
                 cantidadPlaneada: cantidad,
                 cantidadCompletada: 0,
-                lote: lote || `L-${Math.floor(Math.random() * 10000)}`,
+                lote: lote || `L-${Date.now().toString().slice(-6)}`,
                 notas: notaS,
                 costoEstimadoTotal: (receta?.costoPorPorcion || 0) * cantidad,
                 usuarioId: crypto.randomUUID() // ID generado por sesión

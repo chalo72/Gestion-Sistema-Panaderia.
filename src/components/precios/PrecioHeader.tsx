@@ -17,40 +17,36 @@ export function PrecioHeader({
     canEdit
 }: PrecioHeaderProps) {
     return (
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 p-8 glass-card rounded-[2.5rem] bg-blue-50/30 dark:bg-blue-950/20 border-blue-100 dark:border-blue-900/30 shadow-xl relative overflow-hidden">
-            <div className="flex items-center gap-6 relative z-10">
-                <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-2xl shadow-blue-600/30">
-                    <DollarSign className="h-8 w-8 text-white" />
+        <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm mb-5">
+            <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                    <DollarSign className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div>
-                    <h1 className="text-4xl font-black tracking-tight text-gray-900 dark:text-white uppercase">
-                        Market <span className="text-blue-600 dark:text-blue-400">Intelligence</span>
-                    </h1>
-                    <p className="text-muted-foreground font-black text-[10px] uppercase tracking-[0.3em] mt-1 opacity-60">Análisis comparativo & Seguimiento de volatilidad</p>
+                    <h1 className="text-xl font-black text-slate-900 dark:text-white">Precios de Insumos</h1>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Análisis comparativo · Dulce Placer</p>
                 </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-4 relative z-10">
-                <div className="relative group min-w-[300px]">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-500 opacity-40 group-focus-within:opacity-100 transition-opacity" />
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64 min-w-[180px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Rastrear producto o aliado..."
-                        className="h-14 pl-12 bg-white/60 dark:bg-gray-900/40 border-none rounded-2xl shadow-inner font-bold text-xs uppercase tracking-widest placeholder:opacity-40"
+                        placeholder="Buscar producto o proveedor..."
+                        className="pl-9 h-10 rounded-xl border-slate-200 dark:border-slate-700 text-sm"
                     />
                 </div>
                 {canEdit && (
                     <Button
                         onClick={onAddPrecio}
-                        className="h-14 px-8 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl shadow-xl shadow-blue-600/20 gap-3 font-black uppercase tracking-widest text-xs transition-all hover:scale-105 active:scale-95 border-none"
+                        className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
                     >
-                        <Plus className="w-5 h-5" /> Inyectar Precio
+                        <Plus className="w-4 h-4" /> Nuevo Precio
                     </Button>
                 )}
             </div>
-
-            <div className="absolute -top-10 -right-10 w-48 h-48 bg-blue-400/5 rounded-full blur-3xl" />
-        </div>
+        </header>
     );
 }

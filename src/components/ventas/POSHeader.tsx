@@ -1,4 +1,4 @@
-import { Zap, LayoutGrid, X, Users, Plus } from 'lucide-react';
+import { Zap, LayoutGrid, X, Users, Plus, LogOut, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Pestaña activa en el POS
@@ -13,27 +13,66 @@ interface POSHeaderProps {
     viewMode: 'pos' | 'mesas';
     setViewMode: (mode: 'pos' | 'mesas') => void;
     formatCurrency: (value: number) => string;
-    // Nuevas props para pestañas
+    // Props para pestañas
     tabs: TabPOS[];
     activeTabId: string;
     onSelectTab: (tabId: string) => void;
     onCloseTab: (tabId: string) => void;
     onAddVentaRapida: () => void;
+    // Acciones de caja (opcionales)
+    cajaActiva?: boolean;
+    onCerrarCaja?: () => void;
+    onMovimientoEntrada?: () => void;
+    onMovimientoSalida?: () => void;
 }
 
 export function POSHeader({
     viewMode, setViewMode,
-    tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida
+    tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida,
+    cajaActiva, onCerrarCaja, onMovimientoEntrada, onMovimientoSalida
 }: POSHeaderProps) {
     return (
         <div className="flex flex-col gap-1 py-1 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-3">
             {/* Header de Operación Ultra-Compacto */}
             <div className="flex items-center gap-2 justify-between">
-                {/* Botón de Mesas - Compacto */}
+                {/* Botones de gestión de caja - primero */}
+                {cajaActiva && (
+                    <div className="flex items-center gap-1 shrink-0">
+                        <button
+                            onClick={onMovimientoEntrada}
+                            className="h-8 px-2 rounded-lg flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-all"
+                            title="Entrada de caja"
+                        >
+                            <ArrowUpCircle className="w-3.5 h-3.5" />
+                            <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Entrada</span>
+                        </button>
+                        <button
+                            onClick={onMovimientoSalida}
+                            className="h-8 px-2 rounded-lg flex items-center gap-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-100 transition-all"
+                            title="Salida de caja"
+                        >
+                            <ArrowDownCircle className="w-3.5 h-3.5" />
+                            <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Salida</span>
+                        </button>
+                        <button
+                            onClick={onCerrarCaja}
+                            className="h-8 px-2 rounded-lg flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-all"
+                            title="Cerrar caja"
+                        >
+                            <LogOut className="w-3.5 h-3.5" />
+                            <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Cerrar Caja</span>
+                        </button>
+                    </div>
+                )}
+
+                {/* Separador vertical sutil */}
+                {cajaActiva && <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 shrink-0" />}
+
+                {/* Botón de Mesas */}
                 <button
                     onClick={() => setViewMode(viewMode === 'mesas' ? 'pos' : 'mesas')}
                     className={cn(
-                        "h-8 px-3 rounded-lg flex items-center gap-2 transition-all active:scale-95 shadow-sm border",
+                        "h-8 px-3 rounded-lg flex items-center gap-2 transition-all active:scale-95 shadow-sm border shrink-0",
                         viewMode === 'mesas'
                             ? "bg-indigo-600 text-white border-indigo-700 font-bold"
                             : "bg-white dark:bg-slate-800 text-slate-600 border-slate-200 dark:border-slate-700"
@@ -43,7 +82,7 @@ export function POSHeader({
                     <span className="text-[10px] font-black uppercase tracking-tight">Mesas</span>
                 </button>
 
-                {/* Separador vertical sutil */}
+                {/* Separador antes de pestañas */}
                 <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
 
                 {/* Cinta de Pestañas de Venta - Muy pequeña */}

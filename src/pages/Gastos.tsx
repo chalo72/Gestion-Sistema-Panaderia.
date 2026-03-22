@@ -35,6 +35,7 @@ import { ExpenseList } from '@/components/gastos/ExpenseList';
 import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
 
 import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion } from '@/types';
+import { procesarImagenFactura, sugerirCategoria } from '@/lib/ocr-service';
 
 interface GastosProps {
     gastos: Gasto[];
@@ -95,23 +96,52 @@ export default function Gastos({
         if (!file) return;
 
         setIsScanning(true);
-        toast.info("Escaneando comprobante con IA Yimi...", {
-            description: "Analizando descripción, montos y fechas."
+        toast.info('Procesando comprobante con OCR real...', {
+            description: 'Tesseract.js analizando imagen — puede tardar unos segundos.'
         });
 
-        // Simulación de OCR Premium
-        setTimeout(() => {
-            setScanResult({
-                descripcion: 'COMPRA SUMINISTROS - HARINA Y AZÚCAR',
-                monto: 125000,
-                categoria: 'Materia Prima',
-                fecha: new Date().toISOString().split('T')[0],
-                proveedorId: proveedores[0]?.id || 'prov-gen'
+        try {
+            const resultado = await procesarImagenFactura(file, (progreso) => {
+                if (progreso > 0) toast.loading(`OCR: ${progreso}%`, { id: 'ocr-progress' });
             });
+
+            toast.dismiss('ocr-progress');
+
+            if (resultado.errores.length > 0 && !resultado.total) {
+                toast.warning('OCR no pudo leer todos los datos. Completa manualmente.');
+            }
+
+            // Buscar proveedor real por nombre si OCR detectó uno
+            const proveedorMatch = resultado.proveedor
+                ? proveedores.find(p =>
+                    p.nombre.toLowerCase().includes(resultado.proveedor!.nombre.toLowerCase().substring(0, 5))
+                  )
+                : undefined;
+
+            // Sugerir categoría basada en los productos detectados
+            const descripcionDetectada = resultado.productos.length > 0
+                ? resultado.productos.map(p => p.nombre).join(', ')
+                : resultado.texto.substring(0, 80);
+
+            const categoriaDetectada = resultado.productos[0]
+                ? sugerirCategoria(resultado.productos[0].nombre)
+                : 'Otros';
+
+            setScanResult({
+                descripcion: descripcionDetectada || '',
+                monto: resultado.total || 0,
+                categoria: categoriaDetectada,
+                fecha: resultado.fechaFactura || new Date().toISOString().split('T')[0],
+                proveedorId: proveedorMatch?.id,
+            });
+
+            toast.success('OCR completado — revisa y confirma los datos');
+        } catch (err) {
+            toast.error('Error al procesar imagen. Ingresa los datos manualmente.');
+        } finally {
             setIsScanning(false);
             setShowAddModal(true);
-            toast.success("Escaner completado con éxito");
-        }, 2000);
+        }
     };
 
     const handleSaveGasto = async () => {
@@ -151,7 +181,7 @@ export default function Gastos({
     };
 
     return (
-        <div className="space-y-4 h-full flex flex-col animate-ag-fade-in p-2 md:p-6 bg-slate-50/50 dark:bg-black/20 rounded-[3rem]">
+        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
             <ExpenseHeader
                 onAddManual={() => { setScanResult(null); setShowAddModal(true); }}
                 onScanReceipt={() => document.getElementById('receipt-upload')?.click()}

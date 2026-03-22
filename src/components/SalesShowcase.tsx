@@ -6,6 +6,7 @@ import { PaymentProcessor } from '@/components/PaymentProcessor';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Zap, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface SalesShowcaseProps {
   productId: string;
@@ -173,7 +174,7 @@ export function SalesShowcase({ productId, productName, basePrice }: SalesShowca
                   paymentDetails: {},
                   processedBy: 'user_123',
                 });
-                alert(`Pago de $${amount.toFixed(2)} procesado con ${method}`);
+                toast.success(`Pago de $${amount.toFixed(2)} procesado con ${method}`);
               }}
             />
           </div>

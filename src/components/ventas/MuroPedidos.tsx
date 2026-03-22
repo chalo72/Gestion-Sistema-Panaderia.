@@ -26,12 +26,14 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
 
     const [showModal, setShowModal] = useState(false);
     const [editingMesa, setEditingMesa] = useState<Mesa | null>(null);
-    const [form, setForm] = useState({ numero: 0, capacidad: 4, ubicacion: '' });
+    const [form, setForm] = useState({ numero: '', capacidad: 4, ubicacion: '' });
 
     const openCreateModal = () => {
-        const maxNumero = mesas.length > 0 ? Math.max(...mesas.map(m => m.numero)) : 0;
+        const maxNumero = mesas.length > 0
+            ? Math.max(...mesas.map(m => parseInt(m.numero) || 0))
+            : 0;
         setEditingMesa(null);
-        setForm({ numero: maxNumero + 1, capacidad: 4, ubicacion: '' });
+        setForm({ numero: String(maxNumero + 1), capacidad: 4, ubicacion: '' });
         setShowModal(true);
     };
 
@@ -228,7 +230,7 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                         <div>
                             <Label className="text-sm font-bold text-slate-500 mb-1 block">Número de Mesa</Label>
                             <Input type="number" value={form.numero}
-                                onChange={e => setForm(f => ({ ...f, numero: parseInt(e.target.value) || 0 }))}
+                                onChange={e => setForm(f => ({ ...f, numero: e.target.value }))}
                                 className="h-12 text-2xl font-extrabold text-center rounded-xl border-slate-200" />
                         </div>
                         <div>

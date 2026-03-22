@@ -330,7 +330,7 @@ class IndexedDBDatabase implements IDatabase {
   async init(): Promise<void> {
     console.log("💽 IndexedDB: Starting init...");
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('PriceControlDB', 12);
+      const request = indexedDB.open('PriceControlDB', 13);
       request.onblocked = () => {
         console.warn("⚠️ IndexedDB: Connection blocked! Please close other tabs of this app.");
         alert("⚠️ Por favor, cierra otras pestañas de la aplicación para actualizar la base de datos.");
@@ -440,6 +440,17 @@ class IndexedDBDatabase implements IDatabase {
           s.createIndex('fechaEscaneo', 'fechaEscaneo', { unique: false });
           s.createIndex('fechaFactura', 'fechaFactura', { unique: false });
           s.createIndex('recepcionId', 'recepcionId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('creditos_clientes')) {
+          const s = db.createObjectStore('creditos_clientes', { keyPath: 'id' });
+          s.createIndex('estado', 'estado', { unique: false });
+          s.createIndex('fecha', 'fecha', { unique: false });
+          s.createIndex('clienteNombre', 'clienteNombre', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('trabajadores')) {
+          const s = db.createObjectStore('trabajadores', { keyPath: 'id' });
+          s.createIndex('estado', 'estado', { unique: false });
+          s.createIndex('rol', 'rol', { unique: false });
         }
       };
     });
@@ -991,9 +1002,69 @@ class IndexedDBDatabase implements IDatabase {
     return all.filter(f => f.fechaEscaneo >= fechaInicio && f.fechaEscaneo <= fechaFin);
   }
 
+  // Créditos a Clientes
+  async getAllCreditosClientes(): Promise<any[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_clientes'], 'readonly').objectStore('creditos_clientes').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+  async addCreditoCliente(c: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_clientes'], 'readwrite').objectStore('creditos_clientes').add(c);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async updateCreditoCliente(c: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_clientes'], 'readwrite').objectStore('creditos_clientes').put(c);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async deleteCreditoCliente(id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_clientes'], 'readwrite').objectStore('creditos_clientes').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Trabajadores
+  async getAllTrabajadores(): Promise<any[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['trabajadores'], 'readonly').objectStore('trabajadores').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+  async addTrabajador(t: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['trabajadores'], 'readwrite').objectStore('trabajadores').add(t);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async updateTrabajador(t: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['trabajadores'], 'readwrite').objectStore('trabajadores').put(t);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async deleteTrabajador(id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['trabajadores'], 'readwrite').objectStore('trabajadores').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
   async clearAll(): Promise<void> {
     const db = await this.ensureInit();
-    const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios', 'recetas', 'ventas', 'caja', 'ahorros', 'mesas', 'pedidos_activos', 'gastos', 'produccion'];
+    const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios', 'recetas', 'ventas', 'caja', 'ahorros', 'mesas', 'pedidos_activos', 'gastos', 'produccion', 'creditos_clientes', 'trabajadores'];
     for (const storeName of stores) {
       await new Promise<void>((resolve, reject) => {
         const transaction = db.transaction([storeName], 'readwrite');
@@ -1362,6 +1433,18 @@ class HybridDatabase implements IDatabase {
   async deleteFacturaEscaneada(id: string) { await this.local.deleteFacturaEscaneada(id); }
   async getFacturasEscaneadasByProveedor(proveedorId: string) { return this.local.getFacturasEscaneadasByProveedor(proveedorId); }
   async getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string) { return this.local.getFacturasEscaneadasByFecha(fechaInicio, fechaFin); }
+
+  // Créditos a Clientes Hybrid
+  async getAllCreditosClientes() { return this.local.getAllCreditosClientes(); }
+  async addCreditoCliente(c: any) { await this.local.addCreditoCliente(c); }
+  async updateCreditoCliente(c: any) { await this.local.updateCreditoCliente(c); }
+  async deleteCreditoCliente(id: string) { await this.local.deleteCreditoCliente(id); }
+
+  // Trabajadores Hybrid
+  async getAllTrabajadores() { return this.local.getAllTrabajadores(); }
+  async addTrabajador(t: any) { await this.local.addTrabajador(t); }
+  async updateTrabajador(t: any) { await this.local.updateTrabajador(t); }
+  async deleteTrabajador(id: string) { await this.local.deleteTrabajador(id); }
 
   async clearAll() { await this.local.clearAll(); }
 }

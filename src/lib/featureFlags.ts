@@ -30,16 +30,97 @@ const FLAGS: Record<string, FeatureFlag> = {
         enabled: true,
         description: 'Transiciones animadas entre secciones',
     },
-    ADVANCED_ANALYTICS: {
-        enabled: false,
-        percentage: 25,
+
+
+
+
+        ADVANCED_ANALYTICS: {
+        enabled: true,
+        percentage: 100,
         description: 'Dashboard de analíticas avanzado (rollout gradual)',
     },
     EXPORT_PDF: {
-        enabled: false,
+        enabled: true,
         allowedUsers: ['Chalo8321@gmail.com'],
         description: 'Exportar reportes a PDF',
     },
+    VOICE_COMMANDS: {
+        enabled: true,
+        description: 'Control por comandos de voz',
+    },
+    AI_SUGGESTIONS: {
+        enabled: true,
+        description: 'Sugerencias inteligentes con IA',
+    },
+    BARCODE_SCANNER: {
+        enabled: true,
+        description: 'Escaneo de códigos de barras',
+    },
+    MULTI_LANGUAGE: {
+        enabled: true,
+        description: 'Soporte multi-idioma',
+    },
+    CLOUD_SYNC: {
+        enabled: true,
+        description: 'Sincronización con la nube automática',
+    },
+    OFFLINE_MODE: {
+        enabled: true,
+        description: 'Modo offline completo',
+    },
+    PREDICTIVE_STOCK: {
+        enabled: true,
+        description: 'Predicción de stock con IA',
+    },
+    WHATSAPP_INTEGRATION: {
+        enabled: true,
+        description: 'Integración con WhatsApp Business',
+    },
+    EMAIL_NOTIFICATIONS: {
+        enabled: true,
+        description: 'Notificaciones por correo electrónico',
+    },
+    CUSTOMER_LOYALTY: {
+        enabled: true,
+        description: 'Sistema de puntos de fidelidad',
+    },
+    RECIPE_OPTIMIZER: {
+        enabled: true,
+        description: 'Optimizador de recetas con IA',
+    },
+    FACIAL_RECOGNITION: {
+        enabled: true,
+        description: 'Reconocimiento facial para empleados',
+    },
+    AUTO_BACKUP: {
+        enabled: true,
+        description: 'Respaldo automático cada hora',
+    },
+    DELIVERY_TRACKING: {
+        enabled: true,
+        description: 'Seguimiento de entregas en tiempo real',
+    },
+    PRICE_COMPARISON: {
+        enabled: true,
+        description: 'Comparador de precios en tiempo real',
+    },
+    NUTRITIONAL_INFO: {
+        enabled: true,
+        description: 'Información nutricional de productos',
+    },
+    QR_MENU: {
+        enabled: true,
+        description: 'Menú digital con código QR',
+    },
+    AUGMENTED_REALITY: {
+        enabled: true,
+        description: 'Vista de productos en realidad aumentada',
+    },
+
+
+
+
+
     SMART_REPLENISHMENT: {
         enabled: true,
         description: 'Reabastecimiento inteligente — auto-pedidos por stock bajo',

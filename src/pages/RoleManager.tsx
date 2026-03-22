@@ -92,32 +92,27 @@ export default function RoleManager() {
     };
 
     return (
-        <div className="space-y-8 animate-ag-fade-in pb-10">
-            {/* Premium Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 bg-card/40 p-8 rounded-[3rem] border border-white/5 backdrop-blur-xl shadow-2xl relative overflow-hidden">
-                <div className="space-y-2 relative z-10">
-                    <h2 className="text-4xl font-black tracking-tighter text-foreground uppercase italic flex items-center gap-4">
-                        <div className="w-14 h-14 bg-gradient-to-br from-violet-600 to-indigo-700 rounded-2xl flex items-center justify-center shadow-2xl shadow-violet-500/30">
-                            <Lock className="w-8 h-8 text-white" />
-                        </div>
-                        Control de Privilegios
-                    </h2>
-                    <p className="text-muted-foreground font-bold uppercase text-[10px] tracking-[0.3em] opacity-60 ml-1">
-                        Arquitectura de Seguridad Nexus Core Protocol
-                    </p>
+        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+            {/* Header */}
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
+                        <Lock className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <div>
+                        <h1 className="text-xl font-black text-slate-900 dark:text-white">Seguridad y Roles</h1>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Control de privilegios · Dulce Placer</p>
+                    </div>
                 </div>
-                <div className="flex gap-4 relative z-10">
-                    <Button
-                        variant="ghost"
-                        onClick={handleReset}
-                        className="h-14 px-8 rounded-2xl font-black uppercase tracking-widest text-[10px] bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white transition-all duration-500 border border-rose-500/20 shadow-xl shadow-rose-500/10"
-                    >
-                        <RefreshCcw className="w-4 h-4 mr-3" />
-                        Restaurar Nexus
-                    </Button>
-                </div>
-                <div className="absolute -bottom-24 -right-24 w-64 h-64 bg-violet-500/10 rounded-full blur-[100px]" />
-            </div>
+                <Button
+                    variant="ghost"
+                    onClick={handleReset}
+                    className="h-10 px-4 rounded-xl font-black uppercase tracking-widest text-xs bg-rose-50 dark:bg-rose-950/30 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-200 dark:border-rose-800/40 gap-2"
+                >
+                    <RefreshCcw className="w-4 h-4" />
+                    Restaurar
+                </Button>
+            </header>
 
             <Card className="rounded-[2.5rem] border-none bg-card/40 backdrop-blur-xl shadow-3xl overflow-hidden relative group">
                 <CardHeader className="bg-slate-900/5 dark:bg-slate-950/20 p-8 border-b border-white/5">

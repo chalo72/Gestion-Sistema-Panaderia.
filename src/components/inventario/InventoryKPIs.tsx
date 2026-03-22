@@ -1,6 +1,5 @@
 import React from 'react';
 import { Package, CheckCircle, TrendingDown, AlertTriangle } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 interface InventoryKPIsProps {
@@ -14,61 +13,87 @@ interface InventoryKPIsProps {
     setFiltroEstado: (estado: any) => void;
 }
 
-export function InventoryKPIs({
-    stats,
-    filtroEstado,
-    setFiltroEstado
-}: InventoryKPIsProps) {
+export function InventoryKPIs({ stats, filtroEstado, setFiltroEstado }: InventoryKPIsProps) {
     const kpis = [
-        { id: 'todos', label: 'Total Sku', value: stats.total, icon: Package, color: 'bg-indigo-600 shadow-indigo-200' },
-        { id: 'ok', label: 'En Salud', value: stats.ok, icon: CheckCircle, color: 'bg-emerald-600 shadow-emerald-200' },
-        { id: 'bajo', label: 'Crítico', value: stats.bajo, icon: TrendingDown, color: 'bg-amber-500 shadow-amber-200' },
-        { id: 'agotado', label: 'Agotados', value: stats.agotado, icon: AlertTriangle, color: 'bg-rose-600 shadow-rose-200' },
+        {
+            id: 'todos',
+            label: 'Total SKUs',
+            value: stats.total,
+            icon: Package,
+            iconBg: 'bg-indigo-500/10',
+            iconColor: 'text-indigo-600',
+            activeRing: 'ring-indigo-400',
+            textColor: 'text-indigo-600',
+        },
+        {
+            id: 'ok',
+            label: 'En Salud',
+            value: stats.ok,
+            icon: CheckCircle,
+            iconBg: 'bg-emerald-500/10',
+            iconColor: 'text-emerald-600',
+            activeRing: 'ring-emerald-400',
+            textColor: 'text-emerald-600',
+        },
+        {
+            id: 'bajo',
+            label: 'Stock Bajo',
+            value: stats.bajo,
+            icon: TrendingDown,
+            iconBg: 'bg-amber-500/10',
+            iconColor: 'text-amber-600',
+            activeRing: 'ring-amber-400',
+            textColor: 'text-amber-600',
+        },
+        {
+            id: 'agotado',
+            label: 'Agotados',
+            value: stats.agotado,
+            icon: AlertTriangle,
+            iconBg: 'bg-rose-500/10',
+            iconColor: 'text-rose-600',
+            activeRing: 'ring-rose-400',
+            textColor: 'text-rose-600',
+        },
     ];
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {kpis.map((kpi) => (
-                <Card
-                    key={kpi.id}
-                    className={cn(
-                        "group cursor-pointer transition-all duration-500 hover:scale-[1.05] active:scale-[0.98] rounded-[2.5rem] border-none shadow-xl relative overflow-hidden",
-                        filtroEstado === kpi.id
-                            ? "bg-white dark:bg-gray-800 ring-2 ring-indigo-500 shadow-indigo-500/20"
-                            : "bg-white/40 dark:bg-gray-900/40 backdrop-blur-md hover:bg-white dark:hover:bg-gray-800"
-                    )}
-                    onClick={() => setFiltroEstado(kpi.id as any)}
-                >
-                    <CardContent className="p-8">
-                        <div className="flex items-center justify-between mb-6">
-                            <div className={cn("p-4 rounded-2xl text-white shadow-2xl transition-transform group-hover:rotate-12", kpi.color)}>
-                                <kpi.icon className="w-6 h-6" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 shrink-0">
+            {kpis.map((kpi) => {
+                const activo = filtroEstado === kpi.id;
+                return (
+                    <button
+                        key={kpi.id}
+                        onClick={() => setFiltroEstado(kpi.id as any)}
+                        className={cn(
+                            'text-left bg-white dark:bg-slate-900 p-4 rounded-2xl border transition-all shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-[0.98] cursor-pointer',
+                            activo
+                                ? `border-transparent ring-2 ${kpi.activeRing} shadow-md`
+                                : 'border-slate-100 dark:border-slate-800'
+                        )}
+                    >
+                        <div className="flex items-center justify-between mb-3">
+                            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', kpi.iconBg)}>
+                                <kpi.icon className={cn('w-5 h-5', kpi.iconColor)} />
                             </div>
-                            <div className={cn(
-                                "text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-xl",
-                                filtroEstado === kpi.id ? "bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400" : "bg-gray-100 dark:bg-gray-800 text-gray-400 opacity-50"
-                            )}>
-                                {filtroEstado === kpi.id ? 'Filtrado' : 'Ver Todos'}
-                            </div>
+                            {activo && (
+                                <span className={cn(
+                                    'text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full',
+                                    kpi.iconBg, kpi.iconColor
+                                )}>
+                                    Filtrado
+                                </span>
+                            )}
                         </div>
-                        <div>
-                            <p className="text-4xl font-black text-gray-900 dark:text-white tabular-nums tracking-tighter">
-                                {kpi.value.toString().padStart(2, '0')}
-                            </p>
-                            <p className="text-[10px] font-black text-muted-foreground uppercase mt-2 tracking-widest opacity-60">
-                                {kpi.label}
-                            </p>
-                        </div>
-
-                        {/* Background design element */}
-                        <div className={cn(
-                            "absolute -bottom-4 -right-4 w-24 h-24 rounded-full blur-3xl opacity-10 transition-opacity",
-                            filtroEstado === kpi.id ? "opacity-30" : "group-hover:opacity-20",
-                            kpi.color
-                        )} />
-                    </CardContent>
-                </Card>
-            ))}
+                        <p className={cn('text-3xl font-black tabular-nums tracking-tighter', kpi.textColor)}>
+                            {kpi.value.toString().padStart(2, '0')}
+                        </p>
+                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-1">
+                            {kpi.label}
+                        </p>
+                    </button>
+                );
+            })}
         </div>
     );
 }

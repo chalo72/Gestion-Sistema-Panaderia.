@@ -23,7 +23,10 @@ import type {
   PedidoActivo,
   Gasto,
   OrdenProduccion,
-  MovimientoCaja
+  MovimientoCaja,
+  CreditoCliente,
+  PagoCredito,
+  Trabajador
 } from '@/types';
 import { toast } from 'sonner';
 
@@ -71,6 +74,8 @@ export function usePriceControl() {
   const [pedidosActivos, setPedidosActivos] = useState<PedidoActivo[]>([]);
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [produccion, setProduccion] = useState<OrdenProduccion[]>([]);
+  const [creditosClientes, setCreditosClientes] = useState<CreditoCliente[]>([]);
+  const [trabajadores, setTrabajadores] = useState<Trabajador[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   // Inicializar base de datos y cargar datos
@@ -186,7 +191,7 @@ export function usePriceControl() {
   // 📦 DATOS SECUNDARIOS = Cargar en background
   const loadSecondaryDataInBackground = async () => {
     try {
-      const [alertas, inventario, movimientos, gastos, recepciones, historial, recetas, ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, produccion] = await Promise.all([
+      const [alertas, inventario, movimientos, gastos, recepciones, historial, recetas, ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, produccion, creditosClientes, trabajadores] = await Promise.all([
         db.getAllAlertas(),
         db.getAllInventario(),
         db.getAllMovimientos(),
@@ -201,6 +206,8 @@ export function usePriceControl() {
         db.getAllMesas(),
         db.getAllPedidosActivos(),
         db.getAllOrdenesProduccion(),
+        db.getAllCreditosClientes(),
+        db.getAllTrabajadores(),
       ]);
 
       setAlertas(alertas);
@@ -217,6 +224,8 @@ export function usePriceControl() {
       setMesas(mesas);
       setPedidosActivos(pedidosActivos);
       setProduccion(produccion);
+      setCreditosClientes(creditosClientes as CreditoCliente[]);
+      setTrabajadores(trabajadores as Trabajador[]);
     } catch (error) {
       console.error('Error cargando datos secundarios:', error);
     }
@@ -364,6 +373,23 @@ export function usePriceControl() {
     };
     await db.addProducto(nuevoProducto);
     setProductos(prev => [...prev, nuevoProducto]);
+
+    // ── Sincronización automática: crear InventarioItem con stock 0 ──
+    // Así el producto aparece de inmediato en el módulo de Inventario
+    const existeEnInventario = await db.getInventarioItemByProducto(nuevoProducto.id).catch(() => null);
+    if (!existeEnInventario) {
+      const itemInventario: InventarioItem = {
+        id: crypto.randomUUID(),
+        productoId: nuevoProducto.id,
+        stockActual: 0,
+        stockMinimo: 5,
+        ubicacion: 'Almacén General',
+        ultimoMovimiento: now,
+      };
+      await db.updateInventarioItem(itemInventario);
+      setInventario(prev => [...prev, itemInventario]);
+    }
+
     return nuevoProducto;
   }, []);
 
@@ -859,6 +885,13 @@ export function usePriceControl() {
 
   // Funciones de Caja
   const abrirCaja = useCallback(async (usuarioId: string, montoApertura: number) => {
+    // Leer extras guardados por AperturaCajaModal (cajaNombre, turno, vendedoraNombre)
+    let extras: { cajaNombre?: string; turno?: 'Mañana' | 'Tarde' | 'Noche'; vendedoraNombre?: string } = {};
+    try {
+      const raw = localStorage.getItem('dp_caja_extras');
+      if (raw) { extras = JSON.parse(raw); localStorage.removeItem('dp_caja_extras'); }
+    } catch { /* ignorar errores de localStorage */ }
+
     const now = new Date().toISOString();
     const nuevaSesion: CajaSesion = {
       id: crypto.randomUUID(),
@@ -869,6 +902,9 @@ export function usePriceControl() {
       ventasIds: [],
       movimientos: [],
       estado: 'abierta',
+      cajaNombre: extras.cajaNombre,
+      turno: extras.turno,
+      vendedoraNombre: extras.vendedoraNombre,
     };
 
     await db.addSesionCaja(nuevaSesion);
@@ -987,9 +1023,21 @@ export function usePriceControl() {
           }
         } else if (p.tipo === 'ingrediente') {
           const mejorPrecio = getMejorPrecio(p.id);
-          if (mejorPrecio && Math.abs((p.costoBase || 0) - mejorPrecio.precioCosto) > 0.01) {
-            huboCambio = true;
-            return { ...p, costoBase: mejorPrecio.precioCosto, updatedAt: new Date().toISOString() };
+          if (mejorPrecio) {
+            const nuevoCosto = mejorPrecio.precioCosto;
+            const margen = p.margenUtilidad || 0;
+            const nuevoPrecioVenta = margen > 0 ? nuevoCosto * (1 + margen / 100) : p.precioVenta;
+            const costoDistinto  = Math.abs((p.costoBase || 0) - nuevoCosto) > 0.01;
+            const ventaDistinto  = margen > 0 && Math.abs((p.precioVenta || 0) - nuevoPrecioVenta) > 0.01;
+            if (costoDistinto || ventaDistinto) {
+              huboCambio = true;
+              return {
+                ...p,
+                costoBase: nuevoCosto,
+                ...(margen > 0 ? { precioVenta: nuevoPrecioVenta } : {}),
+                updatedAt: new Date().toISOString(),
+              };
+            }
           }
         }
         return p;
@@ -1537,6 +1585,58 @@ export function usePriceControl() {
         }, {} as any)
       };
     }, [gastos, ventas]),
+
+    // Créditos a Clientes
+    creditosClientes,
+    addCreditoCliente: useCallback(async (c: Omit<CreditoCliente, 'id' | 'createdAt'>) => {
+      const nuevo: CreditoCliente = { ...c, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+      await db.addCreditoCliente(nuevo);
+      setCreditosClientes(prev => [nuevo, ...prev]);
+    }, []),
+    updateCreditoCliente: useCallback(async (id: string, updates: Partial<CreditoCliente>) => {
+      const credito = creditosClientes.find(c => c.id === id);
+      if (!credito) return;
+      const updated = { ...credito, ...updates };
+      await db.updateCreditoCliente(updated);
+      setCreditosClientes(prev => prev.map(c => c.id === id ? updated : c));
+    }, [creditosClientes]),
+    deleteCreditoCliente: useCallback(async (id: string) => {
+      await db.deleteCreditoCliente(id);
+      setCreditosClientes(prev => prev.filter(c => c.id !== id));
+    }, []),
+    registrarPagoCredito: useCallback(async (creditoId: string, pago: Omit<PagoCredito, 'id' | 'creditoId'>) => {
+      const credito = creditosClientes.find(c => c.id === creditoId);
+      if (!credito) return;
+      const nuevoPago: PagoCredito = { ...pago, id: crypto.randomUUID(), creditoId };
+      const nuevoSaldo = Math.max(0, credito.saldo - pago.monto);
+      const updated: CreditoCliente = {
+        ...credito,
+        saldo: nuevoSaldo,
+        estado: nuevoSaldo <= 0 ? 'pagado' : credito.estado,
+        pagos: [...credito.pagos, nuevoPago]
+      };
+      await db.updateCreditoCliente(updated);
+      setCreditosClientes(prev => prev.map(c => c.id === creditoId ? updated : c));
+    }, [creditosClientes]),
+
+    // Trabajadores
+    trabajadores,
+    addTrabajador: useCallback(async (t: Omit<Trabajador, 'id' | 'createdAt'>) => {
+      const nuevo: Trabajador = { ...t, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+      await db.addTrabajador(nuevo);
+      setTrabajadores(prev => [nuevo, ...prev]);
+    }, []),
+    updateTrabajador: useCallback(async (id: string, updates: Partial<Trabajador>) => {
+      const trab = trabajadores.find(t => t.id === id);
+      if (!trab) return;
+      const updated = { ...trab, ...updates };
+      await db.updateTrabajador(updated);
+      setTrabajadores(prev => prev.map(t => t.id === id ? updated : t));
+    }, [trabajadores]),
+    deleteTrabajador: useCallback(async (id: string) => {
+      await db.deleteTrabajador(id);
+      setTrabajadores(prev => prev.filter(t => t.id !== id));
+    }, []),
 
     clearAllData,
     loadAllData,

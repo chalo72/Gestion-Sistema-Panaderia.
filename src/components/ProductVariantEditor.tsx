@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Trash2, ImagePlus, Edit2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 interface ProductVariantEditorProps {
   variants?: ProductVariant[];
@@ -25,7 +26,7 @@ export function ProductVariantEditor({
 
   const handleAddVariant = () => {
     if (!formData.value || !formData.sku || formData.price === undefined) {
-      alert('Completa todos los campos requeridos');
+      toast.error('Completa todos los campos requeridos');
       return;
     }
 

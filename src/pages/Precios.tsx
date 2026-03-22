@@ -171,6 +171,7 @@ export function Precios({
                   <h3 className="text-xl font-black uppercase tracking-[0.3em]">Sin Registros de Mercado</h3>
                 </div>
               ) : (
+                <div className="overflow-x-auto">
                 <Table>
                   <TableHeader className="bg-slate-900 dark:bg-black">
                     <TableRow className="hover:bg-transparent border-none">
@@ -231,7 +232,7 @@ export function Precios({
                             </div>
                           </TableCell>
                           <TableCell className="text-right pr-8">
-                            <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <div className="flex items-center justify-end gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                               <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-blue-50 text-blue-600" onClick={() => handleEdit(precio)}>
                                 <Edit2 className="w-4 h-4" />
                               </Button>
@@ -245,6 +246,7 @@ export function Precios({
                     })}
                   </TableBody>
                 </Table>
+                </div>
               )}
             </CardContent>
           </Card>
