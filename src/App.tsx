@@ -344,6 +344,7 @@ function AppContent() {
               getPreciosByProveedor={getPreciosByProveedor}
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
+              onUpdateProducto={updateProducto}
               onNavigateTo={setCurrentView}
             />
           </SectionErrorBoundary>

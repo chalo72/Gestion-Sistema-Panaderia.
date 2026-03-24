@@ -70,13 +70,25 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       usuarioId: 'admin',
       fecha: new Date().toISOString()
     };
-    const updatedSesion: CajaSesion = {
-      ...cajaActiva,
-      movimientos: [...cajaActiva.movimientos, nuevoMovimiento],
-    };
-    await db.updateSesionCaja(updatedSesion as any);
-    setSesionesCaja(prev => prev.map(s => s.id === updatedSesion.id ? updatedSesion : s));
-    setCajaActiva(updatedSesion);
+    
+    // Usamos actualización funcional para evitar condiciones de carrera
+    setCajaActiva(current => {
+      if (!current) return undefined;
+      const updated = {
+        ...current,
+        movimientos: [...(current.movimientos || []), nuevoMovimiento],
+      };
+      
+      // Persistencia asíncrona pero basada en el estado más reciente
+      db.updateSesionCaja(updated as any).catch(err => {
+        console.error("❌ Error persistiendo movimiento de caja:", err);
+        toast.error("Error al sincronizar movimiento con la base de datos");
+      });
+      
+      return updated;
+    });
+
+    setSesionesCaja(prev => prev.map(s => s.id === cajaActiva.id ? { ...s, movimientos: [...(s.movimientos || []), nuevoMovimiento] } : s));
     toast.success('Movimiento registrado');
   }, [cajaActiva]);
 
@@ -107,14 +119,26 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       );
     }
 
-    // 3. Actualizar caja activa
-    const updatedSesion: CajaSesion = {
-      ...cajaActiva,
-      totalVentas: cajaActiva.totalVentas + venta.total,
-    };
-    await db.updateSesionCaja(updatedSesion as any);
-    setSesionesCaja(prev => prev.map(s => s.id === updatedSesion.id ? updatedSesion : s));
-    setCajaActiva(updatedSesion);
+    // 3. Actualizar caja activa con integridad (Atomic update pattern)
+    setCajaActiva(current => {
+      if (!current) return undefined;
+      const updated = {
+        ...current,
+        totalVentas: (current.totalVentas || 0) + venta.total,
+        ventasIds: [...(current.ventasIds || []), venta.id]
+      };
+      
+      // Persistencia en DB
+      db.updateSesionCaja(updated as any).catch(console.error);
+      
+      return updated;
+    });
+
+    setSesionesCaja(prev => prev.map(s => s.id === cajaActiva.id ? { 
+      ...s, 
+      totalVentas: (s.totalVentas || 0) + venta.total,
+      ventasIds: [...(s.ventasIds || []), venta.id] 
+    } : s));
 
     toast.success(`Venta registrada por $${venta.total}`);
     return venta;

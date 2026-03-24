@@ -109,6 +109,8 @@ interface ProveedoresProps {
   getPreciosByProveedor: (proveedorId: string) => PrecioProveedor[];
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
+  onUpdateProducto?: (id: string, updates: Partial<Producto>) => void;
+  onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida', motivo: string) => Promise<void>;
   onNavigateTo?: (view: string) => void;
 }
 
@@ -143,6 +145,8 @@ export function Proveedores({
   getPreciosByProveedor,
   getProductoById,
   formatCurrency,
+  onUpdateProducto,
+  onAjustarStock,
   onNavigateTo,
 }: ProveedoresProps) {
   const [searchTerm, setSearchTerm] = useState('');
@@ -263,6 +267,26 @@ export function Proveedores({
               tipoEmbalaje: item.tipoEmbalaje,
               cantidadEmbalaje: item.cantidadEmbalaje,
             });
+
+            // Sincronización Automática con Inventario (Materia Prima / Producto Venta)
+            if (onUpdateProducto) {
+              onUpdateProducto(productoId, {
+                costoBase: item.costoUnitario,
+                margenUtilidad: item.margenVenta,
+                precioVenta: item.precioVenta,
+                updatedAt: new Date().toISOString()
+              });
+            }
+
+            // AJUSTE DE STOCK AUTOMÁTICO (NUEVO)
+            if (onAjustarStock && item.stockRecibido > 0) {
+              await onAjustarStock(
+                productoId,
+                item.stockRecibido,
+                'entrada',
+                `Factura: ${data.nombre} (Auto-Scan)`
+              );
+            }
           }
         }
         toast.success(`${items.length} producto(s) vinculados`);

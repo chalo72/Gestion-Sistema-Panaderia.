@@ -6,7 +6,7 @@ import {
     ShoppingCart, TrendingUp, TrendingDown, ArrowUpCircle,
     ArrowDownCircle, Timer, Banknote, Coins, RefreshCw,
     CalendarDays, Wallet, Store, Users, Handshake, AlertTriangle,
-    LogOut, CheckSquare, X, ArrowRightLeft
+    LogOut, CheckSquare, X, ArrowRightLeft, MessageSquare
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/database';
@@ -24,6 +24,8 @@ import { AperturaCajaModal } from '@/components/ventas/AperturaCajaModal';
 import { CierreCajaModal } from '@/components/ventas/CierreCajaModal';
 import { VigilianciaIA } from '@/components/vigilancia/VigilianciaIA';
 import { PrestamosCajaModal } from '@/components/ventas/PrestamosCajaModal';
+import { ReporteZ } from '@/components/ventas/ReporteZ';
+import { enviarReporteZWhatsApp } from '@/lib/whatsapp-reporting';
 import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas } from '@/types';
 
 const BILLETES = [
@@ -782,6 +784,27 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                             Cancelar
                         </Button>
                         <Button
+                            onClick={() => {
+                                // Antes de confirmar, disparamos la impresión si se requiere
+                                window.print();
+                            }}
+                            type="button"
+                            variant="outline"
+                            className="w-12 h-12 p-0 border-2 rounded-xl border-slate-200 hover:border-blue-500 hover:text-blue-600 shrink-0"
+                            title="Imprimir Reporte Z"
+                        >
+                            <Monitor className="w-5 h-5" />
+                        </Button>
+                        <Button
+                            onClick={() => enviarReporteZWhatsApp(cajas, ventas || [])}
+                            type="button"
+                            variant="outline"
+                            className="w-12 h-12 p-0 border-2 rounded-xl border-slate-200 hover:border-emerald-500 hover:text-emerald-600 shrink-0"
+                            title="Notificar por WhatsApp"
+                        >
+                            <MessageSquare className="w-5 h-5" />
+                        </Button>
+                        <Button
                             onClick={handleConfirmar}
                             disabled={loading || cajasConMonto === 0}
                             className={cn(
@@ -793,6 +816,11 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                             {loading ? `Cerrando ${progreso}/${cajas.length}...` : `Cerrar ${cajas.length} Cajas`}
                         </Button>
                     </div>
+                </div>
+                
+                {/* ── REPORTE Z IMPRIMIBLE (OCULTO EN PANTALLA) ── */}
+                <div className="hidden print:block">
+                    <ReporteZ cajas={cajas} ventas={ventas || []} formatCurrency={formatCurrency} isPrinting />
                 </div>
             </DialogContent>
         </Dialog>
@@ -1985,11 +2013,27 @@ export function ControlCaja({
                                                 </td>
                                                 <td className="px-5 py-4 text-right text-xs font-black text-slate-600 dark:text-slate-400 tabular-nums">{formatCurrency(sesion.montoApertura)}</td>
                                                 <td className="px-5 py-4 text-right text-xs font-black text-emerald-600 tabular-nums">{formatCurrency(sesion.totalVentas)}</td>
-                                                <td className="px-5 py-4 text-right text-sm font-black text-blue-600 tabular-nums">{formatCurrency(balance)}</td>
                                                 <td className="px-5 py-4 text-center">
-                                                    <Badge className={cn("text-[10px] font-black px-2.5 py-1 rounded-lg uppercase", activo ? "bg-emerald-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
-                                                        {activo ? 'Activo' : 'Cerrado'}
-                                                    </Badge>
+                                                    <div className="flex items-center justify-center gap-2">
+                                                        <Badge className={cn("text-[10px] font-black px-2.5 py-1 rounded-lg uppercase", activo ? "bg-emerald-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
+                                                            {activo ? 'Activo' : 'Cerrado'}
+                                                        </Badge>
+                                                        {!activo && (
+                                                            <button 
+                                                                onClick={() => {
+                                                                    toast.promise(new Promise(resolve => setTimeout(resolve, 800)), {
+                                                                        loading: 'Preparando Reporte Z Histórico...',
+                                                                        success: 'Reporte Generado — Verificando Diferencias',
+                                                                        error: 'Error al generar reporte'
+                                                                    });
+                                                                }}
+                                                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
+                                                                title="Ver Auditoría"
+                                                            >
+                                                                <Eye className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         );

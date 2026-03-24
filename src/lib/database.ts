@@ -333,9 +333,9 @@ class IndexedDBDatabase implements IDatabase {
   private db: IDBDatabase | null = null;
 
   async init(): Promise<void> {
-    console.log("💽 IndexedDB: Starting init...");
+    console.log(`💽 IndexedDB: Starting init (v${DB_VERSION})...`);
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open('PriceControlDB', 13);
+      const request = indexedDB.open(DB_NAME, DB_VERSION);
       request.onblocked = () => {
         console.warn("⚠️ IndexedDB: Connection blocked! Please close other tabs of this app.");
         alert("⚠️ Por favor, cierra otras pestañas de la aplicación para actualizar la base de datos.");

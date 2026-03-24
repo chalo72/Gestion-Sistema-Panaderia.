@@ -61,7 +61,12 @@ const server = http.createServer((req, res) => {
         res.end('Error loading index.html');
         return;
       }
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(200, { 
+        'Content-Type': 'text/html',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
       res.end(data);
     });
     return;
@@ -127,7 +132,16 @@ function handleStaticFiles(req, res, pathname) {
     };
 
     const contentType = mimeTypes[ext] || 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': contentType });
+    const headers = { 'Content-Type': contentType };
+
+    // ANTI-CACHE ABSOLUTO PARA PWA:
+    if (filePath.endsWith('index.html') || filePath.endsWith('sw.js') || filePath.endsWith('version.json')) {
+      headers['Cache-Control'] = 'no-cache, no-store, must-revalidate';
+      headers['Pragma'] = 'no-cache';
+      headers['Expires'] = '0';
+    }
+
+    res.writeHead(200, headers);
     fs.createReadStream(filePath).pipe(res);
     return;
   }
@@ -141,7 +155,12 @@ function handleStaticFiles(req, res, pathname) {
         res.end('Error');
         return;
       }
-      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.writeHead(200, { 
+        'Content-Type': 'text/html',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      });
       res.end(data);
     });
     return;
