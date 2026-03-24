@@ -1,31 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import {
-  Truck,
-  Plus,
-  Edit2,
-  Trash2,
-  Phone,
-  Mail,
-  MapPin,
-  Star,
-  X,
-  UserCheck,
-  CheckCircle2,
-  Tag,
-  Store,
-  Wrench,
-  ShieldCheck,
-  Building2,
-  Search,
-  FileText,
-  Save,
-  ChevronRight,
-  LayoutGrid
+  Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
+  Star, X, UserCheck, CheckCircle2, Tag, Store,
+  Wrench, Building2, Search, FileText, Save, LayoutGrid,
+  ShieldCheck, Info, Package
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
@@ -114,7 +99,6 @@ export function ProveedorForm({
   initialCatalogo,
   formatCurrency,
 }: ProveedorFormProps) {
-  const [activeStep, setActiveStep] = useState(1);
   const [guardando, setGuardando] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '', contacto: '', telefono: '', email: '',
@@ -152,7 +136,6 @@ export function ProveedorForm({
         });
         setCatalogoItems([]);
       }
-      setActiveStep(1);
     }
   }, [isOpen, editingProveedor, initialCatalogo]);
 
@@ -204,278 +187,174 @@ export function ProveedorForm({
     toast.success(`"${newItem.nombre}" añadido al catálogo`);
   };
 
-  const nextStep = () => {
-    if (activeStep === 1 && !formData.nombre.trim()) {
-      toast.error('El nombre de la empresa es obligatorio');
-      return;
-    }
-    setActiveStep(prev => Math.min(prev + 1, 3));
-  };
-
-  const prevStep = () => setActiveStep(prev => Math.max(prev - 1, 1));
-
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="!max-w-[1000px] w-[95vw] md:w-[90vw] p-0 overflow-hidden border-none shadow-2xl rounded-3xl bg-white dark:bg-slate-950">
-        <form onSubmit={handleSave}>
-          <div className="bg-slate-900 border-b border-slate-800 p-8 text-white relative overflow-hidden">
-            <div className="flex items-center justify-between relative z-10">
-              <div className="flex items-center gap-4">
-                <div className="p-4 bg-slate-800/80 rounded-2xl border border-slate-700">
-                  {editingProveedor ? <Edit2 className="w-6 h-6 text-blue-400" /> : <Truck className="w-6 h-6 text-emerald-400" />}
-                </div>
-                <div>
-                  <DialogTitle className="text-2xl font-black uppercase tracking-tight">
-                    {editingProveedor ? 'Editar Proveedor' : 'Nuevo Proveedor'}
-                  </DialogTitle>
-                  <DialogDescription className="text-slate-400 font-bold text-xs mt-1">
-                    Gestión Logística · Dulce Placer
-                  </DialogDescription>
-                </div>
-              </div>
-              
-              <Button type="button" variant="ghost" size="icon" className="text-white/40 hover:text-white hover:bg-white/10 rounded-full w-12 h-12" onClick={onClose}>
-                <X className="w-8 h-8" />
-              </Button>
-            </div>
-
-            <div className="mt-8 flex items-center gap-4 relative z-10">
-              {[1, 2, 3].map((step) => (
-                <React.Fragment key={step}>
-                  <div 
-                    className={cn(
-                      "flex items-center gap-3 transition-all duration-500",
-                      activeStep === step ? "opacity-100 scale-105" : "opacity-40 scale-100"
-                    )}
-                  >
-                    <div className={cn(
-                      "w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm border-2 transition-all duration-500",
-                      activeStep === step 
-                        ? "bg-white text-blue-900 border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]" 
-                        : "bg-transparent text-white border-white/20"
-                    )}>
-                      {activeStep > step ? <CheckCircle2 className="w-6 h-6" /> : step}
-                    </div>
-                    <span className="hidden md:block text-[10px] font-black uppercase tracking-widest">
-                      {step === 1 ? 'Identidad' : step === 2 ? 'Conexión' : 'Catálogo'}
-                    </span>
-                  </div>
-                  {step < 3 && <div className="h-[2px] w-12 bg-white/10 rounded-full" />}
-                </React.Fragment>
-              ))}
-            </div>
+      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto rounded-[2rem] p-0 border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950">
+        
+        {/* HEADER BLOCK (Basado en ProductFormModal) */}
+        <div className="p-6 text-white relative bg-gradient-to-r from-emerald-500 to-teal-600">
+          <div className="flex items-center gap-3">
+             <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm border border-white/10 shadow-sm">
+                {editingProveedor ? <Edit2 className="w-6 h-6" /> : <Building2 className="w-6 h-6" />}
+             </div>
+             <div>
+                <DialogTitle className="text-2xl font-black uppercase tracking-tight">
+                  {editingProveedor ? 'Actualizar Proveedor' : 'Nuevo Proveedor'}
+                </DialogTitle>
+                <DialogDescription className="text-white/80 font-bold uppercase tracking-widest mt-0.5 text-xs">
+                  Gestión Logística · Aliados Estratégicos
+                </DialogDescription>
+             </div>
           </div>
+          <Button variant="ghost" size="icon" type="button" className="absolute right-4 top-4 text-white/70 hover:text-white hover:bg-white/20 rounded-full" onClick={onClose}>
+             <X className="w-6 h-6" />
+          </Button>
+        </div>
 
-          <div className="p-8 max-h-[60vh] overflow-y-auto scrollbar-hide bg-slate-50/50 dark:bg-slate-900/20">
-            {activeStep === 1 && (
-              <div className="space-y-8 animate-ag-entry-right">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Razón Social o Nombre *</Label>
-                    <Input
-                      autoFocus
-                      value={formData.nombre}
-                      onChange={e => setFormData({ ...formData, nombre: e.target.value })}
-                      placeholder="Ej: Trigos del Valle S.A."
-                      className="h-14 xl font-bold rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-blue-500 focus:ring-0 px-5 shadow-sm"
-                    />
-                  </div>
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Rubro Principal</Label>
-                    <div className="grid grid-cols-2 gap-2">
-                       {RUBROS.slice(0, 4).map(r => (
-                         <button
-                           key={r}
-                           type="button"
-                           onClick={() => setFormData({ ...formData, rubro: r })}
-                           className={cn(
-                             "h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all border",
-                             formData.rubro === r 
-                               ? "bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-500/20" 
-                               : "bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800 hover:border-blue-200"
-                           )}
-                         >
-                           {r}
-                         </button>
-                       ))}
-                       <select
-                         value={RUBROS.includes(formData.rubro) && RUBROS.indexOf(formData.rubro) < 4 ? "" : formData.rubro}
-                         onChange={e => setFormData({ ...formData, rubro: e.target.value })}
-                         className="h-10 px-4 rounded-xl text-[10px] font-black uppercase tracking-tight bg-white dark:bg-slate-900 text-slate-500 border border-slate-200 dark:border-slate-800 outline-none"
-                       >
-                         <option value="">Más Rubros...</option>
-                         {RUBROS.slice(4).map(r => <option key={r} value={r}>{r}</option>)}
-                       </select>
-                    </div>
-                  </div>
-                </div>
+        <form onSubmit={handleSave} className="p-6 space-y-6">
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Nivel de Confianza</Label>
-                    <div className="flex h-14 items-center justify-around bg-white dark:bg-slate-900 rounded-2xl px-4 border border-slate-200 dark:border-slate-800 shadow-sm">
-                      {[1,2,3,4,5].map(s => (
-                        <button key={s} type="button" onClick={() => setFormData({ ...formData, calificacion: s })} className="hover:scale-150 transition-transform duration-300">
-                          <Star className={cn('w-6 h-6', s <= formData.calificacion ? 'fill-amber-400 text-amber-400' : 'text-slate-200 dark:text-slate-800')} />
-                        </button>
-                      ))}
+            {/* ── INFORMACIÓN BÁSICA ── */}
+            <div className="p-5 rounded-3xl bg-slate-50/50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 space-y-5 shadow-sm">
+                <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-slate-800/60 pb-3">
+                    <div className="flex items-center gap-2">
+                        <Tag className="w-4 h-4 text-emerald-500" />
+                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-500">Perfil Comercial</span>
                     </div>
-                  </div>
-                  <div className="md:col-span-2 space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Identidad Visual (URL Logo)</Label>
-                    <div className="flex gap-4">
-                      <div className="relative flex-1">
-                        <Input
-                          value={formData.imagen}
-                          onChange={e => setFormData({ ...formData, imagen: e.target.value })}
-                          placeholder="https://servidor.com/logo.png"
-                          className="h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-5 font-mono text-xs"
-                        />
-                      </div>
-                      <div className={cn(
-                        "w-14 h-14 rounded-xl overflow-hidden border flex items-center justify-center bg-white dark:bg-slate-900 transition-all",
-                        formData.imagen ? "border-blue-200 shadow-md" : "border-dashed border-slate-300"
-                      )}>
-                        {formData.imagen ? (
-                          <img src={formData.imagen} className="w-full h-full object-cover" alt="preview" />
-                        ) : (
-                          <Building2 className="w-6 h-6 text-slate-200" />
+                     <button
+                        type="button"
+                        className={cn(
+                          "cursor-pointer flex items-center gap-2 transition-all p-1.5 pr-4 rounded-full border",
+                          formData.activo 
+                            ? "bg-emerald-50/50 border-emerald-200 dark:bg-emerald-950/30 dark:border-emerald-900/50 text-emerald-700 dark:text-emerald-400 shadow-sm shadow-emerald-500/10" 
+                            : "bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-slate-500 shadow-sm"
                         )}
-                      </div>
-                    </div>
-                  </div>
+                        onClick={() => setFormData({ ...formData, activo: !formData.activo })}
+                      >
+                         <div className={cn(
+                           "flex items-center justify-center w-7 h-7 rounded-full text-white shadow-sm transition-colors",
+                           formData.activo ? "bg-emerald-500" : "bg-slate-300 dark:bg-slate-700"
+                         )}>
+                            {formData.activo ? <CheckCircle2 className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                         </div>
+                         <span className="text-[10px] font-black uppercase tracking-widest">
+                           {formData.activo ? 'Empresa Activa' : 'Inactiva'}
+                         </span>
+                      </button>
                 </div>
 
-                <div 
-                  className={cn(
-                    "p-5 rounded-2xl border transition-all duration-300 flex items-center justify-between group cursor-pointer",
-                    formData.activo 
-                      ? "bg-emerald-50/50 border-emerald-200 dark:bg-emerald-950/10 dark:border-emerald-900/30" 
-                      : "bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800"
-                  )}
-                  onClick={() => setFormData({ ...formData, activo: !formData.activo })}
-                >
-                  <div className="flex items-center gap-5">
-                    <div className={cn(
-                      "w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300",
-                      formData.activo ? "bg-emerald-500 text-white shadow-md shadow-emerald-500/20" : "bg-slate-200 text-slate-500"
-                    )}>
-                      {formData.activo ? <ShieldCheck className="w-7 h-7" /> : <X className="w-7 h-7" />}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-1.5 md:col-span-2">
+                         <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Razón Social o Nombre <span className="text-rose-500">*</span></Label>
+                         <div className="relative group">
+                            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                            <Input autoFocus required value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} className="h-12 pl-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-base font-bold rounded-xl shadow-sm focus:border-emerald-400" placeholder="Ej: Trigos del Valle S.A." />
+                         </div>
                     </div>
-                    <div>
-                      <p className={cn("text-sm font-bold uppercase tracking-tight", formData.activo ? "text-emerald-700 dark:text-emerald-400" : "text-slate-600")}>
-                        {formData.activo ? 'Proveedor Activo' : 'Proveedor Inactivo'}
-                      </p>
-                      <p className="text-[10px] font-medium text-slate-500 mt-0.5">Disponibilidad en el sistema</p>
+                    
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Rubro Principal</Label>
+                        <Select value={formData.rubro} onValueChange={v => setFormData({ ...formData, rubro: v })}>
+                            <SelectTrigger className="h-12 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-sm font-medium shadow-sm transition-all focus:ring-emerald-400 focus:border-emerald-400">
+                               <SelectValue placeholder="Seleccionar rubro..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-2xl max-h-56 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 shadow-xl">
+                               {RUBROS.map(r => (
+                                 <SelectItem key={r} value={r} className="text-sm font-medium focus:bg-emerald-50 dark:focus:bg-emerald-900/30 focus:text-emerald-700 dark:focus:text-emerald-400 cursor-pointer rounded-lg mx-1">{r}</SelectItem>
+                               ))}
+                            </SelectContent>
+                        </Select>
                     </div>
-                  </div>
-                  <div className={cn(
-                    "w-11 h-6 rounded-full p-1 transition-all duration-300",
-                    formData.activo ? "bg-emerald-500" : "bg-slate-300"
-                  )}>
-                    <div className={cn("w-4 h-4 bg-white rounded-full transition-all duration-300 shadow-sm", formData.activo ? "translate-x-5" : "translate-x-0")} />
-                  </div>
+
+                    <div className="space-y-1.5">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Calificación Inicial</Label>
+                        <div className="flex h-12 items-center justify-around bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm px-4">
+                           {[1,2,3,4,5].map(s => (
+                             <button key={s} type="button" onClick={() => setFormData({ ...formData, calificacion: s })} className="hover:scale-150 transition-transform duration-300 p-1">
+                               <Star className={cn('w-5 h-5', s <= formData.calificacion ? 'fill-amber-400 text-amber-400' : 'text-slate-200 dark:text-slate-800')} />
+                             </button>
+                           ))}
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-1.5 md:col-span-2">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Identidad Visual (Logo URL)</Label>
+                        <div className="flex gap-4">
+                          <Input value={formData.imagen} onChange={e => setFormData({ ...formData, imagen: e.target.value })} placeholder="https://ejemplo.com/logo.png" className="h-12 flex-1 rounded-xl shadow-sm border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 font-mono text-xs focus:border-emerald-400" />
+                          <div className={cn("w-12 h-12 rounded-xl overflow-hidden shadow-sm shrink-0 border bg-white dark:bg-slate-900 flex items-center justify-center", formData.imagen ? "border-emerald-200" : "border-slate-200 border-dashed dark:border-slate-700 w-12")}>
+                             {formData.imagen ? <img src={formData.imagen} alt="logo" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} /> : <Building2 className="w-5 h-5 text-slate-300" />}
+                          </div>
+                        </div>
+                    </div>
                 </div>
-              </div>
-            )}
+            </div>
 
-            {activeStep === 2 && (
-              <div className="space-y-8 animate-ag-entry-right">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Contacto Comercial</Label>
-                    <div className="relative group">
-                      <UserCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-500 transition-transform group-focus-within:scale-110" />
-                      <Input
-                        value={formData.contacto}
-                        onChange={e => setFormData({ ...formData, contacto: e.target.value })}
-                        placeholder="Nombre del asesor"
-                        className="h-14 pl-11 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-blue-500 px-5 shadow-sm font-medium"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Teléfono (WhatsApp)</Label>
-                    <div className="relative group">
-                      <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-emerald-500 transition-transform group-focus-within:scale-110" />
-                      <Input
-                        value={formData.telefono}
-                        onChange={e => setFormData({ ...formData, telefono: e.target.value })}
-                        placeholder="Celular / Teléfono"
-                        className="h-14 pl-11 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-emerald-500 px-5 shadow-sm font-bold"
-                      />
-                    </div>
-                  </div>
+            {/* ── CONTACTO Y UBICACIÓN ── */}
+            <div className="p-5 rounded-3xl bg-blue-50/40 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 space-y-5 shadow-sm">
+                <div className="flex items-center gap-2 border-b border-blue-100/50 dark:border-blue-900/30 pb-3">
+                    <UserCheck className="w-4 h-4 text-blue-500" />
+                    <span className="text-[11px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400">Contacto y Ubicación</span>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Correo Electrónico</Label>
-                    <div className="relative group">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-rose-500 transition-transform group-focus-within:scale-110" />
-                      <Input
-                        type="email"
-                        value={formData.email}
-                        onChange={e => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="correo@proveedor.com"
-                        className="h-14 pl-11 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-rose-500 px-5 shadow-sm font-medium"
-                      />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-1.5">
+                         <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Asesor / Representante</Label>
+                         <div className="relative group">
+                            <UserCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-blue-500 transition-colors" />
+                            <Input value={formData.contacto} onChange={e => setFormData({ ...formData, contacto: e.target.value })} className="h-12 pl-10 bg-white dark:bg-slate-900 border-blue-100/60 dark:border-slate-800 rounded-xl text-sm shadow-sm focus:border-blue-400" placeholder="Opcional" />
+                         </div>
                     </div>
-                  </div>
-                  <div className="space-y-3">
-                    <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Dirección</Label>
-                    <div className="relative group">
-                      <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 transition-transform group-focus-within:scale-110" />
-                      <Input
-                        value={formData.direccion}
-                        onChange={e => setFormData({ ...formData, direccion: e.target.value })}
-                        placeholder="Dirección comercial"
-                        className="h-14 pl-11 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-indigo-500 px-5 shadow-sm font-medium"
-                      />
+                    <div className="space-y-1.5">
+                         <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">WhatsApp / Teléfono</Label>
+                         <div className="relative group">
+                            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                            <Input value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} className="h-12 pl-10 bg-white dark:bg-slate-900 border-blue-100/60 dark:border-slate-800 rounded-xl text-sm font-bold shadow-sm focus:border-emerald-400" placeholder="Ej: +57 320 000 0000" />
+                         </div>
                     </div>
-                  </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                         <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Correo Electrónico</Label>
+                         <div className="relative group">
+                            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
+                            <Input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="h-12 pl-10 bg-white dark:bg-slate-900 border-blue-100/60 dark:border-slate-800 rounded-xl text-sm shadow-sm focus:border-rose-400" placeholder="aliado@ejemplo.com" />
+                         </div>
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                         <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Dirección Física o Sede</Label>
+                         <div className="relative group">
+                            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                            <Input value={formData.direccion} onChange={e => setFormData({ ...formData, direccion: e.target.value })} className="h-12 pl-10 bg-white dark:bg-slate-900 border-blue-100/60 dark:border-slate-800 rounded-xl text-sm shadow-sm focus:border-indigo-400" placeholder="Dirección comercial completa" />
+                         </div>
+                    </div>
+                    <div className="space-y-1.5 md:col-span-2">
+                         <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Condiciones y Notas Internas</Label>
+                         <div className="relative group">
+                             <FileText className="absolute left-3 top-3 w-4 h-4 text-slate-400 group-focus-within:text-amber-500 transition-colors" />
+                             <Textarea value={formData.notas} onChange={e => setFormData({ ...formData, notas: e.target.value })} rows={2} className="pl-10 rounded-xl bg-white dark:bg-slate-900 border-blue-100/60 dark:border-slate-800 resize-none text-sm shadow-sm focus:border-amber-400 min-h-[4rem] py-3" placeholder="Horarios de entrega, créditos otorgados, pedidos mínimos..." />
+                         </div>
+                    </div>
                 </div>
+            </div>
 
-                <div className="space-y-3">
-                  <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Notas y Condiciones</Label>
-                  <div className="relative group">
-                    <FileText className="absolute left-4 top-4 w-5 h-5 text-slate-300 transition-colors group-focus-within:text-blue-500" />
-                    <textarea
-                      value={formData.notas}
-                      onChange={e => setFormData({ ...formData, notas: e.target.value })}
-                      rows={3}
-                      placeholder="Días de crédito, mínimos de pedido, horarios..."
-                      className="w-full pl-11 pr-5 py-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 focus:border-blue-500 outline-none resize-none text-sm font-medium shadow-sm transition-all"
-                    />
-                  </div>
+            {/* ── CATÁLOGO / PRODUCTOS RELACIONADOS ── */}
+            <div className="p-5 rounded-3xl bg-indigo-50/40 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 space-y-5 shadow-sm">
+                <div className="flex items-center gap-2 border-b border-indigo-100/50 dark:border-indigo-900/30 pb-3">
+                    <Package className="w-4 h-4 text-indigo-500" />
+                    <span className="text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Catálogo de Suministros Asociados</span>
                 </div>
-              </div>
-            )}
-
-            {activeStep === 3 && (
-              <div className="space-y-8 animate-ag-entry-right">
-                <Card className="rounded-3xl border border-blue-50 dark:border-blue-900/30 bg-blue-50/30 dark:bg-blue-900/10 shadow-sm overflow-visible">
-                  <CardContent className="p-6 space-y-5 overflow-visible">
-                    <div className="flex items-center justify-between border-b border-blue-100 dark:border-blue-900/30 pb-3">
-                       <div className="flex items-center gap-2">
-                         <div className="w-2 h-2 rounded-full bg-blue-600" />
-                         <h4 className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400">Vincular Producto</h4>
-                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-12 gap-5 items-end">
-                      <div className="col-span-12 lg:col-span-5 space-y-2">
-                        <Label className="text-[9px] font-black text-slate-500 uppercase ml-1">Referencia o Nombre</Label>
+                
+                <Card className="rounded-2xl border border-indigo-100/60 dark:border-indigo-900/40 bg-white/50 dark:bg-slate-900/50 shadow-none overflow-visible">
+                  <CardContent className="p-4 space-y-4 overflow-visible">
+                    <div className="grid grid-cols-12 gap-3 items-end">
+                      <div className="col-span-12 md:col-span-5 space-y-1.5">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Producto o Insumo *</Label>
                         <div className="relative">
-                          <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400" />
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
                           <Input
                             value={buscarProd}
                             onChange={e => { setBuscarProd(e.target.value); setProdActual(prev => ({ ...prev, nombre: e.target.value, productoId: '' })); setShowDropdown(true); }}
-                            placeholder="Buscar en inventario..."
-                            className="h-12 pl-10 rounded-xl bg-white dark:bg-slate-900 border border-blue-100 text-xs focus:border-blue-500 transition-all font-medium"
+                            placeholder="Buscar existente o crear nuevo..."
+                            className="h-11 pl-9 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/40 text-sm focus:border-indigo-500 font-bold"
                           />
                           {showDropdown && filtradosBusqueda.length > 0 && (
-                            <div className="absolute z-[100] w-full mt-2 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+                            <div className="absolute z-[100] w-full mt-2 bg-white dark:bg-slate-950 rounded-xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden py-1">
                               {filtradosBusqueda.map(p => (
                                 <button
                                   key={p.id}
@@ -492,13 +371,13 @@ export function ProveedorForm({
                                     setBuscarProd(p.nombre);
                                     setShowDropdown(false);
                                   }}
-                                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/10 transition-colors text-left"
+                                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left"
                                 >
                                   <div>
-                                    <p className="text-[11px] font-black text-slate-800 dark:text-white uppercase leading-none">{p.nombre}</p>
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mt-1">{p.categoria}</p>
+                                    <p className="text-xs font-bold text-slate-800 dark:text-white">{p.nombre}</p>
+                                    <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wide">{p.categoria}</p>
                                   </div>
-                                  <Badge className="text-[8px] bg-blue-100 text-blue-700 border-none font-black">EXISTENTE</Badge>
+                                  <Badge className="text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300 border-none font-black uppercase">Click = Usar</Badge>
                                 </button>
                               ))}
                             </div>
@@ -506,13 +385,13 @@ export function ProveedorForm({
                         </div>
                       </div>
 
-                      <div className="col-span-6 lg:col-span-3 space-y-2">
-                        <Label className="text-[9px] font-black text-slate-500 uppercase ml-1">Presentación</Label>
-                        <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-blue-100 dark:border-blue-900/50 p-1">
+                      <div className="col-span-6 md:col-span-3 space-y-1.5">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Presentación</Label>
+                        <div className="flex bg-white dark:bg-slate-900 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1 h-11 items-center">
                           <select
                             value={prodActual.tipoEmbalaje}
                             onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje, cantidadEmbalaje: e.target.value === 'unidad' ? 1 : prev.cantidadEmbalaje }))}
-                            className="flex-1 h-10 px-2 bg-transparent text-[10px] font-bold uppercase outline-none"
+                            className="flex-1 px-1 bg-transparent text-[11px] font-bold uppercase outline-none text-slate-700 dark:text-slate-300"
                           >
                             {EMBALAJES.map(em => <option key={em.value} value={em.value}>{em.emoji} {em.label}</option>)}
                           </select>
@@ -521,165 +400,95 @@ export function ProveedorForm({
                               type="number"
                               value={prodActual.cantidadEmbalaje}
                               onChange={e => setProdActual(prev => ({ ...prev, cantidadEmbalaje: parseInt(e.target.value) || 1 }))}
-                              className="w-12 h-10 rounded-lg text-center font-bold bg-blue-50 dark:bg-blue-900/30 border-none text-blue-600 focus:ring-0"
+                              className="w-12 h-8 rounded-lg text-center font-bold bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 focus:ring-0 text-sm px-1 py-0 mr-1"
                             />
                           )}
                         </div>
                       </div>
 
-                      <div className="col-span-6 lg:col-span-2 space-y-2">
-                        <Label className="text-[9px] font-black text-slate-500 uppercase ml-1">Costo Pack</Label>
+                      <div className="col-span-6 md:col-span-2 space-y-1.5">
+                        <Label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Costo *</Label>
                         <div className="relative">
-                          <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                          <div className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 flex items-center justify-center bg-indigo-100 text-indigo-600 rounded-full text-[9px] font-black pb-[1px]">$</div>
                           <Input
                             type="number"
                             value={prodActual.precioCosto || ''}
                             onChange={e => setProdActual(prev => ({ ...prev, precioCosto: parseFloat(e.target.value) || 0 }))}
-                            placeholder="0"
-                            className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-900 border border-blue-100 font-bold text-blue-600 focus:border-blue-500 transition-all"
+                            placeholder="0.00"
+                            className="h-11 pl-8 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/40 font-bold text-indigo-600 focus:border-indigo-500 text-sm"
                           />
                         </div>
                       </div>
 
-                      <div className="col-span-12 lg:col-span-2">
+                      <div className="col-span-12 md:col-span-2">
                         <Button 
                           type="button" 
                           onClick={addProductoCatalogo} 
-                          className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md active:scale-95 transition-all flex items-center justify-center p-0"
+                          className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-md shadow-indigo-600/20 active:scale-95 transition-all text-xs font-black uppercase tracking-widest"
                         >
-                          <Plus className="w-5 h-5" />
+                          <Plus className="w-4 h-4 mr-1" /> Add
                         </Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between px-2">
-                    <h5 className="text-[11px] font-black uppercase tracking-widest text-slate-500">Catálogo de Productos ({catalogoItems.length})</h5>
-                  </div>
-
-                  {catalogoItems.length === 0 ? (
-                    <div className="py-20 flex flex-col items-center gap-4 border-4 border-dashed border-slate-100 dark:border-slate-800 rounded-[3rem] opacity-30">
-                      <LayoutGrid className="w-14 h-14 text-slate-300" />
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">El catálogo está vacío actualmente</p>
-                    </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-800">
-                            <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Item / Categoría</th>
-                            <th className="px-2 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">Empaque</th>
-                            <th className="px-2 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-right">Costo</th>
-                            <th className="px-2 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">% Mg.</th>
-                            <th className="px-2 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-right">P. Venta</th>
-                            <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-right">Acción</th>
+                {catalogoItems.length > 0 && (
+                  <div className="overflow-hidden rounded-2xl border border-indigo-100 dark:border-indigo-900/30 bg-white dark:bg-slate-900 shadow-sm mt-4">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-slate-50 dark:bg-slate-800/30 border-b border-indigo-100/50 dark:border-indigo-900/30">
+                          <th className="px-5 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500">Insumo</th>
+                          <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">Empaque</th>
+                          <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-right">Costo / U.</th>
+                          <th className="px-4 py-3 text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">Remover</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-indigo-50 dark:divide-indigo-900/20">
+                        {catalogoItems.map((item) => (
+                          <tr key={item.uid} className="hover:bg-indigo-50/30 dark:hover:bg-indigo-900/10 transition-colors">
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-3">
+                                <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", item.destino === 'insumo' ? "bg-amber-50 text-amber-500 dark:bg-amber-900/20" : "bg-emerald-50 text-emerald-500 dark:bg-emerald-900/20")}>
+                                  {item.destino === 'insumo' ? <Wrench className="w-4 h-4" /> : <Store className="w-4 h-4" />}
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-slate-800 dark:text-white">{item.nombre}</p>
+                                    <p className="text-[10px] text-slate-400 capitalize">{item.categoria}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md text-slate-600 dark:text-slate-300">
+                                {EMBALAJES.find(e => e.value === item.tipoEmbalaje)?.emoji} {item.cantidadEmbalaje} {item.tipoEmbalaje !== 'unidad' ? 'uds' : ''}
+                              </span>
+                            </td>
+                              <td className="px-4 py-3 text-right">
+                                <p className="text-sm font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(item.precioCosto)}</p>
+                                {item.cantidadEmbalaje > 1 && <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">P.U: {formatCurrency(item.costoUnitario)}</p>}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <button type="button" onClick={() => setCatalogoItems(prev => prev.filter(i => i.uid !== item.uid))} className="w-8 h-8 mx-auto rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex items-center justify-center transition-colors">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
                           </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {catalogoItems.map((item) => (
-                            <tr key={item.uid} className="group hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors animate-ag-entry-bottom">
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-4">
-                                  <div className={cn(
-                                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
-                                    item.destino === 'insumo' ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-500" : "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-500"
-                                  )}>
-                                    {item.destino === 'insumo' ? <Wrench className="w-5 h-5" /> : <Store className="w-5 h-5" />}
-                                  </div>
-                                  <div className="min-w-0">
-                                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate max-w-[150px]">{item.nombre}</p>
-                                      <p className="text-[9px] text-slate-500 uppercase">{item.categoria}</p>
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-2 py-3 text-center">
-                                  <span className="text-[10px] font-bold text-slate-600 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md">
-                                  {EMBALAJES.find(e => e.value === item.tipoEmbalaje)?.emoji} {item.cantidadEmbalaje} uds
-                                </span>
-                              </td>
-                                <td className="px-2 py-3 text-right">
-                                  <p className="text-xs font-bold text-slate-900 dark:text-white tabular-nums">{formatCurrency(item.precioCosto)}</p>
-                                  <p className="text-[8px] text-slate-400">{formatCurrency(item.costoUnitario)}/u</p>
-                                </td>
-                                <td className="px-2 py-3 text-center">
-                                  <Badge className={cn(
-                                    "text-[9px] border-none",
-                                  item.margenVenta >= 30 ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
-                                )}>
-                                  {item.margenVenta}%
-                                </Badge>
-                                </td>
-                                <td className="px-2 py-3 text-right">
-                                  <p className="text-xs font-bold text-emerald-600 tabular-nums">{formatCurrency(item.precioVenta)}</p>
-                                </td>
-                                <td className="px-4 py-3 text-right">
-                                  <button
-                                    type="button"
-                                    onClick={() => setCatalogoItems(prev => prev.filter(i => i.uid !== item.uid))}
-                                    className="w-8 h-8 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all flex items-center justify-center ml-auto"
-                                  >
-                                  <Trash2 className="w-5 h-5" />
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="p-6 border-t border-slate-100 dark:border-slate-900 bg-white dark:bg-slate-950">
-            <div className="flex justify-between items-center w-full gap-4">
-              <div className="hidden sm:flex lg:flex gap-1.5">
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3].map(s => (
-                    <div key={s} className={cn(
-                      "h-1.5 transition-all duration-500 rounded-full",
-                      activeStep === s ? "w-8 bg-blue-600" : activeStep > s ? "w-4 bg-emerald-500" : "w-4 bg-slate-100 dark:bg-slate-800"
-                    )} />
-                  ))}
-                </div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Paso {activeStep} de 3</p>
-              </div>
-
-              <div className="flex gap-3 w-full sm:w-auto">
-                <Button type="button" variant="ghost" className="px-6 rounded-xl font-bold uppercase text-xs text-slate-500 hover:text-slate-800" onClick={onClose}>
-                  Cancelar
-                </Button>
-                
-                {activeStep > 1 && (
-                  <Button type="button" onClick={prevStep} variant="outline" className="px-6 rounded-xl border-slate-200 dark:border-slate-800 font-bold uppercase text-xs hover:bg-slate-50">
-                    Atrás
-                  </Button>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
-
-                {activeStep < 3 ? (
-                  <Button 
-                    type="button" 
-                    onClick={nextStep}
-                    className="px-8 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
-                  >
-                    Siguiente <ChevronRight className="w-4 h-4 -mr-1" />
-                  </Button>
-                ) : (
-                  <Button 
-                    type="submit" 
-                    disabled={guardando} 
-                    className="px-8 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold uppercase text-xs transition-all flex items-center justify-center gap-2"
-                  >
-                    {guardando ? 'Guardando...' : (editingProveedor ? 'Actualizar Proveedor' : 'Guardar Proveedor')}
-                    <Save className="w-4 h-4 ml-1" />
-                  </Button>
-                )}
-              </div>
             </div>
-          </DialogFooter>
+
+            {/* ── BOTONES ── */}
+            <div className="flex gap-3 pt-6 border-t border-slate-100 dark:border-slate-800">
+                <Button type="button" variant="outline" className="h-14 flex-1 rounded-2xl text-sm font-black uppercase tracking-widest border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800" onClick={onClose}>
+                    Cancelar
+                </Button>
+                <Button type="submit" disabled={guardando} className="h-14 flex-[2] bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest shadow-xl shadow-emerald-500/20 border-none transition-all flex items-center justify-center gap-2">
+                    {guardando ? 'Guardando...' : (editingProveedor ? '✓ Guardar Cambios' : '+ Agregar Proveedor')}
+                </Button>
+            </div>
         </form>
       </DialogContent>
     </Dialog>
