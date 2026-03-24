@@ -15,61 +15,57 @@ import {
   Building2,
   X,
   UserCheck,
-  Zap,
-  ShieldCheck,
-  LayoutGrid,
-  List,
   SortAsc,
-  Award,
-  Filter,
-  CheckCircle2,
-  Circle,
   Download,
   Tag,
   FileText,
-  TrendingUp,
+  ChevronDown,
   PhoneCall,
   AlertTriangle,
+  Store,
+  Wrench,
   BarChart3,
+  Zap,
+  ShieldCheck,
+  TrendingUp,
+  CheckCircle2,
+  Filter,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, PrecioProveedor, ProductoTipo } from '@/types';
+import { ProveedorForm, type ProductoCatalogo } from '@/components/proveedores/ProveedorForm';
 
-/* ── Tipos para el catálogo de productos en el formulario ── */
-type TipoEmbalaje = 'unidad' | 'paca' | 'sipak' | 'saco' | 'caja' | 'bolsa' | 'bandeja' | 'otro';
-type DestinoUso   = 'venta' | 'insumo';
+/* ── Tipos para la vista ── */
+type TipoEmbalaje =
+  | 'unidad' | 'paca'   | 'sipak'  | 'saco'   | 'caja'   | 'bolsa'
+  | 'bandeja'| 'bulto'  | 'bloque' | 'tarro'  | 'costal' | 'garrafa'
+  | 'caneca' | 'arroba' | 'docena' | 'rollo'  | 'atado'  | 'otro';
 
-interface ProductoCatalogo {
-  uid: string;
-  productoId: string;
-  nombre: string;
-  categoria: string;
-  precioCosto: number;
-  margenVenta: number;
-  cantidadEmbalaje: number;
-  tipoEmbalaje: TipoEmbalaje;
-  destino: DestinoUso;
-  notas: string;
-  costoUnitario: number;
-  precioVenta: number;
-}
-
-const EMBALAJES: { value: TipoEmbalaje; label: string; emoji: string }[] = [
-  { value: 'unidad',  label: 'Unidad',  emoji: '📦' },
-  { value: 'paca',    label: 'Paca',    emoji: '🗃️' },
-  { value: 'sipak',   label: 'Sipak',   emoji: '🛍️' },
-  { value: 'saco',    label: 'Saco',    emoji: '🌾' },
-  { value: 'caja',    label: 'Caja',    emoji: '📫' },
-  { value: 'bolsa',   label: 'Bolsa',   emoji: '🛒' },
-  { value: 'bandeja', label: 'Bandeja', emoji: '🍱' },
-  { value: 'otro',    label: 'Otro',    emoji: '🔖' },
+const EMBALAJES: { value: TipoEmbalaje; label: string; emoji: string; desc: string }[] = [
+  { value: 'unidad',  label: 'Unidad',   emoji: '🔹', desc: 'Producto individual'        },
+  { value: 'paca',    label: 'Paca',     emoji: '📦', desc: 'Paquete de unidades'        },
+  { value: 'sipak',   label: 'Sipak',    emoji: '🛍️', desc: 'Six-pack / multipack'       },
+  { value: 'bloque',  label: 'Bloque',   emoji: '🧱', desc: 'Bloque compacto'            },
+  { value: 'bulto',   label: 'Bulto',    emoji: '🎁', desc: 'Bulto o fardo'              },
+  { value: 'tarro',   label: 'Tarro',    emoji: '🫙', desc: 'Tarro, lata o frasco'       },
+  { value: 'saco',    label: 'Saco',     emoji: '🌾', desc: 'Saco o costal pequeño'      },
+  { value: 'costal',  label: 'Costal',   emoji: '⛽', desc: 'Costal grande (50 kg+)'     },
+  { value: 'caja',    label: 'Caja',     emoji: '📫', desc: 'Caja de cartón o madera'    },
+  { value: 'bolsa',   label: 'Bolsa',    emoji: '🛒', desc: 'Bolsa plástica o de tela'   },
+  { value: 'garrafa', label: 'Garrafa',  emoji: '🧴', desc: 'Garrafa o bidón de líquido' },
+  { value: 'caneca',  label: 'Caneca',   emoji: '🪣', desc: 'Caneca o tambor'            },
+  { value: 'bandeja', label: 'Bandeja',  emoji: '🍱', desc: 'Bandeja o charola'          },
+  { value: 'arroba',  label: 'Arroba',   emoji: '⚖️', desc: 'Arroba (11.5 kg)'           },
+  { value: 'docena',  label: 'Docena',   emoji: '🔢', desc: '12 unidades'                },
+  { value: 'rollo',   label: 'Rollo',    emoji: '🧻', desc: 'Rollo o bobina'             },
+  { value: 'atado',   label: 'Atado',    emoji: '🪢', desc: 'Atado o manojo'             },
+  { value: 'otro',    label: 'Otro',     emoji: '🔖', desc: 'Tipo personalizado'         },
 ];
 
 const CATEGORIAS_PROD = [
@@ -78,13 +74,6 @@ const CATEGORIAS_PROD = [
   'Carnes y Embutidos', 'Bebidas', 'Empaques y Desechables',
   'Condimentos y Salsas', 'Granos y Semillas', 'Otro',
 ];
-
-// Constante fuera del componente para evitar nuevo objeto en cada render
-const PROD_INIT = {
-  productoId: '', nombre: '', categoria: CATEGORIAS_PROD[0],
-  precioCosto: 0, margenVenta: 30, cantidadEmbalaje: 1,
-  tipoEmbalaje: 'unidad' as TipoEmbalaje, destino: 'insumo' as DestinoUso, notas: '',
-};
 
 // Componentes auxiliares fuera del componente principal para evitar remount en cada render
 function ProveedorAvatar({ proveedor, size = 'md' }: { proveedor: Proveedor; size?: 'sm' | 'md' | 'lg' }) {
@@ -98,11 +87,11 @@ function ProveedorAvatar({ proveedor, size = 'md' }: { proveedor: Proveedor; siz
   );
 }
 
-function EstrellasRating({ val, size = 'sm' }: { val: number; size?: 'sm' | 'xs' }) {
+function EstrellasRating({ val }: { val: number }) {
   return (
     <div className="flex gap-0.5">
       {[1,2,3,4,5].map(s => (
-        <Star key={s} className={cn(size === 'xs' ? 'w-3 h-3' : 'w-3.5 h-3.5', s <= val ? 'fill-amber-400 text-amber-400' : 'text-slate-200 dark:text-slate-700')} />
+        <Star key={s} className={cn('w-3.5 h-3.5', s <= val ? 'fill-amber-400 text-amber-400' : 'text-slate-200 dark:text-slate-700')} />
       ))}
     </div>
   );
@@ -116,7 +105,7 @@ interface ProveedoresProps {
   onUpdateProveedor: (id: string, updates: Partial<Proveedor>) => void;
   onDeleteProveedor: (id: string) => void;
   onAddProducto?: (p: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
-  onAddOrUpdatePrecio?: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string }) => Promise<void>;
+  onAddOrUpdatePrecio?: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string; destino?: 'venta' | 'insumo'; tipoEmbalaje?: string; cantidadEmbalaje?: number }) => Promise<void>;
   getPreciosByProveedor: (proveedorId: string) => PrecioProveedor[];
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
@@ -162,43 +151,18 @@ export function Proveedores({
   const [editingProveedor, setEditingProveedor] = useState<Proveedor | null>(null);
   const [viewingProveedor, setViewingProveedor] = useState<Proveedor | null>(null);
   const [orden, setOrden] = useState<OrdenTipo>('nombre');
-  const [vistaActual, setVistaActual] = useState<VistasTipo>('grid');
+  const [vistaActual] = useState<VistasTipo>('lista');
   const [soloActivos, setSoloActivos] = useState(false);
   const [filtroRubro, setFiltroRubro] = useState('');
   const [tabDetalle, setTabDetalle] = useState<TabDetalle>('contacto');
   // Dialog de confirmacion de eliminacion
   const [deleteTarget, setDeleteTarget] = useState<Proveedor | null>(null);
 
-  const [formData, setFormData] = useState({
-    nombre: '',
-    contacto: '',
-    telefono: '',
-    email: '',
-    direccion: '',
-    imagen: '',
-    calificacion: 5,
-    activo: true,
-    rubro: '',
-    notas: '',
-  });
+  const [selectedProvId, setSelectedProvId] = useState<string | null>(null);
 
-  /* ─── Estado catálogo de productos ─── */
-  const [catalogoItems, setCatalogoItems] = useState<ProductoCatalogo[]>([]);
-  const [prodActual, setProdActual]       = useState<typeof PROD_INIT>(PROD_INIT);
-  const [buscarProd, setBuscarProd]       = useState('');
-  const [showDropdown, setShowDropdown]   = useState(false);
-  const [guardando, setGuardando]         = useState(false);
+  /* ─── Estado catálogo de productos para el componente Form ─── */
+  const [catalogoParaForm, setCatalogoParaForm] = useState<ProductoCatalogo[]>([]);
 
-  const costoUnitarioCalc = prodActual.cantidadEmbalaje > 0
-    ? prodActual.precioCosto / prodActual.cantidadEmbalaje : 0;
-  const precioVentaCalc = costoUnitarioCalc * (1 + prodActual.margenVenta / 100);
-
-  const productosFiltrados = useMemo(() =>
-    buscarProd.length >= 1
-      ? _productos.filter(p => p.nombre.toLowerCase().includes(buscarProd.toLowerCase())).slice(0, 8)
-      : [],
-    [_productos, buscarProd]
-  );
 
   /* ─── KPIs ─── */
   const kpis = useMemo(() => {
@@ -209,7 +173,9 @@ export function Proveedores({
     const promedioRating = proveedores.length
       ? proveedores.reduce((s, p) => s + (p.calificacion || 5), 0) / proveedores.length
       : 0;
-    return { totalInsumos, activos, mejorCalificado, promedioRating };
+    const conProductos = proveedores.filter(p => getPreciosByProveedor(p.id).length > 0).length;
+    const sinProductos = proveedores.length - conProductos;
+    return { totalInsumos, activos, mejorCalificado, promedioRating, conProductos, sinProductos };
   }, [proveedores, getPreciosByProveedor]);
 
   /* ─── Filtrado + orden ─── */
@@ -257,12 +223,9 @@ export function Proveedores({
   };
 
   /* ─── Formulario ─── */
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
-    setGuardando(true);
+  const handleSubmit = async (data: any, items: ProductoCatalogo[]) => {
+    if (!data.nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
     try {
-      const data = { ...formData };
       let provId: string;
       if (editingProveedor) {
         onUpdateProveedor(editingProveedor.id, data);
@@ -274,8 +237,8 @@ export function Proveedores({
         toast.success('Proveedor creado');
       }
       // Guardar productos del catálogo
-      if (onAddOrUpdatePrecio && catalogoItems.length > 0) {
-        for (const item of catalogoItems) {
+      if (onAddOrUpdatePrecio && items.length > 0) {
+        for (const item of items) {
           let productoId = item.productoId;
           if (!productoId && onAddProducto) {
             const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
@@ -296,42 +259,46 @@ export function Proveedores({
               proveedorId: provId,
               precioCosto: item.precioCosto,
               notas: item.notas || `${EMBALAJES.find(e => e.value === item.tipoEmbalaje)?.label} x${item.cantidadEmbalaje}`,
+              destino: item.destino,
+              tipoEmbalaje: item.tipoEmbalaje,
+              cantidadEmbalaje: item.cantidadEmbalaje,
             });
           }
         }
-        toast.success(`${catalogoItems.length} producto(s) vinculados`);
+        toast.success(`${items.length} producto(s) vinculados`);
       }
-      resetForm();
       setIsDialogOpen(false);
-    } catch {
+      setEditingProveedor(null);
+    } catch (err) {
+      console.error(err);
       toast.error('Error al guardar. Intenta de nuevo.');
-    } finally {
-      setGuardando(false);
+      throw err; // Re-throw para que el Form maneje el estado de carga
     }
-  };
-
-  const resetForm = () => {
-    setFormData({ nombre: '', contacto: '', telefono: '', email: '', direccion: '', imagen: '', calificacion: 5, activo: true, rubro: '', notas: '' });
-    setCatalogoItems([]);
-    setProdActual(PROD_INIT);
-    setBuscarProd('');
-    setEditingProveedor(null);
   };
 
   const handleEdit = (proveedor: Proveedor) => {
     setEditingProveedor(proveedor);
-    setFormData({
-      nombre: proveedor.nombre,
-      contacto: proveedor.contacto || '',
-      telefono: proveedor.telefono || '',
-      email: proveedor.email || '',
-      direccion: proveedor.direccion || '',
-      imagen: proveedor.imagen || '',
-      calificacion: proveedor.calificacion || 5,
-      activo: (proveedor as any).activo !== false,
-      rubro: (proveedor as any).rubro || '',
-      notas: (proveedor as any).notas || '',
+    // Pre-cargar productos existentes del proveedor
+    const preciosExistentes = getPreciosByProveedor(proveedor.id);
+    const itemsPreCargados: ProductoCatalogo[] = preciosExistentes.map(precio => {
+      const prod = getProductoById(precio.productoId);
+      return {
+        uid: precio.id,
+        productoId: precio.productoId,
+        nombre: prod?.nombre || 'Producto eliminado',
+        categoria: prod?.categoria || CATEGORIAS_PROD[0],
+        precioCosto: precio.precioCosto,
+        margenVenta: prod?.margenUtilidad || 30,
+        cantidadEmbalaje: precio.cantidadEmbalaje || 1,
+        tipoEmbalaje: (precio.tipoEmbalaje as any) || 'unidad',
+        destino: precio.destino || 'insumo',
+        notas: precio.notas || '',
+        costoUnitario: precio.cantidadEmbalaje ? precio.precioCosto / precio.cantidadEmbalaje : precio.precioCosto,
+        precioVenta: prod?.precioVenta || 0,
+        precioVentaPack: prod?.precioVenta ? prod.precioVenta * (precio.cantidadEmbalaje || 1) : 0,
+      };
     });
+    setCatalogoParaForm(itemsPreCargados);
     setIsDialogOpen(true);
   };
 
@@ -399,9 +366,9 @@ export function Proveedores({
             <Download className="w-4 h-4" />
             CSV
           </Button>
-          {check('CREAR_PROVEEDORES') && (
+           {check('CREAR_PROVEEDORES') && (
             <Button
-              onClick={() => { resetForm(); setIsDialogOpen(true); }}
+              onClick={() => { setEditingProveedor(null); setCatalogoParaForm([]); setIsDialogOpen(true); }}
               className="h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
             >
               <Plus className="w-4 h-4" />
@@ -416,10 +383,10 @@ export function Proveedores({
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           {[
             { label: 'Total Proveedores', valor: proveedores.length, icon: Building2, color: 'blue' },
-            { label: 'Activos', valor: kpis.activos, icon: CheckCircle2, color: 'emerald' },
+            { label: 'Con Productos', valor: kpis.conProductos, icon: CheckCircle2, color: 'emerald' },
             { label: 'Insumos cargados', valor: kpis.totalInsumos, icon: Package, color: 'indigo' },
             { label: 'Rating promedio', valor: kpis.promedioRating.toFixed(1), icon: Star, color: 'amber' },
-            { label: 'Mejor calificado', valor: kpis.mejorCalificado?.nombre.split(' ')[0] ?? '—', icon: Award, color: 'violet' },
+            { label: 'Sin Productos', valor: kpis.sinProductos, icon: AlertTriangle, color: 'violet' },
           ].map(({ label, valor, icon: Icon, color }) => (
             <div key={label} className="p-4 rounded-2xl bg-white dark:bg-slate-900 shadow-sm border border-slate-100 dark:border-slate-800 flex items-center gap-3">
               <div className={cn(
@@ -500,25 +467,10 @@ export function Proveedores({
           )}
         </div>
 
-        {/* Vista grid/lista */}
-        <div className="flex items-center bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 rounded-2xl p-1 shadow-sm">
-          <button
-            onClick={() => setVistaActual('grid')}
-            className={cn('p-2 rounded-xl transition-all', vistaActual === 'grid' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600')}
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setVistaActual('lista')}
-            className={cn('p-2 rounded-xl transition-all', vistaActual === 'lista' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-600')}
-          >
-            <List className="w-4 h-4" />
-          </button>
-        </div>
       </div>
 
-      {/* ── Contenido ── */}
-      <div className="flex-1 overflow-y-auto pr-1 scrollbar-hide">
+      {/* ── Contenido: Cuadrícula con desplegable por tarjeta ── */}
+      <div className="flex-1 overflow-y-auto scrollbar-hide pb-10">
         {filtrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 opacity-30 text-center">
             <Building2 className="w-24 h-24 mb-6 text-blue-500 animate-ag-float" />
@@ -527,188 +479,196 @@ export function Proveedores({
               {searchTerm || filtroRubro ? 'Sin resultados para ese filtro.' : 'Registra tu primer proveedor.'}
             </p>
           </div>
-        ) : vistaActual === 'grid' ? (
-          /* ─ GRID ─ */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10">
-            {filtrados.map((prov) => {
-              const insumos = getPreciosByProveedor(prov.id);
-              const activo = (prov as any).activo !== false;
-              const rubro = (prov as any).rubro as string | undefined;
-              return (
-                <Card
-                  key={prov.id}
-                  className="group relative overflow-hidden border border-slate-100 dark:border-gray-800 bg-white dark:bg-gray-900 rounded-[2rem] shadow-md hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 cursor-pointer"
-                  onClick={() => { setViewingProveedor(prov); setTabDetalle('contacto'); }}
-                >
-                  {/* Badge calificacion */}
-                  <div className="absolute top-4 right-4 z-10 flex items-center gap-1 bg-amber-50 dark:bg-amber-900/30 text-amber-600 px-2.5 py-1 rounded-full text-[10px] font-black border border-amber-100 dark:border-amber-800/40">
-                    <Star className="w-3 h-3 fill-amber-500 text-amber-500" />
-                    {prov.calificacion || 5}
-                  </div>
-                  {/* Indicador activo */}
-                  <div className={cn(
-                    'absolute top-4 left-4 z-10 w-2.5 h-2.5 rounded-full shadow-md',
-                    activo ? 'bg-emerald-500 shadow-emerald-400/50' : 'bg-slate-300'
-                  )} title={activo ? 'Activo' : 'Inactivo'} />
-
-                  <CardHeader className="flex flex-col items-center text-center pt-10 pb-4">
-                    <div className="mb-4 transition-transform group-hover:scale-105 duration-300">
-                      <ProveedorAvatar proveedor={prov} size="md" />
-                    </div>
-                    <h3 className="font-black text-lg uppercase tracking-tight text-slate-800 dark:text-white line-clamp-1 group-hover:text-blue-600 transition-colors w-full px-2">
-                      {prov.nombre}
-                    </h3>
-                    {rubro && (
-                      <Badge variant="outline" className="mt-1 text-[8px] font-black uppercase tracking-tighter border-violet-100 dark:border-violet-800 text-violet-500 bg-violet-50/50 dark:bg-violet-900/20">
-                        {rubro}
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className="mt-1.5 text-[8px] font-black uppercase tracking-tighter border-blue-100 dark:border-blue-800 text-blue-500 bg-blue-50/50 dark:bg-blue-900/20">
-                      {insumos.length} insumos
-                    </Badge>
-                  </CardHeader>
-
-                  <CardContent className="px-6 pb-4 space-y-2">
-                    <div className="h-px bg-gradient-to-r from-transparent via-slate-100 dark:via-gray-700 to-transparent mb-4" />
-                    {prov.contacto && (
-                      <div className="flex items-center gap-2.5 text-slate-500">
-                        <UserCheck className="w-3.5 h-3.5 shrink-0 text-blue-400" />
-                        <span className="text-[11px] font-semibold truncate">{prov.contacto}</span>
-                      </div>
-                    )}
-                    {prov.telefono && (
-                      <div className="flex items-center gap-2.5 text-emerald-600">
-                        <Phone className="w-3.5 h-3.5 shrink-0" />
-                        <span className="text-[11px] font-bold tracking-wide truncate">{prov.telefono}</span>
-                      </div>
-                    )}
-                    {prov.email && (
-                      <div className="flex items-center gap-2.5 text-slate-400">
-                        <Mail className="w-3.5 h-3.5 shrink-0" />
-                        <span className="text-[11px] truncate">{prov.email}</span>
-                      </div>
-                    )}
-                  </CardContent>
-
-                  <CardFooter className="px-4 pb-4 pt-0 flex gap-2 flex-wrap">
-                    {prov.telefono && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 flex-1 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800/40 text-emerald-600 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all p-0"
-                        onClick={e => { e.stopPropagation(); window.open(`https://wa.me/${(prov.telefono||'').replace(/\D/g,'')}`, '_blank'); }}
-                        title="WhatsApp"
-                      >
-                        <MessageCircle className="w-4 h-4" />
-                      </Button>
-                    )}
-                    {prov.telefono && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-9 flex-1 rounded-xl bg-teal-50 dark:bg-teal-900/20 border-teal-100 dark:border-teal-800/40 text-teal-600 hover:bg-teal-600 hover:text-white hover:border-teal-600 transition-all p-0"
-                        onClick={e => { e.stopPropagation(); window.location.href = `tel:${prov.telefono}`; }}
-                        title="Llamar"
-                      >
-                        <PhoneCall className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 flex-1 rounded-xl bg-blue-50 dark:bg-blue-900/20 border-blue-100 dark:border-blue-800/40 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all p-0"
-                      onClick={e => { e.stopPropagation(); handleEdit(prov); }}
-                      title="Editar"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-9 flex-1 rounded-xl bg-rose-50 dark:bg-rose-900/20 border-rose-100 dark:border-rose-800/40 text-rose-500 hover:bg-rose-600 hover:text-white hover:border-rose-600 transition-all p-0"
-                      onClick={e => { e.stopPropagation(); confirmarEliminar(prov); }}
-                      title="Eliminar"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
         ) : (
-          /* ─ LISTA ─ */
-          <div className="space-y-3 pb-10">
-            {/* Cabecera */}
-            <div className="grid grid-cols-12 gap-4 px-5 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground opacity-50">
-              <div className="col-span-3">Proveedor</div>
-              <div className="col-span-2">Rubro</div>
-              <div className="col-span-2">Contacto</div>
-              <div className="col-span-2">Teléfono</div>
-              <div className="col-span-1 text-center">Insumos</div>
-              <div className="col-span-1 text-center">Rating</div>
-              <div className="col-span-1 text-right">Acciones</div>
-            </div>
-            {filtrados.map((prov) => {
-              const insumos = getPreciosByProveedor(prov.id);
-              const activo = (prov as any).activo !== false;
-              const rubro = (prov as any).rubro as string | undefined;
+          /* ── VISTA GRID / LISTA — un solo map unificado ── */
+          <div className={cn(
+            'gap-3',
+            vistaActual === 'grid'
+              ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+              : 'flex flex-col'
+          )}>
+            {filtrados.map(prov => {
+              const activo       = (prov as any).activo !== false;
+              const rubro        = (prov as any).rubro as string | undefined;
+              const notas        = (prov as any).notas as string | undefined;
+              const insumos      = getPreciosByProveedor(prov.id);
+              const totalInsumos = insumos.filter(i => i.destino !== 'venta').length;
+              const totalVenta   = insumos.filter(i => i.destino === 'venta').length;
+              const isSel        = selectedProvId === prov.id;
               return (
-                <div
-                  key={prov.id}
-                  className="grid grid-cols-12 gap-4 items-center px-5 py-4 bg-white dark:bg-gray-900 rounded-2xl border border-slate-100 dark:border-gray-800 shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer group"
-                  onClick={() => { setViewingProveedor(prov); setTabDetalle('contacto'); }}
-                >
-                  <div className="col-span-3 flex items-center gap-3">
+                <div key={prov.id} className={cn(
+                  'rounded-2xl border-2 overflow-hidden transition-all duration-300 bg-white dark:bg-slate-800',
+                  isSel
+                    ? vistaActual === 'grid'
+                      ? 'border-blue-400 shadow-xl shadow-blue-500/15 col-span-2 md:col-span-3 lg:col-span-4 xl:col-span-5'
+                      : 'border-blue-400 shadow-xl shadow-blue-500/15'
+                    : 'border-slate-100 dark:border-slate-700 hover:border-blue-200 hover:shadow-md'
+                )}>
+                  <button
+                    className={cn('w-full flex items-center gap-3 cursor-pointer group', vistaActual === 'lista' ? 'px-5 py-3' : 'p-3')}
+                    onClick={() => setSelectedProvId(isSel ? null : prov.id)}
+                  >
+                    {/* Avatar */}
                     <div className="relative shrink-0">
-                      <ProveedorAvatar proveedor={prov} size="sm" />
-                      <div className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-gray-900', activo ? 'bg-emerald-500' : 'bg-slate-300')} />
+                      <ProveedorAvatar proveedor={prov} size={vistaActual === 'grid' && isSel ? 'md' : 'sm'} />
+                      <div className={cn('absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-800', activo ? 'bg-emerald-500' : 'bg-slate-300')} />
                     </div>
-                    <span className="font-black text-sm text-slate-800 dark:text-white uppercase tracking-tight truncate group-hover:text-blue-600 transition-colors">{prov.nombre}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[10px] font-bold text-violet-500 truncate block">{rubro || '—'}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[11px] font-semibold text-slate-500 truncate block">{prov.contacto || '—'}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-[11px] font-bold text-emerald-600 truncate block">{prov.telefono || '—'}</span>
-                  </div>
-                  <div className="col-span-1 text-center">
-                    <Badge variant="outline" className="text-[9px] font-black border-blue-100 text-blue-500 bg-blue-50/50">{insumos.length}</Badge>
-                  </div>
-                  <div className="col-span-1 flex justify-center">
-                    <EstrellasRating val={prov.calificacion || 5} size="xs" />
-                  </div>
-                  <div className="col-span-1 flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
-                    {prov.telefono && (
-                      <button className="p-1.5 rounded-lg text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
-                        onClick={() => window.open(`https://wa.me/${(prov.telefono||'').replace(/\D/g,'')}`, '_blank')}
-                        title="WhatsApp">
-                        <MessageCircle className="w-3.5 h-3.5" />
-                      </button>
+                    {/* Nombre + rubro */}
+                    <div className="min-w-0 flex-1 text-left">
+                      {rubro && <p className="text-[9px] font-black text-violet-500 uppercase tracking-widest">{rubro}</p>}
+                      <p className={cn('font-black uppercase tracking-tight leading-tight transition-colors break-words', isSel && vistaActual === 'grid' ? 'text-blue-700 dark:text-blue-400 text-base' : 'text-sm text-slate-800 dark:text-white group-hover:text-blue-600')}>{prov.nombre}</p>
+                      {/* En grid: badges bajo el nombre */}
+                      {vistaActual === 'grid' && (
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          <div className="flex items-center gap-0.5">
+                            <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
+                            <span className="text-[9px] font-black text-amber-500">{prov.calificacion || 5}</span>
+                          </div>
+                          {totalInsumos > 0 && <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded"><Wrench className="w-2 h-2 inline mr-0.5" />{totalInsumos}</span>}
+                          {totalVenta   > 0 && <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded"><Store className="w-2 h-2 inline mr-0.5" />{totalVenta}</span>}
+                        </div>
+                      )}
+                    </div>
+                    {/* En lista: contacto + badges en línea */}
+                    {vistaActual === 'lista' && (
+                      <>
+                        <div className="hidden md:flex items-center gap-5 shrink-0 text-xs">
+                          {prov.telefono && <span className="text-emerald-600 flex items-center gap-1"><Phone className="w-3 h-3" />{prov.telefono}</span>}
+                          {prov.email    && <span className="text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" />{prov.email}</span>}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-0.5">
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            <span className="text-xs font-black text-amber-500">{prov.calificacion || 5}</span>
+                          </div>
+                          {totalInsumos > 0 && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full"><Wrench className="w-2.5 h-2.5 inline mr-0.5" />{totalInsumos} ins.</span>}
+                          {totalVenta   > 0 && <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full"><Store className="w-2.5 h-2.5 inline mr-0.5" />{totalVenta} vta.</span>}
+                        </div>
+                      </>
                     )}
-                    {prov.telefono && (
-                      <button className="p-1.5 rounded-lg text-teal-500 hover:bg-teal-50 dark:hover:bg-teal-900/20 transition-colors"
-                        onClick={() => window.location.href = `tel:${prov.telefono}`}
-                        title="Llamar">
-                        <PhoneCall className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                    <button className="p-1.5 rounded-lg text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors" onClick={() => handleEdit(prov)} title="Editar">
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors" onClick={() => confirmarEliminar(prov)} title="Eliminar">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+                    <ChevronDown className={cn('w-4 h-4 shrink-0 transition-transform duration-300', isSel ? 'rotate-180 text-blue-500' : 'text-slate-300 group-hover:text-slate-500')} />
+                  </button>
+
+                  {/* ── Panel acordeón inline ── */}
+                  {isSel && (
+                    <div className="border-t-2 border-blue-100 dark:border-blue-800/40 bg-white dark:bg-slate-900">
+                      {/* ── Header: avatar + datos completos + acciones ── */}
+                      <div className="px-6 py-5 bg-gradient-to-r from-blue-50 to-indigo-50/30 dark:from-blue-900/20 dark:to-indigo-900/10 border-b border-blue-100 dark:border-blue-800/30 flex items-start gap-5 flex-wrap">
+                        {/* Avatar grande */}
+                        <ProveedorAvatar proveedor={prov} size="lg" />
+                        {/* Datos del proveedor */}
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div>
+                            {rubro && <p className="text-[10px] font-black uppercase tracking-widest text-violet-500 mb-0.5">{rubro}</p>}
+                            <h3 className="text-lg font-black uppercase tracking-tight text-slate-800 dark:text-white">{prov.nombre}</h3>
+                            {/* Rating */}
+                            <div className="flex items-center gap-1 mt-0.5">
+                              {Array.from({ length: 5 }).map((_, i) => (
+                                <Star key={i} className={cn('w-3.5 h-3.5', i < (prov.calificacion || 5) ? 'fill-amber-400 text-amber-400' : 'text-slate-200')} />
+                              ))}
+                              <span className="text-xs font-black text-amber-500 ml-1">{prov.calificacion || 5}.0</span>
+                            </div>
+                          </div>
+                          {/* Datos de contacto en grid — siempre visibles */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm mt-1">
+                            <span className={cn('flex items-center gap-1.5', prov.contacto ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-300 dark:text-slate-600 italic')}>
+                              <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                              {prov.contacto || 'Sin representante'}
+                            </span>
+                            <span className={cn('flex items-center gap-1.5 font-bold', prov.telefono ? 'text-emerald-600' : 'text-slate-300 dark:text-slate-600 italic font-normal')}>
+                              <Phone className="w-3.5 h-3.5 shrink-0" />
+                              {prov.telefono || 'Sin teléfono'}
+                            </span>
+                            <span className={cn('flex items-center gap-1.5', prov.email ? 'text-slate-500' : 'text-slate-300 dark:text-slate-600 italic')}>
+                              <Mail className="w-3.5 h-3.5 shrink-0" />
+                              {prov.email || 'Sin email'}
+                            </span>
+                            <span className={cn('flex items-center gap-1.5', prov.direccion ? 'text-slate-500' : 'text-slate-300 dark:text-slate-600 italic')}>
+                              <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                              {prov.direccion || 'Sin dirección'}
+                            </span>
+                            <span className="text-slate-400 flex items-center gap-1.5 text-xs">
+                              <FileText className="w-3 h-3 shrink-0" />
+                              Registrado: {new Date(prov.createdAt).toLocaleDateString('es-CO')}
+                            </span>
+                            {notas && <span className="text-amber-600 italic flex items-center gap-1.5 text-xs md:col-span-2">"{notas}"</span>}
+                          </div>
+                        </div>
+                        {/* Acciones */}
+                        <div className="flex flex-col gap-2 shrink-0">
+                          {prov.telefono && (
+                            <button onClick={() => window.open(`https://wa.me/${(prov.telefono||'').replace(/\D/g,'')}`, '_blank')}
+                              className="h-9 px-4 flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black transition-colors">
+                              <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                            </button>
+                          )}
+                          <button onClick={() => handleEdit(prov)}
+                            className="h-9 px-4 flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-colors">
+                            <Edit2 className="w-3.5 h-3.5" /> Editar
+                          </button>
+                          <button onClick={() => confirmarEliminar(prov)}
+                            className="h-9 px-4 flex items-center gap-1.5 text-rose-400 hover:text-white hover:bg-rose-600 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-black transition-colors">
+                            <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Tabla de productos */}
+                      {insumos.length === 0 ? (
+                        <div className="flex flex-col items-center py-10 gap-2 opacity-40">
+                          <Package className="w-10 h-10 text-slate-300" />
+                          <p className="text-sm font-bold text-slate-400">Sin productos registrados</p>
+                          <button onClick={() => handleEdit(prov)} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700">+ Agregar</button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="grid grid-cols-12 gap-2 px-6 py-2 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-700">
+                            <div className="col-span-5 text-xs font-black uppercase tracking-widest text-slate-400">Producto</div>
+                            <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-center">Empaque</div>
+                            <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-right">Costo/u</div>
+                            <div className="col-span-3 text-xs font-black uppercase tracking-widest text-slate-400 text-right">P. Venta</div>
+                          </div>
+                          {insumos.map((precio, idx) => {
+                            const prodItem = getProductoById(precio.productoId);
+                            const costoU   = precio.cantidadEmbalaje && precio.cantidadEmbalaje > 1 ? precio.precioCosto / precio.cantidadEmbalaje : precio.precioCosto;
+                            const pventa   = prodItem?.precioVenta || 0;
+                            const emb      = EMBALAJES.find(e => e.value === precio.tipoEmbalaje);
+                            return (
+                              <div key={precio.id} className={cn('grid grid-cols-12 gap-2 items-center px-6 py-3 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 transition-colors', idx < insumos.length - 1 && 'border-b border-slate-100 dark:border-slate-800')}>
+                                <div className="col-span-5 flex items-center gap-2 min-w-0">
+                                  <span className="text-sm shrink-0">{precio.destino === 'venta' ? '🛒' : '🏭'}</span>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{prodItem?.nombre || 'Producto'}</p>
+                                    <p className="text-xs text-slate-400 truncate">{prodItem?.categoria || ''}</p>
+                                  </div>
+                                </div>
+                                <div className="col-span-2 text-center">
+                                  {precio.tipoEmbalaje && precio.tipoEmbalaje !== 'unidad'
+                                    ? <span className="text-xs font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded-lg">{emb?.emoji} ×{precio.cantidadEmbalaje}</span>
+                                    : <span className="text-xs text-slate-400">Unidad</span>}
+                                </div>
+                                <div className="col-span-2 text-right">
+                                  <p className="text-sm font-black text-blue-600 tabular-nums">{formatCurrency(costoU)}</p>
+                                </div>
+                                <div className="col-span-3 text-right">
+                                  {pventa > 0
+                                    ? <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(pventa)}</p>
+                                    : <p className="text-sm text-slate-300">—</p>}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
       </div>
+
 
       {/* ── DIALOG: Confirmar Eliminacion ── */}
       <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
@@ -739,334 +699,16 @@ export function Proveedores({
         </DialogContent>
       </Dialog>
 
-      {/* ── DIALOG: Crear / Editar ── */}
-      <Dialog open={isDialogOpen} onOpenChange={open => { setIsDialogOpen(open); if (!open) resetForm(); }}>
-        <DialogContent className="max-w-2xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-gray-950">
-          {/* Header */}
-          <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-8 text-white relative">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-white/20 rounded-2xl backdrop-blur-md">
-                {editingProveedor ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-              </div>
-              <div>
-                <DialogTitle className="text-xl font-black uppercase tracking-tight">
-                  {editingProveedor ? 'Actualizar Proveedor' : 'Nuevo Proveedor'}
-                </DialogTitle>
-                <DialogDescription className="text-white/60 font-bold text-[10px] uppercase tracking-widest mt-0.5">
-                  Información corporativa del aliado
-                </DialogDescription>
-              </div>
-            </div>
-            <Button variant="ghost" size="icon" className="absolute right-5 top-5 text-white/40 hover:text-white" onClick={() => setIsDialogOpen(false)}>
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-
-          {/* Formulario */}
-          <form onSubmit={handleSubmit} className="p-8 space-y-5 overflow-y-auto max-h-[75vh]">
-            {/* Nombre */}
-            <div className="space-y-2">
-              <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Nombre de la Empresa *</Label>
-              <Input
-                value={formData.nombre}
-                onChange={e => setFormData({ ...formData, nombre: e.target.value })}
-                placeholder="Ej. Comercializadora Global S.A."
-                className="h-14 text-lg font-black rounded-2xl bg-slate-50 dark:bg-gray-800 border-none shadow-inner px-5"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              {/* Representante */}
-              <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Representante</Label>
-                <Input
-                  value={formData.contacto}
-                  onChange={e => setFormData({ ...formData, contacto: e.target.value })}
-                  placeholder="Nombre completo"
-                  className="h-12 font-semibold bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner px-5"
-                />
-              </div>
-
-              {/* Calificacion */}
-              <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Calificación</Label>
-                <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-gray-800 h-12 px-5 rounded-2xl shadow-inner">
-                  {[1,2,3,4,5].map(s => (
-                    <button key={s} type="button" onClick={() => setFormData({ ...formData, calificacion: s })} className="hover:scale-110 transition-transform">
-                      <Star className={cn('w-5 h-5', s <= formData.calificacion ? 'fill-amber-400 text-amber-400' : 'text-slate-300 dark:text-slate-600')} />
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Telefono */}
-              <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">WhatsApp / Celular</Label>
-                <Input
-                  value={formData.telefono}
-                  onChange={e => setFormData({ ...formData, telefono: e.target.value })}
-                  placeholder="+54 9 11 0000-0000"
-                  className="h-12 font-mono bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner px-5"
-                />
-              </div>
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Correo Corporativo</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={e => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="aliado@empresa.com"
-                  className="h-12 bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner px-5"
-                />
-              </div>
-            </div>
-
-            {/* Rubro */}
-            <div className="space-y-2">
-              <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Rubro / Categoría</Label>
-              <div className="relative">
-                <Tag className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-violet-400 pointer-events-none" />
-                <select
-                  value={formData.rubro}
-                  onChange={e => setFormData({ ...formData, rubro: e.target.value })}
-                  className="w-full h-12 pl-12 pr-5 font-semibold bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner outline-none text-slate-700 dark:text-slate-200 text-sm"
-                >
-                  <option value="">Seleccionar rubro...</option>
-                  {RUBROS.map(r => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </div>
-            </div>
-
-            {/* Direccion */}
-            <div className="space-y-2">
-              <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Sede Principal</Label>
-              <Input
-                value={formData.direccion}
-                onChange={e => setFormData({ ...formData, direccion: e.target.value })}
-                placeholder="Dirección completa"
-                className="h-12 bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner px-5"
-              />
-            </div>
-
-            {/* Notas internas */}
-            <div className="space-y-2">
-              <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Notas Internas</Label>
-              <textarea
-                value={formData.notas}
-                onChange={e => setFormData({ ...formData, notas: e.target.value })}
-                placeholder="Condiciones de pago, días de entrega, observaciones..."
-                rows={3}
-                className="w-full px-5 py-4 text-sm font-semibold bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner outline-none resize-none text-slate-700 dark:text-slate-200 placeholder:text-slate-400"
-              />
-            </div>
-
-            {/* Logo URL */}
-            <div className="space-y-2">
-              <Label className="text-[9px] font-black uppercase tracking-widest opacity-50">Logo (URL)</Label>
-              <div className="flex gap-3">
-                <Input
-                  value={formData.imagen}
-                  onChange={e => setFormData({ ...formData, imagen: e.target.value })}
-                  placeholder="https://..."
-                  className="h-12 flex-1 bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner px-5"
-                />
-                {formData.imagen && (
-                  <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-slate-100 bg-white shadow-lg shrink-0">
-                    <img src={formData.imagen} className="w-full h-full object-cover" alt="logo preview" />
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Estado activo */}
-            <button
-              type="button"
-              onClick={() => setFormData({ ...formData, activo: !formData.activo })}
-              className={cn(
-                'w-full h-12 rounded-2xl border-2 flex items-center justify-center gap-2 font-black uppercase text-[10px] tracking-widest transition-all',
-                formData.activo
-                  ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600'
-                  : 'border-slate-200 bg-slate-50 dark:bg-gray-800 text-slate-400'
-              )}
-            >
-              {formData.activo ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
-              {formData.activo ? 'Proveedor Activo' : 'Proveedor Inactivo'}
-            </button>
-
-            {/* ══ SECCIÓN: CATÁLOGO DE PRODUCTOS ══ */}
-            <div className="border-t border-slate-100 dark:border-gray-800 pt-6 space-y-4">
-              <h3 className="text-[10px] font-black uppercase tracking-widest text-blue-600 flex items-center gap-2">
-                <Package className="w-3.5 h-3.5" /> Catálogo de Productos del Proveedor
-              </h3>
-
-              {/* Mini formulario de producto */}
-              <div className="bg-slate-50 dark:bg-gray-900 rounded-2xl p-4 space-y-3 border border-slate-100 dark:border-gray-800">
-                {/* Búsqueda */}
-                <div className="relative">
-                  <Input
-                    value={buscarProd}
-                    onChange={e => { setBuscarProd(e.target.value); setProdActual(prev => ({ ...prev, nombre: e.target.value, productoId: '' })); setShowDropdown(true); }}
-                    onFocus={() => setShowDropdown(true)}
-                    onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
-                    placeholder="Buscar producto existente o escribir nuevo..."
-                    className="h-10 bg-white dark:bg-gray-800 border-none rounded-xl shadow-inner px-4 text-sm"
-                  />
-                  {showDropdown && productosFiltrados.length > 0 && (
-                    <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-700 rounded-2xl shadow-xl overflow-hidden">
-                      {productosFiltrados.map(prod => (
-                        <button key={prod.id} type="button"
-                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors text-left"
-                          onMouseDown={() => { setProdActual(prev => ({ ...prev, productoId: prod.id, nombre: prod.nombre, categoria: prod.categoria, margenVenta: prod.margenUtilidad || 30, destino: prod.tipo === 'ingrediente' ? 'insumo' : 'venta' })); setBuscarProd(prod.nombre); setShowDropdown(false); }}>
-                          <Package className="w-4 h-4 text-blue-500 shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-bold truncate">{prod.nombre}</p>
-                            <p className="text-[9px] text-slate-400 uppercase tracking-widest">{prod.categoria}</p>
-                          </div>
-                          <Badge className="ml-auto text-[8px] bg-blue-50 text-blue-600 border-none shrink-0">Existente</Badge>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  {/* Categoría */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest opacity-50">Categoría</label>
-                    <select value={prodActual.categoria} onChange={e => setProdActual(prev => ({ ...prev, categoria: e.target.value }))}
-                      className="w-full h-10 bg-white dark:bg-gray-800 border-none rounded-xl shadow-inner px-3 text-sm font-semibold outline-none cursor-pointer">
-                      {CATEGORIAS_PROD.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  {/* Destino */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest opacity-50">Destino</label>
-                    <div className="flex h-10 gap-2">
-                      {(['insumo', 'venta'] as DestinoUso[]).map(val => (
-                        <button key={val} type="button" onClick={() => setProdActual(prev => ({ ...prev, destino: val }))}
-                          className={cn('flex-1 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border-2',
-                            prodActual.destino === val
-                              ? val === 'insumo' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-emerald-600 text-white border-emerald-600'
-                              : 'bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700 text-slate-400')}>
-                          {val === 'insumo' ? '🏭 Insumo' : '🛒 Venta'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  {/* Costo embalaje */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest opacity-50">Costo del Embalaje</label>
-                    <Input type="number" min="0" step="0.01" value={prodActual.precioCosto || ''}
-                      onChange={e => setProdActual(prev => ({ ...prev, precioCosto: parseFloat(e.target.value) || 0 }))}
-                      placeholder="0.00" className="h-10 bg-white dark:bg-gray-800 border-none rounded-xl shadow-inner px-3 text-right font-bold" />
-                  </div>
-                  {/* % Margen */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest opacity-50">Margen de Venta %</label>
-                    <Input type="number" min="0" max="500" value={prodActual.margenVenta || ''}
-                      onChange={e => setProdActual(prev => ({ ...prev, margenVenta: parseFloat(e.target.value) || 0 }))}
-                      placeholder="30" className="h-10 bg-white dark:bg-gray-800 border-none rounded-xl shadow-inner px-3 text-right font-bold" />
-                  </div>
-                  {/* Unidades */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest opacity-50">Unidades x Embalaje</label>
-                    <Input type="number" min="1" value={prodActual.cantidadEmbalaje || ''}
-                      onChange={e => setProdActual(prev => ({ ...prev, cantidadEmbalaje: parseInt(e.target.value) || 1 }))}
-                      placeholder="1" className="h-10 bg-white dark:bg-gray-800 border-none rounded-xl shadow-inner px-3 text-right font-bold" />
-                  </div>
-                  {/* Tipo embalaje */}
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black uppercase tracking-widest opacity-50">Tipo de Embalaje</label>
-                    <select value={prodActual.tipoEmbalaje} onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje }))}
-                      className="w-full h-10 bg-white dark:bg-gray-800 border-none rounded-xl shadow-inner px-3 text-sm font-semibold outline-none cursor-pointer">
-                      {EMBALAJES.map(em => <option key={em.value} value={em.value}>{em.emoji} {em.label}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Panel calculado */}
-                {prodActual.precioCosto > 0 && (
-                  <div className="grid grid-cols-3 gap-2 p-3 bg-white dark:bg-gray-800 rounded-xl border border-slate-100 dark:border-gray-700 text-center">
-                    {[
-                      { label: 'Costo Unit.', val: formatCurrency(costoUnitarioCalc), color: 'text-blue-600' },
-                      { label: 'P. Venta',   val: formatCurrency(precioVentaCalc),   color: 'text-emerald-600' },
-                      { label: 'Ganancia',   val: `${prodActual.margenVenta}%`,       color: 'text-amber-600' },
-                    ].map(({ label, val, color }) => (
-                      <div key={label}>
-                        <p className="text-[8px] font-black uppercase tracking-widest opacity-40 mb-0.5">{label}</p>
-                        <p className={cn('text-sm font-black', color)}>{val}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <Button type="button"
-                  onClick={() => {
-                    if (!prodActual.nombre.trim()) { toast.error('Ingresa el nombre'); return; }
-                    if (prodActual.precioCosto <= 0) { toast.error('El costo debe ser mayor a 0'); return; }
-                    setCatalogoItems(prev => [...prev, { ...prodActual, uid: crypto.randomUUID(), costoUnitario: costoUnitarioCalc, precioVenta: precioVentaCalc }]);
-                    setProdActual(PROD_INIT);
-                    setBuscarProd('');
-                    toast.success(`Producto agregado al catálogo`);
-                  }}
-                  className="w-full h-10 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-black uppercase tracking-widest text-[10px] border-none gap-2">
-                  <Plus className="w-3.5 h-3.5" /> Agregar al Catálogo
-                </Button>
-              </div>
-
-              {/* Tabla de productos agregados */}
-              {catalogoItems.length > 0 && (
-                <div className="space-y-2">
-                  <div className="grid grid-cols-12 gap-1 px-2 text-[8px] font-black uppercase tracking-widest text-slate-400">
-                    <div className="col-span-4">Producto</div>
-                    <div className="col-span-2 text-center">Embalaje</div>
-                    <div className="col-span-2 text-right">Costo u.</div>
-                    <div className="col-span-2 text-right">P. Venta</div>
-                    <div className="col-span-1 text-center">Dest.</div>
-                    <div className="col-span-1"/>
-                  </div>
-                  {catalogoItems.map(item => (
-                    <div key={item.uid} className="grid grid-cols-12 gap-1 items-center px-3 py-2.5 bg-white dark:bg-gray-900 rounded-xl border border-slate-100 dark:border-gray-800 shadow-sm">
-                      <div className="col-span-4 min-w-0">
-                        <p className="font-bold text-sm text-slate-800 dark:text-white truncate">{item.nombre}</p>
-                        <p className="text-[8px] text-slate-400 uppercase truncate">{item.categoria}</p>
-                      </div>
-                      <div className="col-span-2 text-center text-xs text-slate-400">{EMBALAJES.find(e => e.value === item.tipoEmbalaje)?.emoji} {item.cantidadEmbalaje}u</div>
-                      <div className="col-span-2 text-right font-black text-sm text-blue-600 tabular-nums">{formatCurrency(item.costoUnitario)}</div>
-                      <div className="col-span-2 text-right font-black text-sm text-emerald-600 tabular-nums">{formatCurrency(item.precioVenta)}</div>
-                      <div className="col-span-1 flex justify-center">
-                        <span className="text-sm">{item.destino === 'insumo' ? '🏭' : '🛒'}</span>
-                      </div>
-                      <div className="col-span-1 flex justify-end">
-                        <button type="button" onClick={() => setCatalogoItems(prev => prev.filter(i => i.uid !== item.uid))}
-                          className="p-1 rounded-lg text-rose-400 hover:bg-rose-50 transition-colors">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="flex justify-between px-3 py-2 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800/40">
-                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-600">{catalogoItems.length} productos · {catalogoItems.filter(i => i.destino === 'insumo').length} insumos · {catalogoItems.filter(i => i.destino === 'venta').length} venta</span>
-                    <span className="text-sm font-black text-blue-700">{formatCurrency(catalogoItems.reduce((s, i) => s + i.precioCosto, 0))}</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Botones */}
-            <div className="flex gap-3 pt-2">
-              <Button type="button" variant="ghost" className="h-14 flex-1 rounded-2xl font-black uppercase tracking-widest text-[10px] opacity-50" onClick={() => setIsDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={guardando} className="h-14 flex-[2] bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-blue-600/25 border-none">
-                {guardando ? 'Guardando...' : editingProveedor ? `Guardar${catalogoItems.length > 0 ? ` + ${catalogoItems.length} prod.` : ''}` : `Crear Proveedor${catalogoItems.length > 0 ? ` + ${catalogoItems.length} prod.` : ''}`}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* ── COMPONENTE MODULAR FORMULARIO: Crear / Editar ── */}
+      <ProveedorForm
+        isOpen={isDialogOpen}
+        onClose={() => setIsDialogOpen(false)}
+        onSubmit={handleSubmit}
+        editingProveedor={editingProveedor}
+        productosExistentes={_productos}
+        initialCatalogo={catalogoParaForm}
+        formatCurrency={formatCurrency}
+      />
 
       {/* ── DIALOG: Detalle proveedor ── */}
       <Dialog open={!!viewingProveedor} onOpenChange={() => setViewingProveedor(null)}>
@@ -1108,9 +750,15 @@ export function Proveedores({
                       {/* KPIs del proveedor */}
                       <div className="flex flex-wrap justify-center md:justify-start gap-3 pt-2">
                         <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
-                          <p className="text-2xl font-black">{insumos.length}</p>
-                          <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">Insumos</p>
+                          <p className="text-2xl font-black">{insumos.filter(i => i.destino !== 'venta').length}</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">🏭 Insumos</p>
                         </div>
+                        {insumos.filter(i => i.destino === 'venta').length > 0 && (
+                        <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
+                          <p className="text-2xl font-black">{insumos.filter(i => i.destino === 'venta').length}</p>
+                          <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300">🛒 Venta</p>
+                        </div>
+                        )}
                         <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
                           <p className="text-2xl font-black">
                             {insumos.length > 0 ? formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0) / insumos.length) : '—'}
@@ -1160,7 +808,7 @@ export function Proveedores({
                 <div className="flex border-b border-slate-100 dark:border-gray-800 bg-white dark:bg-gray-950 px-8 shrink-0">
                   {([
                     { id: 'contacto' as TabDetalle, label: 'Contacto', icon: UserCheck },
-                    { id: 'catalogo' as TabDetalle, label: `Catálogo (${insumos.length})`, icon: Package },
+                    { id: 'catalogo' as TabDetalle, label: `Catálogo (${insumos.filter(i=>i.destino!=='venta').length}🏭 + ${insumos.filter(i=>i.destino==='venta').length}🛒)`, icon: Package },
                     { id: 'analisis' as TabDetalle, label: 'Análisis', icon: BarChart3 },
                   ]).map(({ id, label, icon: Icon }) => (
                     <button
@@ -1259,10 +907,38 @@ export function Proveedores({
                         </Badge>
                       </div>
 
+                      {/* Resumen rápido venta vs insumo */}
+                      {insumos.length > 0 && (
+                        <div className="flex gap-3 mb-2">
+                          <div className="flex-1 flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/40 rounded-xl px-4 py-2.5">
+                            <span className="text-lg">🏭</span>
+                            <div>
+                              <p className="text-xl font-black text-indigo-600">{insumos.filter(i => i.destino !== 'venta').length}</p>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Insumos</p>
+                            </div>
+                          </div>
+                          <div className="flex-1 flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-2.5">
+                            <span className="text-lg">🛒</span>
+                            <div>
+                              <p className="text-xl font-black text-emerald-600">{insumos.filter(i => i.destino === 'venta').length}</p>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Para Venta</p>
+                            </div>
+                          </div>
+                          <div className="flex-1 flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40 rounded-xl px-4 py-2.5">
+                            <span className="text-lg">💰</span>
+                            <div>
+                              <p className="text-sm font-black text-blue-600">{formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0))}</p>
+                              <p className="text-[9px] font-black uppercase tracking-widest text-blue-400">Valor Total</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
                       {insumos.length === 0 ? (
                         <div className="py-16 text-center opacity-30">
                           <Package className="w-16 h-16 mx-auto mb-4 text-blue-400" />
-                          <p className="text-[10px] font-black uppercase tracking-widest">Sin insumos vinculados</p>
+                          <p className="text-[10px] font-black uppercase tracking-widest">Sin productos vinculados</p>
+                          <p className="text-[9px] text-slate-400 mt-2">Edita este proveedor para agregar productos</p>
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1272,11 +948,24 @@ export function Proveedores({
                             const costoBase = Number(precio.precioCosto || 0);
                             const precioVenta = Number(prod.precioVenta || 0);
                             const margen = costoBase > 0 ? ((precioVenta - costoBase) / costoBase) * 100 : 0;
+                            const esVenta = precio.destino === 'venta';
+                            const embalajeInfo = precio.tipoEmbalaje
+                              ? `${EMBALAJES.find(e => e.value === precio.tipoEmbalaje)?.emoji || '📦'} ${EMBALAJES.find(e => e.value === precio.tipoEmbalaje)?.label || precio.tipoEmbalaje}${precio.cantidadEmbalaje && precio.cantidadEmbalaje > 1 ? ` x${precio.cantidadEmbalaje}` : ''}`
+                              : precio.notas || '';
                             return (
-                              <div key={precio.id} className="p-5 rounded-2xl bg-white dark:bg-gray-900 border border-slate-100 dark:border-gray-800 shadow-sm hover:shadow-lg transition-all flex items-center justify-between group">
+                              <div key={precio.id} className={cn(
+                                'p-5 rounded-2xl border shadow-sm hover:shadow-lg transition-all flex items-center justify-between group',
+                                esVenta
+                                  ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/30'
+                                  : 'bg-white dark:bg-gray-900 border-slate-100 dark:border-gray-800'
+                              )}>
                                 <div className="flex-1 min-w-0">
-                                  <p className="font-black text-slate-800 dark:text-white uppercase tracking-tight truncate group-hover:text-blue-600 transition-colors">{prod.nombre}</p>
-                                  <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 mt-0.5 truncate">{prod.categoria}</p>
+                                  <div className="flex items-center gap-2 mb-0.5">
+                                    <span className="text-sm">{esVenta ? '🛒' : '🏭'}</span>
+                                    <p className={cn('font-black uppercase tracking-tight truncate group-hover:transition-colors text-sm', esVenta ? 'text-emerald-800 dark:text-emerald-200 group-hover:text-emerald-600' : 'text-slate-800 dark:text-white group-hover:text-blue-600')}>{prod.nombre}</p>
+                                  </div>
+                                  <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 truncate">{prod.categoria}</p>
+                                  {embalajeInfo && <p className="text-[9px] font-semibold text-slate-400 mt-0.5 truncate">{embalajeInfo}</p>}
                                 </div>
                                 <div className="text-right ml-3 shrink-0">
                                   <p className="text-lg font-black text-blue-600 tabular-nums">{formatCurrency(precio.precioCosto)}</p>

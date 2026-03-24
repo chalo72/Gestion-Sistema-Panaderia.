@@ -22,12 +22,13 @@ import './index.css'
   };
 })();
 
-// Registro de Service Worker para PWA
+// Registro de Service Worker para PWA — auto-recarga silenciosa
 const updateSW = registerSW({
   onNeedRefresh() {
-    if (confirm('Nueva versión disponible. ¿Recargar?')) {
-      updateSW(true)
-    }
+    updateSW(true) // Recarga automática sin preguntar
+  },
+  onOfflineReady() {
+    // App lista para uso offline — sin aviso al usuario
   },
 })
 

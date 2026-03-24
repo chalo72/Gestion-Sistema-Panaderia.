@@ -44,7 +44,7 @@ import {
     DialogDescription
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
-import { exportToCSV } from '@/lib/export-utils';
+import { exportCSV } from '@/lib/exportUtils';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -614,17 +614,17 @@ export default function HistorialVentas({
                     vendedor: p.vendedor,
                     cliente: p.cliente
                 }));
-                exportToCSV(dataToExport, 'Productos_Vendidos_DulcePlacer', {
-                    categoria: 'Categoría',
-                    producto: 'Producto',
-                    fecha: 'Fecha',
-                    cantidad: 'Cantidad',
-                    precioUnitario: 'Precio Unitario',
-                    subtotal: 'Subtotal',
-                    margen: 'Margen',
-                    vendedor: 'Vendedor',
-                    cliente: 'Cliente'
-                });
+                exportCSV(dataToExport, 'Productos_Vendidos_DulcePlacer', [
+                    { key: 'categoria', label: 'Categoría' },
+                    { key: 'producto', label: 'Producto' },
+                    { key: 'fecha', label: 'Fecha' },
+                    { key: 'cantidad', label: 'Cantidad' },
+                    { key: 'precioUnitario', label: 'Precio Unitario' },
+                    { key: 'subtotal', label: 'Subtotal' },
+                    { key: 'margen', label: 'Margen' },
+                    { key: 'vendedor', label: 'Vendedor' },
+                    { key: 'cliente', label: 'Cliente' }
+                ]);
                 toast.success(`${dataToExport.length} productos exportados`, { id: 'export-excel' });
             } else if (filteredVentas.length > 0) {
                 // Exportar transacciones
@@ -637,15 +637,15 @@ export default function HistorialVentas({
                     vendedor: v.usuarioId,
                     items: v.items.map(item => `${getProductoById(item.productoId)?.nombre} (x${item.cantidad})`).join('; ')
                 }));
-                exportToCSV(dataToExport, 'Historial_Ventas_DulcePlacer', {
-                    id: 'ID Venta',
-                    fecha: 'Fecha y Hora',
-                    cliente: 'Cliente',
-                    metodoPago: 'Método de Pago',
-                    total: 'Total de Venta',
-                    vendedor: 'Vendido Por',
-                    items: 'Productos Vendidos'
-                });
+                exportCSV(dataToExport, 'Historial_Ventas_DulcePlacer', [
+                    { key: 'id', label: 'ID Venta' },
+                    { key: 'fecha', label: 'Fecha y Hora' },
+                    { key: 'cliente', label: 'Cliente' },
+                    { key: 'metodoPago', label: 'Método de Pago' },
+                    { key: 'total', label: 'Total de Venta' },
+                    { key: 'vendedor', label: 'Vendido Por' },
+                    { key: 'items', label: 'Productos Vendidos' }
+                ]);
                 toast.success(`${dataToExport.length} ventas exportadas`, { id: 'export-excel' });
             } else {
                 toast.error('No hay datos para exportar', { id: 'export-excel' });
@@ -1190,6 +1190,71 @@ export default function HistorialVentas({
                     </select>
                 </div>
             </div>
+
+            {/* ══ RESUMEN FILTRO ACTIVO ══ */}
+            {methodFilter !== 'all' && (
+                <div className={cn(
+                    "flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 rounded-2xl border-2",
+                    methodFilter === 'efectivo'     && "bg-emerald-50 border-emerald-200 dark:bg-emerald-900/10 dark:border-emerald-800",
+                    methodFilter === 'tarjeta'      && "bg-blue-50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800",
+                    methodFilter === 'nequi'        && "bg-violet-50 border-violet-200 dark:bg-violet-900/10 dark:border-violet-800",
+                    methodFilter === 'credito'      && "bg-amber-50 border-amber-200 dark:bg-amber-900/10 dark:border-amber-800",
+                    methodFilter === 'transferencia'&& "bg-cyan-50 border-cyan-200 dark:bg-cyan-900/10 dark:border-cyan-800",
+                )}>
+                    {/* Ícono + etiqueta */}
+                    <div className="flex items-center gap-3">
+                        <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                            methodFilter === 'efectivo'      && "bg-emerald-100 dark:bg-emerald-800",
+                            methodFilter === 'tarjeta'       && "bg-blue-100 dark:bg-blue-800",
+                            methodFilter === 'nequi'         && "bg-violet-100 dark:bg-violet-800",
+                            methodFilter === 'credito'       && "bg-amber-100 dark:bg-amber-800",
+                            methodFilter === 'transferencia' && "bg-cyan-100 dark:bg-cyan-800",
+                        )}>
+                            {methodFilter === 'efectivo' && <Banknote className="w-5 h-5 text-emerald-600" />}
+                            {methodFilter === 'tarjeta'  && <CreditCard className="w-5 h-5 text-blue-600" />}
+                            {methodFilter === 'nequi'    && <DollarSign className="w-5 h-5 text-violet-600" />}
+                            {methodFilter === 'credito'  && <Clock className="w-5 h-5 text-amber-600" />}
+                            {methodFilter === 'transferencia' && <TrendingUp className="w-5 h-5 text-cyan-600" />}
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filtro activo</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white uppercase">
+                                {methodFilter === 'efectivo'      && 'Efectivo'}
+                                {methodFilter === 'tarjeta'       && 'Tarjeta'}
+                                {methodFilter === 'nequi'         && 'Nequi'}
+                                {methodFilter === 'credito'       && 'Crédito / Fiado'}
+                                {methodFilter === 'transferencia' && 'Transferencia'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* KPIs del método */}
+                    <div className="flex items-center gap-6 flex-wrap justify-center sm:justify-end">
+                        <div className="text-center">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Transacciones</p>
+                            <p className="text-2xl font-black text-slate-700 dark:text-slate-200 tabular-nums">{kpis.cantidadVentas}</p>
+                        </div>
+                        <div className="w-px h-10 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+                        <div className="text-center">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Promedio</p>
+                            <p className="text-2xl font-black text-slate-700 dark:text-slate-200 tabular-nums">{formatCurrency(kpis.promedioVenta)}</p>
+                        </div>
+                        <div className="w-px h-10 bg-slate-200 dark:bg-slate-700 hidden sm:block" />
+                        <div className="text-center">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total recaudado</p>
+                            <p className={cn(
+                                "text-3xl font-black tabular-nums",
+                                methodFilter === 'efectivo'      && "text-emerald-600",
+                                methodFilter === 'tarjeta'       && "text-blue-600",
+                                methodFilter === 'nequi'         && "text-violet-600",
+                                methodFilter === 'credito'       && "text-amber-600",
+                                methodFilter === 'transferencia' && "text-cyan-600",
+                            )}>{formatCurrency(kpis.totalVentas)}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* VISTA DE TRANSACCIONES - Tabla Detallada Estilo Stitch Premium */}
             {viewMode === 'transacciones' && (

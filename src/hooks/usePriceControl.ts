@@ -11,32 +11,23 @@ import type {
   PrePedidoItem,
   Categoria,
   InventarioItem,
-  MovimientoInventario,
   Receta,
-  IngredienteReceta,
-  Venta,
-  VentaItem,
-  CajaSesion,
-  MetodoPago,
   Recepcion,
-  Mesa,
-  PedidoActivo,
-  Gasto,
-  OrdenProduccion,
-  MovimientoCaja,
-  CreditoCliente,
-  PagoCredito,
-  Trabajador
 } from '@/types';
 import { toast } from 'sonner';
 
-import { safeNumber, safeString } from '@/lib/safe-utils';
+import { safeNumber } from '@/lib/safe-utils';
+import { useFinanzas } from './useFinanzas';
+import { useProduccionHook } from './useProduccionHook';
+import { useVentas } from './useVentas';
+import { useInventario } from './useInventario';
 
 import {
   CATEGORIAS_DEFAULT,
   DATOS_EJEMPLO,
-  MONEDAS
-} from '@/types';
+} from '@/lib/seed-data';
+
+import { MONEDAS } from '@/types';
 
 const defaultConfig: Configuracion = {
   margenUtilidadDefault: 30,
@@ -62,21 +53,16 @@ export function usePriceControl() {
   const [configuracion, setConfiguracion] = useState<Configuracion>(defaultConfig);
   const [prepedidos, setPrepedidos] = useState<PrePedido[]>([]);
 
-  const [inventario, setInventario] = useState<InventarioItem[]>([]);
-  const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
-  const [recepciones, setRecepciones] = useState<Recepcion[]>([]);
   const [recetas, setRecetas] = useState<Receta[]>([]);
-  const [ventas, setVentas] = useState<Venta[]>([]);
-  const [sesionesCaja, setSesionesCaja] = useState<CajaSesion[]>([]);
-  const [cajaActiva, setCajaActiva] = useState<CajaSesion | undefined>(undefined);
-  const [ahorros, setAhorros] = useState<any[]>([]); // Estado para ahorros
-  const [mesas, setMesas] = useState<Mesa[]>([]);
-  const [pedidosActivos, setPedidosActivos] = useState<PedidoActivo[]>([]);
-  const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [produccion, setProduccion] = useState<OrdenProduccion[]>([]);
-  const [creditosClientes, setCreditosClientes] = useState<CreditoCliente[]>([]);
-  const [trabajadores, setTrabajadores] = useState<Trabajador[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  // Sub-hooks delegados (Fase 4 de refactoring)
+  // onAjustarStock se define más abajo, así que usamos un ref para romper la dependencia circular
+  const onAjustarStockRef = { current: async (_pid: string, _q: number, _t: 'entrada' | 'salida', _m: string) => { return; } };
+  const inventarioHook = useInventario({ productos });
+  const finanzas = useFinanzas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
+  const produccionHook = useProduccionHook({ onAjustarStock: (...args) => onAjustarStockRef.current(...args), recetas });
+  const ventasHook = useVentas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
 
   // Inicializar base de datos y cargar datos
   useEffect(() => {
@@ -191,7 +177,7 @@ export function usePriceControl() {
   // 📦 DATOS SECUNDARIOS = Cargar en background
   const loadSecondaryDataInBackground = async () => {
     try {
-      const [alertas, inventario, movimientos, gastos, recepciones, historial, recetas, ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, produccion, creditosClientes, trabajadores] = await Promise.all([
+      const [alertas, inventario, movimientos, gastos, recepciones, historial, recetas, ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, produccion, creditosClientes, creditosTrabajadoresData, trabajadores] = await Promise.all([
         db.getAllAlertas(),
         db.getAllInventario(),
         db.getAllMovimientos(),
@@ -207,25 +193,27 @@ export function usePriceControl() {
         db.getAllPedidosActivos(),
         db.getAllOrdenesProduccion(),
         db.getAllCreditosClientes(),
+        db.getAllCreditosTrabajadores(),
         db.getAllTrabajadores(),
       ]);
 
       setAlertas(alertas);
-      setInventario(inventario);
-      setMovimientos(movimientos);
-      setGastos(gastos);
-      setRecepciones(recepciones as Recepcion[]);
+      inventarioHook.setInventario(inventario);
+      inventarioHook.setMovimientos(movimientos);
+      finanzas.setGastos(gastos);
+      inventarioHook.setRecepciones(recepciones as Recepcion[]);
       setHistorial(historial);
       setRecetas(recetas as Receta[]);
-      setVentas(ventas);
-      setSesionesCaja(sesionesCaja);
-      setCajaActiva(cajaActiva);
-      setAhorros(ahorros);
-      setMesas(mesas);
-      setPedidosActivos(pedidosActivos);
-      setProduccion(produccion);
-      setCreditosClientes(creditosClientes as CreditoCliente[]);
-      setTrabajadores(trabajadores as Trabajador[]);
+      ventasHook.setVentas(ventas);
+      ventasHook.setSesionesCaja(sesionesCaja as any);
+      ventasHook.setCajaActiva(cajaActiva as any);
+      finanzas.setAhorros(ahorros);
+      ventasHook.setMesas(mesas);
+      ventasHook.setPedidosActivos(pedidosActivos);
+      produccionHook.setProduccion(produccion);
+      finanzas.setCreditosClientes(creditosClientes as import('@/types').CreditoCliente[]);
+      finanzas.setCreditosTrabajadores(creditosTrabajadoresData as import('@/types').CreditoTrabajador[]);
+      finanzas.setTrabajadores(trabajadores as import('@/types').Trabajador[]);
     } catch (error) {
       console.error('Error cargando datos secundarios:', error);
     }
@@ -275,23 +263,50 @@ export function usePriceControl() {
         db.getAllPrecios().then(setPrecios),
         db.getAllPrePedidos().then(setPrepedidos),
         db.getAllAlertas().then(setAlertas),
-        db.getAllInventario().then(setInventario),
-        db.getAllMovimientos().then(setMovimientos),
-        db.getAllGastos().then(setGastos),
-        db.getAllRecepciones().then((data) => setRecepciones(data as Recepcion[])),
+        db.getAllInventario().then(inventarioHook.setInventario),
+        db.getAllMovimientos().then(inventarioHook.setMovimientos),
+        db.getAllGastos().then(finanzas.setGastos),
+        db.getAllRecepciones().then((data) => inventarioHook.setRecepciones(data as Recepcion[])),
         db.getAllHistorial().then(setHistorial),
         db.getAllRecetas().then((data) => setRecetas(data as Receta[])),
-        db.getAllVentas().then(setVentas),
-        db.getAllSesionesCaja().then(setSesionesCaja),
-        db.getSesionCajaActiva().then(setCajaActiva),
-        db.getAllAhorros().then(setAhorros),
-        db.getAllMesas().then(setMesas),
-        db.getAllPedidosActivos().then(setPedidosActivos),
-        db.getAllOrdenesProduccion().then(setProduccion),
+        db.getAllVentas().then(ventasHook.setVentas),
+        db.getAllSesionesCaja().then((data) => ventasHook.setSesionesCaja(data as any)),
+        db.getSesionCajaActiva().then((data) => ventasHook.setCajaActiva(data as any)),
+        db.getAllAhorros().then(finanzas.setAhorros),
+        db.getAllMesas().then(ventasHook.setMesas),
+        db.getAllPedidosActivos().then(ventasHook.setPedidosActivos),
+        db.getAllOrdenesProduccion().then(produccionHook.setProduccion),
       ];
 
       await Promise.allSettled(dataPromises);
       console.log('⚡ Todas las constantes de datos han sido cargadas y sincronizadas.');
+
+      // ── Auto-inicializar InventarioItem para productos sin registro ──
+      // Garantiza que TODOS los productos existentes aparezcan en el módulo de Inventario
+      try {
+        const [todosProductos, todosInventarios] = await Promise.all([
+          db.getAllProductos(),
+          db.getAllInventario(),
+        ]);
+        const idsConInventario = new Set(todosInventarios.map((i: InventarioItem) => i.productoId));
+        const productosSinInventario = todosProductos.filter((p: Producto) => !idsConInventario.has(p.id));
+        if (productosSinInventario.length > 0) {
+          const now = new Date().toISOString();
+          const nuevosItems: InventarioItem[] = productosSinInventario.map((p: Producto) => ({
+            id: crypto.randomUUID(),
+            productoId: p.id,
+            stockActual: 0,
+            stockMinimo: 5,
+            ubicacion: 'Almacén General',
+            ultimoMovimiento: now,
+          }));
+          await Promise.all(nuevosItems.map(item => db.updateInventarioItem(item)));
+          inventarioHook.setInventario([...todosInventarios, ...nuevosItems]);
+          console.log(`✅ Auto-inicializados ${nuevosItems.length} ítems de inventario para productos existentes`);
+        }
+      } catch (err) {
+        console.warn('⚠️ Error en auto-inicialización de inventario:', err);
+      }
 
     } catch (error) {
       console.error('❌ Error crítico en la carga asíncrona de datos:', error);
@@ -387,7 +402,7 @@ export function usePriceControl() {
         ultimoMovimiento: now,
       };
       await db.updateInventarioItem(itemInventario);
-      setInventario(prev => [...prev, itemInventario]);
+      inventarioHook.setInventario(prev => [...prev, itemInventario]);
     }
 
     return nuevoProducto;
@@ -449,8 +464,11 @@ export function usePriceControl() {
     proveedorId: string;
     precioCosto: number;
     notas?: string;
+    destino?: 'venta' | 'insumo';
+    tipoEmbalaje?: string;
+    cantidadEmbalaje?: number;
   }) => {
-    const { productoId, proveedorId, precioCosto, notas } = data;
+    const { productoId, proveedorId, precioCosto, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
     const existingPrecio = await db.getPrecioByProductoProveedor(productoId, proveedorId);
 
     const now = new Date().toISOString();
@@ -502,7 +520,7 @@ export function usePriceControl() {
       }
 
       // Actualizar precio existente
-      const updatedPrecio = { ...existingPrecio, precioCosto, fechaActualizacion: now, notas };
+      const updatedPrecio = { ...existingPrecio, precioCosto, fechaActualizacion: now, notas, ...(destino && { destino }), ...(tipoEmbalaje && { tipoEmbalaje }), ...(cantidadEmbalaje && { cantidadEmbalaje }) };
       await db.updatePrecio(updatedPrecio);
       setPrecios(prev => prev.map(p => p.id === existingPrecio.id ? updatedPrecio : p));
     } else {
@@ -514,6 +532,9 @@ export function usePriceControl() {
         precioCosto,
         fechaActualizacion: now,
         notas,
+        destino,
+        tipoEmbalaje,
+        cantidadEmbalaje,
       };
       await db.addPrecio(nuevoPrecio);
       setPrecios(prev => [...prev, nuevoPrecio]);
@@ -651,312 +672,25 @@ export function usePriceControl() {
     setAlertas([]);
   }, []);
 
-  // Funciones de Inventario
-  const onAjustarStock = useCallback(async (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => {
-    const now = new Date().toISOString();
-
-    // Obtener item actual o crear uno nuevo
-    let item = inventario.find(i => i.productoId === productoId);
-    let nuevoStock = 0;
-
-    if (item) {
-      if (tipo === 'entrada') nuevoStock = item.stockActual + cantidad;
-      else if (tipo === 'salida') nuevoStock = Math.max(0, item.stockActual - cantidad);
-      else if (tipo === 'ajuste') nuevoStock = cantidad;
-    } else {
-      // Si no existe, crearlo (asumiendo stock 0 inicial si es entrada/salida)
-      if (tipo === 'entrada' || tipo === 'ajuste') nuevoStock = cantidad;
-      else nuevoStock = 0;
-    }
-
-    // Actualizar/Crear Item Inventario
-    const newItem: InventarioItem = item ? {
-      ...item,
-      stockActual: nuevoStock,
-      ultimoMovimiento: now,
-    } : {
-      id: crypto.randomUUID(),
-      productoId,
-      stockActual: nuevoStock,
-      stockMinimo: 5, // Default
-      ubicacion: 'Almacén General',
-      ultimoMovimiento: now,
-    };
-
-    await db.updateInventarioItem(newItem);
-
-    if (item) {
-      setInventario(prev => prev.map(i => i.id === item!.id ? newItem : i));
-    } else {
-      setInventario(prev => [...prev, newItem]);
-    }
-
-    // Registrar Movimiento
-    const movimiento: MovimientoInventario = {
-      id: crypto.randomUUID(),
-      productoId,
-      tipo,
-      cantidad,
-      motivo,
-      fecha: now,
-      usuario: motivo ? `${motivo.split(':')[0]}` : 'Sistema', // Nombre del usuario se pasa desde el componente que llama
-    };
-
-    await db.addMovimiento(movimiento);
-    setMovimientos(prev => [movimiento, ...prev]);
-
-  }, [inventario]);
-
-  // Funciones de Recepciones
-  const addRecepcion = useCallback(async (data: Omit<Recepcion, 'id'>) => {
-    const recepcion: Recepcion = {
-      ...data,
-      id: crypto.randomUUID(),
-    };
-    await db.addRecepcion(recepcion);
-    setRecepciones(prev => [...prev, recepcion]);
-    return recepcion;
-  }, []);
-
-  const confirmarRecepcion = useCallback(async (recepcion: Recepcion) => {
-    // 1. Actualizar Inventario
-    for (const item of recepcion.items) {
-      if (item.cantidadRecibida > 0) {
-        await onAjustarStock(
-          item.productoId,
-          item.cantidadRecibida,
-          'entrada',
-          `Recepción Factura ${recepcion.numeroFactura}`
-        );
-      }
-
-      // 2. Actualizar Precio de Costo si es diferente (Opcional, pero recomendado)
-      // Solo si el precio facturado es válido y diferente
-      if (item.precioFacturado > 0) {
-        // Encontrar precio actual
-        const currentPrice = await db.getPrecioByProductoProveedor(item.productoId, recepcion.proveedorId);
-
-        // Si no existe o es diferente, actualizar/crear
-        if (!currentPrice || currentPrice.precioCosto !== item.precioFacturado) {
-          // Usamos la función existente que maneja historial y alertas
-          await addOrUpdatePrecio({
-            productoId: item.productoId,
-            proveedorId: recepcion.proveedorId,
-            precioCosto: item.precioFacturado,
-            notas: `Actualizado desde Recepción ${recepcion.numeroFactura}`
-          });
-        }
-      }
-    }
-
-    // 3. Actualizar estado de la recepción
-    const updatedRecepcion: Recepcion = {
-      ...recepcion,
-      estado: 'completada' // O 'con_incidencias' si hay lógica para ello
-    };
-
-    // Si hay items defectuosos o cantidades incorrectas, marcar como con incidencias
-    const tieneIncidencias = recepcion.items.some(i => !i.cantidadOk || !i.productoOk || i.defectuosos > 0);
-    if (tieneIncidencias) updatedRecepcion.estado = 'con_incidencias';
-
-    await db.updateRecepcion(updatedRecepcion);
-    setRecepciones(prev => prev.map(r => r.id === recepcion.id ? updatedRecepcion : r));
-
-    // 4. Si viene de un PrePedido, actualizar estado del PrePedido (Opcional)
-    if (recepcion.prePedidoId) {
-      const prepedido = prepedidos.find(p => p.id === recepcion.prePedidoId);
-      if (prepedido) {
-        // Lógica para cerrar prepedido si se recibió todo, por ahora lo dejamos simple
-      }
-    }
-
-  }, [onAjustarStock, addOrUpdatePrecio, prepedidos]);
-
-  const updateRecepcion = useCallback(async (id: string, updates: Partial<Recepcion>) => {
-    const recepcion = recepciones.find(r => r.id === id);
-    if (!recepcion) return;
-    const updatedRecepcion = { ...recepcion, ...updates };
-    await db.updateRecepcion(updatedRecepcion);
-    setRecepciones(prev => prev.map(r => r.id === id ? updatedRecepcion : r));
-  }, [recepciones]);
-
-  const getRecepcionesByProveedor = useCallback((proveedorId: string) => {
-    return recepciones.filter(r => r.proveedorId === proveedorId);
-  }, [recepciones]);
-
-  // Funciones de Ventas (POS)
-  const registrarVenta = useCallback(async (data: {
-    items: Omit<VentaItem, 'id'>[];
-    metodoPago: MetodoPago;
-    cliente?: string;
-    notas?: string;
-    usuarioId: string;
-  }) => {
-    const now = new Date().toISOString();
-    const id = crypto.randomUUID();
-
-    const itemsConId: VentaItem[] = data.items.map(item => ({
-      ...item,
-      id: crypto.randomUUID(),
-    }));
-
-    const total = itemsConId.reduce((sum, item) => sum + item.subtotal, 0);
-
-    const nuevaVenta: Venta = {
-      id,
-      cajaId: cajaActiva?.id,
-      items: itemsConId,
-      total,
-      metodoPago: data.metodoPago,
-      usuarioId: data.usuarioId,
-      cliente: data.cliente,
-      notas: data.notas,
-      fecha: now,
-    };
-
-    // 1. Guardar en DB
-    await db.addVenta(nuevaVenta);
-    setVentas(prev => [nuevaVenta, ...prev]);
-
-    // 2. Descontar Stock y Registrar Movimientos
-    for (const item of itemsConId) {
-      const producto = productos.find(p => p.id === item.productoId);
-      if (producto) {
-        await onAjustarStock(
-          item.productoId,
-          item.cantidad,
-          'salida',
-          `Venta #${id.slice(0, 8)}`
-        );
-      }
-    }
-
-    // 3. Actualizar Caja si hay una activa
-    if (cajaActiva) {
-      const updatedCaja: CajaSesion = {
-        ...cajaActiva,
-        totalVentas: cajaActiva.totalVentas + total,
-        ventasIds: [...cajaActiva.ventasIds, id],
-      };
-      await db.updateSesionCaja(updatedCaja);
-      setCajaActiva(updatedCaja);
-      setSesionesCaja(prev => prev.map(s => s.id === updatedCaja.id ? updatedCaja : s));
-    }
-
-    return nuevaVenta;
-  }, [cajaActiva, productos, onAjustarStock]);
-
-  // Función para formatear moneda
+  // Utilidades de moneda
   const formatCurrency = useCallback((value: any) => {
     try {
-      if (value === null || value === undefined) return '€0.00';
-
-      let numValue: number;
-      if (typeof value === 'number') {
-        numValue = value;
-      } else if (typeof value === 'object') {
-        numValue = 0;
-      } else {
-        try {
-          const n = Number(value);
-          numValue = isNaN(n) ? 0 : n;
-        } catch {
-          numValue = 0;
-        }
-      }
-
-      if (isNaN(numValue)) return '€0.00';
-
+      if (value === null || value === undefined) return '$0.00';
+      const numValue = typeof value === 'number' ? value : Number(value) || 0;
       const monedaConfig = MONEDAS.find(m => m.code === (configuracion.moneda || 'COP')) || MONEDAS[0];
       return new Intl.NumberFormat(monedaConfig.locale, {
         style: 'currency',
         currency: monedaConfig.code,
       }).format(numValue);
     } catch (error) {
-      console.error('Error en formatCurrency:', error, value);
-      return '€0.00';
+      console.error('Error en formatCurrency:', error);
+      return '$0.00';
     }
   }, [configuracion.moneda]);
 
-  // Función para obtener la moneda actual
   const getMonedaActual = useCallback(() => {
     return MONEDAS.find(m => m.code === configuracion.moneda) || MONEDAS[0];
   }, [configuracion.moneda]);
-
-  // Funciones de Caja
-  const abrirCaja = useCallback(async (usuarioId: string, montoApertura: number) => {
-    // Leer extras guardados por AperturaCajaModal (cajaNombre, turno, vendedoraNombre)
-    let extras: { cajaNombre?: string; turno?: 'Mañana' | 'Tarde' | 'Noche'; vendedoraNombre?: string } = {};
-    try {
-      const raw = localStorage.getItem('dp_caja_extras');
-      if (raw) { extras = JSON.parse(raw); localStorage.removeItem('dp_caja_extras'); }
-    } catch { /* ignorar errores de localStorage */ }
-
-    const now = new Date().toISOString();
-    const nuevaSesion: CajaSesion = {
-      id: crypto.randomUUID(),
-      usuarioId,
-      fechaApertura: now,
-      montoApertura,
-      totalVentas: 0,
-      ventasIds: [],
-      movimientos: [],
-      estado: 'abierta',
-      cajaNombre: extras.cajaNombre,
-      turno: extras.turno,
-      vendedoraNombre: extras.vendedoraNombre,
-    };
-
-    await db.addSesionCaja(nuevaSesion);
-    setCajaActiva(nuevaSesion);
-    setSesionesCaja(prev => [nuevaSesion, ...prev]);
-    return nuevaSesion;
-  }, []);
-
-  const cerrarCaja = useCallback(async (montoCierre: number) => {
-    if (!cajaActiva) return;
-
-    const updatedCaja: CajaSesion = {
-      ...cajaActiva,
-      fechaCierre: new Date().toISOString(),
-      montoCierre,
-      estado: 'cerrada',
-    };
-
-    await db.updateSesionCaja(updatedCaja);
-    setCajaActiva(undefined);
-    setSesionesCaja(prev => prev.map(s => s.id === updatedCaja.id ? updatedCaja : s));
-    return updatedCaja;
-  }, [cajaActiva]);
-
-  const registrarMovimientoCaja = useCallback(async (monto: number, tipo: 'entrada' | 'salida', motivo: string, usuarioId: string) => {
-    if (!cajaActiva) {
-      toast.error('Debe haber una caja abierta para registrar movimientos');
-      return;
-    }
-
-    const movimiento: MovimientoCaja = {
-      id: crypto.randomUUID(),
-      cajaId: cajaActiva.id,
-      tipo,
-      monto,
-      motivo,
-      fecha: new Date().toISOString(),
-      usuarioId
-    };
-
-    const updatedCaja: CajaSesion = {
-      ...cajaActiva,
-      movimientos: [...(cajaActiva.movimientos || []), movimiento]
-    };
-
-    await db.updateSesionCaja(updatedCaja);
-    setCajaActiva(updatedCaja);
-    setSesionesCaja(prev => prev.map(s => s.id === updatedCaja.id ? updatedCaja : s));
-
-    toast.success(`${tipo === 'entrada' ? 'Entrada' : 'Salida'} de caja registrada: ${formatCurrency(monto)}`);
-    return movimiento;
-  }, [cajaActiva, formatCurrency]);
 
   // Funciones de utilidad
   const getPreciosByProducto = useCallback((productoId: string) => {
@@ -990,7 +724,7 @@ export function usePriceControl() {
       return producto?.costoBase || 0;
     }
 
-    const costoTotal = receta.ingredientes.reduce((sum, ing) => {
+    const costoTotal = receta.ingredientes.reduce((sum: number, ing: any) => {
       const mejorPrecio = getMejorPrecio(ing.productoId);
       // Si no hay precio de proveedor, usar el costo base manual del ingrediente
       let costoUnitario = 0;
@@ -1060,7 +794,7 @@ export function usePriceControl() {
 
   // Funciones de Reabastecimiento Inteligente
   const generarSugerenciasPedido = useCallback(async () => {
-    const productosBajoStock = inventario.filter(item => item.stockActual <= item.stockMinimo);
+    const productosBajoStock = inventarioHook.inventario.filter(item => item.stockActual <= item.stockMinimo);
     if (productosBajoStock.length === 0) return 0;
 
     const pedidosPorProveedor: Record<string, PrePedidoItem[]> = {};
@@ -1112,7 +846,7 @@ export function usePriceControl() {
       pedidosCreados++;
     }
     return pedidosCreados;
-  }, [inventario, productos, getMejorPrecio]);
+  }, [inventarioHook.inventario, productos, getMejorPrecio]);
 
   const getProductoById = useCallback((id: string) => {
     return productos.find(p => p.id === id);
@@ -1177,16 +911,16 @@ export function usePriceControl() {
       .filter(p => p.estado === 'borrador')
       .reduce((sum, p) => sum + safeNumber(p.total), 0);
 
-    const totalItemsInventario = inventario.length;
-    const itemsBajoStock = inventario.filter(inv => inv.stockActual <= inv.stockMinimo).length;
-    const totalRecepciones = recepciones.length;
-    const recepcionesPendientes = recepciones.filter(r => r.estado === 'en_proceso').length;
+    const totalItemsInventario = inventarioHook.inventario.length;
+    const itemsBajoStock = inventarioHook.inventario.filter(inv => inv.stockActual <= inv.stockMinimo).length;
+    const totalRecepciones = inventarioHook.recepciones.length;
+    const recepcionesPendientes = inventarioHook.recepciones.filter(r => r.estado === 'en_proceso').length;
     const totalCambiosPrecios = historial.length;
 
     // Detección Predictiva de Agotamiento
-    const prediccionAgotamiento = inventario.filter(inv => {
+    const prediccionAgotamiento = inventarioHook.inventario.filter(inv => {
       try {
-        const movs = movimientos.filter(m => m.productoId === inv.productoId && m.tipo === 'salida');
+        const movs = inventarioHook.movimientos.filter(m => m.productoId === inv.productoId && m.tipo === 'salida');
         if (movs.length < 3) return false;
         const consumoPromedio = movs.reduce((a, b) => a + safeNumber(b.cantidad), 0) / 30;
         const diasRestantes = safeNumber(inv.stockActual) / (consumoPromedio || 1);
@@ -1201,6 +935,7 @@ export function usePriceControl() {
       totalProveedores,
       alertasNoLeidas: alertasNoLeidasCount,
       utilidadPromedio: Math.round(utilidadPromedio * 100) / 100,
+      productosConPrecio: productosConPrecio.length,
       productosSinPrecio,
       totalPrePedidos,
       prePedidosConfirmados,
@@ -1213,15 +948,15 @@ export function usePriceControl() {
       itemsEnRiesgo: prediccionAgotamiento,
       totalRecetas: recetas.length,
       // Estadísticas de Ventas
-      ventasHoy: ventas.filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0])).length,
-      ingresosHoy: ventas
+      ventasHoy: ventasHook.ventas.filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0])).length,
+      ingresosHoy: ventasHook.ventas
         .filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0]))
         .reduce((sum, v) => sum + safeNumber(v.total), 0),
-      ticketPromedio: ventas.length > 0
-        ? ventas.reduce((sum, v) => sum + safeNumber(v.total), 0) / ventas.length
+      ticketPromedio: ventasHook.ventas.length > 0
+        ? ventasHook.ventas.reduce((sum, v) => sum + safeNumber(v.total), 0) / ventasHook.ventas.length
         : 0,
     };
-  }, [productos, proveedores, alertas, precios, prepedidos, inventario, recepciones, historial, movimientos, recetas, ventas, getMejorPrecio]);
+  }, [productos, proveedores, alertas, precios, prepedidos, inventarioHook.inventario, inventarioHook.recepciones, historial, inventarioHook.movimientos, recetas, ventasHook.ventas, getMejorPrecio]);
 
   // Alias para mantener compatibilidad
   const getEstadisticas = useCallback(() => estadisticas, [estadisticas]);
@@ -1235,12 +970,24 @@ export function usePriceControl() {
     setPrepedidos([]);
     setAlertas([]);
     setConfiguracion(defaultConfig);
-    setInventario([]);
-    setMovimientos([]);
-    setRecepciones([]);
     setHistorial([]);
     setRecetas([]);
-  }, []);
+    // Limpiar sub-hooks
+    finanzas.setGastos([]);
+    finanzas.setAhorros([]);
+    finanzas.setCreditosClientes([]);
+    finanzas.setCreditosTrabajadores([]);
+    finanzas.setTrabajadores([]);
+    produccionHook.setProduccion([]);
+    ventasHook.setVentas([]);
+    ventasHook.setSesionesCaja([]);
+    ventasHook.setCajaActiva(undefined);
+    ventasHook.setMesas([]);
+    ventasHook.setPedidosActivos([]);
+    inventarioHook.setInventario([]);
+    inventarioHook.setMovimientos([]);
+    inventarioHook.setRecepciones([]);
+  }, [finanzas, produccionHook, ventasHook, inventarioHook]);
 
   // Sincronización Manual
   const syncWithCloud = useCallback(async () => {
@@ -1263,162 +1010,17 @@ export function usePriceControl() {
     }
   }, [loadAllData]);
 
-  // Funciones de Producción
-  const addOrdenProduccion = useCallback(async (data: Omit<OrdenProduccion, 'id' | 'fechaInicio' | 'estado'>) => {
-    const orden: OrdenProduccion = {
-      ...data,
-      id: crypto.randomUUID(),
-      fechaInicio: new Date().toISOString(),
-      estado: 'planeado',
-    };
-    await db.addOrdenProduccion(orden as any);
-    setProduccion(prev => [...prev, orden]);
-    return orden;
-  }, []);
 
-  const updateOrdenProduccion = useCallback(async (id: string, updates: Partial<OrdenProduccion>) => {
-    const orden = produccion.find(o => o.id === id);
-    if (!orden) return;
-    const updatedOrden = { ...orden, ...updates };
-    await db.updateOrdenProduccion(updatedOrden as any);
-    setProduccion(prev => prev.map(o => o.id === id ? updatedOrden : o));
-  }, [produccion]);
+  // Wire onAjustarStock ref for sub-hooks
+  onAjustarStockRef.current = inventarioHook.onAjustarStock;
 
-  const finalizarProduccion = useCallback(async (id: string, cantidadCompletada: number) => {
-    const orden = produccion.find(o => o.id === id);
-    if (!orden || orden.estado === 'completado') return;
-
-    // 1. Obtener receta
-    const receta = recetas.find(r => r.productoId === orden.productoId);
-    if (!receta) {
-      toast.error('No hay receta definida para este producto. No se pueden descontar insumos.');
-    } else {
-      // 2. Descontar ingredientes
-      for (const ingrediente of receta.ingredientes) {
-        const cantidadTotal = (ingrediente.cantidad / receta.porcionesResultantes) * cantidadCompletada;
-        await onAjustarStock(
-          ingrediente.productoId,
-          cantidadTotal,
-          'salida',
-          `Producción Lote: ${orden.lote || 'N/A'} - Orden: ${orden.id.slice(0, 8)}`
-        );
-      }
-    }
-
-    // 3. Cargar producto terminado
-    await onAjustarStock(
-      orden.productoId,
-      cantidadCompletada,
-      'entrada',
-      `Producción Finalizada Lote: ${orden.lote || 'N/A'}`
-    );
-
-    // 4. Actualizar orden
-    const updatedOrden: OrdenProduccion = {
-      ...orden,
-      cantidadCompletada,
-      estado: 'completado',
-      fechaFin: new Date().toISOString()
-    };
-    await db.updateOrdenProduccion(updatedOrden as any);
-    setProduccion(prev => prev.map(o => o.id === id ? updatedOrden : o));
-
-    toast.success(`Producción de ${cantidadCompletada} unidades completada y stock actualizado.`);
-  }, [produccion, recetas, onAjustarStock]);
-
-  // Estados para Formulaciones y Modelos de Pan
-  const [formulaciones, setFormulaciones] = useState<import('@/types').FormulacionBase[]>([]);
-  const [modelosPan, setModelosPan] = useState<import('@/types').ModeloPan[]>([]);
-
-  // Cargar formulaciones y modelos desde localStorage
-  useEffect(() => {
-    const savedFormulaciones = localStorage.getItem('formulaciones');
-    const savedModelos = localStorage.getItem('modelosPan');
-    if (savedFormulaciones) setFormulaciones(JSON.parse(savedFormulaciones));
-    if (savedModelos) setModelosPan(JSON.parse(savedModelos));
-  }, []);
-
-  // Persistir formulaciones
-  useEffect(() => {
-    if (formulaciones.length > 0 || localStorage.getItem('formulaciones')) {
-      localStorage.setItem('formulaciones', JSON.stringify(formulaciones));
-    }
-  }, [formulaciones]);
-
-  // Persistir modelos
-  useEffect(() => {
-    if (modelosPan.length > 0 || localStorage.getItem('modelosPan')) {
-      localStorage.setItem('modelosPan', JSON.stringify(modelosPan));
-    }
-  }, [modelosPan]);
-
-  // Funciones CRUD para Formulaciones
-  const addFormulacion = useCallback(async (data: Omit<import('@/types').FormulacionBase, 'id'>) => {
-    const formulacion: import('@/types').FormulacionBase = {
-      ...data,
-      id: crypto.randomUUID(),
-    };
-    setFormulaciones(prev => [...prev, formulacion]);
-    toast.success('Formulación creada');
-    return formulacion;
-  }, []);
-
-  const updateFormulacion = useCallback(async (id: string, updates: Partial<import('@/types').FormulacionBase>) => {
-    setFormulaciones(prev => prev.map(f => f.id === id ? { ...f, ...updates, fechaActualizacion: new Date().toISOString() } : f));
-    toast.success('Formulación actualizada');
-  }, []);
-
-  const deleteFormulacion = useCallback(async (id: string) => {
-    setFormulaciones(prev => prev.filter(f => f.id !== id));
-    toast.success('Formulación eliminada');
-  }, []);
-
-  // Funciones CRUD para Modelos de Pan
-  const addModeloPan = useCallback(async (data: Omit<import('@/types').ModeloPan, 'id'>) => {
-    const modelo: import('@/types').ModeloPan = {
-      ...data,
-      id: crypto.randomUUID(),
-    };
-    setModelosPan(prev => [...prev, modelo]);
-    toast.success('Modelo de pan creado');
-    return modelo;
-  }, []);
-
-  const updateModeloPan = useCallback(async (id: string, updates: Partial<import('@/types').ModeloPan>) => {
-    setModelosPan(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
-    toast.success('Modelo actualizado');
-  }, []);
-
-  const deleteModeloPan = useCallback(async (id: string) => {
-    setModelosPan(prev => prev.filter(m => m.id !== id));
-    toast.success('Modelo eliminado');
-  }, []);
 
   return {
-    // Datos
-    productos,
-    proveedores,
-    precios,
-    historial,
-    alertas,
-    configuracion,
-    prepedidos,
-    recepciones,
-    estadisticas, // Nuevo export para uso directo sin llamar a función
+    // Datos Base
+    productos, proveedores, precios, historial, alertas, configuracion, prepedidos, estadisticas, loaded,
+    downloadFromCloud, syncWithCloud, cargarDatosEjemplo, clearAllData, loadAllData, MONEDAS,
 
-    inventario,
-    movimientos,
-    produccion,
-    formulaciones,
-    modelosPan,
-    loaded,
-    downloadFromCloud,
-    syncWithCloud,
-
-    // Datos de ejemplo
-    cargarDatosEjemplo,
-
-    // Acciones de Recetas
+    // Recetas, Categorías, Productos, Proveedores, Precios, Pre-Pedidos
     addReceta: async (r: Receta) => {
       await db.addReceta(r as any);
       setRecetas(prev => [...prev, r]);
@@ -1433,213 +1035,30 @@ export function usePriceControl() {
     },
     getRecetaByProducto: (pid: string) => recetas.find(r => r.productoId === pid),
     recetas,
-
-    // Acciones de Categorías
-    addCategoria,
-    deleteCategoria,
-
-    // Acciones de Productos
-    addProducto,
-    updateProducto,
-    deleteProducto,
-
-    // Acciones de Proveedores
-    addProveedor,
-    updateProveedor,
-    deleteProveedor,
-
-    // Acciones de Precios
-    addOrUpdatePrecio,
-    deletePrecio,
-
-    // Acciones de Pre-Pedidos
-    addPrePedido,
-    updatePrePedido,
-    deletePrePedido,
-    addItemToPrePedido,
-    removeItemFromPrePedido,
-    updateItemCantidad,
-
-    // Acciones de Alertas
-    marcarAlertaLeida,
-    marcarTodasAlertasLeidas,
-    deleteAlerta,
-    clearAllAlertas,
-
-    // Acciones de Inventario
-    onAjustarStock,
-
-    // Acciones de Producción
-    addOrdenProduccion,
-    updateOrdenProduccion,
-    finalizarProduccion,
-
-    // Acciones de Formulaciones y Modelos
-    addFormulacion,
-    updateFormulacion,
-    deleteFormulacion,
-    addModeloPan,
-    updateModeloPan,
-    deleteModeloPan,
-
-    // Acciones de Recepciones
-    addRecepcion,
-    confirmarRecepcion,
-    updateRecepcion,
-    getRecepcionesByProveedor,
-
-    // Configuración
+    addCategoria, deleteCategoria,
+    addProducto, updateProducto, deleteProducto,
+    addProveedor, updateProveedor, deleteProveedor,
+    addOrUpdatePrecio, deletePrecio,
+    addPrePedido, updatePrePedido, deletePrePedido, addItemToPrePedido, removeItemFromPrePedido, updateItemCantidad,
+    marcarAlertaLeida, marcarTodasAlertasLeidas, deleteAlerta, clearAllAlertas,
     updateConfiguracion,
+    formatCurrency, getMonedaActual, getPreciosByProducto, getPreciosByProveedor, getMejorPrecio, getMejorPrecioByProveedor,
+    generarSugerenciasPedido, getProductoById, getProveedorById, getPrecioByIds, getPrePedidoById, getPrePedidosByProveedor,
+    getAlertasNoLeidas, getEstadisticas,
 
-    // Ventas y Caja
-    ventas,
-    sesionesCaja,
-    cajaActiva,
-    registrarVenta,
-    abrirCaja,
-    cerrarCaja,
-    registrarMovimientoCaja,
+    // --- DELEGACIÓN A SUB-HOOK: PRODUCCIÓN ---
+    ...produccionHook,
 
-    // Utilidades
-    formatCurrency,
-    getMonedaActual,
-    getPreciosByProducto,
-    getPreciosByProveedor,
-    getMejorPrecio,
-    getMejorPrecioByProveedor,
-    generarSugerenciasPedido,
-    getProductoById,
-    getProveedorById,
-    getPrecioByIds,
-    getPrePedidoById,
-    getPrePedidosByProveedor,
-    getAlertasNoLeidas,
-    getEstadisticas,
-    ahorros,
-    mesas,
-    pedidosActivos,
-    updateMesa: useCallback(async (mesa: Mesa) => {
-      await db.updateMesa(mesa);
-      setMesas(prev => prev.map(m => m.id === mesa.id ? mesa : m));
-    }, []),
-    addMesa: useCallback(async (mesa: Mesa) => {
-      await db.updateMesa(mesa); // put = upsert
-      setMesas(prev => [...prev, mesa]);
-    }, []),
-    deleteMesa: useCallback(async (id: string) => {
-      await db.deleteMesa(id);
-      setMesas(prev => prev.filter(m => m.id !== id));
-    }, []),
-    addPedidoActivo: useCallback(async (pedido: PedidoActivo) => {
-      await db.addPedidoActivo(pedido);
-      setPedidosActivos(prev => [...prev, pedido]);
-    }, []),
-    updatePedidoActivo: useCallback(async (pedido: PedidoActivo) => {
-      await db.updatePedidoActivo(pedido);
-      setPedidosActivos(prev => prev.map(p => p.id === pedido.id ? pedido : p));
-    }, []),
-    deletePedidoActivo: useCallback(async (id: string) => {
-      await db.deletePedidoActivo(id);
-      setPedidosActivos(prev => prev.filter(p => p.id !== id));
-    }, []),
+    // --- DELEGACIÓN A SUB-HOOK: FINANZAS ---
+    ...finanzas,
+    // Sobrescribimos generarReporte para pasarle el estado ventas desde ventasHook
+    generarReporte: (periodo: string) => finanzas.generarReporte(periodo, ventasHook.ventas),
 
-    // Gastos
-    gastos,
-    addGasto: useCallback(async (g: Omit<Gasto, 'id'>) => {
-      const newG = { ...g, id: crypto.randomUUID() };
-      await db.addGasto(newG as any);
-      setGastos(prev => [newG as Gasto, ...prev]);
-    }, []),
-    updateGasto: useCallback(async (id: string, updates: Partial<Gasto>) => {
-      const gasto = gastos.find(g => g.id === id);
-      if (!gasto) return;
-      const updated = { ...gasto, ...updates };
-      await db.updateGasto(updated as any);
-      setGastos(prev => prev.map(g => g.id === id ? updated : g));
-    }, [gastos]),
-    deleteGasto: useCallback(async (id: string) => {
-      await db.deleteGasto(id);
-      setGastos(prev => prev.filter(g => g.id !== id));
-    }, []),
-    generarReporte: useCallback((periodo: string) => {
-      const gastosPeriodo = gastos.filter(g => g.fecha.startsWith(periodo));
-      const ventasPeriodo = ventas.filter(v => v.fecha.startsWith(periodo));
+    // --- DELEGACIÓN A SUB-HOOK: VENTAS, CAJA Y MESAS ---
+    ...ventasHook,
 
-      const totalVentas = ventasPeriodo.reduce((s, v) => s + v.total, 0);
-      const totalGastos = gastosPeriodo.reduce((s, g) => s + g.monto, 0);
-
-      const gastosPorCategoria = gastosPeriodo.reduce((acc, g) => {
-        acc[g.categoria] = (acc[g.categoria] || 0) + g.monto;
-        return acc;
-      }, {} as any);
-
-      return {
-        periodo,
-        totalVentas,
-        totalGastos,
-        utilidadBruta: totalVentas - totalGastos,
-        gastosPorCategoria,
-        ventasPorMetodoPago: ventasPeriodo.reduce((acc, v) => {
-          acc[v.metodoPago] = (acc[v.metodoPago] || 0) + v.total;
-          return acc;
-        }, {} as any)
-      };
-    }, [gastos, ventas]),
-
-    // Créditos a Clientes
-    creditosClientes,
-    addCreditoCliente: useCallback(async (c: Omit<CreditoCliente, 'id' | 'createdAt'>) => {
-      const nuevo: CreditoCliente = { ...c, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
-      await db.addCreditoCliente(nuevo);
-      setCreditosClientes(prev => [nuevo, ...prev]);
-    }, []),
-    updateCreditoCliente: useCallback(async (id: string, updates: Partial<CreditoCliente>) => {
-      const credito = creditosClientes.find(c => c.id === id);
-      if (!credito) return;
-      const updated = { ...credito, ...updates };
-      await db.updateCreditoCliente(updated);
-      setCreditosClientes(prev => prev.map(c => c.id === id ? updated : c));
-    }, [creditosClientes]),
-    deleteCreditoCliente: useCallback(async (id: string) => {
-      await db.deleteCreditoCliente(id);
-      setCreditosClientes(prev => prev.filter(c => c.id !== id));
-    }, []),
-    registrarPagoCredito: useCallback(async (creditoId: string, pago: Omit<PagoCredito, 'id' | 'creditoId'>) => {
-      const credito = creditosClientes.find(c => c.id === creditoId);
-      if (!credito) return;
-      const nuevoPago: PagoCredito = { ...pago, id: crypto.randomUUID(), creditoId };
-      const nuevoSaldo = Math.max(0, credito.saldo - pago.monto);
-      const updated: CreditoCliente = {
-        ...credito,
-        saldo: nuevoSaldo,
-        estado: nuevoSaldo <= 0 ? 'pagado' : credito.estado,
-        pagos: [...credito.pagos, nuevoPago]
-      };
-      await db.updateCreditoCliente(updated);
-      setCreditosClientes(prev => prev.map(c => c.id === creditoId ? updated : c));
-    }, [creditosClientes]),
-
-    // Trabajadores
-    trabajadores,
-    addTrabajador: useCallback(async (t: Omit<Trabajador, 'id' | 'createdAt'>) => {
-      const nuevo: Trabajador = { ...t, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
-      await db.addTrabajador(nuevo);
-      setTrabajadores(prev => [nuevo, ...prev]);
-    }, []),
-    updateTrabajador: useCallback(async (id: string, updates: Partial<Trabajador>) => {
-      const trab = trabajadores.find(t => t.id === id);
-      if (!trab) return;
-      const updated = { ...trab, ...updates };
-      await db.updateTrabajador(updated);
-      setTrabajadores(prev => prev.map(t => t.id === id ? updated : t));
-    }, [trabajadores]),
-    deleteTrabajador: useCallback(async (id: string) => {
-      await db.deleteTrabajador(id);
-      setTrabajadores(prev => prev.filter(t => t.id !== id));
-    }, []),
-
-    clearAllData,
-    loadAllData,
-    MONEDAS,
+    // --- DELEGACIÓN A SUB-HOOK: INVENTARIO Y RECEPCIONES ---
+    ...inventarioHook,
   };
 }
+

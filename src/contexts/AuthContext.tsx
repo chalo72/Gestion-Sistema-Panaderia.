@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { Usuario, UserRole, Permission } from '@/types';
-import { ROLE_PERMISSIONS, USUARIOS_PRUEBA } from '@/types';
+import { ROLE_PERMISSIONS } from '@/types';
+import { USUARIOS_PRUEBA } from '@/lib/seed-data';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 

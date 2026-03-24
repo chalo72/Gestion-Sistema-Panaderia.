@@ -194,6 +194,11 @@ function AppContent() {
     updateCreditoCliente,
     deleteCreditoCliente,
     registrarPagoCredito,
+    creditosTrabajadores,
+    addCreditoTrabajador,
+    updateCreditoTrabajador,
+    deleteCreditoTrabajador,
+    registrarPagoCreditoTrabajador,
     trabajadores,
     addTrabajador,
     updateTrabajador,
@@ -231,7 +236,7 @@ function AppContent() {
   const isLoading = (authLoading || !dataLoaded) && !isForceLoaded;
 
   useEffect(() => {
-    let timer: any;
+    let timer: ReturnType<typeof setTimeout>;
     if (isLoading && !isForceLoaded) {
       timer = setTimeout(() => {
         setShowForceLoad(true);
@@ -612,11 +617,10 @@ function AppContent() {
         ) : <UnauthorizedState />;
       case 'listapreciosproincial':
         // Ruta absorbida por Inventario (tab Precios + Stock)
-        setCurrentView('inventario');
         return null;
       case 'creditos':
         return hasPermission('VER_FINANZAS') ? (
-          <SectionErrorBoundary sectionName="Créditos a Clientes">
+          <SectionErrorBoundary sectionName="Créditos">
             <Suspense fallback={<SectionSkeleton />}>
               <CreditosClientes
                 creditosClientes={creditosClientes}
@@ -624,8 +628,16 @@ function AppContent() {
                 onUpdateCreditoCliente={updateCreditoCliente}
                 onDeleteCreditoCliente={deleteCreditoCliente}
                 onRegistrarPagoCredito={registrarPagoCredito}
+                creditosTrabajadores={creditosTrabajadores}
+                onAddCreditoTrabajador={addCreditoTrabajador}
+                onUpdateCreditoTrabajador={updateCreditoTrabajador}
+                onDeleteCreditoTrabajador={deleteCreditoTrabajador}
+                onRegistrarPagoCreditoTrabajador={registrarPagoCreditoTrabajador}
                 formatCurrency={formatCurrency}
                 usuario={usuario!}
+                productos={productos}
+                trabajadores={trabajadores}
+                onGoToTrabajadores={() => setCurrentView('trabajadores')}
               />
             </Suspense>
           </SectionErrorBoundary>
@@ -640,6 +652,12 @@ function AppContent() {
                 onUpdateTrabajador={updateTrabajador}
                 onDeleteTrabajador={deleteTrabajador}
                 formatCurrency={formatCurrency}
+                creditosTrabajadores={creditosTrabajadores}
+                onAddCreditoTrabajador={addCreditoTrabajador}
+                onUpdateCreditoTrabajador={updateCreditoTrabajador}
+                onDeleteCreditoTrabajador={deleteCreditoTrabajador}
+                onRegistrarPagoCreditoTrabajador={registrarPagoCreditoTrabajador}
+                usuario={usuario!}
               />
             </Suspense>
           </SectionErrorBoundary>
@@ -717,11 +735,14 @@ function AppContent() {
             <div>
               <div className="flex items-center gap-2">
                 <p className="text-base font-bold text-foreground">{usuario?.nombre} {usuario?.apellido}</p>
-                {isOnline ? (
-                  <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 bg-emerald-50/50">Online</Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 bg-amber-50/50 grayscale">Offline</Badge>
-                )}
+                <div className="flex gap-2">
+                  {isOnline ? (
+                    <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 bg-emerald-50/50">Online</Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 bg-amber-50/50 grayscale">Offline</Badge>
+                  )}
+                  <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-600 bg-blue-50/50 animate-pulse">Nexus v3.1-FIX</Badge>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground font-medium">{usuario?.rol}</p>
             </div>

@@ -43,8 +43,6 @@ interface MetaAhorro {
 export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProps) {
     const totalRecaudado = useMemo(() => ventas.reduce((acc, v) => acc + v.total, 0), [ventas]);
     const ahorroEstimado = totalRecaudado * 0.15;
-    const metaAhorro = 5000000;
-    const porcentajeMeta = Math.min((ahorroEstimado / metaAhorro) * 100, 100);
 
     const [showMetaModal, setShowMetaModal] = useState(false);
     const [metas, setMetas] = useState<MetaAhorro[]>(() => {
@@ -53,6 +51,22 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
         } catch { return []; }
     });
     const [formMeta, setFormMeta] = useState({ nombre: '', monto: '', plazo: '' });
+
+    // Meta principal: usa el monto de la primera meta creada, o $5M por defecto
+    const metaAhorro = metas.length > 0 ? metas[0].monto : 5000000;
+    const porcentajeMeta = Math.min((ahorroEstimado / metaAhorro) * 100, 100);
+
+    // Crecimiento mensual real vs mes anterior
+    const crecimientoMensual = useMemo(() => {
+        const ahora = new Date();
+        const mesActual = ahora.toISOString().slice(0, 7);
+        const mesAnterior = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1).toISOString().slice(0, 7);
+        const ventasMes = ventas.filter(v => v.fecha?.startsWith(mesActual)).reduce((a, v) => a + v.total, 0);
+        const ventasAnterior = ventas.filter(v => v.fecha?.startsWith(mesAnterior)).reduce((a, v) => a + v.total, 0);
+        if (ventasAnterior === 0) return ventasMes > 0 ? '+100%' : '—';
+        const pct = ((ventasMes - ventasAnterior) / ventasAnterior) * 100;
+        return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+    }, [ventas]);
 
     const handleGuardarMeta = () => {
         if (!formMeta.nombre.trim() || !formMeta.monto) {
@@ -145,7 +159,7 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full md:w-auto shrink-0">
                             {[
-                                { icon: TrendingUp, label: 'Mensual', value: '+12.5%', color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                                { icon: TrendingUp, label: 'Mensual', value: crecimientoMensual, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
                                 { icon: ShieldCheck, label: 'Reserva', value: '100%', color: 'text-blue-400', bg: 'bg-blue-500/10' },
                                 { icon: Sparkles, label: 'Capital', value: 'Activo', color: 'text-amber-400', bg: 'bg-amber-500/10' },
                                 { icon: Rocket, label: 'Proy.', value: 'Q4', color: 'text-purple-400', bg: 'bg-purple-500/10' },
@@ -197,23 +211,27 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                         bg: 'bg-indigo-500/10',
                         content: (
                             <div className="space-y-4">
-                                {(ahorros?.length > 0 ? ahorros : [
-                                    { nombre: 'Nuevo Horno Turbo', progreso: 70, color: 'bg-indigo-500' },
-                                    { nombre: 'Batidora Industrial', progreso: 100, color: 'bg-emerald-500' }
-                                ]).map((meta: any, i: number) => (
-                                    <div key={i} className="group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-gray-800/20 transition-all">
-                                        <div className="flex items-center justify-between mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <div className={cn("w-1.5 h-1.5 rounded-full shadow-sm", meta.color || 'bg-indigo-500')} />
-                                                <span className="text-[10px] font-black uppercase tracking-tight text-slate-800 dark:text-gray-300">{meta.nombre}</span>
+                                {metas.length > 0 ? metas.map((meta, i) => {
+                                    const colores = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500'];
+                                    const color = colores[i % colores.length];
+                                    const progreso = Math.min((ahorroEstimado / meta.monto) * 100, 100);
+                                    return (
+                                        <div key={meta.id} className="group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-gray-800/20 transition-all">
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-sm", color)} />
+                                                    <span className="text-[10px] font-black uppercase tracking-tight text-slate-800 dark:text-gray-300">{meta.nombre}</span>
+                                                </div>
+                                                <Badge variant="outline" className="text-[8px] font-black border-none bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 px-2 py-0.5 rounded-md">
+                                                    {progreso >= 100 ? 'LISTO' : `${progreso.toFixed(0)}%`}
+                                                </Badge>
                                             </div>
-                                            <Badge variant="outline" className="text-[8px] font-black border-none bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 px-2 py-0.5 rounded-md">
-                                                {meta.progreso === 100 ? 'SUCCESS' : `${meta.progreso}%`}
-                                            </Badge>
+                                            <Progress value={progreso} className="h-1 bg-slate-100 dark:bg-gray-800" indicatorClassName={color} />
                                         </div>
-                                        <Progress value={meta.progreso} className="h-1 bg-slate-100 dark:bg-gray-800" indicatorClassName={meta.color || 'bg-indigo-500'} />
-                                    </div>
-                                ))}
+                                    );
+                                }) : (
+                                    <p className="text-[10px] text-muted-foreground text-center py-4 opacity-60 font-bold uppercase tracking-widest">Sin metas. Crea una con "Nueva Meta".</p>
+                                )}
                             </div>
                         )
                     },

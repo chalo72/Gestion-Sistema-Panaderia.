@@ -31,6 +31,17 @@
   </style>
   <script>
     console.log("🚀 Antigravity Boot Probe: index.html loaded");
+    // NUCLEAR CACHE PURGE
+    if (window.navigator && 'serviceWorker' in window.navigator) {
+      window.navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let registration of registrations) {
+          registration.unregister().then(() => {
+            console.log("🧹 Service Worker de-registered");
+            window.location.reload();
+          });
+        }
+      });
+    }
     window.onerror = (m, s, l, c, e) => {
       console.error("❌ CRITICAL BOOT ERROR:", m, s, l);
       document.body.innerHTML = `

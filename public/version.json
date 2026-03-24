@@ -1,7 +1,7 @@
 {
-  "version": "1.0.54",
-  "timestamp": 1774147163600,
-  "buildDate": "2026-03-22",
+  "version": "1.0.95",
+  "timestamp": 1774308182314,
+  "buildDate": "2026-03-23",
   "changes": [
     "Sistema de gestión de precios optimizado",
     "Auto-sincronización offline",

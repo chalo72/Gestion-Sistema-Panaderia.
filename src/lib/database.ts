@@ -315,6 +315,11 @@ export interface IDatabase {
   getFacturasEscaneadasByProveedor(proveedorId: string): Promise<any[]>;
   getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string): Promise<any[]>;
 
+  // Préstamos entre Cajas
+  getAllPrestamosCaja(): Promise<any[]>;
+  addPrestamoCaja(prestamo: any): Promise<void>;
+  updatePrestamoCaja(prestamo: any): Promise<void>;
+
   clearAll(): Promise<void>;
 
   syncLocalToCloud?(): Promise<void>;
@@ -322,7 +327,7 @@ export interface IDatabase {
 }
 
 const DB_NAME = 'PriceControlDB';
-const DB_VERSION = 12; // Incrementado para incluir producción
+const DB_VERSION = 14; // Incrementado para incluir prestamos_caja
 
 class IndexedDBDatabase implements IDatabase {
   private db: IDBDatabase | null = null;
@@ -451,6 +456,19 @@ class IndexedDBDatabase implements IDatabase {
           const s = db.createObjectStore('trabajadores', { keyPath: 'id' });
           s.createIndex('estado', 'estado', { unique: false });
           s.createIndex('rol', 'rol', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('creditos_trabajadores')) {
+          const s = db.createObjectStore('creditos_trabajadores', { keyPath: 'id' });
+          s.createIndex('trabajadorId', 'trabajadorId', { unique: false });
+          s.createIndex('estado', 'estado', { unique: false });
+          s.createIndex('fecha', 'fecha', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('prestamos_caja')) {
+          const s = db.createObjectStore('prestamos_caja', { keyPath: 'id' });
+          s.createIndex('estado', 'estado', { unique: false });
+          s.createIndex('fechaPrestamo', 'fechaPrestamo', { unique: false });
+          s.createIndex('cajaOrigenId', 'cajaOrigenId', { unique: false });
+          s.createIndex('cajaDestinoId', 'cajaDestinoId', { unique: false });
         }
       };
     });
@@ -1032,6 +1050,36 @@ class IndexedDBDatabase implements IDatabase {
     });
   }
 
+  // Créditos Trabajadores
+  async getAllCreditosTrabajadores(): Promise<any[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_trabajadores'], 'readonly').objectStore('creditos_trabajadores').getAll();
+      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
+    });
+  }
+  async addCreditoTrabajador(c: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_trabajadores'], 'readwrite').objectStore('creditos_trabajadores').add(c);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async updateCreditoTrabajador(c: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_trabajadores'], 'readwrite').objectStore('creditos_trabajadores').put(c);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async deleteCreditoTrabajador(id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['creditos_trabajadores'], 'readwrite').objectStore('creditos_trabajadores').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
   // Trabajadores
   async getAllTrabajadores(): Promise<any[]> {
     const db = await this.ensureInit();
@@ -1058,6 +1106,29 @@ class IndexedDBDatabase implements IDatabase {
     const db = await this.ensureInit();
     return new Promise((resolve, reject) => {
       const req = db.transaction(['trabajadores'], 'readwrite').objectStore('trabajadores').delete(id);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Préstamos entre Cajas
+  async getAllPrestamosCaja(): Promise<any[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['prestamos_caja'], 'readonly').objectStore('prestamos_caja').getAll();
+      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
+    });
+  }
+  async addPrestamoCaja(p: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['prestamos_caja'], 'readwrite').objectStore('prestamos_caja').add(p);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async updatePrestamoCaja(p: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['prestamos_caja'], 'readwrite').objectStore('prestamos_caja').put(p);
       req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
     });
   }
@@ -1440,11 +1511,22 @@ class HybridDatabase implements IDatabase {
   async updateCreditoCliente(c: any) { await this.local.updateCreditoCliente(c); }
   async deleteCreditoCliente(id: string) { await this.local.deleteCreditoCliente(id); }
 
+  // Créditos Trabajadores Hybrid
+  async getAllCreditosTrabajadores() { return this.local.getAllCreditosTrabajadores(); }
+  async addCreditoTrabajador(c: any) { await this.local.addCreditoTrabajador(c); }
+  async updateCreditoTrabajador(c: any) { await this.local.updateCreditoTrabajador(c); }
+  async deleteCreditoTrabajador(id: string) { await this.local.deleteCreditoTrabajador(id); }
+
   // Trabajadores Hybrid
   async getAllTrabajadores() { return this.local.getAllTrabajadores(); }
   async addTrabajador(t: any) { await this.local.addTrabajador(t); }
   async updateTrabajador(t: any) { await this.local.updateTrabajador(t); }
   async deleteTrabajador(id: string) { await this.local.deleteTrabajador(id); }
+
+  // Préstamos entre Cajas Hybrid (solo local — datos sensibles del admin)
+  async getAllPrestamosCaja() { return this.local.getAllPrestamosCaja(); }
+  async addPrestamoCaja(p: any) { await this.local.addPrestamoCaja(p); }
+  async updatePrestamoCaja(p: any) { await this.local.updatePrestamoCaja(p); }
 
   async clearAll() { await this.local.clearAll(); }
 }

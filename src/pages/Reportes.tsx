@@ -95,6 +95,25 @@ export default function Reportes({
         }));
     }, [reporteActual]);
 
+    // Reporte del mes anterior para calcular tendencias reales
+    const prevPeriodo = useMemo(() => {
+        const d = new Date();
+        d.setMonth(d.getMonth() - 1);
+        return d.toISOString().slice(0, 7);
+    }, []);
+
+    const reporteMesAnterior = useMemo(() => generarReporte(prevPeriodo), [ventas, gastos, prevPeriodo, generarReporte]);
+
+    // Calcula % cambio real entre dos valores
+    const calcTrend = (actual: number, anterior: number): string => {
+        if (anterior === 0) return actual > 0 ? 'Nuevo' : '—';
+        const pct = ((actual - anterior) / anterior) * 100;
+        return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
+    };
+
+    const margenActual = reporteActual.totalVentas > 0 ? (reporteActual.utilidadBruta / reporteActual.totalVentas) * 100 : 0;
+    const margenAnterior = reporteMesAnterior.totalVentas > 0 ? (reporteMesAnterior.utilidadBruta / reporteMesAnterior.totalVentas) * 100 : 0;
+
     const cardsData = [
         {
             title: 'Ventas del Mes',
@@ -102,7 +121,7 @@ export default function Reportes({
             icon: TrendingUp,
             color: 'text-emerald-500',
             bg: 'bg-emerald-500/10',
-            trend: '+12.5%'
+            trend: calcTrend(reporteActual.totalVentas, reporteMesAnterior.totalVentas)
         },
         {
             title: 'Gastos del Mes',
@@ -110,7 +129,7 @@ export default function Reportes({
             icon: TrendingDown,
             color: 'text-rose-500',
             bg: 'bg-rose-500/10',
-            trend: '-2.4%'
+            trend: calcTrend(reporteActual.totalGastos, reporteMesAnterior.totalGastos)
         },
         {
             title: 'Utilidad Bruta',
@@ -118,15 +137,15 @@ export default function Reportes({
             icon: DollarSign,
             color: 'text-indigo-500',
             bg: 'bg-indigo-500/10',
-            trend: '+8.1%'
+            trend: calcTrend(reporteActual.utilidadBruta, reporteMesAnterior.utilidadBruta)
         },
         {
             title: 'Margen Neto',
-            value: `${reporteActual.totalVentas > 0 ? ((reporteActual.utilidadBruta / reporteActual.totalVentas) * 100).toFixed(1) : 0}%`,
+            value: `${margenActual.toFixed(1)}%`,
             icon: Activity,
             color: 'text-amber-500',
             bg: 'bg-amber-500/10',
-            trend: 'Estable'
+            trend: margenAnterior === 0 ? '—' : `${margenActual >= margenAnterior ? '+' : ''}${(margenActual - margenAnterior).toFixed(1)}pp`
         }
     ];
 

@@ -80,7 +80,7 @@ export default defineConfig({
             urlPattern: /.*/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'v1-app-cache',
+              cacheName: 'v3-app-cache-premium',
               expiration: {
                 maxEntries: 50,
                 maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
@@ -93,7 +93,7 @@ export default defineConfig({
         ]
       },
       devOptions: {
-        enabled: true,
+        enabled: false,
         type: 'module'
       }
     })
@@ -105,8 +105,13 @@ export default defineConfig({
   },
   server: {
     port: 5173,
-    host: '0.0.0.0', // Escucha en TODAS las interfaces
-    strictPort: true,
+    host: '0.0.0.0',
+    strictPort: false,
     open: false,
+  },
+  preview: {
+    port: 5173,
+    host: '0.0.0.0',
+    strictPort: false,
   },
 });
