@@ -77,6 +77,7 @@ const FORM_VACIO: Omit<Trabajador, 'id' | 'createdAt'> = {
     estado: 'activo',
     horario: '',
     observaciones: '',
+    fotoPerfil: undefined,
 };
 
 // Convierte archivo a base64
@@ -133,6 +134,7 @@ export default function Trabajadores({
     });
     const [creditoFoto, setCreditoFoto] = useState<string | undefined>(undefined);
     const fotoInputRef = useRef<HTMLInputElement>(null);
+    const fotoPerfilInputRef = useRef<HTMLInputElement>(null);
 
     // Formulario pago
     const [formPago, setFormPago] = useState({
@@ -202,6 +204,7 @@ export default function Trabajadores({
             estado: t.estado,
             horario: t.horario || '',
             observaciones: t.observaciones || '',
+            fotoPerfil: t.fotoPerfil || undefined,
         });
         setShowModal(true);
     };
@@ -225,6 +228,19 @@ export default function Trabajadores({
             toast.error('Error al guardar');
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    // Foto de perfil del trabajador
+    const handleFotoPerfil = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        try {
+            const base64 = await fileToBase64(file);
+            setFormData(p => ({ ...p, fotoPerfil: base64 }));
+            toast.success('Foto de perfil actualizada');
+        } catch {
+            toast.error('Error al cargar la foto');
         }
     };
 
@@ -452,6 +468,13 @@ export default function Trabajadores({
                                             <div className="flex items-start justify-between gap-2">
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-center gap-2 flex-wrap">
+                                                        {t.fotoPerfil ? (
+                                                            <img src={t.fotoPerfil} alt={t.nombre} className="w-8 h-8 rounded-full object-cover border-2 border-violet-200 dark:border-violet-800 shrink-0" />
+                                                        ) : (
+                                                            <div className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
+                                                                <UserCircle2 className="w-5 h-5 text-violet-400" />
+                                                            </div>
+                                                        )}
                                                         <span className="font-black text-base truncate text-gray-900 dark:text-white">{t.nombre}</span>
                                                         <Badge className={`${ESTADO_COLOR[t.estado]} text-[9px] font-bold uppercase tracking-widest border-none`}>
                                                             {t.estado}
@@ -800,6 +823,47 @@ export default function Trabajadores({
                                     onChange={e => setFormData(p => ({ ...p, observaciones: e.target.value }))}
                                     className="mt-1"
                                 />
+                            </div>
+                            <div className="col-span-2">
+                                <Label className="text-xs font-bold uppercase tracking-widest">Foto de perfil</Label>
+                                <input
+                                    ref={fotoPerfilInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="user"
+                                    className="hidden"
+                                    onChange={handleFotoPerfil}
+                                />
+                                {formData.fotoPerfil ? (
+                                    <div className="mt-1 flex items-center gap-3">
+                                        <img src={formData.fotoPerfil} alt="Perfil" className="w-16 h-16 rounded-xl object-cover border-2 border-violet-200 dark:border-violet-800" />
+                                        <div className="flex flex-col gap-1">
+                                            <button
+                                                type="button"
+                                                onClick={() => fotoPerfilInputRef.current?.click()}
+                                                className="text-xs font-bold text-violet-600 hover:text-violet-800 flex items-center gap-1"
+                                            >
+                                                <Camera className="w-3.5 h-3.5" /> Cambiar foto
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData(p => ({ ...p, fotoPerfil: undefined }))}
+                                                className="text-xs font-bold text-red-400 hover:text-red-600 flex items-center gap-1"
+                                            >
+                                                <X className="w-3.5 h-3.5" /> Eliminar foto
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => fotoPerfilInputRef.current?.click()}
+                                        className="mt-1 w-full border-2 border-dashed border-violet-200 dark:border-violet-800 rounded-xl p-4 flex flex-col items-center gap-1 text-violet-400 hover:text-violet-600 hover:border-violet-400 transition-colors"
+                                    >
+                                        <Camera className="w-6 h-6" />
+                                        <span className="text-xs font-bold uppercase tracking-widest">Agregar foto de perfil</span>
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </div>

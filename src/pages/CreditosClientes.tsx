@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import {
     CreditCard, Plus, Search, Trash2, DollarSign,
     CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp,
-    Camera, ShoppingCart, X, Package, Image, UserCircle2, Scissors
+    Camera, ShoppingCart, X, Package, Image, UserCircle2, Scissors, Edit2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -96,10 +96,12 @@ async function fileToBase64(file: File): Promise<string> {
 export default function CreditosClientes({
     creditosClientes,
     onAddCreditoCliente,
+    onUpdateCreditoCliente,
     onDeleteCreditoCliente,
     onRegistrarPagoCredito,
     creditosTrabajadores,
     onAddCreditoTrabajador,
+    onUpdateCreditoTrabajador,
     onDeleteCreditoTrabajador,
     onRegistrarPagoCreditoTrabajador,
     formatCurrency,
@@ -138,6 +140,9 @@ export default function CreditosClientes({
         metodoPago: 'efectivo' as MetodoPago,
         nota: '',
     });
+    const [editandoCredito, setEditandoCredito] = useState<CreditoCliente | null>(null);
+    const [formEditCliente, setFormEditCliente] = useState({ estado: 'activo', descripcion: '', fechaVencimiento: '' });
+    const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
 
     // ── Estado tab trabajadores ───────────────────────────────────────────
     const [searchTrabajador, setSearchTrabajador] = useState('');
@@ -164,6 +169,9 @@ export default function CreditosClientes({
         metodoPago: 'efectivo' as MetodoPago,
         nota: '',
     });
+    const [editandoCreditoTrab, setEditandoCreditoTrab] = useState<CreditoTrabajador | null>(null);
+    const [formEditTrab, setFormEditTrab] = useState({ estado: 'activo', descripcion: '', descontarDeSalario: true });
+    const [isSavingEditTrab, setIsSavingEditTrab] = useState(false);
 
     // ── Cómputos ──────────────────────────────────────────────────────────
 
@@ -293,6 +301,46 @@ export default function CreditosClientes({
             toast.success(`Pago de ${formatCurrency(monto)} registrado`);
         } catch { toast.error('Error al registrar pago'); }
         finally { setIsSavingCliente(false); }
+    };
+
+    const abrirEditarCredito = (c: CreditoCliente) => {
+        setEditandoCredito(c);
+        setFormEditCliente({ estado: c.estado, descripcion: c.descripcion, fechaVencimiento: c.fechaVencimiento || '' });
+    };
+
+    const handleGuardarEditCliente = async () => {
+        if (!editandoCredito) return;
+        setIsSavingEditCliente(true);
+        try {
+            await onUpdateCreditoCliente(editandoCredito.id, {
+                estado: formEditCliente.estado as CreditoCliente['estado'],
+                descripcion: formEditCliente.descripcion.trim() || editandoCredito.descripcion,
+                fechaVencimiento: formEditCliente.fechaVencimiento || undefined,
+            });
+            setEditandoCredito(null);
+            toast.success('Crédito actualizado');
+        } catch { toast.error('Error al actualizar crédito'); }
+        finally { setIsSavingEditCliente(false); }
+    };
+
+    const abrirEditarCreditoTrab = (c: CreditoTrabajador) => {
+        setEditandoCreditoTrab(c);
+        setFormEditTrab({ estado: c.estado, descripcion: c.descripcion, descontarDeSalario: c.descontarDeSalario });
+    };
+
+    const handleGuardarEditTrab = async () => {
+        if (!editandoCreditoTrab) return;
+        setIsSavingEditTrab(true);
+        try {
+            await onUpdateCreditoTrabajador(editandoCreditoTrab.id, {
+                estado: formEditTrab.estado as CreditoTrabajador['estado'],
+                descripcion: formEditTrab.descripcion.trim() || editandoCreditoTrab.descripcion,
+                descontarDeSalario: formEditTrab.descontarDeSalario,
+            });
+            setEditandoCreditoTrab(null);
+            toast.success('Crédito actualizado');
+        } catch { toast.error('Error al actualizar crédito'); }
+        finally { setIsSavingEditTrab(false); }
     };
 
     // ── Lógica trabajadores ───────────────────────────────────────────────
@@ -577,6 +625,12 @@ export default function CreditosClientes({
                                                 {expandedClienteId === credito.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                                             </Button>
                                             <Button size="sm" variant="ghost"
+                                                onClick={() => abrirEditarCredito(credito)}
+                                                className="h-8 w-8 p-0 rounded-xl text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                                title="Editar crédito">
+                                                <Edit2 className="w-4 h-4" />
+                                            </Button>
+                                            <Button size="sm" variant="ghost"
                                                 onClick={async () => { await onDeleteCreditoCliente(credito.id); toast.success('Crédito eliminado'); }}
                                                 className="h-8 w-8 p-0 rounded-xl text-red-500 hover:text-red-700 hover:bg-red-50">
                                                 <Trash2 className="w-4 h-4" />
@@ -760,6 +814,12 @@ export default function CreditosClientes({
                                                 onClick={() => setExpandedTrabId(expandedTrabId === credito.id ? null : credito.id)}
                                                 className="h-8 w-8 p-0 rounded-xl">
                                                 {expandedTrabId === credito.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                                            </Button>
+                                            <Button size="sm" variant="ghost"
+                                                onClick={() => abrirEditarCreditoTrab(credito)}
+                                                className="h-8 w-8 p-0 rounded-xl text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                                title="Editar crédito">
+                                                <Edit2 className="w-4 h-4" />
                                             </Button>
                                             <Button size="sm" variant="ghost"
                                                 onClick={async () => { await onDeleteCreditoTrabajador(credito.id); toast.success('Crédito eliminado'); }}
@@ -1175,6 +1235,101 @@ export default function CreditosClientes({
                         <Button onClick={handlePagoTrab} disabled={isSavingTrab}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white">
                             {isSavingTrab ? 'Guardando...' : 'Confirmar Pago'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal: Editar Crédito Cliente */}
+            <Dialog open={!!editandoCredito} onOpenChange={v => { if (!v) setEditandoCredito(null); }}>
+                <DialogContent className="rounded-3xl max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="font-black uppercase tracking-tight text-sm">Editar Crédito</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Estado</Label>
+                            <Select value={formEditCliente.estado} onValueChange={v => setFormEditCliente(p => ({ ...p, estado: v }))}>
+                                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="activo">Activo</SelectItem>
+                                    <SelectItem value="pagado">Pagado</SelectItem>
+                                    <SelectItem value="vencido">Vencido</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Descripción</Label>
+                            <Input
+                                value={formEditCliente.descripcion}
+                                onChange={e => setFormEditCliente(p => ({ ...p, descripcion: e.target.value }))}
+                                placeholder="Descripción del crédito..."
+                                className="mt-1"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Fecha de vencimiento</Label>
+                            <Input
+                                type="date"
+                                value={formEditCliente.fechaVencimiento}
+                                onChange={e => setFormEditCliente(p => ({ ...p, fechaVencimiento: e.target.value }))}
+                                className="mt-1"
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setEditandoCredito(null)}>Cancelar</Button>
+                        <Button onClick={handleGuardarEditCliente} disabled={isSavingEditCliente}
+                            className="bg-blue-600 hover:bg-blue-700 text-white">
+                            {isSavingEditCliente ? 'Guardando...' : 'Guardar cambios'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal: Editar Crédito Trabajador */}
+            <Dialog open={!!editandoCreditoTrab} onOpenChange={v => { if (!v) setEditandoCreditoTrab(null); }}>
+                <DialogContent className="rounded-3xl max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="font-black uppercase tracking-tight text-sm">Editar Crédito Trabajador</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Estado</Label>
+                            <Select value={formEditTrab.estado} onValueChange={v => setFormEditTrab(p => ({ ...p, estado: v }))}>
+                                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="activo">Activo</SelectItem>
+                                    <SelectItem value="pagado">Pagado</SelectItem>
+                                    <SelectItem value="descontado">Descontado de nómina</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Descripción</Label>
+                            <Input
+                                value={formEditTrab.descripcion}
+                                onChange={e => setFormEditTrab(p => ({ ...p, descripcion: e.target.value }))}
+                                placeholder="¿Qué tomó el trabajador?"
+                                className="mt-1"
+                            />
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                            <input
+                                type="checkbox"
+                                id="descuento-edit"
+                                checked={formEditTrab.descontarDeSalario}
+                                onChange={e => setFormEditTrab(p => ({ ...p, descontarDeSalario: e.target.checked }))}
+                                className="rounded"
+                            />
+                            <Label htmlFor="descuento-edit" className="text-xs font-bold cursor-pointer">Descontar de nómina</Label>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="ghost" onClick={() => setEditandoCreditoTrab(null)}>Cancelar</Button>
+                        <Button onClick={handleGuardarEditTrab} disabled={isSavingEditTrab}
+                            className="bg-blue-600 hover:bg-blue-700 text-white">
+                            {isSavingEditTrab ? 'Guardando...' : 'Guardar cambios'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

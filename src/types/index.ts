@@ -728,5 +728,6 @@ export interface Trabajador {
   estado: TrabajadorEstado;
   horario?: string;           // ej: "Lun-Vie 7am-3pm"
   observaciones?: string;
+  fotoPerfil?: string;        // base64 foto del trabajador
   createdAt: string;
 }

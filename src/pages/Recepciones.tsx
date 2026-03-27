@@ -271,8 +271,6 @@ export default function Recepciones({
             }, 1500);
         }
     };
-        }
-    };
 
     // Vincular pre-pedido: auto-rellena items esperados
     const handleVincularPrePedido = (pedidoId: string) => {
