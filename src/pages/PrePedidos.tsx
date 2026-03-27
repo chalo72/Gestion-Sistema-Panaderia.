@@ -1,49 +1,56 @@
 import { useState, useMemo, useEffect } from 'react';
-import {
-  Package,
-  ShoppingCart,
-  ArrowLeft,
-  Calculator,
-  AlertTriangle,
-  Store,
-  Check,
+import { 
+  Plus, 
+  Minus,
+  ShoppingCart, 
+  Package, 
+  Store, 
+  Zap, 
+  ChevronRight,
+  LayoutGrid,
   X,
-  History,
-  FileText,
-  Plus
+  Search,
+  Trash2,
+  ChevronLeft
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Producto, Proveedor, PrecioProveedor, PrePedido } from '@/types';
-
-// Componentes modulares
 import { PrePedidoHeader } from '@/components/prepedidos/PrePedidoHeader';
-import { PrePedidoCard } from '@/components/prepedidos/PrePedidoCard';
 import { PrePedidoModal } from '@/components/prepedidos/PrePedidoModal';
-import { PrePedidoItem } from '@/components/prepedidos/PrePedidoItem';
 import { PrePedidoAddItemModal } from '@/components/prepedidos/PrePedidoAddItemModal';
+import { ProveedorCatalogoTactico } from '@/components/prepedidos/ProveedorCatalogoTactico';
+import type { PrePedido, Producto, Proveedor, PrecioProveedor, InventarioItem, OrdenProduccion, Receta } from '@/types';
+
+// [Nexus-Volt] Speed Booster Utils
+const debounceMap = new Map<string, any>();
+const debounceUpdate = (id: string, fn: Function, ms: number) => {
+  if (debounceMap.has(id)) clearTimeout(debounceMap.get(id));
+  debounceMap.set(id, setTimeout(() => { fn(); debounceMap.delete(id); }, ms));
+};
 
 interface PrePedidosProps {
   prepedidos: PrePedido[];
   productos: Producto[];
   proveedores: Proveedor[];
   precios: PrecioProveedor[];
-  onAddPrePedido: (data: Omit<PrePedido, 'id' | 'fechaCreacion' | 'fechaActualizacion'>) => Promise<PrePedido>;
+  inventario: InventarioItem[];
+  produccion: OrdenProduccion[];
+  recetas: Receta[];
+  onAddPrePedido: (pedido: Omit<PrePedido, 'id'>) => Promise<PrePedido>;
   onUpdatePrePedido: (id: string, updates: Partial<PrePedido>) => void;
   onDeletePrePedido: (id: string) => void;
-  onAddItem: (prePedidoId: string, item: { productoId: string; proveedorId: string; cantidad: number; precioUnitario: number }) => void;
-  onRemoveItem: (prePedidoId: string, itemId: string) => void;
-  onUpdateItemCantidad: (prePedidoId: string, itemId: string, cantidad: number) => void;
+  onAddItem: (pedidoId: string, item: any) => void;
+  onRemoveItem: (itemId: string, pedidoId: string) => void;
+  onUpdateItemCantidad: (pedidoId: string, itemId: string, cantidad: number) => void;
   getProductoById: (id: string) => Producto | undefined;
   getProveedorById: (id: string) => Proveedor | undefined;
   getMejorPrecioByProveedor: (productoId: string, proveedorId: string) => PrecioProveedor | undefined;
   getPreciosByProveedor: (proveedorId: string) => PrecioProveedor[];
-  formatCurrency: (value: number) => string;
+  formatCurrency: (amount: number) => string;
   onGenerarSugerencias: () => Promise<number>;
 }
 
@@ -52,6 +59,9 @@ export default function PrePedidos({
   productos,
   proveedores,
   precios,
+  inventario,
+  produccion,
+  recetas,
   onAddPrePedido,
   onUpdatePrePedido,
   onDeletePrePedido,
@@ -63,372 +73,419 @@ export default function PrePedidos({
   getMejorPrecioByProveedor,
   getPreciosByProveedor,
   formatCurrency,
-  onGenerarSugerencias,
+  onGenerarSugerencias
 }: PrePedidosProps) {
-  const [selectedPrePedido, setSelectedPrePedido] = useState<PrePedido | null>(null);
+  const [activeTab, setActiveTab] = useState<'creacion' | 'gestion'>('creacion');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
-
-  const [nuevoPedido, setNuevoPedido] = useState({
+  const [selectedPrePedido, setSelectedPrePedido] = useState<PrePedido | null>(null);
+  const [nuevoPedido, setNuevoPedido] = useState<Omit<PrePedido, 'id'>>({
     nombre: '',
     proveedorId: '',
-    presupuestoMaximo: '',
+    items: [],
+    total: 0,
+    presupuestoMaximo: 0,
+    estado: 'borrador',
     notas: '',
+    fechaCreacion: new Date().toISOString(),
+    fechaActualizacion: new Date().toISOString()
   });
 
   const [selectedProductoId, setSelectedProductoId] = useState('');
   const [cantidad, setCantidad] = useState(1);
+  const [showSupplierGrid, setShowSupplierGrid] = useState(true); // INICIAR EN TABLERO POR DEFECTO
+  const [activeProveedorId, setActiveProveedorId] = useState<string | null>(null);
 
-  // Mantener selectedPrePedido sincronizado con cambios en la prop prepedidos
+  // Pedidos en borrador para el ticket rápido
+  const pedidosBorrador = useMemo(() => 
+    prepedidos.filter(p => p.estado === 'borrador').sort((a,b) => b.total - a.total)
+  , [prepedidos]);
+
+  // Borrador activo del proveedor actual mostrado
+  const activeDraft = useMemo(() => {
+    if (activeProveedorId) {
+      return prepedidos.find(p => p.proveedorId === activeProveedorId && p.estado === 'borrador');
+    }
+    return pedidosBorrador.length > 0 ? pedidosBorrador[0] : undefined;
+  }, [prepedidos, activeProveedorId, pedidosBorrador]);
+
+  // Sincronizar el pedido seleccionado si cambia la lista
   useEffect(() => {
     if (selectedPrePedido) {
       const updated = prepedidos.find(p => p.id === selectedPrePedido.id);
       if (updated) setSelectedPrePedido(updated);
+    } else if (pedidosBorrador.length > 0) {
+      // Por defecto seleccionar el borrador más reciente
+      setSelectedPrePedido(pedidosBorrador[0]);
     }
-  }, [prepedidos]);
+  }, [prepedidos, pedidosBorrador]);
 
-  const totalActual = useMemo(() => {
-    if (!selectedPrePedido) return 0;
-    return selectedPrePedido.items.reduce((sum, item) => sum + item.subtotal, 0);
-  }, [selectedPrePedido]);
-
-  const porcentajeUsado = useMemo(() => {
-    if (!selectedPrePedido || !selectedPrePedido.presupuestoMaximo) return 0;
-    return (totalActual / selectedPrePedido.presupuestoMaximo) * 100;
-  }, [totalActual, selectedPrePedido]);
-
-  const handleCrearPedido = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nuevoPedido.nombre || !nuevoPedido.proveedorId || !nuevoPedido.presupuestoMaximo) {
-      toast.error('Nombre, proveedor y presupuesto son esenciales');
+  const handleCrearPedido = async () => {
+    if (!nuevoPedido.nombre || !nuevoPedido.proveedorId) {
+      toast.error('Nombre y Proveedor son obligatorios');
       return;
     }
+    const created = await onAddPrePedido(nuevoPedido);
+    setIsCreateModalOpen(false);
+    setSelectedPrePedido(created);
+    toast.success('Orden de planificación creada');
+  };
 
-    try {
-      const pedido = await onAddPrePedido({
-        nombre: nuevoPedido.nombre,
-        proveedorId: nuevoPedido.proveedorId,
-        items: [],
-        total: 0,
-        presupuestoMaximo: parseFloat(nuevoPedido.presupuestoMaximo),
-        estado: 'borrador',
-        notas: nuevoPedido.notas,
+  const handleAddItemToDraft = async (productoId: string, proveedorId: string, cantidad: number, precio: number) => {
+    if (productoId) {
+      toast.success('¡Agregando al ticket!', {
+        duration: 800,
+        icon: <ShoppingCart className="w-4 h-4 text-emerald-500 animate-bounce" />
       });
+    }
 
-      toast.success('Estrategia de pedido inicializada');
-      setNuevoPedido({ nombre: '', proveedorId: '', presupuestoMaximo: '', notas: '' });
-      setIsCreateModalOpen(false);
-      setSelectedPrePedido(pedido);
-    } catch (error) {
-      toast.error('Error al crear el pre-pedido');
+    let borrador = prepedidos.find(p => p.proveedorId === proveedorId && p.estado === 'borrador');
+    
+    if (!borrador) {
+       const prov = getProveedorById(proveedorId);
+       try {
+         borrador = await onAddPrePedido({
+           nombre: `Pedido: ${prov?.nombre || 'Proveedor'}`,
+           proveedorId,
+           items: [],
+           total: 0,
+           presupuestoMaximo: 1000000,
+           estado: 'borrador',
+           notas: 'Generado desde el Panel',
+           fechaCreacion: new Date().toISOString(),
+           fechaActualizacion: new Date().toISOString()
+         });
+       } catch (error) {
+         toast.error('Error al iniciar');
+         return;
+       }
+    }
+
+    if (productoId) {
+      // [Nexus-Volt] Smart Auto-Merge: Verificar si el producto ya existe en el borrador
+      const itemExistente = borrador.items.find(i => i.productoId === productoId);
+      
+      if (itemExistente) {
+        // Si ya existe, sumamos la cantidad (Ej: 12 + 12 = 24 / 2 Pacas)
+        onUpdateItemCantidad(borrador.id, itemExistente.id, itemExistente.cantidad + Math.max(1, cantidad));
+      } else {
+        // Si no existe, lo agregamos normal
+        onAddItem(borrador.id, {
+          productoId,
+          proveedorId,
+          cantidad: Math.max(1, cantidad),
+          precioUnitario: precio
+        });
+      }
     }
   };
 
-  const handleAgregarItem = async () => {
-    if (!selectedPrePedido || !selectedProductoId || cantidad < 1) {
-      toast.error('Selección inválida');
-      return;
-    }
-
-    const precio = getMejorPrecioByProveedor(selectedProductoId, selectedPrePedido.proveedorId);
-    if (!precio) {
-      toast.error('El proveedor no oferta este ítem');
-      return;
-    }
-
-    onAddItem(selectedPrePedido.id, {
-      productoId: selectedProductoId,
-      proveedorId: selectedPrePedido.proveedorId,
-      cantidad: cantidad,
-      precioUnitario: precio.precioCosto,
-    });
-
-    toast.success('Ítem vinculado al plan');
-    setSelectedProductoId('');
-    setCantidad(1);
-    setIsAddItemModalOpen(false);
-  };
-
-  const handleUpdateItemCantidad = (itemId: string, nuevaCantidad: number) => {
-    if (!selectedPrePedido || nuevaCantidad < 1) return;
-    onUpdateItemCantidad(selectedPrePedido.id, itemId, nuevaCantidad);
-  };
-
-  const handleRemoveItem = (itemId: string) => {
-    if (!selectedPrePedido) return;
-    onRemoveItem(selectedPrePedido.id, itemId);
-    toast.success('Ítem descartado del plan');
-  };
-
-  const handleConfirmarPedido = () => {
-    if (!selectedPrePedido) return;
-    onUpdatePrePedido(selectedPrePedido.id, { estado: 'confirmado' });
-    toast.success('Plan de compra confirmado y ejecutado');
-    setSelectedPrePedido(null);
-  };
-
-  const handleRechazarPedido = () => {
-    if (!selectedPrePedido) return;
-    onUpdatePrePedido(selectedPrePedido.id, { estado: 'rechazado' });
-    toast.success('Plan de compra archivado');
-    setSelectedPrePedido(null);
-  };
-
-  const handleDeletePedido = (id: string) => {
-    if (confirm('¿Expurgar este registro de pre-pedido permanentemente?')) {
-      onDeletePrePedido(id);
-      toast.success('Registro eliminado');
-      if (selectedPrePedido?.id === id) setSelectedPrePedido(null);
-    }
-  };
-
-  const getProductosDisponibles = (proveedorId: string) => {
-    const preciosProveedor = getPreciosByProveedor(proveedorId);
-    return preciosProveedor
-      .map(p => {
-        const producto = getProductoById(p.productoId);
-        return producto ? { ...producto, precioCosto: p.precioCosto } : null;
-      })
-      .filter(Boolean) as (Producto & { precioCosto: number })[];
-  };
-
-  const pedidosBorrador = prepedidos.filter(p => p.estado === 'borrador');
-  const pedidosConfirmados = prepedidos.filter(p => p.estado === 'confirmado');
-  const pedidosRechazados = prepedidos.filter(p => p.estado === 'rechazado');
-
-  // Vista de Detalle Expandido
-  if (selectedPrePedido) {
-    const proveedor = getProveedorById(selectedPrePedido.proveedorId);
-    const excede = totalActual > selectedPrePedido.presupuestoMaximo;
-    const isBorrador = selectedPrePedido.estado === 'borrador';
-
+  if (activeTab === 'gestion') {
     return (
-      <div className="space-y-8 animate-ag-fade-in relative pb-20">
-        <div className="flex items-center justify-between mb-8 p-6 glass-card rounded-[2.5rem] bg-indigo-900 text-white shadow-2xl">
-          <div className="flex items-center gap-6">
-            <Button variant="ghost" size="icon" className="h-14 w-14 rounded-2xl bg-white/10 text-white hover:bg-white/20" onClick={() => setSelectedPrePedido(null)}>
-              <ArrowLeft className="w-6 h-6" />
+      <div className="min-h-screen p-8 bg-slate-50">
+        <div className="max-w-7xl mx-auto space-y-8">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={() => setActiveTab('creacion')} className="gap-2">
+              <ChevronLeft className="w-4 h-4" /> VOLVER AL POS
             </Button>
-            <div>
-              <h2 className="text-3xl font-black uppercase tracking-tighter">{selectedPrePedido.nombre}</h2>
-              <p className="text-indigo-200/60 font-black text-[10px] uppercase tracking-widest flex items-center gap-2 mt-1">
-                <Store className="w-3.5 h-3.5" /> Alianza Comercial: {proveedor?.nombre}
-              </p>
-            </div>
+            <h2 className="text-2xl font-black uppercase tracking-tight">Gestión de Pedidos Guardados</h2>
           </div>
-          <Badge className={cn("h-10 px-6 rounded-xl font-black uppercase text-[10px] tracking-widest border-none shadow-lg", isBorrador ? "bg-amber-500" : selectedPrePedido.estado === 'confirmado' ? "bg-emerald-500" : "bg-rose-500")}>
-            {selectedPrePedido.estado}
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Budget Scorecard */}
-          <Card className={cn(
-            "lg:col-span-1 rounded-[3rem] border-none shadow-2xl overflow-hidden relative",
-            excede ? "bg-rose-50 dark:bg-rose-950/20" : "bg-emerald-50 dark:bg-emerald-950/20"
-          )}>
-            <CardContent className="p-10 space-y-10 relative z-10">
-              <div className="flex items-center justify-between">
-                <div className={cn("p-4 rounded-2xl shadow-lg", excede ? "bg-rose-500 text-white" : "bg-emerald-500 text-white")}>
-                  <Calculator className="w-8 h-8" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {prepedidos.map(p => (
+              <Card key={p.id} className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                  <h3 className="font-bold">{p.nombre}</h3>
+                  <Badge>{p.estado}</Badge>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-40 mb-1">Presupuesto Límite</p>
-                  <p className="text-2xl font-black tabular-nums tracking-tighter">{formatCurrency(selectedPrePedido.presupuestoMaximo)}</p>
+                <p className="text-2xl font-black text-indigo-600 mb-4">{formatCurrency(p.total)}</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => { setSelectedPrePedido(p); setActiveTab('creacion'); }}>Editar</Button>
+                  <Button size="sm" variant="destructive" onClick={() => onDeletePrePedido(p.id)}><Trash2 className="w-4 h-4" /></Button>
                 </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex justify-between items-end">
-                  <h4 className="text-[10px] font-black uppercase tracking-widest opacity-50">Impacto Total Estimado</h4>
-                  <p className={cn("text-5xl font-black tabular-nums tracking-tighter", excede ? "text-rose-600" : "text-emerald-600")}>
-                    {formatCurrency(totalActual)}
-                  </p>
-                </div>
-                <div className="h-4 w-full bg-white dark:bg-gray-800 rounded-full overflow-hidden p-1 shadow-inner border border-white/50">
-                  <Progress value={Math.min(porcentajeUsado, 100)} className={cn("h-full rounded-full transition-all duration-1000", excede ? "bg-rose-500 shadow-[0_0_15px_rgba(239,68,68,0.5)]" : "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)]")} />
-                </div>
-                <div className="flex justify-between items-center px-1">
-                  <span className={cn("text-[10px] font-black uppercase tracking-widest", excede ? "text-rose-600" : "text-emerald-600")}>
-                    {excede ? `Exceso: ${formatCurrency(totalActual - selectedPrePedido.presupuestoMaximo)}` : `Disponible: ${formatCurrency(selectedPrePedido.presupuestoMaximo - totalActual)}`}
-                  </span>
-                  <span className="text-[10px] font-black uppercase tracking-widest opacity-30">{porcentajeUsado.toFixed(1)}% Consumido</span>
-                </div>
-              </div>
-
-              {isBorrador && excede && (
-                <div className="p-6 rounded-[2rem] bg-white/60 dark:bg-black/20 border border-rose-200 flex items-center gap-4 animate-ag-pulse">
-                  <AlertTriangle className="w-6 h-6 text-rose-500" />
-                  <p className="text-[9px] font-black uppercase tracking-widest text-rose-800 leading-relaxed">
-                    Alerta: El monto excede el presupuesto estratégico. Ajuste el volumen antes de confirmar.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-            <FileText className="absolute -bottom-10 -right-10 w-48 h-48 opacity-[0.03] rotate-12" />
-          </Card>
-
-          {/* Items List */}
-          <div className="lg:col-span-2 space-y-8">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 flex items-center gap-2">
-                <Package className="w-5 h-5" /> Componentes del Pedido
-              </h4>
-              {isBorrador && (
-                <Button onClick={() => setIsAddItemModalOpen(true)} className="h-12 px-6 rounded-2xl bg-indigo-600 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-indigo-500/20 border-none hover:scale-105 transition-all">
-                  <Plus className="w-4 h-4 mr-2" /> Vincular Oferta
-                </Button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              {selectedPrePedido.items.length === 0 ? (
-                <div className="py-32 flex flex-col items-center justify-center glass-card rounded-[3rem] border-2 border-dashed border-indigo-200 opacity-30">
-                  <Package className="w-16 h-16 mb-4 text-indigo-300" />
-                  <p className="font-black uppercase text-[10px] tracking-widest">Sin ítems registrados</p>
-                </div>
-              ) : (
-                selectedPrePedido.items.map((item) => (
-                  <PrePedidoItem
-                    key={item.id}
-                    item={item}
-                    producto={getProductoById(item.productoId)}
-                    formatCurrency={formatCurrency}
-                    onUpdateCantidad={handleUpdateItemCantidad}
-                    onRemove={handleRemoveItem}
-                    isBorrador={isBorrador}
-                  />
-                ))
-              )}
-            </div>
-
-            {isBorrador && selectedPrePedido.items.length > 0 && (
-              <div className="flex justify-end gap-4 pt-10 border-t border-slate-100 dark:border-gray-800">
-                <Button variant="ghost" onClick={() => setSelectedPrePedido(null)} className="h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest opacity-40">
-                  Preservar Borrador
-                </Button>
-                <Button variant="outline" onClick={handleRechazarPedido} className="h-14 px-8 rounded-2xl font-black uppercase text-[10px] tracking-widest border-rose-200 text-rose-500 hover:bg-rose-50">
-                  <X className="w-4 h-4 mr-2" /> Archivar Plan
-                </Button>
-                <Button
-                  disabled={excede}
-                  onClick={handleConfirmarPedido}
-                  className="h-14 px-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-2xl shadow-emerald-500/30 border-none"
-                >
-                  <Check className="w-4 h-4 mr-2" /> Confirmar & Ejecutar
-                </Button>
-              </div>
-            )}
+              </Card>
+            ))}
           </div>
         </div>
-
-        <PrePedidoAddItemModal
-          isOpen={isAddItemModalOpen}
-          onOpenChange={setIsAddItemModalOpen}
-          productosDisponibles={getProductosDisponibles(selectedPrePedido.proveedorId)}
-          selectedProductoId={selectedProductoId}
-          setSelectedProductoId={setSelectedProductoId}
-          cantidad={cantidad}
-          setCantidad={setCantidad}
-          onAdd={handleAgregarItem}
-          formatCurrency={formatCurrency}
-        />
       </div>
     );
   }
 
   return (
-    <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
-      <PrePedidoHeader
-        onAddPrePedido={() => { setIsCreateModalOpen(true); }}
-        onGenerarSugerencias={async () => {
-          const count = await onGenerarSugerencias();
-          if (count > 0) toast.success(`${count} Borradores inteligentes generados 🪄`);
-          else toast.info('Stock óptimo, no se requieren pedidos urgentes.');
-        }}
-        pedidosCount={prepedidos.length}
-      />
+    <div className="min-h-screen flex flex-col gap-8 px-4 md:px-4 py-8 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in relative">
+      <div className="absolute top-0 left-0 w-full h-full pointer-events-none opacity-10 overflow-hidden">
+         <div className="absolute top-20 right-20 w-[500px] h-[500px] bg-indigo-500/5 blur-[150px] rounded-full" />
+      </div>
 
-      <Tabs defaultValue="borrador" className="w-full">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8 px-4">
-          <TabsList className="bg-white/40 dark:bg-gray-900/40 backdrop-blur-md p-1.5 rounded-[2.5rem] h-16 w-full md:w-auto grid grid-cols-3 gap-2">
-            <TabsTrigger value="borrador" className="rounded-[2rem] font-black uppercase text-[10px] tracking-widest transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-xl px-8">Borradores <Badge variant="secondary" className="ml-2 bg-white/20 text-white border-none">{pedidosBorrador.length}</Badge></TabsTrigger>
-            <TabsTrigger value="confirmados" className="rounded-[2rem] font-black uppercase text-[10px] tracking-widest transition-all data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-xl px-8">Confirmados</TabsTrigger>
-            <TabsTrigger value="rechazados" className="rounded-[2rem] font-black uppercase text-[10px] tracking-widest transition-all data-[state=active]:bg-rose-600 data-[state=active]:text-white data-[state=active]:shadow-xl px-8">Archivados</TabsTrigger>
-          </TabsList>
+      <div className="relative z-10 space-y-8">
+        <PrePedidoHeader
+          onAddPrePedido={() => setIsCreateModalOpen(true)}
+          onGenerarSugerencias={async () => {
+            const count = await onGenerarSugerencias();
+            if (count > 0) toast.success(`${count} Borradores inteligentes generados 🪄`);
+            else toast.info('Stock equilibrado.');
+          }}
+          pedidosCount={prepedidos.length}
+        />
 
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="h-14 w-14 rounded-2xl bg-white/60 dark:bg-gray-950/40 shadow-lg text-slate-400">
-              <History className="w-5 h-5" />
-            </Button>
-          </div>
-        </div>
-
-        <TabsContent value="borrador" className="mt-0 focus-visible:ring-0">
-          {pedidosBorrador.length === 0 ? (
-            <div className="py-40 flex flex-col items-center justify-center opacity-30 text-center">
-              <ShoppingCart className="w-32 h-32 mb-8 text-indigo-500 animate-ag-float" />
-              <h3 className="text-2xl font-black uppercase tracking-[0.3em]">Mesa de Trabajo Limpia</h3>
-              <p className="text-[10px] font-bold uppercase tracking-widest mt-4">No hay planes de compra en curso.</p>
+        {showSupplierGrid ? (
+          <div className="animate-ag-fade-in space-y-8 pb-40">
+            <div className="flex items-center justify-between">
+               <div className="space-y-1">
+                  <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-900 dark:text-white">Panel de Aliados</h2>
+                  <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Toca un proveedor para iniciar pedido rápido</p>
+               </div>
+               <Button onClick={() => setShowSupplierGrid(false)} variant="outline" className="rounded-2xl h-12 px-6 font-black uppercase text-[10px] tracking-widest gap-3">
+                 <ShoppingCart className="w-4 h-4" /> VOLVER AL TICKET
+               </Button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-10">
-              {pedidosBorrador.map((p) => (
-                <PrePedidoCard
-                  key={p.id}
-                  pedido={p}
-                  proveedor={getProveedorById(p.proveedorId)}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+              {proveedores.map(prov => {
+                const isSelected = selectedPrePedido?.proveedorId === prov.id;
+                const tieneBorrador = prepedidos.some(p => p.proveedorId === prov.id && p.estado === 'borrador');
+                const criticalCount = productos.filter(p => {
+                   const precio = precios.find(pr => pr.productoId === p.id && pr.proveedorId === prov.id);
+                   const inv = inventario.find(i => i.productoId === p.id);
+                   return precio && inv && inv.stockActual < inv.stockMinimo;
+                }).length;
+                
+                return (
+                  <Card 
+                    key={prov.id}
+                    onClick={() => {
+                      setActiveProveedorId(prov.id);
+                      handleAddItemToDraft('', prov.id, 0, 0); 
+                      setShowSupplierGrid(false);
+                    }}
+                    className={cn(
+                      "rounded-2xl border border-slate-200 transition-all cursor-pointer group relative overflow-hidden h-[180px] flex flex-col hover:shadow-lg hover:border-indigo-400",
+                      isSelected ? "bg-indigo-50/30 border-indigo-600" : "bg-white"
+                    )}
+                  >
+                    {criticalCount > 0 && (
+                      <div className="absolute top-3 right-3">
+                        <Badge className="bg-rose-500 text-white border-none font-black text-[8px] px-1.5 py-0.5 animate-pulse">
+                          {criticalCount} ALERTA
+                        </Badge>
+                      </div>
+                    )}
+
+                    <div className="p-4 flex-1">
+                       <div className={cn(
+                         "w-12 h-12 rounded-xl flex items-center justify-center border transition-all mb-3 text-slate-400",
+                         isSelected ? "bg-indigo-600 border-indigo-400 text-white" : "bg-slate-50 border-slate-100"
+                       )}>
+                          <Store className="w-6 h-6" />
+                       </div>
+                       
+                       <div className="space-y-0.5">
+                          <h3 className="text-sm font-black uppercase tracking-tight text-slate-900 truncate">{prov.nombre}</h3>
+                          <div className="flex items-center gap-2">
+                             <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">CATÁLOGO</span>
+                             {tieneBorrador && <Badge className="bg-emerald-500/10 text-emerald-600 border-none font-black text-[7px] uppercase h-4">ACTIVO</Badge>}
+                          </div>
+                       </div>
+                    </div>
+                    
+                    <div className={cn(
+                      "mt-auto p-2 border-t flex items-center justify-between text-slate-300",
+                      isSelected ? "bg-indigo-600/5 border-indigo-100" : "bg-slate-50/50 border-slate-100"
+                    )}>
+                       <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-2">ABRIR</span>
+                       <ChevronRight className="w-4 h-4" />
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-start gap-8 min-h-[75vh]">
+            <div className="flex-1 space-y-8 animate-ag-fade-in pb-20">
+               <div className="flex items-center gap-4">
+                  <Button variant="outline" onClick={() => setShowSupplierGrid(true)} className="rounded-xl border-slate-200 font-black h-12 uppercase text-[10px] tracking-widest gap-2">
+                    <LayoutGrid className="w-4 h-4" /> SELECCIONAR PROVEEDOR
+                  </Button>
+               </div>
+               <ProveedorCatalogoTactico
+                  proveedores={proveedores}
+                  productos={productos}
+                  precios={precios}
+                  inventario={inventario}
+                  produccion={produccion}
+                  recetas={recetas}
                   formatCurrency={formatCurrency}
-                  onClick={() => setSelectedPrePedido(p)}
-                  onDelete={handleDeletePedido}
+                  onAddItemToDraft={handleAddItemToDraft}
+                  getProductoById={getProductoById}
+                  activeProveedorId={activeProveedorId}
+                  onShowBoard={() => { setShowSupplierGrid(true); setActiveProveedorId(null); }} // Nueva prop para volver
                 />
-              ))}
             </div>
-          )}
-        </TabsContent>
 
-        <TabsContent value="confirmados" className="mt-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-10 opacity-70">
-            {pedidosConfirmados.map((p) => (
-              <PrePedidoCard
-                key={p.id}
-                pedido={p}
-                proveedor={getProveedorById(p.proveedorId)}
-                formatCurrency={formatCurrency}
-                onClick={() => setSelectedPrePedido(p)}
-                onDelete={handleDeletePedido}
-              />
-            ))}
+            <div className="w-full lg:w-[380px] lg:sticky lg:top-8 h-fit animate-ag-slide-up">
+              <Card className="rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border-slate-200 dark:border-slate-800 overflow-hidden border-b-8 border-b-indigo-600">
+                 <div className="bg-slate-50 dark:bg-slate-950 p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                        <ShoppingCart className="w-6 h-6 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-black uppercase tracking-tighter text-slate-900 dark:text-white">Ticket</h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Resumen</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[11px] font-black tabular-nums bg-white dark:bg-slate-800 border-indigo-100 text-indigo-600 px-3 py-1 rounded-full">
+                      {activeDraft?.items.length || 0} ITEMS
+                    </Badge>
+                 </div>
+
+                 <CardContent className="p-0">
+                    <ScrollArea className="h-[450px] p-6">
+                      {!activeDraft || activeDraft.items.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center py-24 opacity-30 grayscale">
+                          <Package className="w-16 h-16 mb-6 text-indigo-300" />
+                          <p className="text-[11px] font-black uppercase tracking-widest text-center text-slate-500">Carrito vacío</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-5">
+                          <div className="flex items-center gap-2 mb-4">
+                             <Store className="w-3.5 h-3.5 text-indigo-500" />
+                             <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-400 truncate">Aliado: {getProveedorById(activeDraft?.proveedorId || '')?.nombre}</span>
+                          </div>
+                          {activeDraft?.items.map((item) => {
+                            const prod = getProductoById(item.productoId);
+                            const bestPrice = activeDraft ? getMejorPrecioByProveedor(item.productoId, activeDraft.proveedorId) : undefined;
+                            
+                            // Lógica HEURÍSTICA: Si no hay valor oficial, deducir por el nombre (Kola PQÑ, Roman 250, etc)
+                            const nombreUpper = (prod?.nombre || '').toUpperCase();
+                            const detectado12 = (nombreUpper.includes('PQÑ') || nombreUpper.includes('400') || nombreUpper.includes('250')) ? 12 : 1;
+                            
+                            const bulkAmount = Number(bestPrice?.cantidadEmbalaje || (prod as any)?.cantidadEmbalaje || detectado12);
+                            const isBulk = bulkAmount > 1;
+                            const embalajeNombre = bestPrice?.tipoEmbalaje || (prod as any)?.tipoEmbalaje || (bulkAmount === 12 ? 'PACA' : 'CUID');
+                            
+                            return (
+                              <div key={item.id} className="group animate-ag-fade-in border-b border-slate-100 dark:border-slate-800/50 pb-4 last:border-none">
+                                <div className="flex items-start justify-between">
+                                  <div className="space-y-1">
+                                    <h5 className="font-black uppercase text-[11px] tracking-tight truncate w-32 text-slate-800 dark:text-slate-200">{prod?.nombre}</h5>
+                                    <div className="flex items-center gap-2">
+                                      {/* CONTROLES DE EDICIÓN EN TICKET - FILA ÚNICA COMPACTA (OPTIMIZADA) */}
+                                      <div className="flex items-center gap-1 mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/40">
+                                        {/* UNIDADES (CHICO PERO CLARO) */}
+                                        <div className="flex items-center bg-slate-100/80 dark:bg-slate-800 rounded-md p-0.5 border border-slate-200 dark:border-slate-700 shadow-sm">
+                                          <button 
+                                            onClick={() => {
+                                              const newQty = Math.max(1, item.cantidad - 1);
+                                              debounceUpdate(item.id, () => activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty), 50);
+                                              // Actualización visual inmediata (Optimistic UI)
+                                              item.cantidad = newQty;
+                                            }}
+                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-white rounded transition-all active:scale-95"
+                                          >
+                                            <Minus className="w-3.5 h-3.5" />
+                                          </button>
+                                          <div className="px-2 min-w-[28px] flex items-center justify-center">
+                                            <span className="text-[11px] font-black tabular-nums text-slate-800 dark:text-slate-100">{item.cantidad}</span>
+                                          </div>
+                                          <button 
+                                            onClick={() => {
+                                              const newQty = item.cantidad + 1;
+                                              debounceUpdate(item.id, () => activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty), 50);
+                                              item.cantidad = newQty;
+                                            }}
+                                            className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-emerald-600 hover:bg-white rounded transition-all active:scale-95"
+                                          >
+                                            <Plus className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+
+                                        {/* SEPARADOR */}
+                                        {isBulk && <div className="w-[1px] h-5 bg-slate-200 dark:bg-slate-700/50 mx-1" />}
+
+                                        {/* PACAS (COMPACTO) */}
+                                        {isBulk && (
+                                          <div className="flex items-center bg-indigo-50 dark:bg-indigo-950/30 rounded-md p-0.5 border border-indigo-100 dark:border-indigo-900 shadow-sm">
+                                            <button 
+                                              onClick={() => {
+                                                const newQty = Math.max(1, item.cantidad - bulkAmount);
+                                                debounceUpdate(item.id, () => activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty), 50);
+                                                item.cantidad = newQty;
+                                              }}
+                                              className="px-1.5 h-6 flex items-center justify-center text-rose-600 hover:bg-rose-500 hover:text-white rounded text-[9px] font-black transition-all active:scale-95"
+                                            >
+                                              -{embalajeNombre[0]}
+                                            </button>
+                                            <div className="px-2 min-w-[35px] flex items-center justify-center">
+                                              <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300">
+                                                {(item.cantidad / bulkAmount).toFixed(1).replace('.0', '')}
+                                              </span>
+                                            </div>
+                                            <button 
+                                              onClick={() => {
+                                                const newQty = item.cantidad + bulkAmount;
+                                                debounceUpdate(item.id, () => activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty), 50);
+                                                item.cantidad = newQty;
+                                              }}
+                                              className="px-1.5 h-6 flex items-center justify-center text-emerald-600 hover:bg-emerald-500 hover:text-white rounded text-[9px] font-black transition-all active:scale-95"
+                                            >
+                                              +{embalajeNombre[0]}
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      <span className="text-[9px] text-slate-400 font-bold tabular-nums">
+                                        x {formatCurrency(item.precioUnitario)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right flex flex-col items-end gap-1">
+                                    <span className="font-black text-[12px] tabular-nums text-indigo-600">{formatCurrency(item.cantidad * item.precioUnitario)}</span>
+                                    <Button variant="ghost" size="icon" onClick={() => activeDraft && onRemoveItem(item.id, activeDraft.id)} className="h-7 w-7 rounded-lg text-rose-500 hover:bg-rose-50 transition-all opacity-50 hover:opacity-100"><X className="w-3.5 h-3.5" /></Button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </ScrollArea>
+
+                    <div className="p-8 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 space-y-6">
+                      <div className="space-y-3">
+                         <div className="flex justify-between text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                            <span>Subtotal</span>
+                            <span className="tabular-nums font-bold">{formatCurrency(activeDraft?.total || 0)}</span>
+                         </div>
+                         <div className="flex justify-between items-center text-slate-900 dark:text-white pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-800">
+                            <span className="text-[12px] font-black uppercase tracking-tighter">TOTAL COMPRA</span>
+                            <span className="text-3xl font-black tabular-nums tracking-tighter text-indigo-600">{formatCurrency(activeDraft?.total || 0)}</span>
+                         </div>
+                      </div>
+                      <div className="flex gap-2">
+                         <Button variant="outline" onClick={() => setActiveTab('gestion')} className="h-14 w-14 rounded-2xl border-slate-200 text-slate-500 hover:bg-slate-100"><LayoutGrid className="w-5 h-5" /></Button>
+                          <Button 
+                            disabled={!activeDraft || activeDraft.items.length === 0} 
+                            onClick={() => { 
+                               if (activeDraft) {
+                                  onUpdatePrePedido(activeDraft.id, { estado: 'confirmado' });
+                                  toast.success('🎉 ¡Pedido finalizado con éxito! Movido a historial.');
+                               }
+                            }} 
+                            className="flex-1 h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl shadow-xl shadow-emerald-500/30 font-black uppercase text-[12px] tracking-[0.2em] gap-3 active:scale-95 transition-all group"
+                          >
+                            <Zap className="w-5 h-5 text-amber-300 group-hover:animate-pulse" /> Finalizar Pedido
+                          </Button>
+                      </div>
+                    </div>
+                 </CardContent>
+              </Card>
+            </div>
           </div>
-        </TabsContent>
+        )}
+      </div>
 
-        <TabsContent value="rechazados" className="mt-0">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 pb-10 opacity-60 grayscale">
-            {pedidosRechazados.map((p) => (
-              <PrePedidoCard
-                key={p.id}
-                pedido={p}
-                proveedor={getProveedorById(p.proveedorId)}
-                formatCurrency={formatCurrency}
-                onClick={() => setSelectedPrePedido(p)}
-                onDelete={handleDeletePedido}
-              />
-            ))}
-          </div>
-        </TabsContent>
-      </Tabs>
-
-      <PrePedidoModal
-        isOpen={isCreateModalOpen}
-        onOpenChange={setIsCreateModalOpen}
-        nuevoPedido={nuevoPedido}
-        setNuevoPedido={setNuevoPedido}
-        proveedores={proveedores}
-        onSubmit={handleCrearPedido}
-      />
+      <PrePedidoModal isOpen={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} nuevoPedido={nuevoPedido} setNuevoPedido={setNuevoPedido} proveedores={proveedores} onSubmit={handleCrearPedido} />
+      <PrePedidoAddItemModal isOpen={isAddItemModalOpen} onOpenChange={setIsAddItemModalOpen} productosDisponibles={[]} selectedProductoId={selectedProductoId} setSelectedProductoId={setSelectedProductoId} cantidad={cantidad} setCantidad={setCantidad} onAdd={() => {}} formatCurrency={formatCurrency} />
     </div>
   );
 }
-
-// Export default for consistency with other sections
-export { PrePedidos };

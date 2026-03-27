@@ -2,15 +2,14 @@
  * useVentas — Sub-hook para gestión de ventas, caja, mesas y pedidos activos
  * Extraído de usePriceControl.ts para reducir su tamaño
  */
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { db } from '@/lib/database';
 import type { 
   Venta, 
   CajaSesion, 
   Mesa, 
   PedidoActivo, 
-  MovimientoCaja,
-  VentaItem
+  MovimientoCaja
 } from '@/types';
 import { toast } from 'sonner';
 
@@ -58,39 +57,51 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     toast.success('Caja cerrada correctamente');
   }, [cajaActiva]);
 
-  const registrarMovimientoCaja = useCallback(async (movimiento: Omit<MovimientoCaja, 'id' | 'fecha' | 'cajaId' | 'usuarioId'>) => {
-    if (!cajaActiva) {
-      toast.error('No hay una caja activa abierta');
+  const registrarMovimientoCaja = useCallback(async (movimiento: Omit<MovimientoCaja, 'id' | 'fecha' | 'cajaId' | 'usuarioId'> | number, tipo?: 'entrada' | 'salida', motivo?: string, _usuarioId?: string, cajaId?: string) => {
+    const targetCajaId = cajaId || cajaActiva?.id;
+    if (!targetCajaId) {
+      toast.error('No se especificó una caja válida para el movimiento');
       return;
     }
+
+    const data: Omit<MovimientoCaja, 'id' | 'fecha' | 'cajaId' | 'usuarioId'> = typeof movimiento === 'number' 
+      ? { monto: movimiento, tipo: tipo || 'entrada', motivo: motivo || '' }
+      : movimiento;
+
     const nuevoMovimiento: MovimientoCaja = {
-      ...movimiento,
+      ...data,
       id: crypto.randomUUID(),
-      cajaId: cajaActiva.id,
+      cajaId: targetCajaId,
       usuarioId: 'admin',
       fecha: new Date().toISOString()
     };
     
-    // Usamos actualización funcional para evitar condiciones de carrera
-    setCajaActiva(current => {
-      if (!current) return undefined;
-      const updated = {
-        ...current,
-        movimientos: [...(current.movimientos || []), nuevoMovimiento],
-      };
-      
-      // Persistencia asíncrona pero basada en el estado más reciente
-      db.updateSesionCaja(updated as any).catch(err => {
-        console.error("❌ Error persistiendo movimiento de caja:", err);
-        toast.error("Error al sincronizar movimiento con la base de datos");
+    // Si es la caja activa, actualizamos el estado local
+    if (cajaActiva?.id === targetCajaId) {
+      setCajaActiva(current => {
+        if (!current) return undefined;
+        const updated = {
+          ...current,
+          movimientos: [...(current.movimientos || []), nuevoMovimiento],
+        };
+        db.updateSesionCaja(updated as any).catch(console.error);
+        return updated;
       });
-      
-      return updated;
-    });
+    } else {
+      // Si es otra caja, actualizamos directamente en DB y en la lista de sesiones
+      const sesion = sesionesCaja.find(s => s.id === targetCajaId);
+      if (sesion) {
+        const updated = {
+          ...sesion,
+          movimientos: [...(sesion.movimientos || []), nuevoMovimiento]
+        };
+        await db.updateSesionCaja(updated as any);
+        setSesionesCaja(prev => prev.map(s => s.id === targetCajaId ? updated : s));
+      }
+    }
 
-    setSesionesCaja(prev => prev.map(s => s.id === cajaActiva.id ? { ...s, movimientos: [...(s.movimientos || []), nuevoMovimiento] } : s));
     toast.success('Movimiento registrado');
-  }, [cajaActiva]);
+  }, [cajaActiva, sesionesCaja]);
 
   // --- Gestión de Ventas ---
   const registrarVenta = useCallback(async (data: Omit<Venta, 'id' | 'fecha'>) => {

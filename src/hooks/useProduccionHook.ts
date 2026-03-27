@@ -4,9 +4,12 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { db } from '@/lib/database';
+import { DATOS_EJEMPLO } from '@/lib/seed-data';
 import type {
   OrdenProduccion,
   Receta,
+  FormulacionBase,
+  ModeloPan
 } from '@/types';
 import { toast } from 'sonner';
 
@@ -17,15 +20,25 @@ interface UseProduccionParams {
 
 export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionParams) {
   const [produccion, setProduccion] = useState<OrdenProduccion[]>([]);
-  const [formulaciones, setFormulaciones] = useState<import('@/types').FormulacionBase[]>([]);
-  const [modelosPan, setModelosPan] = useState<import('@/types').ModeloPan[]>([]);
+  const [formulaciones, setFormulaciones] = useState<FormulacionBase[]>([]);
+  const [modelosPan, setModelosPan] = useState<ModeloPan[]>([]);
 
   // Cargar formulaciones y modelos desde localStorage
   useEffect(() => {
     const savedFormulaciones = localStorage.getItem('formulaciones');
     const savedModelos = localStorage.getItem('modelosPan');
-    if (savedFormulaciones) setFormulaciones(JSON.parse(savedFormulaciones));
-    if (savedModelos) setModelosPan(JSON.parse(savedModelos));
+    
+    if (savedFormulaciones && JSON.parse(savedFormulaciones).length > 0) {
+      setFormulaciones(JSON.parse(savedFormulaciones));
+    } else if (DATOS_EJEMPLO.formulaciones) {
+      setFormulaciones(DATOS_EJEMPLO.formulaciones as FormulacionBase[]);
+    }
+    
+    if (savedModelos && JSON.parse(savedModelos).length > 0) {
+      setModelosPan(JSON.parse(savedModelos));
+    } else if (DATOS_EJEMPLO.modelosPan) {
+      setModelosPan(DATOS_EJEMPLO.modelosPan as ModeloPan[]);
+    }
   }, []);
 
   // Persistir formulaciones

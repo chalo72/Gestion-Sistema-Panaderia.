@@ -169,7 +169,7 @@ export function Sidebar({
             <div className="flex-1 min-w-0 animate-ag-fade-in">
               <h1 className="text-sm font-bold text-white tracking-tight leading-tight">Gestion Panaderia</h1>
               <h1 className="text-sm font-extrabold text-[#ff007f] tracking-tight leading-tight">Dulce Placer</h1>
-              <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">v5.0 • {role}</p>
+              <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">v5.1-NEXUS • {role}</p>
             </div>
           )}
         </div>
@@ -272,7 +272,7 @@ export function Sidebar({
         {(!isCollapsed || isMobile) ? (
           <div className="text-xs text-slate-500 text-center space-y-1 animate-ag-fade-in">
             <p className="font-semibold text-[#ff007f]/80">Panaderia Dulce Placer</p>
-            <p>v5.0 • {role}</p>
+            <p>v5.1-NEXUS • {role}</p>
           </div>
         ) : (
           <div className="flex justify-center text-[8px] font-bold text-[#ff007f]">DP</div>

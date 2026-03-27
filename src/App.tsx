@@ -374,6 +374,9 @@ function AppContent() {
               productos={productos}
               proveedores={proveedores}
               precios={precios}
+              inventario={inventario}
+              produccion={produccion}
+              recetas={recetas}
               onAddPrePedido={addPrePedido}
               onUpdatePrePedido={updatePrePedido}
               onDeletePrePedido={deletePrePedido}
@@ -468,10 +471,18 @@ function AppContent() {
             <Recetas
               productos={productos}
               recetas={recetas}
+              formulaciones={formulaciones}
+              modelosPan={modelosPan}
               getMejorPrecio={getMejorPrecio}
               addReceta={addReceta}
               updateReceta={updateReceta}
               deleteReceta={deleteReceta}
+              addFormulacion={addFormulacion}
+              updateFormulacion={updateFormulacion}
+              deleteFormulacion={deleteFormulacion}
+              addModeloPan={addModeloPan}
+              updateModeloPan={updateModeloPan}
+              deleteModeloPan={deleteModeloPan}
               formatCurrency={formatCurrency}
               getProductoById={getProductoById}
             />

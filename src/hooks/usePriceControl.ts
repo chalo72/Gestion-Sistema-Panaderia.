@@ -161,8 +161,8 @@ export function usePriceControl() {
         Promise.allSettled(proveedoresParaAgregar.map(p => db.addProveedor(p as Proveedor).catch(() => {}))),
         Promise.allSettled(DATOS_EJEMPLO.productos.map(p => db.addProducto(p as Producto).catch(() => {}))),
         Promise.allSettled(DATOS_EJEMPLO.precios.map(p => db.addPrecio(p as PrecioProveedor).catch(() => {}))),
-        ventasEnDB.length === 0 ? Promise.allSettled(DATOS_EJEMPLO.ventas?.map(v => db.addVenta(v as any).catch(() => {})) ?? []) : Promise.resolve(),
-        recepcionesEnDB.length === 0 ? Promise.allSettled(DATOS_EJEMPLO.recepciones?.map(r => db.addRecepcion(r as any).catch(() => {})) ?? []) : Promise.resolve(),
+        ventasEnDB.length === 0 ? Promise.allSettled((DATOS_EJEMPLO as any).ventas?.map((v: any) => db.addVenta(v).catch(() => {})) ?? []) : Promise.resolve(),
+        recepcionesEnDB.length === 0 ? Promise.allSettled((DATOS_EJEMPLO as any).recepciones?.map((r: any) => db.addRecepcion(r).catch(() => {})) ?? []) : Promise.resolve(),
       ]);
 
       // Actualizar estado LOCAL después del seed (SIN re-queries)
@@ -323,8 +323,8 @@ export function usePriceControl() {
         Promise.allSettled(DATOS_EJEMPLO.proveedores.map(p => db.addProveedor(p as Proveedor).catch(() => {}))),
         Promise.allSettled(DATOS_EJEMPLO.productos.map(p => db.addProducto(p as Producto).catch(() => {}))),
         Promise.allSettled(DATOS_EJEMPLO.precios.map(p => db.addPrecio(p as PrecioProveedor).catch(() => {}))),
-        DATOS_EJEMPLO.ventas ? Promise.allSettled(DATOS_EJEMPLO.ventas.map(v => db.addVenta(v as any).catch(() => {}))) : Promise.resolve(),
-        DATOS_EJEMPLO.recepciones ? Promise.allSettled(DATOS_EJEMPLO.recepciones.map(r => db.addRecepcion(r as any).catch(() => {}))) : Promise.resolve(),
+        (DATOS_EJEMPLO as any).ventas ? Promise.allSettled((DATOS_EJEMPLO as any).ventas.map((v: any) => db.addVenta(v).catch(() => {}))) : Promise.resolve(),
+        (DATOS_EJEMPLO as any).recepciones ? Promise.allSettled((DATOS_EJEMPLO as any).recepciones.map((r: any) => db.addRecepcion(r).catch(() => {}))) : Promise.resolve(),
       ]);
       
       // Guardar categorías
@@ -794,20 +794,42 @@ export function usePriceControl() {
 
   // Funciones de Reabastecimiento Inteligente
   const generarSugerenciasPedido = useCallback(async () => {
-    const productosBajoStock = inventarioHook.inventario.filter(item => item.stockActual <= item.stockMinimo);
-    if (productosBajoStock.length === 0) return 0;
+    // 1. Análisis de Necesidades de Producción (Forensic Prediction)
+    const necesidadesProduccion: Record<string, number> = {};
+    const ordenesActivas = produccionHook.produccion.filter(o => o.estado === 'planeado' || o.estado === 'en_proceso');
+    
+    ordenesActivas.forEach(orden => {
+      const receta = recetas.find(r => r.productoId === orden.productoId);
+      if (!receta) return;
+      const faltantes = Math.max(0, orden.cantidadPlaneada - (orden.cantidadCompletada || 0));
+      receta.ingredientes.forEach(ing => {
+        const qty = (ing.cantidad / receta.porcionesResultantes) * faltantes;
+        necesidadesProduccion[ing.productoId] = (necesidadesProduccion[ing.productoId] || 0) + qty;
+      });
+    });
+
+    const productosBajoStock = inventarioHook.inventario.filter(item => {
+      const necesidadProd = necesidadesProduccion[item.productoId] || 0;
+      return (item.stockActual - necesidadProd) <= item.stockMinimo;
+    });
+
+    if (productosBajoStock.length === 0 && Object.keys(necesidadesProduccion).length === 0) return 0;
 
     const pedidosPorProveedor: Record<string, PrePedidoItem[]> = {};
 
-    for (const item of productosBajoStock) {
-      const producto = productos.find(p => p.id === item.productoId);
-      if (!producto) continue;
+    // Procesar tanto productos bajo stock como necesidades de producción
+    const todosProductosInteres = new Set([...productosBajoStock.map(p => p.productoId), ...Object.keys(necesidadesProduccion)]);
 
-      const stockObjetivo = Math.max(item.stockMinimo * 3, 10);
-      const cantidadNecesaria = stockObjetivo - item.stockActual;
+    for (const productoId of todosProductosInteres) {
+      const itemInv = inventarioHook.inventario.find(i => i.productoId === productoId);
+      const stockActual = itemInv?.stockActual || 0;
+      const stockMinimo = itemInv?.stockMinimo || 5;
+      const necesidadProd = necesidadesProduccion[productoId] || 0;
+      
+      const cantidadNecesaria = Math.ceil(Math.max(0, (stockMinimo * 2) - stockActual + necesidadProd));
       if (cantidadNecesaria <= 0) continue;
 
-      const mejorPrecio = getMejorPrecio(item.productoId);
+      const mejorPrecio = getMejorPrecio(productoId);
       if (mejorPrecio) {
         const proveedorId = mejorPrecio.proveedorId;
         if (!pedidosPorProveedor[proveedorId]) {
@@ -815,14 +837,12 @@ export function usePriceControl() {
         }
         pedidosPorProveedor[proveedorId].push({
           id: crypto.randomUUID(),
-          productoId: item.productoId,
+          productoId: productoId,
           proveedorId: proveedorId,
           cantidad: cantidadNecesaria,
           precioUnitario: mejorPrecio.precioCosto,
           subtotal: cantidadNecesaria * mejorPrecio.precioCosto
         });
-      } else {
-        console.warn(`Producto ${producto.nombre} no tiene proveedores registrados.`);
       }
     }
 

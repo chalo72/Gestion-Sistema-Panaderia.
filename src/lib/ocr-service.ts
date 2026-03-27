@@ -248,17 +248,23 @@ export function sugerirCategoria(nombreProducto: string): string {
   const nombre = nombreProducto.toLowerCase();
   
   const categorias: Record<string, string[]> = {
-    'Harinas': ['harina', 'trigo', 'maiz', 'avena', 'centeno'],
-    'Lácteos': ['leche', 'crema', 'mantequilla', 'queso', 'yogurt', 'lacteo'],
-    'Azúcares': ['azucar', 'azúcar', 'miel', 'panela', 'endulzante', 'edulcorante'],
-    'Huevos': ['huevo', 'huevos', 'clara', 'yema'],
-    'Aceites': ['aceite', 'manteca', 'margarina', 'grasa'],
-    'Frutas': ['fruta', 'frutas', 'manzana', 'fresa', 'mora', 'naranja', 'limon', 'uva'],
-    'Chocolates': ['chocolate', 'cacao', 'cocoa'],
-    'Levaduras': ['levadura', 'polvo de hornear', 'bicarbonato', 'royal'],
-    'Esencias': ['esencia', 'vainilla', 'extracto', 'aroma'],
-    'Empaques': ['bolsa', 'caja', 'empaque', 'envase', 'bandeja', 'papel'],
-    'Limpieza': ['detergente', 'jabon', 'desinfectante', 'limpiador'],
+    'Harinas': ['harina', 'trigo', 'maiz', 'avena', 'centeno', 'fecula', 'almidon', 'premezcla'],
+    'Lácteos': ['leche', 'crema', 'mantequilla', 'queso', 'yogurt', 'lacteo', 'suero', 'cuajada', 'kefir'],
+    'Azúcares': ['azucar', 'azúcar', 'miel', 'panela', 'endulzante', 'edulcorante', 'steva', 'fructosa'],
+    'Huevos': ['huevo', 'huevos', 'clara', 'yema', 'huevo liquido'],
+    'Aceites': ['aceite', 'manteca', 'margarina', 'grasa', 'palma', 'girasol'],
+    'Frutas y Verduras': ['fruta', 'frutas', 'manzana', 'fresa', 'mora', 'naranja', 'limon', 'uva', 'durazno', 'mango', 'cereza', 'cebolla', 'ajo', 'pimenton'],
+    'Chocolates': ['chocolate', 'cacao', 'cocoa', 'nutella', 'colacao', 'milo'],
+    'Levaduras': ['levadura', 'polvo de hornear', 'bicarbonato', 'royal', 'leudante'],
+    'Esencias': ['esencia', 'vainilla', 'extracto', 'aroma', 'esencia de'],
+    'Empaques': ['bolsa', 'caja', 'empaque', 'envase', 'bandeja', 'papel', 'film', 'vinipel', 'domo', 'tarrina'],
+    'Limpieza': ['detergente', 'jabon', 'desinfectante', 'limpiador', 'cloro', 'lavaloza', 'antibacterial'],
+    'Rellenos y Cárnicos': ['jamon', 'mortadela', 'tocino', 'chorizo', 'carne', 'pollo', 'atun', 'bocadillo', 'arequipe', 'mermelada', 'crema pastelera', 'chantilly'],
+    'Decoración y Coberturas': ['sprinkles', 'grageas', 'perlas', 'colorante', 'fondant', 'granillo', 'brillo', 'perla', 'azucar glass'],
+    'Frutos Secos y Semillas': ['nuez', 'almendra', 'ajonjoli', 'chia', 'linaza', 'mani', 'pistacho', 'semilla', 'quinoa', 'avellana'],
+    'Aditivos y Conservantes': ['propionato', 'antimoho', 'sorbato', 'benzoato', 'antioxidante', 'emulsionante', 'mejorador'],
+    'Utensilios y Despacho': ['servilleta', 'pitillo', 'venero', 'tenedor', 'cuchara', 'cuchillo', 'plato desechable', 'espatula', 'brocha'],
+    'Servicios/Varios': ['agua', 'luz', 'gas', 'arriendo', 'nomina', 'reparacion', 'mantenimiento', 'materia prima general']
   };
   
   for (const [categoria, palabras] of Object.entries(categorias)) {

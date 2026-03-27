@@ -6,8 +6,10 @@ import {
     ArrowLeft, Package, GitCompareArrows, AlertTriangle,
     TrendingUp, TrendingDown, Scan, Sparkles, Loader2,
     Camera, Zap, FileText, Check, FolderOpen, Grid3X3,
-    Trash2, ZoomIn, Filter, CalendarRange
+    Trash2, ZoomIn, Filter, CalendarRange,
+    Fingerprint, Activity, Cpu, Layers, Database, History, Bot
 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,7 +41,8 @@ export default function Recepciones({
     onConfirmarRecepcion,
     getProveedorById,
     getProductoById,
-    formatCurrency
+    formatCurrency,
+    onUpdateProductoBase
 }: RecepcionesProps) {
     const { check } = useCan();
     const { usuario } = useAuth();
@@ -164,45 +167,60 @@ export default function Recepciones({
 
         setIsScanning(true);
         setScanProgress(0);
-        setScanStep('Iniciando OCR real con Tesseract.js...');
+        setScanStep('Mapeando estructura forense...');
+        console.log("ANTIGRAVITY: Iniciando escaneo forense de imagen...", imagenFileRef.current.name);
 
         try {
             const resultado = await procesarImagenFactura(
                 imagenFileRef.current,
                 (progreso) => {
                     setScanProgress(progreso);
-                    if (progreso < 30) setScanStep('Preparando imagen...');
-                    else if (progreso < 60) setScanStep('Detectando texto...');
-                    else if (progreso < 85) setScanStep('Extrayendo productos y precios...');
-                    else setScanStep('Finalizando análisis...');
+                    if (progreso < 30) setScanStep('Preparando buffer de imagen...');
+                    else if (progreso < 60) setScanStep('Detectando patrones de factura...');
+                    else if (progreso < 85) setScanStep('Analizando descriptores de productos...');
+                    else setScanStep('Finalizando auditoría digital...');
                 }
             );
+
+            console.log("ANTIGRAVITY: Resultado OCR crudo:", resultado);
 
             // Buscar proveedor real por nombre si OCR detectó uno
             const proveedorMatch = resultado.proveedor
                 ? proveedores.find(p =>
                     p.nombre.toLowerCase().includes(
-                        resultado.proveedor!.nombre.toLowerCase().substring(0, 5)
-                    )
-                  )
+                        resultado.proveedor!.nombre.toLowerCase().trim().substring(0, 5)
+                    ) ||
+                    resultado.proveedor!.nombre.toLowerCase().includes(p.nombre.toLowerCase().trim().substring(0, 5))
+                )
                 : undefined;
 
-            // Convertir productos detectados por OCR a items de recepción
+            console.log("ANTIGRAVITY: Proveedor detectado:", proveedorMatch?.nombre || "Ninguno coincidente");
+
+            // Convertir productos detectados por OCR a items de recepción con lógica de fuzzy matching mejorada
             const itemsEscaneados: RecepcionItem[] = resultado.productos
                 .map(prod => {
-                    // Buscar producto real en la lista por nombre similar
-                    const productoReal = productos.find(p =>
-                        p.nombre.toLowerCase().includes(prod.nombre.toLowerCase().substring(0, 4)) ||
-                        prod.nombre.toLowerCase().includes(p.nombre.toLowerCase().substring(0, 4))
-                    );
-                    if (!productoReal) return null;
+                    // Buscar producto real en la lista por nombre similar (más flexible)
+                    const prodNombreLimpio = prod.nombre.toLowerCase().trim();
+                    const productoReal = productos.find(p => {
+                        const pNombreLimpio = p.nombre.toLowerCase().trim();
+                        return pNombreLimpio.includes(prodNombreLimpio.substring(0, 5)) ||
+                               prodNombreLimpio.includes(pNombreLimpio.substring(0, 5));
+                    });
+
+                    if (!productoReal) {
+                        console.warn(`ANTIGRAVITY: No se encontró coincidencia para "${prod.nombre}"`);
+                        return null;
+                    }
+
+                    console.log(`ANTIGRAVITY: Coincidencia encontrada: ${prod.nombre} -> ${productoReal.nombre}`);
+                    
                     return {
                         id: crypto.randomUUID(),
                         productoId: productoReal.id,
                         cantidadEsperada: prod.cantidad || 1,
                         cantidadRecibida: prod.cantidad || 1,
-                        precioEsperado: prod.precioUnitario || productoReal.precio || 0,
-                        precioFacturado: prod.precioUnitario || productoReal.precio || 0,
+                        precioEsperado: prod.precioUnitario || productoReal.costoBase || 0,
+                        precioFacturado: prod.precioUnitario || productoReal.costoBase || 0,
                         embalajeOk: true,
                         productoOk: true,
                         cantidadOk: true,
@@ -220,30 +238,39 @@ export default function Recepciones({
                 proveedorId: proveedorMatch?.id || prev.proveedorId,
                 numeroFactura: numFactura,
                 fechaFactura: resultado.fechaFactura || prev.fechaFactura,
-                items: itemsEscaneados.length > 0 ? itemsEscaneados : prev.items
+                items: itemsEscaneados.length > 0 ? [...prev.items, ...itemsEscaneados] : prev.items
             }));
 
             setScanProgress(100);
-            setScanStep('¡Completado!');
+            setScanStep('Análisis completado con éxito');
 
             if (itemsEscaneados.length === 0) {
-                toast.warning('OCR completado — no se detectaron productos coincidentes. Agrega los ítems manualmente.');
+                toast.warning('OCR finalizado — se leyó el texto pero no se detectaron productos que ya existan en tu catálogo.', {
+                    duration: 6000,
+                    description: 'Puedes agregar los productos manualmente o revisar la ortografía en el catálogo.'
+                });
             } else {
                 toast.success(
                     <div className="flex flex-col gap-1">
-                        <span className="font-semibold">✨ Factura escaneada exitosamente</span>
-                        <span className="text-sm text-muted-foreground">
-                            {itemsEscaneados.length} productos detectados • {proveedorMatch?.nombre || 'Revisa el proveedor'}
+                        <span className="font-semibold text-emerald-700">✨ Scanner Forense Exitoso</span>
+                        <span className="text-[10px] text-muted-foreground uppercase font-black">
+                            {itemsEscaneados.length} productos detectados • {proveedorMatch?.nombre || 'Proveedor por definir'}
                         </span>
-                    </div>
+                    </div>,
+                    { icon: <Bot className="w-5 h-5 text-indigo-500" /> }
                 );
             }
         } catch (err) {
-            toast.error('Error al procesar la imagen. Ingresa los datos manualmente.');
+            console.error("ANTIGRAVITY: Error crítico en Scanner:", err);
+            toast.error('Error al procesar la imagen forense. Intenta con una foto más clara.');
         } finally {
-            setIsScanning(false);
-            setScanProgress(0);
-            setScanStep('');
+            setTimeout(() => {
+                setIsScanning(false);
+                setScanProgress(0);
+                setScanStep('');
+            }, 1500);
+        }
+    };
         }
     };
 
@@ -282,24 +309,53 @@ export default function Recepciones({
     };
 
     // Filtrar recepciones
+    // --- KPIs DE AUDITORÍA LOGÍSTICA ---
+    const stats = useMemo(() => {
+        const estaSemana = new Date();
+        estaSemana.setDate(estaSemana.getDate() - 7);
+        const recSemana = recepciones.filter(r => new Date(r.fechaRecepcion) >= estaSemana);
+        const inversion = recSemana.reduce((s, r) => s + r.totalFactura, 0);
+        const conIncidencias = recepciones.filter(r => r.items.some(i => !i.productoOk || !i.embalajeOk)).length;
+        const tasaIncidencia = recepciones.length > 0 ? (conIncidencias / recepciones.length) * 100 : 0;
+        
+        return { inversion, tasaIncidencia, totalMes: recepciones.length };
+    }, [recepciones]);
+
+    // Filtrar recepciones para la lista principal (Shield-Safe-Filter)
     const filteredRecepciones = useMemo(() => {
-        return recepciones.filter(r => {
-            const matchesSearch = r.numeroFactura.toLowerCase().includes(busqueda.toLowerCase()) ||
-                getProveedorById(r.proveedorId)?.nombre.toLowerCase().includes(busqueda.toLowerCase());
-            const matchesProveedor = proveedorFiltro === 'todos' || r.proveedorId === proveedorFiltro;
-            return matchesSearch && matchesProveedor;
-        }).sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime());
+        try {
+            if (!recepciones || !Array.isArray(recepciones)) return [];
+            
+            return recepciones.filter(recepcion => {
+                if (!recepcion) return false;
+                const proveedor = getProveedorById(recepcion.proveedorId);
+                const matchBusqueda = 
+                    (recepcion.numeroFactura?.toLowerCase() || "").includes(busqueda.toLowerCase()) ||
+                    (proveedor?.nombre?.toLowerCase() || "").includes(busqueda.toLowerCase());
+                const matchProveedor = proveedorFiltro === 'todos' || recepcion.proveedorId === proveedorFiltro;
+                return matchBusqueda && matchProveedor;
+            }).sort((a, b) => {
+                const dateA = a.fechaRecepcion ? new Date(a.fechaRecepcion).getTime() : 0;
+                const dateB = b.fechaRecepcion ? new Date(b.fechaRecepcion).getTime() : 0;
+                return dateB - dateA;
+            });
+        } catch (error) {
+            console.error("Shield-Guardian: Error filtrando recepciones", error);
+            return [];
+        }
     }, [recepciones, busqueda, proveedorFiltro, getProveedorById]);
 
     // Manejar subida de imagen
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            // Guardar el File original para OCR real
             imagenFileRef.current = file;
             const reader = new FileReader();
             reader.onloadend = () => {
                 setNewRecepcion(prev => ({ ...prev, imagenFactura: reader.result as string }));
+                toast.success("Imagen cargada. Iniciando análisis forense...", {
+                    icon: <Zap className="w-4 h-4 text-amber-500" />
+                });
             };
             reader.readAsDataURL(file);
         }
@@ -729,117 +785,55 @@ export default function Recepciones({
                                             : 'border-primary/30 hover:border-primary hover:bg-primary/5'}`}
                                     onClick={() => !isScanning && fileInputRef.current?.click()}
                                 >
-                                    {newRecepcion.imagenFactura ? (
-                                        <div className="relative">
-                                            <img
-                                                src={newRecepcion.imagenFactura}
-                                                alt="Factura"
-                                                className="max-h-40 mx-auto rounded-lg shadow-md"
-                                            />
-                                            <Button
-                                                size="sm"
-                                                variant="destructive"
-                                                className="absolute top-1 right-1 h-6 w-6 p-0 rounded-full"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setNewRecepcion(prev => ({ ...prev, imagenFactura: null, items: [] }));
-                                                }}
-                                            >
-                                                <X className="w-3 h-3" />
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-2 py-4">
-                                            <div className="mx-auto w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                                                <FileText className="w-6 h-6 text-primary" />
+                                    {/* Preview Imagen Forense (Volt-Pixel) */}
+                                    {newRecepcion.imagenFactura && (
+                                        <div className="space-y-3">
+                                            <div className="relative group rounded-2xl overflow-hidden border-2 border-indigo-500/20 shadow-xl bg-slate-900 aspect-[3/4]">
+                                                <img 
+                                                    src={newRecepcion.imagenFactura} 
+                                                    className="w-full h-full object-contain" 
+                                                    alt="Factura"
+                                                />
+                                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 p-4 text-center">
+                                                    <p className="text-[10px] font-black text-indigo-300 uppercase tracking-widest">Vista de Auditoría Forense</p>
+                                                </div>
+                                                {/* Scanning Anim */}
+                                                {isScanning && (
+                                                    <div className="absolute inset-0 bg-indigo-500/10 backdrop-blur-[1px]">
+                                                        <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400 animate-[scan-beam_2s_ease-in-out_infinite]" />
+                                                    </div>
+                                                )}
                                             </div>
-                                            <div>
-                                                <p className="text-sm font-medium">Subir foto de factura</p>
-                                                <p className="text-xs text-muted-foreground">Click o arrastra la imagen aquí</p>
-                                            </div>
+                                            
+                                            {/* Botón de acción inmediata bajo la foto */}
+                                            {!isScanning && (
+                                                <Button 
+                                                    onClick={(e) => { e.stopPropagation(); handleScanFactura(); }}
+                                                    className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[11px] tracking-tighter rounded-xl shadow-lg shadow-indigo-600/30 animate-ag-pulse"
+                                                >
+                                                    <Sparkles className="w-4 h-4 mr-2" /> Iniciar Análisis Forense
+                                                </Button>
+                                            )}
                                         </div>
                                     )}
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept="image/*,application/pdf"
-                                        className="hidden"
-                                        onChange={handleImageUpload}
-                                    />
                                 </div>
-
-                                {/* Botón de Escaneo OCR */}
-                                {newRecepcion.imagenFactura && (
-                                    <div className="space-y-3">
-                                        {isScanning ? (
-                                            <div className="p-4 rounded-xl bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-200">
-                                                <div className="flex items-center gap-3 mb-3">
-                                                    <div className="relative">
-                                                        <Loader2 className="w-5 h-5 text-violet-600 animate-spin" />
-                                                        <Sparkles className="w-3 h-3 text-violet-400 absolute -top-1 -right-1 animate-pulse" />
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <p className="text-sm font-semibold text-violet-700">Procesando con IA Yimi</p>
-                                                        <p className="text-xs text-violet-500">{scanStep}</p>
-                                                    </div>
-                                                    <span className="text-sm font-bold text-violet-600">{scanProgress}%</span>
-                                                </div>
-                                                <div className="h-2 bg-violet-100 rounded-full overflow-hidden">
-                                                    <div 
-                                                        className="h-full bg-gradient-to-r from-violet-500 to-purple-500 transition-all duration-300"
-                                                        style={{ width: `${scanProgress}%` }}
-                                                    />
-                                                </div>
-                                            </div>
-                                        ) : (
-                                            <Button
-                                                className="w-full h-12 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 text-white shadow-lg shadow-violet-200"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleScanFactura();
-                                                }}
-                                            >
-                                                <Zap className="w-5 h-5 mr-2" />
-                                                <span className="font-semibold">Procesar con IA</span>
-                                                <Sparkles className="w-4 h-4 ml-2 opacity-70" />
-                                            </Button>
-                                        )}
-                                        <p className="text-[10px] text-center text-muted-foreground">
-                                            La IA detectará automáticamente proveedor, productos y cantidades
-                                        </p>
-                                    </div>
-                                )}
                             </div>
                         </CardContent>
                     </Card>
 
-                    {/* Checklist de Productos */}
-                    <Card className="lg:col-span-2 shadow-2xl border-white/10 glass-card">
-                        <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/50">
+                    {/* Checklist de Productos (Volt-Audit-System) */}
+                    <Card className="lg:col-span-2 shadow-2xl border-white/10 glass-card bg-white/40 dark:bg-slate-900/40 backdrop-blur-md overflow-hidden flex flex-col max-h-[750px]">
+                        <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100/50 bg-white/60 py-4 flex-shrink-0">
                             <div>
-                                <CardTitle>Checklist de Recepción</CardTitle>
-                                <p className="text-xs text-muted-foreground mt-1">Verifica el estado físico de cada producto</p>
+                                <CardTitle className="text-xl font-black uppercase tracking-tighter flex items-center gap-2">
+                                    <Activity className="w-5 h-5 text-indigo-500" />
+                                    Auditoría de Mercancía
+                                </CardTitle>
+                                <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Validación de Integridad Física y Costos</p>
                             </div>
                             <div className="flex gap-2">
-                                {newRecepcion.items.length > 0 && (
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-[10px] font-black h-8 border-emerald-200 text-emerald-600 hover:bg-emerald-50"
-                                        onClick={() => {
-                                            setNewRecepcion(prev => ({
-                                                ...prev,
-                                                items: prev.items.map(i => ({ ...i, productoOk: true, embalajeOk: true, cantidadOk: true }))
-                                            }));
-                                            toast.success('Todos los items marcados como OK');
-                                        }}
-                                    >
-                                        <CheckCircle className="w-3 h-3 mr-1" />
-                                        MARCAR TODO OK
-                                    </Button>
-                                )}
                                 <select
-                                    className="text-sm p-2 rounded-md border bg-background w-48 h-8"
+                                    className="text-[11px] font-black uppercase p-2 rounded-xl border-2 border-indigo-50 bg-white min-w-[200px] h-10 outline-none focus:border-indigo-500 transition-all"
                                     onChange={(e) => {
                                         if (e.target.value) {
                                             handleAddItem(e.target.value);
@@ -847,88 +841,153 @@ export default function Recepciones({
                                         }
                                     }}
                                 >
-                                    <option value="">+ Agregar Producto</option>
+                                    <option value="">+ Insumo / Producto</option>
                                     {productos.map(p => (
                                         <option key={p.id} value={p.id}>{p.nombre}</option>
                                     ))}
                                 </select>
                             </div>
                         </CardHeader>
-                        <CardContent className="pt-6">
-                            <div className="space-y-4">
+                        <CardContent className="p-6 overflow-y-auto flex-1 scrollbar-hide">
+                            <div className="space-y-6">
                                 {newRecepcion.items.length === 0 ? (
-                                    <div className="text-center py-16 text-muted-foreground border-2 border-dashed rounded-2xl bg-slate-50/50">
-                                        <Package className="w-12 h-12 mx-auto mb-4 opacity-20 text-blue-500" />
-                                        <p className="font-medium">No hay productos en la lista</p>
-                                        <p className="text-xs">Usa el buscador o vincula un pre-pedido para comenzar</p>
+                                    <div className="text-center py-24 text-muted-foreground border-4 border-dashed rounded-[2.5rem] bg-indigo-50/30 flex flex-col items-center gap-4">
+                                        <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center animate-ag-float">
+                                            <Package className="w-10 h-10 text-indigo-500 opacity-50" />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="font-black text-lg uppercase tracking-tighter text-indigo-900">Buzón de Recepción Vacío</p>
+                                            <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-500">
+                                                {newRecepcion.imagenFactura ? 'Imagen detectada. ¿Iniciar escaneo?' : 'Inicia el escaneo forense o agrega manualmente'}
+                                            </p>
+                                        </div>
+                                        {newRecepcion.imagenFactura && !isScanning && (
+                                            <Button 
+                                                onClick={handleScanFactura} 
+                                                className="mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase text-[10px] tracking-widest h-10 px-6 rounded-xl animate-ag-pulse"
+                                            >
+                                                <Sparkles className="w-4 h-4 mr-2" /> Iniciar Análisis Forense
+                                            </Button>
+                                        )}
+                                        {isScanning && (
+                                            <div className="mt-2 w-48 space-y-2">
+                                                <Progress value={scanProgress} className="h-1 bg-indigo-100" />
+                                                <p className="text-[9px] font-black uppercase text-indigo-600 animate-pulse">{scanStep}</p>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
-                                    <div className="space-y-3">
-                                        {newRecepcion.items.map((item) => (
-                                            <div key={item.id} className="p-4 border rounded-2xl bg-white/50 hover:bg-white transition-all shadow-sm hover:shadow-md border-white/20">
-                                                <div className="flex items-start justify-between mb-4">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                                                            <Package className="w-5 h-5" />
+                                    <div className="grid grid-cols-1 gap-4">
+                                        {newRecepcion.items.map((item) => {
+                                            const prod = getProductoById(item.productoId);
+                                            const inflacion = prod?.costoBase ? ((item.precioFacturado / prod.costoBase) - 1) * 100 : 0;
+                                            
+                                            return (
+                                                <div key={item.id} className="relative group p-5 border-2 rounded-2xl bg-white hover:bg-slate-50 transition-all shadow-sm hover:shadow-xl border-slate-100 flex flex-col gap-5">
+                                                    <div className="flex items-start justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-600/20">
+                                                                <Package className="w-6 h-6" />
+                                                            </div>
+                                                            <div>
+                                                                <h4 className="font-black text-slate-900 uppercase leading-none">{prod?.nombre}</h4>
+                                                                <div className="flex items-center gap-2 mt-1.5">
+                                                                    <Badge variant="outline" className="text-[9px] font-black uppercase text-slate-500 border-slate-200">SKU: {item.id.slice(0, 5)}</Badge>
+                                                                    {inflacion > 2 && (
+                                                                        <Badge className="bg-rose-100 text-rose-600 border-rose-200 text-[8px] font-black px-1.5">
+                                                                            <TrendingUp className="w-2.5 h-2.5 mr-1" /> INC: {inflacion.toFixed(1)}%
+                                                                        </Badge>
+                                                                    )}
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div>
-                                                            <h4 className="font-bold text-slate-800">{getProductoById(item.productoId)?.nombre}</h4>
-                                                            <p className="text-[10px] font-black text-muted-foreground uppercase tracking-tighter">SKU: {item.productoId.slice(0, 8)}</p>
-                                                        </div>
+                                                        <Button variant="ghost" size="icon" className="rounded-xl hover:bg-rose-50 hover:text-rose-500" onClick={() => setNewRecepcion(prev => ({ ...prev, items: prev.items.filter(i => i.id !== item.id) }))}>
+                                                            <X className="w-4 h-4" />
+                                                        </Button>
                                                     </div>
-                                                    <Button variant="ghost" size="icon" className="rounded-xl hover:bg-red-50 hover:text-red-500" onClick={() => setNewRecepcion(prev => ({ ...prev, items: prev.items.filter(i => i.id !== item.id) }))}>
-                                                        <X className="w-4 h-4" />
-                                                    </Button>
-                                                </div>
 
-                                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Recibido</Label>
-                                                        <Input
-                                                            type="number"
-                                                            min="0"
-                                                            value={item.cantidadRecibida}
-                                                            onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseInt(e.target.value) })}
-                                                            className="h-10 rounded-xl font-bold bg-white"
-                                                        />
-                                                    </div>
-                                                    <div className="space-y-1.5">
-                                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Costo Factura</Label>
-                                                        <Input
-                                                            type="number"
-                                                            min="0"
-                                                            step="0.01"
-                                                            value={item.precioFacturado}
-                                                            onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) })}
-                                                            className="h-10 rounded-xl font-bold bg-white"
-                                                        />
-                                                    </div>
-                                                    <div className="col-span-2 flex items-end gap-2">
-                                                        <div
-                                                            className={`flex-1 h-10 flex items-center justify-center rounded-xl text-[10px] font-black border cursor-pointer transition-all ${item.embalajeOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm shadow-emerald-200/50' : 'bg-red-50 border-red-200 text-red-700'}`}
-                                                            onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })}
-                                                        >
-                                                            {item.embalajeOk ? '✓ EMBALAJE OK' : '✗ EMBALAJE MAL'}
+                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                                                        <div className="space-y-2">
+                                                            <Label className="text-[10px] font-black uppercase text-indigo-500 ml-1">Cant. Recibida</Label>
+                                                            <Input
+                                                                type="number"
+                                                                min="1"
+                                                                value={item.cantidadRecibida}
+                                                                onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseInt(e.target.value) || 0 })}
+                                                                className="h-12 rounded-xl font-black text-center bg-slate-50 border-none text-indigo-600 text-lg"
+                                                            />
                                                         </div>
-                                                        <div
-                                                            className={`flex-1 h-10 flex items-center justify-center rounded-xl text-[10px] font-black border cursor-pointer transition-all ${item.productoOk ? 'bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm shadow-emerald-200/50' : 'bg-red-50 border-red-200 text-red-700'}`}
-                                                            onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
-                                                        >
-                                                            {item.productoOk ? '✓ ESTADO OK' : '✗ ESTADO MAL'}
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center justify-between ml-1">
+                                                                <Label className="text-[10px] font-black uppercase text-blue-500">Valor Paca / Pack</Label>
+                                                                <Badge variant="outline" className="text-[8px] font-black border-blue-200 text-blue-500 px-1 py-0 h-4">TOTAL</Badge>
+                                                            </div>
+                                                            <Input
+                                                                type="number"
+                                                                value={item.precioFacturado * item.cantidadRecibida}
+                                                                onChange={e => {
+                                                                    const total = parseFloat(e.target.value) || 0;
+                                                                    const unit = item.cantidadRecibida > 0 ? total / item.cantidadRecibida : 0;
+                                                                    handleUpdateItem(item.id, { precioFacturado: unit });
+                                                                }}
+                                                                className="h-12 rounded-xl font-black text-center bg-blue-50/30 border-none text-blue-700 text-lg"
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center justify-between ml-1">
+                                                                <Label className="text-[10px] font-black uppercase text-emerald-600">Costo Unitario</Label>
+                                                                {inflacion > 2 && <Badge className="bg-rose-500 text-white text-[8px] font-black px-1.5 h-4">↑</Badge>}
+                                                            </div>
+                                                            <Input
+                                                                type="number"
+                                                                value={item.precioFacturado}
+                                                                onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
+                                                                className={cn(
+                                                                    "h-12 rounded-xl font-black text-center bg-slate-50 border-none text-lg",
+                                                                    inflacion > 5 ? "text-rose-600 ring-4 ring-rose-500/10" : "text-emerald-600"
+                                                                )}
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-2 grid grid-cols-2 gap-2">
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })}
+                                                                className={cn(
+                                                                    "h-12 rounded-xl text-[9px] font-black uppercase flex flex-col items-center justify-center transition-all border-2",
+                                                                    item.embalajeOk ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm shadow-emerald-200/50" : "bg-rose-50 border-rose-200 text-rose-700"
+                                                                )}
+                                                            >
+                                                                <Layers className="w-3.5 h-3.5 mb-0.5" />
+                                                                {item.embalajeOk ? 'Embalaje OK' : 'Dañado'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
+                                                                className={cn(
+                                                                    "h-12 rounded-xl text-[9px] font-black uppercase flex flex-col items-center justify-center transition-all border-2",
+                                                                    item.productoOk ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-sm shadow-emerald-200/50" : "bg-rose-50 border-rose-200 text-rose-700"
+                                                                )}
+                                                            >
+                                                                <Check className="w-3.5 h-3.5 mb-0.5" />
+                                                                {item.productoOk ? 'Estado OK' : 'Incompleto'}
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                </div>
 
-                                                {(!item.embalajeOk || !item.productoOk) && (
-                                                    <Input
-                                                        placeholder="Describe la incidencia detalladamente..."
-                                                        value={item.observaciones || ''}
-                                                        onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
-                                                        className="h-10 mt-3 text-xs border-red-200 bg-red-50 placeholder:text-red-300 rounded-xl"
-                                                    />
-                                                )}
-                                            </div>
-                                        ))}
+                                                    {(!item.embalajeOk || !item.productoOk) && (
+                                                        <div className="p-4 bg-rose-50 border-2 border-rose-100 rounded-2xl animate-ag-fade-in">
+                                                            <Label className="text-[9px] font-black uppercase text-rose-400 mb-2 block">Descripción de la novedad</Label>
+                                                            <Input
+                                                                placeholder="¿Qué pasó con el producto?..."
+                                                                value={item.observaciones || ''}
+                                                                onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
+                                                                className="h-10 text-xs border-none bg-white text-rose-700 font-bold placeholder:text-rose-200 rounded-xl"
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>
@@ -1197,113 +1256,149 @@ export default function Recepciones({
 
     return (
         <div className="space-y-6 animate-ag-fade-in">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-2xl font-bold">📥 Recepción de Mercancía</h1>
-                    <p className="text-muted-foreground">Digitaliza facturas y verifica el stock entrante</p>
-                </div>
-                <div className="flex gap-2">
-                    {/* Botón Archivo de Facturas */}
-                    <Button 
-                        variant="outline" 
-                        onClick={() => setView('galeria')} 
-                        className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50"
-                    >
-                        <FolderOpen className="w-4 h-4" /> 
-                        Archivo
-                        {facturasGuardadas.length > 0 && (
-                            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-[10px]">
-                                {facturasGuardadas.length}
-                            </Badge>
-                        )}
-                    </Button>
-                    {check('CREAR_RECEPCIONES') && (
-                        <Button onClick={() => setView('new')} className="gap-2 shadow-lg hover:shadow-primary/20">
-                            <Plus className="w-4 h-4" /> Nueva Recepción
+            {/* --- DASHBOARD DE MÉTRICAS LOGÍSTICAS (Nexus-Core) --- */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card className="bg-gradient-to-br from-indigo-600 to-blue-700 text-white border-none shadow-xl shadow-indigo-500/20 rounded-[2rem] overflow-hidden group">
+                    <CardContent className="p-6 relative">
+                        <TrendingUp className="absolute right-4 top-4 w-12 h-12 text-white/10 group-hover:scale-125 transition-transform" />
+                        <p className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Inversión Mercancía (7d)</p>
+                        <h2 className="text-3xl font-black mt-1 tabular-nums">{formatCurrency(stats.inversion)}</h2>
+                        <div className="flex items-center gap-2 mt-4">
+                            <Badge className="bg-white/20 text-white border-none text-[10px]">TOTAL MES: {stats.totalMes}</Badge>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] shadow-sm">
+                    <CardContent className="p-6 flex items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-rose-50 dark:bg-rose-900/20 flex items-center justify-center">
+                            <AlertTriangle className="w-7 h-7 text-rose-500" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tasa de Incidencia</p>
+                            <h2 className="text-2xl font-black text-rose-600 tabular-nums">{stats.tasaIncidencia.toFixed(1)}%</h2>
+                            <p className="text-[9px] font-bold text-slate-500 mt-0.5">Entregas con novedad física o precio</p>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-[2rem] shadow-sm">
+                    <CardContent className="p-6 flex items-center gap-5">
+                        <div className="w-14 h-14 rounded-2xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center text-amber-500">
+                             <History className="w-7 h-7 text-amber-500" />
+                        </div>
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Auditoría Pendiente</p>
+                            <h2 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{prepedidosConfirmados.length}</h2>
+                            <p className="text-[9px] font-bold text-slate-500 mt-0.5">Pedidos por confirmar recepción</p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="flex flex-col gap-6">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold uppercase tracking-tighter">📥 Gestión de Recepciones</h1>
+                        <p className="text-xs text-muted-foreground uppercase font-black tracking-widest leading-none mt-1">Scanner Forense & Control de Stock v5.1</p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button 
+                            variant="ghost" 
+                            onClick={() => setView('galeria')} 
+                            className="gap-2 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-50"
+                        >
+                            <FolderOpen className="w-4 h-4 text-amber-500" /> 
+                            Archivo de Facturas
                         </Button>
+                        {check('CREAR_RECEPCIONES') && (
+                            <Button onClick={() => setView('new')} className="gap-2 h-12 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 font-black uppercase text-[11px] tracking-widest">
+                                <Plus className="w-4 h-4" /> Registrar Factura
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Buscar por factura o proveedor..."
+                            value={busqueda}
+                            onChange={e => setBusqueda(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
+                    <div className="w-full sm:w-64">
+                        <select
+                            className="w-full p-2 h-10 rounded-md border bg-background text-sm"
+                            value={proveedorFiltro}
+                            onChange={e => setProveedorFiltro(e.target.value)}
+                        >
+                            <option value="todos">Todos los Proveedores</option>
+                            {proveedores.map(p => (
+                                <option key={p.id} value={p.id}>{p.nombre}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    {filteredRecepciones.map(recepcion => {
+                        const proveedor = getProveedorById(recepcion.proveedorId);
+                        const itemsCount = recepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0);
+                        const hasIssues = recepcion.items.some(i => !i.productoOk || !i.embalajeOk || i.defectuosos > 0);
+
+                        return (
+                            <Card
+                                key={recepcion.id}
+                                className="group hover:scale-[1.02] transition-all cursor-pointer overflow-hidden border-l-4 border-l-primary"
+                                onClick={() => { setSelectedRecepcion(recepcion); setView('details'); }}
+                            >
+                                <CardContent className="p-0">
+                                    <div className="p-4 space-y-3">
+                                        <div className="flex justify-between items-start">
+                                            <Badge variant="outline" className="bg-background/50">
+                                                {recepcion.numeroFactura}
+                                            </Badge>
+                                            <Badge className={`${hasIssues ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'} hover:bg-white`}>
+                                                {hasIssues ? 'Incidencias' : 'OK'}
+                                            </Badge>
+                                        </div>
+
+                                        <div>
+                                            <h3 className="font-semibold text-lg line-clamp-1">{proveedor?.nombre || 'Desconocido'}</h3>
+                                            <p className="text-xs text-muted-foreground flex items-center gap-1">
+                                                <Calendar className="w-3 h-3" />
+                                                {new Date(recepcion.fechaRecepcion).toLocaleDateString()}
+                                            </p>
+                                        </div>
+
+                                        {recepcion.imagenFactura && (
+                                            <div className="relative h-24 bg-muted/30 rounded-lg overflow-hidden group-hover:bg-muted/50 transition-colors flex items-center justify-center">
+                                                <img src={recepcion.imagenFactura} className="w-full h-full object-cover opacity-50 blur-[1px] group-hover:blur-0 transition-all" />
+                                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Eye className="w-6 h-6 text-foreground drop-shadow-md" />
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="pt-3 border-t flex justify-between items-center text-sm">
+                                            <span className="text-muted-foreground">{itemsCount} items</span>
+                                            <span className="font-bold text-primary">{formatCurrency(recepcion.totalFactura)}</span>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+
+                    {filteredRecepciones.length === 0 && (
+                        <div className="col-span-full py-12 text-center text-muted-foreground">
+                            No se encontraron recepciones
+                        </div>
                     )}
                 </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Buscar por factura o proveedor..."
-                        value={busqueda}
-                        onChange={e => setBusqueda(e.target.value)}
-                        className="pl-10"
-                    />
-                </div>
-                <div className="w-full sm:w-64">
-                    <select
-                        className="w-full p-2 h-10 rounded-md border bg-background text-sm"
-                        value={proveedorFiltro}
-                        onChange={e => setProveedorFiltro(e.target.value)}
-                    >
-                        <option value="todos">Todos los Proveedores</option>
-                        {proveedores.map(p => (
-                            <option key={p.id} value={p.id}>{p.nombre}</option>
-                        ))}
-                    </select>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {filteredRecepciones.map(recepcion => {
-                    const proveedor = getProveedorById(recepcion.proveedorId);
-                    const itemsCount = recepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0);
-                    const hasIssues = recepcion.items.some(i => !i.productoOk || !i.embalajeOk || i.defectuosos > 0);
-
-                    return (
-                        <Card
-                            key={recepcion.id}
-                            className="group hover:scale-[1.02] transition-all cursor-pointer overflow-hidden border-l-4 border-l-primary"
-                            onClick={() => { setSelectedRecepcion(recepcion); setView('details'); }}
-                        >
-                            <CardContent className="p-0">
-                                <div className="p-4 space-y-3">
-                                    <div className="flex justify-between items-start">
-                                        <Badge variant="outline" className="bg-background/50">
-                                            {recepcion.numeroFactura}
-                                        </Badge>
-                                        <Badge className={`${hasIssues ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'} hover:bg-white`}>
-                                            {hasIssues ? 'Incidencias' : 'OK'}
-                                        </Badge>
-                                    </div>
-
-                                    <div>
-                                        <h3 className="font-semibold text-lg line-clamp-1">{proveedor?.nombre || 'Desconocido'}</h3>
-                                        <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                            <Calendar className="w-3 h-3" />
-                                            {new Date(recepcion.fechaRecepcion).toLocaleDateString()}
-                                        </p>
-                                    </div>
-
-                                    {recepcion.imagenFactura && (
-                                        <div className="relative h-24 bg-muted/30 rounded-lg overflow-hidden group-hover:bg-muted/50 transition-colors flex items-center justify-center">
-                                            <img src={recepcion.imagenFactura} className="w-full h-full object-cover opacity-50 blur-[1px] group-hover:blur-0 transition-all" />
-                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Eye className="w-6 h-6 text-foreground drop-shadow-md" />
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    <div className="pt-3 border-t flex justify-between items-center text-sm">
-                                        <span className="text-muted-foreground">{itemsCount} items</span>
-                                        <span className="font-bold text-primary">{formatCurrency(recepcion.totalFactura)}</span>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    );
-                })}
-
-                {filteredRecepciones.length === 0 && (
-                    <div className="col-span-full py-12 text-center text-muted-foreground">
-                        No se encontraron recepciones
-                    </div>
-                )}
             </div>
         </div>
     );

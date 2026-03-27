@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback } from 'react';
 import { 
   Upload, FileSpreadsheet, Camera, Loader2, Check, AlertCircle, 
-  Download, Trash2, Edit2, Save, X, Plus, Search, ChevronDown 
+  Download, Trash2, Edit2, Save, X, Plus, Search, ChevronDown,
+  Fingerprint, Activity, Cpu, Layers, Database
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -445,13 +446,47 @@ export default function CargaMasiva({
           )}
           
           {importState === 'processing' && (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-16">
-                <Loader2 className="w-12 h-12 text-violet-600 animate-spin mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Procesando imagen...</h3>
-                <p className="text-sm text-gray-500 mb-4">Leyendo texto de la factura</p>
-                <Progress value={progress} className="w-64" />
-                <p className="text-xs text-gray-400 mt-2">{progress}%</p>
+            <Card className="relative overflow-hidden bg-slate-950 border-indigo-500/30 shadow-[0_0_50px_rgba(79,70,229,0.1)]">
+              {/* Forensic Scan Beam */}
+              <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.8)] animate-[scan-beam_2s_ease-in-out_infinite] z-10" />
+              
+              <CardContent className="flex flex-col items-center justify-center py-20 relative z-20">
+                <div className="relative mb-8 scale-110">
+                    <Cpu className="w-16 h-16 text-cyan-400 animate-ag-float" />
+                    <Activity className="absolute inset-0 flex items-center justify-center w-6 h-6 m-auto text-indigo-500 animate-pulse" />
+                </div>
+                
+                <div className="w-full max-w-sm space-y-4">
+                  <div className="flex justify-between items-end">
+                      <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-400 flex items-center gap-2">
+                        <Fingerprint className="w-3 h-3" />
+                        Procesamiento Forense
+                      </span>
+                      <span className="text-xl font-black text-white tabular-nums">{progress}%</span>
+                  </div>
+                  <Progress value={progress} className="h-2 bg-slate-800" />
+                  
+                  <div className="grid grid-cols-2 gap-3 mt-4">
+                      <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-xl flex items-center gap-3">
+                          <Layers className="w-5 h-5 text-indigo-400" />
+                          <div className="flex flex-col text-left">
+                              <span className="text-[9px] font-black text-slate-500 uppercase">Motor OCR</span>
+                              <span className="text-[11px] font-bold text-slate-300">Tesseract Engine</span>
+                          </div>
+                      </div>
+                      <div className="bg-slate-900/50 border border-slate-800 p-3 rounded-xl flex items-center gap-3">
+                          <Database className="w-5 h-5 text-emerald-400" />
+                          <div className="flex flex-col text-left">
+                              <span className="text-[9px] font-black text-slate-500 uppercase">Data Refactor</span>
+                              <span className="text-[11px] font-bold text-slate-300">Analizando...</span>
+                          </div>
+                      </div>
+                  </div>
+
+                  <p className="text-slate-400 text-[10px] text-center font-bold uppercase tracking-[0.2em] pt-4 animate-pulse">
+                    Extrayendo descriptores de productos y metadatos de precios...
+                  </p>
+                </div>
               </CardContent>
             </Card>
           )}

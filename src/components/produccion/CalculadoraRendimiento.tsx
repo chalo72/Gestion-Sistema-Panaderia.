@@ -25,11 +25,12 @@ import {
   SelectValue
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
-import type { FormulacionBase, ModeloPan } from '@/types';
+import type { FormulacionBase, ModeloPan, Producto } from '@/types';
 
 interface CalculadoraRendimientoProps {
   formulaciones: FormulacionBase[];
   modelos: ModeloPan[];
+  getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
 }
 
@@ -39,6 +40,7 @@ const ARROBA_GR = ARROBA_KG * 1000;
 export function CalculadoraRendimiento({
   formulaciones,
   modelos,
+  getProductoById,
   formatCurrency
 }: CalculadoraRendimientoProps) {
   // Estado de la calculadora
@@ -360,15 +362,20 @@ export function CalculadoraRendimiento({
                     <FlaskConical className="w-4 h-4 text-amber-500" />
                     Insumos Necesarios para {resultados.arrobas} arroba(s)
                   </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                    {resultados.ingredientesNecesarios.map((ing, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-muted/30 rounded-lg text-sm">
-                        <span className="text-muted-foreground truncate">{ing.productoId.substring(0, 15)}...</span>
-                        <Badge variant="outline" className="ml-2 shrink-0">
-                          {ing.cantidadTotal.toFixed(0)} {ing.unidad}
-                        </Badge>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {resultados.ingredientesNecesarios.map((ing, index) => {
+                      const producto = getProductoById(ing.productoId);
+                      return (
+                        <div key={index} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl border border-border/50 text-sm">
+                          <span className="font-medium truncate mr-2" title={producto?.nombre || ing.productoId}>
+                            {producto?.nombre || 'Insumo'}
+                          </span>
+                          <Badge variant="secondary" className="font-black shrink-0">
+                            {ing.cantidadTotal.toFixed(ing.unidad === 'und' ? 0 : 1)} {ing.unidad}
+                          </Badge>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>

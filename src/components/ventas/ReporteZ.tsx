@@ -1,7 +1,7 @@
-import React from 'react';
-import { CajaSesion, Venta } from '@/types';
+
+import type { CajaSesion, Venta } from '@/types';
 import { cn } from '@/lib/utils';
-import { Store, User, Calendar, Clock, Banknote, TrendingUp, TrendingDown, AlertCircle } from 'lucide-react';
+import { Calendar, Clock, Banknote, AlertCircle } from 'lucide-react';
 
 interface ReporteZProps {
     cajas: CajaSesion[];

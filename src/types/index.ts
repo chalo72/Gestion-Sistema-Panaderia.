@@ -39,6 +39,10 @@ export interface Receta {
   costoTotal: number;
   costoPorPorcion: number;
   instrucciones?: string;
+  temperaturaHorno?: number; // Grados C
+  tiempoHorneado?: number;   // Minutos
+  tiempoFermentacion?: number; // Minutos
+  dificultad?: 'facil' | 'medio' | 'maestro';
   fechaActualizacion: string;
 }
 

@@ -2,20 +2,27 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
   Star, X, UserCheck, CheckCircle2, Tag, Store,
-  Wrench, Building2, Search, FileText, Save, LayoutGrid, Scan, Camera,
-  ShieldCheck, Info, Package, ImageIcon, ShoppingCart,
+  Wrench, Building2, Search, FileText, Save, Scan, Camera,
+  ShieldCheck, Info, ImageIcon, ShoppingCart,
   Zap,
   Bot,
-  ScrollText,
-  ScanLine
+  ScanLine,
+  Fingerprint,
+  Activity,
+  Cpu,
+  Layers,
+  Database,
+  History
 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { procesarImagenFactura, sugerirCategoria, type ResultadoOCR, type ProductoDetectado } from '@/lib/ocr-service';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -73,10 +80,12 @@ const RUBROS = [
 ];
 
 const CATEGORIAS_PROD = [
-  'Harinas y Materia Prima', 'Azúcares y Endulzantes', 'Lácteos y Huevos',
-  'Levaduras y Aditivos', 'Aceites y Grasas', 'Frutas y Verduras',
-  'Carnes y Embutidos', 'Bebidas', 'Empaques y Desechables',
-  'Condimentos y Salsas', 'Granos y Semillas', 'Otro',
+  'Harinas', 'Lácteos', 'Azúcares', 'Huevos', 'Aceites', 
+  'Frutas y Verduras', 'Chocolates', 'Levaduras', 'Esencias', 
+  'Empaques', 'Limpieza', 'Rellenos y Cárnicos', 
+  'Decoración y Coberturas', 'Frutos Secos y Semillas', 
+  'Aditivos y Conservantes', 'Utensilios y Despacho', 
+  'Servicios/Varios', 'Otro'
 ];
 
 const PROD_INIT: Omit<ProductoCatalogo, 'uid' | 'costoUnitario' | 'precioVenta' | 'precioVentaPack'> = {
@@ -119,6 +128,11 @@ export function ProveedorForm({
   const [buscarProd, setBuscarProd] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
   const [fotoCapturada, setFotoCapturada] = useState<string | null>(null);
+  const [ocrProgress, setOcrProgress] = useState(0);
+  const [ocrResult, setOcrResult] = useState<ResultadoOCR | null>(null);
+  const [activeItemsScan, setActiveItemsScan] = useState<ProductoDetectado[]>([]);
+  const [isCategoriaIA, setIsCategoriaIA] = useState(false);
+
   const fileInputUploadRef = useRef<HTMLInputElement>(null);
   const fileInputCameraRef = useRef<HTMLInputElement>(null);
 
@@ -150,13 +164,17 @@ export function ProveedorForm({
     }
   }, [isOpen, editingProveedor, initialCatalogo]);
 
-  const costUnit = useMemo(() => 
-    prodActual.cantidadEmbalaje > 0 ? prodActual.precioCosto / prodActual.cantidadEmbalaje : 0
-  , [prodActual.precioCosto, prodActual.cantidadEmbalaje]);
+  const costUnit = useMemo(() => {
+    const cost = Number(prodActual.precioCosto || 0);
+    const packQty = Number(prodActual.cantidadEmbalaje || 1) || 1;
+    return cost / packQty;
+  }, [prodActual.precioCosto, prodActual.cantidadEmbalaje]);
 
-  const sellPrice = useMemo(() => 
-    costUnit * (1 + prodActual.margenVenta / 100)
-  , [costUnit, prodActual.margenVenta]);
+  const sellPrice = useMemo(() => {
+    // Si no hay margen, el precio de venta es igual al costo unitario
+    if (!prodActual.margenVenta) return costUnit;
+    return costUnit * (1 + Number(prodActual.margenVenta) / 100);
+  }, [costUnit, prodActual.margenVenta]);
 
   const filtradosBusqueda = useMemo(() =>
     buscarProd.length >= 1
@@ -187,9 +205,9 @@ export function ProveedorForm({
     const itemData: ProductoCatalogo = {
       ...prodActual,
       uid: editingUid || crypto.randomUUID(),
-      costoUnitario: costUnit,
-      precioVenta: sellPrice,
-      precioVentaPack: sellPrice * prodActual.cantidadEmbalaje,
+      costoUnitario: costUnit, // Ya calculado por el useMemo
+      precioVenta: Math.round(sellPrice), // Precio por UNIDAD basado en margen
+      precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1)), 
       stockRecibido: prodActual.stockRecibido
     };
 
@@ -210,51 +228,68 @@ export function ProveedorForm({
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onload = (ev) => {
+      reader.onload = async (ev) => {
         const base64 = ev.target?.result as string;
         setFotoCapturada(base64);
         setIsAnalizando(true);
+        setOcrProgress(0);
+        setOcrResult(null);
         
-        // Protocolo AI-Vision-Extractor (Simulación Premium)
+        // Protocolo AI-Forensic-Analyzer (Integración OCR Real)
         toast.promise(
-          new Promise((resolve) => {
-            setTimeout(() => {
-              // Simulamos datos extraídos de la "factura"
-              const mockData = {
-                nombre: "Proveedor IA Detectado " + Math.floor(Math.random() * 100),
-                items: [
-                  { nombre: "Insumo Escaneado 1", costoBase: 12000, margen: 30 },
-                  { nombre: "Insumo Escaneado 2", costoBase: 45000, margen: 25 }
-                ]
-              };
-              resolve(mockData);
-            }, 4000);
-          }),
+          procesarImagenFactura(base64, (p) => setOcrProgress(p)),
           {
             loading: (
               <div className="flex flex-col gap-1">
                 <span className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2">
-                  <ScanLine className="w-3 h-3 animate-pulse" />
-                  IA Nexus Vision
+                  <Activity className="w-3 h-3 animate-pulse" />
+                  Scanner Forense Nexus
                 </span>
-                <span className="text-[10px] text-slate-500">Mapeando estructura de precios...</span>
+                <span className="text-[10px] text-slate-500">Mapeando estructura de datos... {ocrProgress}%</span>
               </div>
             ),
-            success: (data: any) => {
+            success: (result: ResultadoOCR) => {
               setIsAnalizando(false);
-              const first = data.items[0];
-              setProdActual(curr => ({
-                ...curr,
-                nombre: first.nombre,
-                precioCosto: first.costoBase,
-                margenVenta: first.margen,
-                stockRecibido: 1 // Sugerencia inicial
-              }));
-              return "Factura procesada con Nexus Vision";
+              setOcrResult(result);
+              
+              if (result.errores.length > 0 && result.productos.length === 0) {
+                return result.errores[0];
+              }
+
+              // Mapeo Inteligente del Proveedor (Si no tiene nombre)
+              if (result.proveedor && !formData.nombre) {
+                setFormData(prev => ({
+                  ...prev,
+                  nombre: result.proveedor?.nombre || prev.nombre,
+                  telefono: result.proveedor?.telefono || prev.telefono,
+                  notas: result.proveedor?.nit ? `NIT: ${result.proveedor.nit}\n${prev.notas}` : prev.notas
+                }));
+              }
+
+              // Mapeo Inteligente de Productos
+              if (result.productos.length > 0) {
+                setActiveItemsScan(result.productos);
+                const first = result.productos[0];
+                const catSug = sugerirCategoria(first.nombre);
+                
+                setProdActual(curr => ({
+                  ...curr,
+                  nombre: first.nombre,
+                  precioCosto: first.precioUnitario || first.costoTotal,
+                  categoria: catSug !== 'General' ? catSug : curr.categoria,
+                  cantidadEmbalaje: first.cantidad || 1,
+                  notas: `Detectado vía Scanner Forense (Confianza: ${first.confianza}%)`
+                }));
+                setBuscarProd(first.nombre);
+                if (catSug !== 'General') setIsCategoriaIA(true);
+                return `Análisis completado: ${result.productos.length} items detectados`;
+              }
+              
+              return "Factura analizada (Sin productos detectados)";
             },
             error: () => {
               setIsAnalizando(false);
-              return 'Error crítico en el análisis. Intenta de nuevo.';
+              return 'Error crítico en el motor forense. Intenta con una imagen más clara.';
             }
           }
         );
@@ -274,6 +309,7 @@ export function ProveedorForm({
     setProdActual(PROD_INIT);
     setEditingUid(null);
     setBuscarProd('');
+    setIsCategoriaIA(false);
   };
 
   return (
@@ -456,20 +492,56 @@ export function ProveedorForm({
                 </div>
             </div>
 
-            {/* ── SECCIÓN 3: CATÁLOGO DE INSUMOS ── */}
+            {/* ── SECCIÓN 3: CATÁLOGO DE PRODUCTOS / INSUMOS ── */}
             <div className="space-y-6 relative overflow-visible">
-                {/* IA SCANNER OVERLAY (Volt & Pixel) */}
+                {/* IA FORENSIC SCANNER OVERLAY (Volt & Pixel) */}
                 {isAnalizando && (
-                  <div className="absolute inset-0 z-[200] rounded-[2rem] bg-slate-900/40 backdrop-blur-md flex flex-col items-center justify-center p-12 text-center animate-ag-fade-in border-4 border-dashed border-indigo-500/20">
-                      <div className="relative mb-6">
-                          <Bot className="w-16 h-16 text-indigo-400 animate-ag-float" />
-                          <ScanLine className="absolute -inset-2 w-20 h-20 text-indigo-500 animate-pulse" />
+                  <div className="absolute inset-0 z-[200] rounded-[2rem] bg-slate-950/80 backdrop-blur-xl flex flex-col items-center justify-center p-12 text-center animate-ag-fade-in border-4 border border-indigo-500/30 overflow-hidden shadow-[0_0_100px_rgba(79,70,229,0.2)]">
+                      {/* Scanning Beam Animation */}
+                      <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_20px_rgba(34,211,238,0.8)] animate-[scan-beam_2s_ease-in-out_infinite] z-10" />
+                      
+                      {/* Matrix Grid Surface (Simulation) */}
+                      <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#4f46e5_1px,transparent_1px)] [background-size:20px_20px]" />
+
+                      <div className="relative mb-8 scale-150">
+                          <Cpu className="w-16 h-16 text-cyan-400 animate-ag-float" />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                              <Activity className="w-6 h-6 text-indigo-500 animate-pulse" />
+                          </div>
+                          {/* Satellite Data Nodes */}
+                          <div className="absolute -top-4 -right-4 w-4 h-4 bg-emerald-500 rounded-full animate-ping opacity-75" />
+                          <div className="absolute -bottom-4 -left-4 w-3 h-3 bg-amber-500 rounded-full animate-ping opacity-50 delay-700" />
                       </div>
                       
-                      <div className="space-y-2">
-                          <Badge className="bg-indigo-600 text-white font-black animate-pulse">ANALIZANDO FACTURA</Badge>
-                          <p className="text-slate-100/70 text-[10px] font-bold uppercase tracking-[0.2em]">
-                            Extrayendo descriptores y precios...
+                      <div className="space-y-4 w-full max-w-xs z-20">
+                          <div className="flex justify-between items-end mb-1">
+                              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-cyan-400 flex items-center gap-2">
+                                <Fingerprint className="w-3 h-3" />
+                                Mapeo Forense
+                              </span>
+                              <span className="text-xl font-black text-white tabular-nums">{ocrProgress}%</span>
+                          </div>
+                          <Progress value={ocrProgress} className="h-2 bg-slate-800" />
+                          
+                          <div className="grid grid-cols-2 gap-2 mt-4">
+                              <div className="bg-slate-900/50 border border-slate-800 p-2 rounded-xl flex items-center gap-2">
+                                  <Layers className="w-4 h-4 text-indigo-400 h-3 w-3" />
+                                  <div className="flex flex-col text-left">
+                                      <span className="text-[8px] font-black text-slate-500">OCR CORE</span>
+                                      <span className="text-[10px] font-bold text-slate-300">Tesseract Engine</span>
+                                  </div>
+                              </div>
+                              <div className="bg-slate-900/50 border border-slate-800 p-2 rounded-xl flex items-center gap-2">
+                                  <Database className="w-4 h-4 text-emerald-400 h-3 w-3" />
+                                  <div className="flex flex-col text-left">
+                                      <span className="text-[8px] font-black text-slate-500">ESTRUCTURA</span>
+                                      <span className="text-[10px] font-bold text-slate-300">Analizando...</span>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] pt-4 animate-pulse">
+                            Buscando descriptores y precios unitarios...
                           </p>
                       </div>
                   </div>
@@ -479,7 +551,7 @@ export function ProveedorForm({
                     <div className="flex items-center gap-3">
                       <div className="flex items-center gap-2.5">
                           <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
-                          <span className="text-xs font-black uppercase tracking-widest text-slate-500">Portafolio de Suministros</span>
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-500">Catálogo de Productos</span>
                       </div>
                       
                       <div className="flex gap-2">
@@ -526,113 +598,215 @@ export function ProveedorForm({
                 
                 <Card className="rounded-[2rem] border-2 border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/20 dark:bg-slate-900/20 shadow-none overflow-visible">
                   <CardContent className="p-6 space-y-6 overflow-visible">
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                    <div className="flex flex-col gap-6">
                       
-                      {/* Buscador de Producto (3 Cols) */}
-                      <div className="md:col-span-3 space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Suministro *</Label>
-                        <div className="relative group">
-                          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400 group-focus-within:text-indigo-600" />
-                          <Input
-                            value={buscarProd}
-                            onChange={e => { setBuscarProd(e.target.value); setProdActual(prev => ({ ...prev, nombre: e.target.value, productoId: '' })); setShowDropdown(true); }}
-                            placeholder="Buscar..."
-                            className="h-12 pl-11 rounded-xl bg-white dark:bg-slate-950 border-indigo-100 dark:border-indigo-900/40 text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 text-foreground"
-                          />
-                          {showDropdown && filtradosBusqueda.length > 0 && (
-                            <div className="absolute z-[100] w-full mt-2 bg-white dark:bg-slate-950 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden py-1 animate-ag-slide-up">
-                              {filtradosBusqueda.map(p => (
-                                <button
-                                  key={p.id} type="button"
-                                  onClick={() => {
-                                    setProdActual(prev => ({ ...prev, productoId: p.id, nombre: p.nombre, categoria: p.categoria, margenVenta: p.margenUtilidad || 30, destino: p.tipo === 'ingrediente' ? 'insumo' : 'venta' }));
-                                    setBuscarProd(p.nombre); setShowDropdown(false);
-                                  }}
-                                  className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/20 text-left transition-colors"
-                                >
-                                  <div>
-                                    <p className="text-xs font-black text-slate-800 dark:text-white uppercase">{p.nombre}</p>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{p.categoria}</p>
-                                  </div>
-                                  <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 font-black text-[9px] uppercase">Usar</Badge>
-                                </button>
-                              ))}
-                            </div>
-                          )}
+                      {/* FILA 1: IDENTIFICACIÓN */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                        {/* Buscador de Producto (7 Cols) */}
+                        <div className="md:col-span-7 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Producto / Insumo *</Label>
+                          <div className="relative group">
+                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400 group-focus-within:text-indigo-600" />
+                            <Input
+                              value={buscarProd}
+                              onChange={e => { 
+                                setBuscarProd(e.target.value); 
+                                setProdActual(prev => ({ ...prev, nombre: e.target.value, productoId: '' })); 
+                                setShowDropdown(true);
+                                setIsCategoriaIA(false); 
+                              }}
+                              placeholder="Nombre del producto..."
+                              className="h-12 pl-11 rounded-xl bg-white dark:bg-slate-950 border-indigo-100 dark:border-indigo-900/40 text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 text-foreground"
+                            />
+                            {showDropdown && filtradosBusqueda.length > 0 && (
+                              <div className="absolute z-[100] w-full mt-2 bg-white dark:bg-slate-950 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden py-1">
+                                {filtradosBusqueda.map(p => (
+                                  <button
+                                    key={p.id} type="button"
+                                    onClick={() => {
+                                      setProdActual(prev => ({ ...prev, productoId: p.id, nombre: p.nombre, categoria: p.categoria, margenVenta: p.margenUtilidad || 30, destino: p.tipo === 'ingrediente' ? 'insumo' : 'venta' }));
+                                      setBuscarProd(p.nombre); setShowDropdown(false);
+                                      setIsCategoriaIA(false);
+                                    }}
+                                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/20 text-left transition-colors"
+                                  >
+                                    <div>
+                                      <p className="text-xs font-black text-slate-800 dark:text-white uppercase">{p.nombre}</p>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{p.categoria}</p>
+                                    </div>
+                                    <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 font-black text-[9px] uppercase">Usar</Badge>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Categoría (5 Cols) */}
+                        <div className="md:col-span-5 space-y-2 relative">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1 flex items-center gap-1">
+                            Categoría
+                            {isCategoriaIA && <Badge className="bg-cyan-100 text-cyan-700 py-0 px-1 text-[7px] border-cyan-200 animate-pulse">AUTO-IA</Badge>}
+                          </Label>
+                          <Select 
+                            value={prodActual.categoria} 
+                            onValueChange={v => {
+                              setProdActual({ ...prodActual, categoria: v });
+                              setIsCategoriaIA(false);
+                            }}
+                          >
+                            <SelectTrigger className={cn(
+                              "h-12 rounded-xl bg-white dark:bg-slate-950 border-indigo-100 dark:border-indigo-900/40 text-[11px] font-black uppercase tracking-tighter transition-all",
+                              isCategoriaIA && "ring-4 ring-cyan-500/20 border-cyan-500 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
+                            )}>
+                               <SelectValue placeholder="Seleccionar..." />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 p-1 max-h-60 overflow-y-auto">
+                               {CATEGORIAS_PROD.map(c => (
+                                 <SelectItem key={c} value={c} className="rounded-lg font-black uppercase text-[10px] tracking-tight">{c}</SelectItem>
+                               ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                       </div>
 
-                      {/* Presentación (2 Cols) */}
-                      <div className="md:col-span-2 space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Unidad / Pack</Label>
-                        <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1.5 h-12 items-center">
-                          <select
-                            value={prodActual.tipoEmbalaje}
-                            onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje, cantidadEmbalaje: e.target.value === 'unidad' ? 1 : prev.cantidadEmbalaje }))}
-                            className="flex-1 px-2 bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 dark:text-slate-300 cursor-pointer"
-                          >
-                            {EMBALAJES.map(em => <option key={em.value} value={em.value}>{em.emoji} {em.label.substring(0,3)}</option>)}
-                          </select>
-                          {prodActual.tipoEmbalaje !== 'unidad' && (
+                      {/* FILA 2: ESPECIFICACIONES FINANCIERAS */}
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        
+                        {/* Presentación (3 Cols) */}
+                        <div className="md:col-span-3 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Unidad / Pack</Label>
+                          <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1.5 h-12 items-center">
+                            <select
+                              value={prodActual.tipoEmbalaje}
+                              onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje, cantidadEmbalaje: e.target.value === 'unidad' ? 1 : prev.cantidadEmbalaje }))}
+                              className="flex-1 px-2 bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 dark:text-slate-300 cursor-pointer"
+                            >
+                              {EMBALAJES.map(em => (
+                                <option key={em.value} value={em.value} className="bg-white text-slate-900 font-bold p-2">
+                                  {em.emoji} {em.label}
+                                </option>
+                              ))}
+                            </select>
+                            {/* [Nexus-Volt] Habilitar selector siempre para ajustar unidades o packs */}
                             <input
                               type="number"
+                              min="1"
                               value={prodActual.cantidadEmbalaje}
                               onChange={e => setProdActual(prev => ({ ...prev, cantidadEmbalaje: parseInt(e.target.value) || 1 }))}
-                              className="w-10 h-7 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px]"
+                              className="w-12 h-8 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px] hover:bg-indigo-100 transition-colors"
                             />
-                          )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Destino (Volt & Pixel) */}
-                      <div className="md:col-span-1 space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Uso</Label>
-                        <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1 h-12 items-center gap-1 shadow-inner">
-                          <button
-                            type="button"
-                            onClick={() => setProdActual(prev => ({ ...prev, destino: 'insumo' }))}
-                            className={cn(
-                              "flex-1 h-full rounded-lg flex items-center justify-center transition-all",
-                              prodActual.destino === 'insumo' ? "bg-amber-100 text-amber-600 shadow-sm" : "text-slate-300 hover:text-slate-400"
-                            )}
-                            title="Para Insumo"
-                          >
-                            <Wrench className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setProdActual(prev => ({ ...prev, destino: 'venta' }))}
-                            className={cn(
-                              "flex-1 h-full rounded-lg flex items-center justify-center transition-all",
-                              prodActual.destino === 'venta' ? "bg-emerald-100 text-emerald-600 shadow-sm" : "text-slate-300 hover:text-slate-400"
-                            )}
-                            title="Para Venta"
-                          >
-                            <ShoppingCart className="w-3.5 h-3.5" />
-                          </button>
+                        {/* Uso (2 Cols) */}
+                        <div className="md:col-span-2 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Uso Destino</Label>
+                          <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1 h-12 items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setProdActual(prev => ({ ...prev, destino: 'insumo' }))}
+                              className={cn(
+                                "flex-1 h-full rounded-lg flex items-center justify-center transition-all",
+                                prodActual.destino === 'insumo' ? "bg-amber-100 text-amber-600 shadow-sm" : "text-slate-300 hover:text-slate-400"
+                              )}
+                            >
+                              <Wrench className="w-3.5 h-3.5" />
+                              <span className="text-[8px] font-black ml-1 uppercase">Insumo</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setProdActual(prev => ({ ...prev, destino: 'venta' }))}
+                              className={cn(
+                                "flex-1 h-full rounded-lg flex items-center justify-center transition-all",
+                                prodActual.destino === 'venta' ? "bg-emerald-100 text-emerald-600 shadow-sm" : "text-slate-300 hover:text-slate-400"
+                              )}
+                            >
+                              <ShoppingCart className="w-3.5 h-3.5" />
+                              <span className="text-[8px] font-black ml-1 uppercase">Venta</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Costo Dinámico Mejorado (Neo & Pixel) */}
-                      <div className="md:col-span-2 space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">
-                          Costo *
-                        </Label>
-                        <div className="relative group/cost flex items-center gap-2">
+                        {/* Valor Paca (2 Cols) */}
+                        <div className="md:col-span-2 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Valor Paca *</Label>
+                          <div className="relative group/cost">
+                              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-indigo-400" />
+                              <Input
+                                  type="number"
+                                  value={prodActual.precioCosto || ''}
+                                  onChange={e => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setProdActual(prev => ({ 
+                                      ...prev, 
+                                      precioCosto: val
+                                    }));
+                                  }}
+                                  className={cn(
+                                    "h-12 pl-8 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all",
+                                    "border-indigo-100 dark:border-indigo-900/40 text-blue-600 focus:ring-4 focus:ring-indigo-500/10"
+                                  )}
+                                  placeholder="0"
+                              />
+                          </div>
+                        </div>
+
+                        {/* Costo Unitario (2 Cols) - AHORA EDITABLE */}
+                        <div className="md:col-span-2 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-blue-500 ml-1">Costo Unitario</Label>
+                          <div className="relative group">
+                              <Input 
+                                type="number"
+                                value={costUnit > 0 ? Math.round(costUnit) : ''}
+                                onChange={e => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  // [Nexus-Volt] Si cambia el unitario, recalculamos el total de la paca (precioCosto)
+                                  setProdActual(prev => ({ 
+                                    ...prev, 
+                                    precioCosto: val * (prev.cantidadEmbalaje || 1) 
+                                  }));
+                                }}
+                                className="h-12 px-4 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                placeholder="0"
+                              />
+                          </div>
+                        </div>
+
+                        {/* Margen (2 Cols) */}
+                        <div className="md:col-span-2 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-500 ml-1">Ganancia %</Label>
+                          <div className="relative group">
+                            <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
+                            <Input 
+                              type="number"
+                              value={prodActual.margenVenta}
+                              onChange={(e) => setProdActual({ ...prodActual, margenVenta: Number(e.target.value) })}
+                              className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
+                              placeholder="30"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Venta (3 Cols) */}
+                        <div className="md:col-span-3 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Precio Venta Final</Label>
+                          <div className="relative group flex gap-2">
                             <div className="relative flex-1">
-                                <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-indigo-400" />
-                                <Input
-                                    type="number"
-                                    value={prodActual.precioCosto || ''}
-                                    onChange={e => setProdActual(prev => ({ ...prev, precioCosto: parseFloat(e.target.value) || 0 }))}
-                                    className={cn(
-                                      "h-12 pl-8 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all",
-                                      editingUid 
-                                        ? "border-amber-300 ring-4 ring-amber-500/10 text-amber-600" 
-                                        : "border-indigo-100 dark:border-indigo-900/40 text-blue-600 focus:ring-4 focus:ring-indigo-500/10"
-                                    )}
-                                    placeholder="0"
-                                />
+                              <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                              <Input 
+                                type="number"
+                                value={sellPrice > 0 ? Math.round(sellPrice) : ''}
+                                onChange={(e) => {
+                                  const newPrice = parseFloat(e.target.value) || 0;
+                                  if (costUnit > 0) {
+                                    const newMargin = ((newPrice / costUnit) - 1) * 100;
+                                    setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargin) }));
+                                  }
+                                }}
+                                className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10"
+                                placeholder="0"
+                              />
                             </div>
                             {editingUid && (
                                 <Button
@@ -645,73 +819,67 @@ export function ProveedorForm({
                                   <X className="w-4 h-4" />
                                 </Button>
                             )}
+                          </div>
                         </div>
                       </div>
-
-                      {/* Stock Recibido (Volt & Pixel) NUEVO */}
-                      <div className="md:col-span-2 space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-500 ml-1">Cant. Recibida</Label>
-                        <div className="relative group">
-                          <Package className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-400" />
-                          <Input 
-                            type="number"
-                            value={prodActual.stockRecibido}
-                            onChange={(e) => setProdActual({ ...prodActual, stockRecibido: Number(e.target.value) })}
-                            className="h-12 pl-10 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
-                            placeholder="0"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Margen (2 Cols) */}
-                      <div className="md:col-span-2 space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-500 ml-1">Ganancia %</Label>
-                        <div className="relative group">
-                          <Zap className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400 animate-pulse" />
-                          <Input 
-                            type="number"
-                            value={prodActual.margenVenta}
-                            onChange={(e) => setProdActual({ ...prodActual, margenVenta: Number(e.target.value) })}
-                            className="h-12 pl-10 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
-                            placeholder="30"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Botón Acción (Neo) */}
-                      <div className="md:col-span-3 space-y-2 flex items-end">
-                        <Button 
-                          type="button" 
-                          onClick={addProductoCatalogo} 
-                          className={cn(
-                            "w-full h-12 text-white rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-2",
-                            editingUid ? "bg-amber-500 shadow-amber-500/20" : "bg-indigo-600 shadow-indigo-600/20"
-                          )}
-                        >
-                          {editingUid ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                          <span className="text-[11px] font-black uppercase tracking-widest">
-                            {editingUid ? 'Guardar Cambios' : 'Añadir Insumo'}
-                          </span>
-                        </Button>
+                      
+                      {/* FILA 3: ACCIÓN */}
+                      <div className="pt-2 flex justify-end border-t border-indigo-100/50 dark:border-indigo-900/20">
+                          <Button 
+                            type="button" 
+                            onClick={addProductoCatalogo} 
+                            className={cn(
+                              "w-full md:w-auto min-w-[200px] h-12 text-white rounded-xl shadow-lg active:scale-95 transition-all flex items-center justify-center gap-3 px-8",
+                              editingUid ? "bg-amber-500 shadow-amber-500/20" : "bg-indigo-600 shadow-indigo-600/20 hover:bg-indigo-700"
+                            )}
+                          >
+                            {editingUid ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                            <span className="text-[11px] font-black uppercase tracking-widest">
+                              {editingUid ? 'Guardar Cambios' : 'Añadir al Catálogo'}
+                            </span>
+                          </Button>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {fotoCapturada && (
-                  <div className="relative group rounded-3xl overflow-hidden border-2 border-indigo-200 dark:border-indigo-800 animate-ag-scale-in max-h-48">
+                  <div className="relative group rounded-3xl overflow-hidden border-2 border-indigo-200 dark:border-indigo-800 animate-ag-scale-in max-h-48 group">
                     <img src={fotoCapturada} alt="Captura" className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-700" />
-                    <div className="absolute inset-0 bg-indigo-900/40 backdrop-blur-sm flex flex-col items-center justify-center p-4">
-                       <Scan className="w-8 h-8 text-white animate-pulse mb-2" />
-                       <p className="text-white text-[10px] font-black uppercase tracking-[0.2em]">Factura bajo Análisis Digital</p>
-                       <p className="text-white/60 text-[9px] font-bold mt-1 text-center">La IA está extrayendo los datos estructurales...</p>
-                       <Button 
-                         variant="ghost" size="icon" 
-                         className="absolute top-2 right-2 text-white/50 hover:bg-white/20 rounded-xl"
-                         onClick={() => setFotoCapturada(null)}
-                       >
-                         <X className="w-4 h-4" />
-                       </Button>
+                    
+                    {/* Data Markers Overlays (Simulated visual feedback of detection) */}
+                    {!isAnalizando && ocrResult?.productos.map((p, idx) => (
+                      <div 
+                        key={idx}
+                        className="absolute bg-emerald-500/80 backdrop-blur-sm text-white text-[8px] font-black px-1.5 py-0.5 rounded shadow-lg border border-white/20 animate-ag-fade-in"
+                        style={{ top: `${20 + idx * 15}%`, left: `${30 + (idx % 2) * 20}%` }}
+                      >
+                        {p.nombre} - Detectado ({p.confianza}%)
+                      </div>
+                    ))}
+
+                    <div className={cn(
+                      "absolute inset-0 flex flex-col items-center justify-center p-4 transition-all duration-500",
+                      isAnalizando ? "bg-indigo-950/60 backdrop-blur-md" : "bg-transparent group-hover:bg-slate-950/40 backdrop-blur-none group-hover:backdrop-blur-[2px]"
+                    )}>
+                       {isAnalizando ? (
+                         <>
+                           <Activity className="w-8 h-8 text-cyan-400 animate-pulse mb-2" />
+                           <p className="text-white text-[10px] font-black uppercase tracking-[0.2em]">Escaneo Forense en Curso</p>
+                         </>
+                       ) : (
+                         <div className="opacity-0 group-hover:opacity-100 flex flex-col items-center gap-2">
+                           <History className="w-6 h-6 text-white" />
+                           <p className="text-white text-[9px] font-black uppercase tracking-[0.2em]">Vista Previa de Factura</p>
+                           <Button 
+                             variant="ghost" size="sm" 
+                             className="h-8 rounded-xl bg-white/20 hover:bg-white/30 text-white text-[9px] font-black"
+                             onClick={() => setFotoCapturada(null)}
+                           >
+                             Descartar y Re-escanear
+                           </Button>
+                         </div>
+                       )}
                     </div>
                   </div>
                 )}
@@ -746,11 +914,11 @@ export function ProveedorForm({
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
-                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Suministro</th>
+                            <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Producto / Insumo</th>
                             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Und/Pack</th>
                             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">Costo Aliado</th>
-                            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">Gain %</th>
-                            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 text-right">Precio Sug.</th>
+                            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">Ganancia %</th>
+                            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 text-right">Precio Venta</th>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Acción</th>
                           </tr>
                         </thead>

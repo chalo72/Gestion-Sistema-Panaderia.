@@ -1,25 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
-    Plus,
-    ChefHat,
-    Clock,
-    CheckCircle2,
-    XCircle,
-    AlertTriangle,
-    Flame,
-    ClipboardList,
-    ArrowRight,
-    Package,
-    Layers,
-    FlaskConical,
-    Croissant,
-    Calculator,
-    ShoppingCart
+    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -30,15 +15,7 @@ import { CalculadoraRendimiento } from '@/components/produccion/CalculadoraRendi
 import { GeneradorPedidoInsumos } from '@/components/produccion/GeneradorPedidoInsumos';
 
 import type {
-    Producto,
-    OrdenProduccion,
-    Receta,
-    ProduccionEstado,
-    InventarioItem,
-    FormulacionBase,
-    ModeloPan,
-    Proveedor,
-    ProyeccionInsumo
+    Producto, OrdenProduccion, Receta, ProduccionEstado, InventarioItem, FormulacionBase, ModeloPan, Proveedor
 } from '@/types';
 
 interface ProduccionProps {
@@ -141,6 +118,29 @@ export function Produccion({
                     </Button>
                 )}
             </div>
+    
+            {/* Guía Rápida: La Ruta del Maestro Panadero */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-y border-slate-200 dark:border-slate-800/50 py-8 bg-slate-50/20 dark:bg-slate-900/10 backdrop-blur-sm -mx-2 px-4 rounded-3xl mb-4">
+                {[
+                    { step: '01', title: 'RECETAS (DNA)', desc: 'Crea tu masa base por arroba.', icon: FlaskConical, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+                    { step: '02', title: 'MODELOS', desc: 'Define los panes y sus pesos.', icon: Croissant, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                    { step: '03', title: 'LANZAR', desc: '¡Hornea tus lotes del día!', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10' }
+                ].map((item, idx) => (
+                    <div key={idx} className="flex items-start gap-4 group">
+                        <div className="flex flex-col items-center">
+                            <span className="text-[9px] font-black text-slate-300 dark:text-slate-700 tracking-tighter mb-1.5">{item.step}</span>
+                            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-all duration-500 border border-white dark:border-slate-800", item.bg, item.color)}>
+                                <item.icon className="w-6 h-6" />
+                            </div>
+                        </div>
+                        <div className="space-y-1 pt-4">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/90">{item.title}</h4>
+                            <p className="text-[11px] text-muted-foreground font-medium leading-relaxed max-w-[160px]">{item.desc}</p>
+                        </div>
+                        {idx < 2 && <ArrowRight className="hidden md:block w-5 h-5 text-slate-200 dark:text-slate-800 mt-8 ml-auto animate-pulse" />}
+                    </div>
+                ))}
+            </div>
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
@@ -174,18 +174,18 @@ export function Produccion({
                 {columns.map((col) => (
                     <div key={col.estado} className="flex flex-col gap-5">
                         <div className="flex items-center justify-between px-2">
-                            <h2 className={cn("font-black uppercase tracking-[0.2em] text-[10px] flex items-center gap-2", col.color)}>
-                                <div className={cn("p-1.5 rounded-lg bg-current opacity-10")}>
+                            <h2 className={cn("font-black uppercase tracking-[0.25em] text-[10px] flex items-center gap-2.5", col.color)}>
+                                <div className={cn("p-2 rounded-xl bg-current/10 border border-current/20 backdrop-blur-md shadow-sm")}>
                                     <col.icon className="w-4 h-4" />
                                 </div>
-                                {col.title}
-                                <span className="ml-2 px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 text-[10px]">
+                                <span className="drop-shadow-sm">{col.title}</span>
+                                <Badge variant="outline" className="ml-auto text-[9px] font-black bg-white/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800 shadow-inner">
                                     {getOrdenesByEstado(col.estado).length}
-                                </span>
+                                </Badge>
                             </h2>
                         </div>
 
-                        <div className="flex flex-col gap-4 p-4 rounded-[2rem] bg-white/40 dark:bg-slate-900/40 backdrop-blur-md border border-white/20 dark:border-slate-800/50 min-h-[600px] shadow-xl shadow-slate-200/50 dark:shadow-none">
+                        <div className="flex flex-col gap-4 p-5 rounded-[2.5rem] bg-white/30 dark:bg-slate-900/30 backdrop-blur-2xl border border-white/40 dark:border-slate-800/40 min-h-[650px] shadow-2xl shadow-slate-200/40 dark:shadow-none ring-1 ring-white/20">
                             {getOrdenesByEstado(col.estado).map((orden) => {
                                 const producto = productos.find(p => p.id === orden.productoId);
                                 const isEnProceso = orden.estado === 'en_proceso';
@@ -199,40 +199,46 @@ export function Produccion({
                                         )} />
 
                                         <CardHeader className="p-5 pb-3">
-                                            <div className="flex justify-between items-start gap-3">
-                                                <CardTitle className="text-sm font-black text-foreground group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors leading-tight">
-                                                    {producto?.nombre || 'Producto Desconocido'}
-                                                </CardTitle>
+                                            <div className="flex justify-between items-start gap-4">
+                                                <div className="space-y-1">
+                                                    <CardTitle className="text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors leading-snug uppercase tracking-tight">
+                                                        {producto?.nombre || 'Producto Desconocido'}
+                                                    </CardTitle>
+                                                    <p className="text-[10px] font-black text-slate-400 flex items-center gap-1.5 uppercase tracking-[0.1em]">
+                                                        {orden.estado === 'planeado' ? <ClipboardList className="w-3 h-3" /> : <Clock className="w-3 h-3 text-amber-500 animate-spin-slow" />}
+                                                        {new Date(orden.fechaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                </div>
                                                 {orden.lote && (
-                                                    <Badge className="text-[9px] bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-none font-bold uppercase tracking-tighter">
-                                                        #{orden.lote}
-                                                    </Badge>
+                                                    <div className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-[9px] font-black text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700 uppercase tracking-widest shadow-inner">
+                                                        LOT: {orden.lote.slice(-4)}
+                                                    </div>
                                                 )}
                                             </div>
-                                            <CardDescription className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest flex items-center gap-1 mt-1">
-                                                <Clock className="w-3 h-3" />
-                                                {new Date(orden.fechaInicio).toLocaleDateString()} · {new Date(orden.fechaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </CardDescription>
                                         </CardHeader>
 
                                         <CardContent className="p-5 pt-0 space-y-4">
-                                            <div className="bg-slate-50 dark:bg-slate-950/40 rounded-xl p-3 flex items-center justify-between border border-slate-100 dark:border-slate-800/50">
-                                                <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">Packs / Cant.</span>
-                                                <span className="font-black text-indigo-600 dark:text-indigo-400 text-lg">
+                                            <div className="bg-slate-50/50 dark:bg-slate-950/20 rounded-2xl p-4 flex items-center justify-between border border-slate-100/50 dark:border-slate-800/30 shadow-inner">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5">Cantidad Lote</span>
+                                                    <span className="text-xs font-black text-slate-500 uppercase">Unidades / Packs</span>
+                                                </div>
+                                                <span className="font-black text-amber-600 dark:text-amber-400 text-2xl drop-shadow-sm">
                                                     {orden.cantidadPlaneada}
                                                 </span>
                                             </div>
 
                                             {isEnProceso && (
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between text-[10px] uppercase font-black tracking-widest">
-                                                        <span className="text-amber-500 flex items-center gap-1">
-                                                            <Flame className="w-3 h-3 animate-bounce" /> Horneando
+                                                <div className="space-y-2.5 p-1">
+                                                    <div className="flex justify-between text-[9px] uppercase font-black tracking-[0.2em]">
+                                                        <span className="text-amber-600 flex items-center gap-1.5">
+                                                            <div className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />
+                                                            HORNEANDO...
                                                         </span>
-                                                        <span className="text-slate-400">50%</span>
+                                                        <span className="text-slate-400">En marcha</span>
                                                     </div>
-                                                    <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                                        <div className="h-full bg-gradient-to-r from-amber-400 to-orange-500 w-1/2 rounded-full shadow-[0_0_10px_rgba(251,191,36,0.5)]" />
+                                                    <div className="h-2 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden shadow-inner border border-slate-200/10">
+                                                        <div className="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400 w-2/3 rounded-full shadow-[0_0_15px_rgba(251,191,36,0.5)] animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
                                                     </div>
                                                 </div>
                                             )}
@@ -287,10 +293,11 @@ export function Produccion({
                     <FormulacionesView
                         formulaciones={formulaciones}
                         productos={productos}
-                        onAddFormulacion={addFormulacion}
-                        onUpdateFormulacion={updateFormulacion}
+                        onAddFormulacion={async (f) => { await addFormulacion(f); }}
+                        onUpdateFormulacion={async (f) => { await updateFormulacion(f.id, f); }}
                         onDeleteFormulacion={deleteFormulacion}
                         getProductoById={getProductoById}
+                        getMejorPrecio={getMejorPrecio}
                         formatCurrency={formatCurrency}
                     />
                 </TabsContent>
@@ -300,8 +307,8 @@ export function Produccion({
                     <ModelosPanView
                         modelos={modelosPan}
                         formulaciones={formulaciones}
-                        onAddModelo={addModeloPan}
-                        onUpdateModelo={updateModeloPan}
+                        onAddModelo={async (m) => { await addModeloPan(m); }}
+                        onUpdateModelo={async (m) => { await updateModeloPan(m.id, m); }}
                         onDeleteModelo={deleteModeloPan}
                         formatCurrency={formatCurrency}
                     />
@@ -341,6 +348,8 @@ export function Produccion({
                 onClose={() => setShowPlanModal(false)}
                 productos={productos.filter(p => p.tipo === 'elaborado')}
                 recetas={recetas}
+                formulaciones={formulaciones}
+                modelos={modelosPan}
                 inventario={inventario}
                 onConfirm={addOrdenProduccion}
             />
