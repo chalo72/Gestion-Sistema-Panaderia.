@@ -439,6 +439,7 @@ function AppContent() {
               getProveedorById={getProveedorById}
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
+              onUpdateProductoBase={updateProducto}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;

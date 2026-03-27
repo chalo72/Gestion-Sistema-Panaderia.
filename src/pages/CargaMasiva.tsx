@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { procesarImagenFactura, sugerirCategoria, type ProductoDetectado, type ProveedorDetectado } from '@/lib/ocr-service';
+import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo, type ProductoDetectado, type ProveedorDetectado } from '@/lib/ocr-service';
 import { parsearArchivo, generarPlantillaExcel, type FilaImportada, type ResultadoImportacion } from '@/lib/excel-parser';
 import type { Producto, Proveedor, Categoria } from '@/types';
 
@@ -235,9 +235,9 @@ export default function CargaMasiva({
       // Primero crear proveedor si fue detectado y no existe
       let newProveedorId = '';
       if (activeTab === 'factura' && proveedorDetectado?.nombre) {
-        const proveedorExistente = proveedores.find(
-          p => p.nombre.toLowerCase() === proveedorDetectado.nombre.toLowerCase()
-        );
+        // Matching forense con Jaro-Winkler
+        const mProv = matchProveedorEnCatalogo(proveedorDetectado.nombre, proveedores, p => p.nombre, 0.52);
+        const proveedorExistente = mProv.indice >= 0 ? proveedores[mProv.indice] : undefined;
         if (!proveedorExistente) {
           try {
             const nuevoProveedor = await onAddProveedor({

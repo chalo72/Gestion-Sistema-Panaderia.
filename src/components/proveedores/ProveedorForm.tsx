@@ -15,7 +15,7 @@ import {
   History
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { procesarImagenFactura, sugerirCategoria, type ResultadoOCR, type ProductoDetectado } from '@/lib/ocr-service';
+import { procesarImagenFactura, sugerirCategoria, normalizarTexto, type ResultadoOCR, type ProductoDetectado } from '@/lib/ocr-service';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

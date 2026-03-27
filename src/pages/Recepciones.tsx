@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { db } from '@/lib/database';
 import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada } from '@/types';
-import { procesarImagenFactura } from '@/lib/ocr-service';
+import { procesarImagenFactura, matchProductoEnCatalogo, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 
 interface RecepcionesProps {
     recepciones: Recepcion[];
@@ -30,6 +30,7 @@ interface RecepcionesProps {
     getProveedorById: (id: string) => Proveedor | undefined;
     getProductoById: (id: string) => Producto | undefined;
     formatCurrency: (value: number) => string;
+    onUpdateProductoBase?: (id: string, updates: Partial<Producto>) => Promise<void>;
 }
 
 export default function Recepciones({
@@ -182,51 +183,72 @@ export default function Recepciones({
                 }
             );
 
-            console.log("ANTIGRAVITY: Resultado OCR crudo:", resultado);
+            // ── MATCHING FORENSE v2 ───────────────────────────────
+            // Buscar proveedor con motor Jaro-Winkler
+            let proveedorMatchId = '';
+            if (resultado.proveedor?.nombre) {
+                const mProv = matchProveedorEnCatalogo(
+                    resultado.proveedor.nombre,
+                    proveedores,
+                    p => p.nombre,
+                    0.52
+                );
+                if (mProv.indice >= 0) {
+                    proveedorMatchId = proveedores[mProv.indice].id;
+                    console.log(`[OCR Forense] Proveedor: "${resultado.proveedor.nombre}" → "${proveedores[mProv.indice].nombre}" (score: ${(mProv.score * 100).toFixed(0)}%)`);
+                }
+            }
 
-            // Buscar proveedor real por nombre si OCR detectó uno
-            const proveedorMatch = resultado.proveedor
-                ? proveedores.find(p =>
-                    p.nombre.toLowerCase().includes(
-                        resultado.proveedor!.nombre.toLowerCase().trim().substring(0, 5)
-                    ) ||
-                    resultado.proveedor!.nombre.toLowerCase().includes(p.nombre.toLowerCase().trim().substring(0, 5))
-                )
-                : undefined;
+            // Matching de productos con algoritmo Jaro-Winkler + tokens
+            const noEncontrados: string[] = [];
+            const difPrecios: Array<{ nombre: string; precioAnterior: number; precioNuevo: number; productoId: string }> = [];
 
-            console.log("ANTIGRAVITY: Proveedor detectado:", proveedorMatch?.nombre || "Ninguno coincidente");
-
-            // Convertir productos detectados por OCR a items de recepción con lógica de fuzzy matching mejorada
             const itemsEscaneados: RecepcionItem[] = resultado.productos
                 .map(prod => {
-                    // Buscar producto real en la lista por nombre similar (más flexible)
-                    const prodNombreLimpio = prod.nombre.toLowerCase().trim();
-                    const productoReal = productos.find(p => {
-                        const pNombreLimpio = p.nombre.toLowerCase().trim();
-                        return pNombreLimpio.includes(prodNombreLimpio.substring(0, 5)) ||
-                               prodNombreLimpio.includes(pNombreLimpio.substring(0, 5));
-                    });
+                    const match = matchProductoEnCatalogo(
+                        prod.nombre,
+                        productos,
+                        p => p.nombre,
+                        0.55
+                    );
 
-                    if (!productoReal) {
-                        console.warn(`ANTIGRAVITY: No se encontró coincidencia para "${prod.nombre}"`);
+                    if (match.indice < 0) {
+                        noEncontrados.push(prod.nombre);
+                        console.warn(`[OCR Forense] Sin match: "${prod.nombre}" (mejor score: ${(match.score * 100).toFixed(0)}%)`);
                         return null;
                     }
 
-                    console.log(`ANTIGRAVITY: Coincidencia encontrada: ${prod.nombre} -> ${productoReal.nombre}`);
-                    
+                    const productoReal = productos[match.indice];
+                    console.log(`[OCR Forense] Match "${prod.nombre}" → "${productoReal.nombre}" (${match.metodo} ${(match.score * 100).toFixed(0)}%)`);
+
+                    // Detectar diferencia de precio
+                    const precioCatalogo = productoReal.costoBase || 0;
+                    const precioFacturado = prod.precioUnitario || 0;
+                    if (precioFacturado > 0 && precioCatalogo > 0) {
+                        const diff = Math.abs(precioFacturado - precioCatalogo) / precioCatalogo;
+                        if (diff > 0.02) { // diferencia > 2%
+                            difPrecios.push({
+                                nombre: productoReal.nombre,
+                                precioAnterior: precioCatalogo,
+                                precioNuevo: precioFacturado,
+                                productoId: productoReal.id,
+                            });
+                        }
+                    }
+
                     return {
                         id: crypto.randomUUID(),
                         productoId: productoReal.id,
                         cantidadEsperada: prod.cantidad || 1,
                         cantidadRecibida: prod.cantidad || 1,
-                        precioEsperado: prod.precioUnitario || productoReal.costoBase || 0,
-                        precioFacturado: prod.precioUnitario || productoReal.costoBase || 0,
+                        precioEsperado: precioCatalogo || precioFacturado,
+                        precioFacturado: precioFacturado || precioCatalogo,
                         embalajeOk: true,
                         productoOk: true,
                         cantidadOk: true,
                         modeloOk: true,
                         defectuosos: 0,
-                        observaciones: ''
+                        observaciones: `OCR match: ${match.metodo} ${(match.score * 100).toFixed(0)}%`
                     };
                 })
                 .filter((item): item is RecepcionItem => item !== null);
@@ -235,26 +257,59 @@ export default function Recepciones({
 
             setNewRecepcion(prev => ({
                 ...prev,
-                proveedorId: proveedorMatch?.id || prev.proveedorId,
+                proveedorId: proveedorMatchId || prev.proveedorId,
                 numeroFactura: numFactura,
                 fechaFactura: resultado.fechaFactura || prev.fechaFactura,
                 items: itemsEscaneados.length > 0 ? [...prev.items, ...itemsEscaneados] : prev.items
             }));
 
+            // Notificar productos no encontrados
+            if (noEncontrados.length > 0) {
+                toast.warning(
+                    `${noEncontrados.length} producto${noEncontrados.length > 1 ? 's' : ''} sin coincidir: ${noEncontrados.slice(0, 3).join(', ')}${noEncontrados.length > 3 ? '...' : ''}`,
+                    { duration: 7000, description: 'Agrégalos manualmente o verificá la ortografía en el catálogo.' }
+                );
+            }
+
+            // Notificar diferencias de precio y ofrecer actualizar
+            if (difPrecios.length > 0 && onUpdateProductoBase) {
+                difPrecios.forEach(d => {
+                    const subida = d.precioNuevo > d.precioAnterior;
+                    toast(
+                        <div className="flex flex-col gap-1">
+                            <span className="font-bold text-sm">{subida ? '📈' : '📉'} Precio cambiado: {d.nombre}</span>
+                            <span className="text-xs text-muted-foreground">
+                                Catálogo: {formatCurrency(d.precioAnterior)} → Factura: {formatCurrency(d.precioNuevo)}
+                            </span>
+                        </div>,
+                        {
+                            duration: 12000,
+                            action: {
+                                label: 'Actualizar catálogo',
+                                onClick: () => onUpdateProductoBase(d.productoId, { costoBase: d.precioNuevo }),
+                            },
+                        }
+                    );
+                });
+            }
+
             setScanProgress(100);
             setScanStep('Análisis completado con éxito');
 
             if (itemsEscaneados.length === 0) {
-                toast.warning('OCR finalizado — se leyó el texto pero no se detectaron productos que ya existan en tu catálogo.', {
+                toast.warning('OCR finalizado — texto leído pero sin productos coincidentes en tu catálogo.', {
                     duration: 6000,
-                    description: 'Puedes agregar los productos manualmente o revisar la ortografía en el catálogo.'
+                    description: `Calidad imagen: ${resultado.calidadOCR ?? '?'}%. Revisá la nitidez o agregá los productos manualmente.`
                 });
             } else {
+                const provNombre = proveedorMatchId
+                    ? proveedores.find(p => p.id === proveedorMatchId)?.nombre
+                    : undefined;
                 toast.success(
                     <div className="flex flex-col gap-1">
-                        <span className="font-semibold text-emerald-700">✨ Scanner Forense Exitoso</span>
+                        <span className="font-semibold text-emerald-700">✨ Scanner Forense Completado</span>
                         <span className="text-[10px] text-muted-foreground uppercase font-black">
-                            {itemsEscaneados.length} productos detectados • {proveedorMatch?.nombre || 'Proveedor por definir'}
+                            {itemsEscaneados.length} productos • {provNombre || 'Proveedor por definir'} • Calidad: {resultado.calidadOCR ?? '?'}%
                         </span>
                     </div>,
                     { icon: <Bot className="w-5 h-5 text-indigo-500" /> }

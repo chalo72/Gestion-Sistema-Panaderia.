@@ -35,7 +35,7 @@ import { ExpenseList } from '@/components/gastos/ExpenseList';
 import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
 
 import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion } from '@/types';
-import { procesarImagenFactura, sugerirCategoria } from '@/lib/ocr-service';
+import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 
 interface GastosProps {
     gastos: Gasto[];
@@ -111,12 +111,12 @@ export default function Gastos({
                 toast.warning('OCR no pudo leer todos los datos. Completa manualmente.');
             }
 
-            // Buscar proveedor real por nombre si OCR detectó uno
-            const proveedorMatch = resultado.proveedor
-                ? proveedores.find(p =>
-                    p.nombre.toLowerCase().includes(resultado.proveedor!.nombre.toLowerCase().substring(0, 5))
-                  )
-                : undefined;
+            // Matching forense de proveedor con Jaro-Winkler
+            let proveedorMatch: typeof proveedores[0] | undefined;
+            if (resultado.proveedor?.nombre) {
+                const mProv = matchProveedorEnCatalogo(resultado.proveedor.nombre, proveedores, p => p.nombre, 0.52);
+                if (mProv.indice >= 0) proveedorMatch = proveedores[mProv.indice];
+            }
 
             // Sugerir categoría basada en los productos detectados
             const descripcionDetectada = resultado.productos.length > 0
