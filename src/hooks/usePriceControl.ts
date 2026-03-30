@@ -86,10 +86,10 @@ export function usePriceControl() {
   // ⚡ DATOS CRÍTICOS = Mostrar UI rápido (Productos, Precios, Config)
   const loadCriticalData = async () => {
     try {
-      // ETAPA 1 — Config + timer mínimo en paralelo → logo visible al menos 2.5s
+      // ETAPA 1 — Config + timer mínimo en paralelo → logo visible al menos 1s
       const [configData] = await Promise.all([
         db.getConfiguracion(),
-        new Promise<void>(res => setTimeout(res, 2500)),
+        new Promise<void>(res => setTimeout(res, 1000)),
       ]);
 
       let finalConfig = configData ? {
