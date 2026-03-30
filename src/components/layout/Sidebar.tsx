@@ -219,62 +219,66 @@ export function Sidebar({
         )}
 
         {/* Menu por secciones */}
-        <nav className="space-y-1">
+        <nav className="space-y-2">
           {menuGroups.map((group, gi) => (
             <div key={group.section}>
-              {/* Separador entre secciones (no antes de la primera) */}
-              {gi > 0 && (
-                <div className="border-t border-white/[0.06] my-2" />
-              )}
-
               {/* Etiqueta de sección — oculta cuando está colapsado */}
               {(!isCollapsed || isMobile) && (
-                <p className="px-3 pt-1 pb-1.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-500 select-none">
-                  {group.emoji} {group.section}
-                </p>
+                <div className="flex items-center gap-2 px-1 pt-1 pb-1.5 select-none">
+                  <span className="text-base leading-none">{group.emoji}</span>
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
+                    {group.section}
+                  </span>
+                  <div className="flex-1 h-px bg-white/[0.08]" />
+                </div>
               )}
 
-              {/* Items del grupo */}
-              <ul className="space-y-0.5">
-                {group.items.map((item, index) => {
-                  const Icon = item.icon;
-                  const isActive = currentView === item.id;
-                  return (
-                    <li key={item.id} style={{ animationDelay: `${(gi * 5 + index) * 30}ms` }}>
-                      <button
-                        type="button"
-                        title={isCollapsed && !isMobile ? item.label : undefined}
-                        onClick={() => { onViewChange(item.id); if (isMobile) setOpen(false); }}
-                        className={cn(
-                          "w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 group relative",
-                          isCollapsed && !isMobile ? "px-2 justify-center" : "",
-                          isActive
-                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20"
-                            : "text-slate-400 hover:bg-white/[0.06] hover:text-white"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0",
-                          isActive ? "bg-white/20" : "bg-white/[0.04] group-hover:bg-white/[0.08]"
-                        )}>
-                          <Icon className="w-3.5 h-3.5" />
-                        </div>
-                        {(!isCollapsed || isMobile) && (
-                          <span className="font-medium text-[13px] truncate">{item.label}</span>
-                        )}
-                        {(!isCollapsed || isMobile) && item.id === 'alertas' && alertasNoLeidas > 0 && (
-                          <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-ag-pulse-glow">
-                            {alertasNoLeidas}
-                          </span>
-                        )}
-                        {isActive && (!isCollapsed || isMobile) && (
-                          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-l-full" />
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              {/* Items del grupo — dentro de tarjeta */}
+              <div className={cn(
+                "rounded-xl border border-white/[0.07] overflow-hidden",
+                (!isCollapsed || isMobile) ? "bg-white/[0.03]" : "bg-transparent border-transparent"
+              )}>
+                <ul className="p-1 space-y-0.5">
+                  {group.items.map((item, index) => {
+                    const Icon = item.icon;
+                    const isActive = currentView === item.id;
+                    return (
+                      <li key={item.id} style={{ animationDelay: `${(gi * 5 + index) * 30}ms` }}>
+                        <button
+                          type="button"
+                          title={isCollapsed && !isMobile ? item.label : undefined}
+                          onClick={() => { onViewChange(item.id); if (isMobile) setOpen(false); }}
+                          className={cn(
+                            "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative",
+                            isCollapsed && !isMobile ? "px-2 justify-center" : "",
+                            isActive
+                              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-600/20"
+                              : "text-slate-400 hover:bg-white/[0.07] hover:text-white"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 shrink-0",
+                            isActive ? "bg-white/20" : "bg-white/[0.04] group-hover:bg-white/[0.08]"
+                          )}>
+                            <Icon className="w-3.5 h-3.5" />
+                          </div>
+                          {(!isCollapsed || isMobile) && (
+                            <span className="font-medium text-[13px] truncate">{item.label}</span>
+                          )}
+                          {(!isCollapsed || isMobile) && item.id === 'alertas' && alertasNoLeidas > 0 && (
+                            <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-ag-pulse-glow">
+                              {alertasNoLeidas}
+                            </span>
+                          )}
+                          {isActive && (!isCollapsed || isMobile) && (
+                            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-1 h-5 bg-white rounded-l-full" />
+                          )}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </div>
           ))}
         </nav>
