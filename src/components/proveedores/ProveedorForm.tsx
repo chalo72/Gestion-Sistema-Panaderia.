@@ -925,7 +925,7 @@ export function ProveedorForm({
                               <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
                               <Input 
                                 type="number"
-                                value={sellPrice > 0 ? Math.round(sellPrice) : ''}
+                                value={sellPrice > 0 ? Math.round(sellPrice / 100) * 100 : ''}
                                 onChange={(e) => {
                                   const newPrice = parseFloat(e.target.value) || 0;
                                   if (costUnit > 0) {
