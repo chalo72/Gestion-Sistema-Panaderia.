@@ -194,6 +194,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [usuarios]);
 
   const updateUsuario = useCallback(async (id: string, updates: Partial<Usuario>): Promise<boolean> => {
+    // El dueño (owner-local-id) no puede perder su rol ADMIN
+    if (id === 'owner-local-id' && updates.rol && updates.rol !== 'ADMIN') {
+      toast.error('El rol del dueño no puede ser modificado.');
+      return false;
+    }
     const newList = usuarios.map(u => u.id === id ? { ...u, ...updates } : u);
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
