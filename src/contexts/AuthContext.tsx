@@ -108,12 +108,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       toast.error('Error de configuración del sistema.');
       return { success: false, error: 'Sistema no configurado.' };
     }
-    const isAdmin = localUser?.rol === 'ADMIN' && password === passMaestra;
-    const isGuest = localUser?.rol !== 'ADMIN' && (password === passInvitado || password === passMaestra);
+
+    // El dueño siempre entra como ADMIN con la contraseña maestra
+    const esOwner = emailLower === 'chalo8321@gmail.com' && password === passMaestra;
+    const isAdmin = (localUser?.rol === 'ADMIN' || esOwner) && password === passMaestra;
+    const isGuest = !isAdmin && localUser?.rol !== 'ADMIN' && (password === passInvitado || password === passMaestra);
     const isMasterPass = isAdmin || isGuest;
 
-    if (localUser && isMasterPass) {
-      const userData = { ...localUser, ultimoAcceso: new Date().toISOString() };
+    if ((localUser || esOwner) && isMasterPass) {
+      const baseUser = localUser ?? USUARIOS_PRUEBA[0];
+      // Restaurar rol ADMIN si fue modificado accidentalmente
+      const rolFinal = esOwner ? 'ADMIN' : baseUser.rol;
+      const userData = { ...baseUser, rol: rolFinal, ultimoAcceso: new Date().toISOString() };
+      // Corregir también en la lista guardada
+      if (esOwner && localUser?.rol !== 'ADMIN') {
+        const listCorregida = (localUserList as Usuario[]).map(u =>
+          u.email.toLowerCase() === emailLower ? { ...u, rol: 'ADMIN' } : u
+        );
+        localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(listCorregida));
+      }
       setUsuario(userData);
       localStorage.setItem('pricecontrol_local_user', JSON.stringify(userData));
       setIsLoading(false);
