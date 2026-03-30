@@ -54,9 +54,20 @@
           <h1 style="color: #ff007f;">Error de Carga</h1>
           <p style="opacity: 0.7;">${m}</p>
           <p style="font-size: 10px; opacity: 0.4;">${s} (Línea ${l})</p>
+          <button onclick="location.reload(true)" style="margin-top:16px;padding:10px 24px;background:#ff007f;color:#fff;border:none;border-radius:12px;font-weight:900;font-size:14px;cursor:pointer;">Recargar</button>
         </div>
       `;
     };
+    // Si React no monta en 10s → mostrar botón de recargar
+    setTimeout(function() {
+      var root = document.getElementById('root');
+      if (root && root.children.length <= 1 && root.querySelector('div[style]')) {
+        var btn = document.createElement('div');
+        btn.style.cssText = 'position:fixed;bottom:32px;left:50%;transform:translateX(-50%);z-index:9999;text-align:center;';
+        btn.innerHTML = '<button onclick="(function(){if(navigator.serviceWorker){navigator.serviceWorker.getRegistrations().then(function(r){r.forEach(function(sw){sw.unregister();});location.reload(true);});}else{location.reload(true);}})()" style="padding:12px 28px;background:#ff007f;color:#fff;border:none;border-radius:14px;font-weight:900;font-size:13px;cursor:pointer;box-shadow:0 4px 20px rgba(255,0,127,0.4);">¿Tardando mucho? Toca aquí</button>';
+        document.body.appendChild(btn);
+      }
+    }, 10000);
   </script>
 </head>
 
