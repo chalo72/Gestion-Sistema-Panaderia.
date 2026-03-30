@@ -112,7 +112,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // El dueño siempre entra como ADMIN con la contraseña maestra
     const esOwner = emailLower === 'chalo8321@gmail.com' && password === passMaestra;
     const isAdmin = (localUser?.rol === 'ADMIN' || esOwner) && password === passMaestra;
-    const isGuest = !isAdmin && localUser?.rol !== 'ADMIN' && (password === passInvitado || password === passMaestra);
+    // Contraseña individual del usuario (si tiene una asignada)
+    const tienePassPropia = !!(localUser as any)?.password;
+    const passIndividualOk = tienePassPropia && password === (localUser as any).password;
+    const isGuest = !isAdmin && localUser?.rol !== 'ADMIN' && (passIndividualOk || password === passInvitado || password === passMaestra);
     const isMasterPass = isAdmin || isGuest;
 
     if ((localUser || esOwner) && isMasterPass) {

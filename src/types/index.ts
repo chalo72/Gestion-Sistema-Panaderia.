@@ -330,6 +330,7 @@ export interface Usuario {
   activo: boolean;
   ultimoAcceso?: string;
   createdAt: string;
+  password?: string;
 }
 
 // Permisos granulares del sistema

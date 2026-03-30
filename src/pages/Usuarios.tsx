@@ -19,6 +19,8 @@ import {
   Activity,
   UserPlus,
   Lock,
+  Eye,
+  EyeOff,
   MoreVertical
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -31,12 +33,14 @@ export function Usuarios() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: '',
     nombre: '',
     apellido: '',
     rol: 'VENDEDOR' as UserRole,
     activo: true,
+    password: '',
   });
 
   const filteredUsuarios = useMemo(() => {
@@ -63,18 +67,24 @@ export function Usuarios() {
     e.preventDefault();
 
     if (editingUser) {
-      const success = await updateUsuario(editingUser.id, formData);
+      const updates: any = { ...formData };
+      if (!updates.password) delete updates.password; // No borrar contraseña si dejó vacío
+      const success = await updateUsuario(editingUser.id, updates);
       if (success) {
-        toast.success('Entidad de usuario actualizada en el Nexus');
+        toast.success('Usuario actualizado');
         setIsDialogOpen(false);
         setEditingUser(null);
       }
     } else {
+      if (!formData.password) {
+        toast.error('Debes asignar una contraseña al usuario.');
+        return;
+      }
       const success = await addUsuario(formData);
       if (success) {
-        toast.success('Nueva entidad de usuario sincronizada');
+        toast.success('Usuario creado');
         setIsDialogOpen(false);
-        setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true });
+        setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true, password: '' });
       }
     }
   };
@@ -87,6 +97,7 @@ export function Usuarios() {
       apellido: user.apellido || '',
       rol: user.rol,
       activo: user.activo,
+      password: '',
     });
     setIsDialogOpen(true);
   };
@@ -199,6 +210,25 @@ export function Usuarios() {
                       <SelectItem value="VENDEDOR" className="font-bold uppercase text-[10px] tracking-widest">Vendedor</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1">
+                    {editingUser ? 'Nueva Contraseña (dejar vacío para no cambiar)' : 'Contraseña *'}
+                  </Label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500/50" />
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      className="h-10 pl-12 pr-12 rounded-xl border border-slate-200 dark:border-slate-700 mt-1"
+                      placeholder={editingUser ? '••••••••' : 'Contraseña del usuario'}
+                    />
+                    <button type="button" onClick={() => setShowPassword(p => !p)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
