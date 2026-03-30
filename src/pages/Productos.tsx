@@ -27,6 +27,7 @@ interface ProductosProps {
     onDeleteProducto: (id: string) => void;
     onAddCategoria: (nombre: string, color: string) => Promise<Categoria>;
     onDeleteCategoria: (id: string) => void;
+    onUpdateCategoria: (id: string, nombre: string, color: string) => void;
     onAddOrUpdatePrecio: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string }) => void;
     onDeletePrecio: (id: string) => void;
     getMejorPrecio: (productoId: string) => PrecioProveedor | null;
@@ -43,7 +44,7 @@ const COLORES_PRESET = [
 export default function Productos({
     productos, proveedores, precios: _precios, categorias,
     onAddProducto, onUpdateProducto, onDeleteProducto,
-    onAddCategoria, onDeleteCategoria, onAddOrUpdatePrecio, onDeletePrecio,
+    onAddCategoria, onDeleteCategoria, onUpdateCategoria, onAddOrUpdatePrecio, onDeletePrecio,
     getMejorPrecio, getPreciosByProducto, getProveedorById, formatCurrency,
 }: ProductosProps) {
     const [searchTerm, setSearchTerm] = useState('');
@@ -61,11 +62,19 @@ export default function Productos({
     const [notasPrecio, setNotasPrecio] = useState('');
     const [formData, setFormData] = useState({
         nombre: '', categoria: '', descripcion: '', precioVenta: '',
-        margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado',
+        margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
     });
     const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0] });
 
-    const categoriasUnicas = useMemo(() => ['Todos', ...new Set(productos.map(p => p.categoria))], [productos]);
+    const categoriasUnicas = useMemo(() => {
+        const normalizadas = productos
+            .map(p => p.categoria?.trim())
+            .filter((c): c is string => !!c);
+        const unicas = [...new Set(normalizadas.map(c => c.toLowerCase()))].map(cLower =>
+            normalizadas.find(c => c.toLowerCase() === cLower) || cLower
+        );
+        return ['Todos', ...unicas];
+    }, [productos]);
 
     const filteredProductos = useMemo(() => {
         return productos.filter(p => {
@@ -86,7 +95,7 @@ export default function Productos({
         const margen = parseFloat(formData.margenUtilidad) || 30;
         const costo = parseFloat(formData.precioCosto) || 0;
         if (costo > 0 && precioVenta === 0) precioVenta = costo * (1 + margen / 100);
-        const data: any = { nombre: formData.nombre, categoria: formData.categoria, descripcion: formData.descripcion, precioVenta, margenUtilidad: margen, imagen: formData.imagen, tipo: formData.tipo || 'elaborado' };
+        const data: any = { nombre: formData.nombre, categoria: formData.categoria, descripcion: formData.descripcion, precioVenta, margenUtilidad: margen, imagen: formData.imagen, tipo: formData.tipo || 'elaborado', unidadMedida: formData.unidadMedida || 'unidad', ...(costo > 0 && { costoBase: costo }) };
         try {
             if (editingProducto) {
                 onUpdateProducto(editingProducto.id, data);
@@ -111,14 +120,25 @@ export default function Productos({
     };
 
     const resetForm = () => {
-        setFormData({ nombre: '', categoria: '', descripcion: '', precioVenta: '', margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado' });
+        setFormData({ nombre: '', categoria: '', descripcion: '', precioVenta: '', margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '' });
         setEditingProducto(null);
     };
 
     const handleEdit = (producto: Producto) => {
         setEditingProducto(producto);
         const mp = getMejorPrecio(producto.id);
-        setFormData({ nombre: producto.nombre, categoria: producto.categoria, descripcion: producto.descripcion || '', precioVenta: producto.precioVenta.toString(), margenUtilidad: producto.margenUtilidad.toString(), imagen: producto.imagen || '', proveedorId: mp?.proveedorId || '', precioCosto: mp?.precioCosto.toString() || '', notasPrecio: mp?.notas || '', tipo: producto.tipo || 'elaborado' });
+        // Normalizar categoría: buscar coincidencia exacta primero, luego insensible a mayúsculas
+        const catGuardada = producto.categoria || '';
+        const catMatch = categorias.find(c => c.nombre === catGuardada)
+            || categorias.find(c => c.nombre.toLowerCase().trim() === catGuardada.toLowerCase().trim());
+        const categoriaFinal = catMatch ? catMatch.nombre : catGuardada;
+        setFormData({ nombre: producto.nombre, categoria: categoriaFinal, descripcion: producto.descripcion || '', precioVenta: producto.precioVenta.toString(), margenUtilidad: producto.margenUtilidad.toString(), imagen: producto.imagen || '', proveedorId: mp?.proveedorId || '', precioCosto: mp?.precioCosto.toString() || '', notasPrecio: mp?.notas || '', tipo: producto.tipo || 'elaborado', unidadMedida: (producto as any).unidadMedida || '' });
+        setIsDialogOpen(true);
+    };
+
+    const handleAddInsumo = () => {
+        resetForm();
+        setFormData((prev: any) => ({ ...prev, tipo: 'ingrediente' }));
         setIsDialogOpen(true);
     };
 
@@ -143,7 +163,9 @@ export default function Productos({
         <div className="space-y-6 pb-12">
             <ProductHeader vistaActual={vistaActual} setVistaActual={setVistaActual}
                 onManageCategories={() => setIsCategoriaDialogOpen(true)}
-                onAddProduct={() => { resetForm(); setIsDialogOpen(true); }} checkPermission={check} />
+                onAddProduct={() => { resetForm(); setIsDialogOpen(true); }}
+                onAddInsumo={handleAddInsumo}
+                checkPermission={check} />
 
             {/* KPI Cards Ultra Compactas */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -230,7 +252,8 @@ export default function Productos({
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
                         {filteredProductos.map(producto => {
                             const mp = getMejorPrecio(producto.id);
-                            const cb = Number(mp?.precioCosto || 0);
+                            // Costo unitario: preferir costoBase del producto; si no, calcular desde proveedor
+                            const cb = Number(producto.costoBase || (mp ? mp.precioCosto / (mp.cantidadEmbalaje || 1) : 0));
                             const pv = Number(producto.precioVenta || 0);
                             const ut = cb > 0 ? ((pv - cb) / cb) * 100 : 0;
                             return <ProductCard key={producto.id} producto={producto} mejorPrecio={mp} utilidad={ut}
@@ -258,7 +281,8 @@ export default function Productos({
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
                                 {filteredProductos.map(producto => {
                                     const mp = getMejorPrecio(producto.id);
-                                    const cb = Number(mp?.precioCosto || 0);
+                                    // Costo unitario: preferir costoBase del producto; si no, calcular desde proveedor
+                                    const cb = Number(producto.costoBase || (mp ? mp.precioCosto / (mp.cantidadEmbalaje || 1) : 0));
                                     const pv = Number(producto.precioVenta || 0);
                                     const ut = cb > 0 ? ((pv - cb) / cb) * 100 : 0;
                                     const cc = getCategoriaColor(producto.categoria);
@@ -372,7 +396,8 @@ export default function Productos({
                 categorias={categorias} proveedores={proveedores} formData={formData} setFormData={setFormData}
                 onSubmit={handleSubmit} formatCurrency={formatCurrency} onAddCategoria={onAddCategoria} />
             <ProductCategoryManager isOpen={isCategoriaDialogOpen} onOpenChange={setIsCategoriaDialogOpen}
-                categorias={categorias} onDeleteCategoria={onDeleteCategoria} onAddCategoria={handleHandleAddCategoria}
+                categorias={categorias} onDeleteCategoria={onDeleteCategoria} onUpdateCategoria={onUpdateCategoria}
+                onAddCategoria={handleHandleAddCategoria}
                 nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} coloresPreset={COLORES_PRESET} />
         </div>
     );

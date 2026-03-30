@@ -124,7 +124,7 @@ export function PrePedidoModal({
                                     type="number"
                                     step="0.01"
                                     value={nuevoPedido.presupuestoMaximo}
-                                    onChange={(e) => setNuevoPedido({ ...nuevoPedido, presupuestoMaximo: e.target.value })}
+                                    onChange={(e) => setNuevoPedido({ ...nuevoPedido, presupuestoMaximo: parseFloat(e.target.value) || 0 })}
                                     className="h-12 pl-9 rounded-xl bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/50 transition-all font-bold text-slate-900 dark:text-white tabular-nums text-sm"
                                     placeholder="0.00"
                                 />

@@ -69,8 +69,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const savedLocalUser = localStorage.getItem('pricecontrol_local_user');
         if (savedLocalUser) {
           const userData = JSON.parse(savedLocalUser) as Usuario;
-          // Validar que la sesion no tenga mas de 12 horas de antiguedad
-          const SESSION_MAX_MS = 12 * 60 * 60 * 1000;
+          // Validar que la sesion no tenga mas de 30 dias de antiguedad
+          const SESSION_MAX_MS = 30 * 24 * 60 * 60 * 1000;
           const ultimoAcceso = userData.ultimoAcceso ? new Date(userData.ultimoAcceso).getTime() : 0;
           const sesionExpirada = ultimoAcceso > 0 && (Date.now() - ultimoAcceso) > SESSION_MAX_MS;
           if (sesionExpirada) {
@@ -86,10 +86,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) setIsLoading(false);
       }
     };
-
-    // Sello de Seguridad: Purga de Usuarios de Prueba Antiguos
-    localStorage.removeItem('pricecontrol_local_user_list');
-    localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(USUARIOS_PRUEBA));
 
     initializeAuth();
     loadUsuarios();

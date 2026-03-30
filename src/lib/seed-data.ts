@@ -17,19 +17,24 @@ export const CREDENCIALES_PRUEBA: Record<string, string> = {};
 // Categorías de Panadería y Negocio Dulce Placer — Completas
 export const CATEGORIAS_DEFAULT: Categoria[] = [
   // === PRODUCTOS ELABORADOS (para venta POS) ===
-  { id: 'cat-pan', nombre: 'Panes', color: '#d97706', icono: '🍞' },
-  { id: 'cat-past', nombre: 'Pastelería', color: '#ec4899', icono: '🎂' },
-  { id: 'cat-repo', nombre: 'Repostería', color: '#f43f5e', icono: '🧁' },
-  { id: 'cat-beb', nombre: 'Bebidas', color: '#0ea5e9', icono: '☕' },
-  { id: 'cat-mich', nombre: 'Micheladas', color: '#ef4444', icono: '🍺' },
-  { id: 'cat-aven', nombre: 'Avena y Granola', color: '#84cc16', icono: '🥣' },
-  { id: 'cat-piat', nombre: 'Piñatería', color: '#a855f7', icono: '🎉' },
+  { id: 'cat-pan', nombre: 'Panes', color: '#d97706', icono: '🍞', tipo: 'venta' },
+  { id: 'cat-past', nombre: 'Pastelería', color: '#ec4899', icono: '🎂', tipo: 'venta' },
+  { id: 'cat-repo', nombre: 'Repostería', color: '#f43f5e', icono: '🧁', tipo: 'venta' },
+  { id: 'cat-dulc', nombre: 'Dulces', color: '#f59e0b', icono: '🍬', tipo: 'venta' },
+  { id: 'cat-gallt', nombre: 'Galletería', color: '#a16207', icono: '🍪', tipo: 'venta' },
+  { id: 'cat-hojal', nombre: 'Hojaldres', color: '#ca8a04', icono: '🥐', tipo: 'venta' },
+  { id: 'cat-beb', nombre: 'Bebidas', color: '#0ea5e9', icono: '☕', tipo: 'venta' },
+  { id: 'cat-mich', nombre: 'Micheladas', color: '#ef4444', icono: '🍺', tipo: 'venta' },
+  { id: 'cat-aven', nombre: 'Avena y Granola', color: '#84cc16', icono: '🥣', tipo: 'venta' },
+  { id: 'cat-piat', nombre: 'Piñatería', color: '#a855f7', icono: '🎉', tipo: 'venta' },
+  { id: 'cat-pasab', nombre: 'Pasabocas', color: '#f97316', icono: '🍿', tipo: 'venta' },
+  { id: 'cat-otro', nombre: 'Otro', color: '#6b7280', icono: '📦' },
   // === MATERIA PRIMA (para inventario/compras) ===
-  { id: '3606f157-8df1-419b-a010-0968997e0001', nombre: 'Harinas y Materia Prima', color: '#8b5e3c', icono: '🌾' },
-  { id: '3606f157-8df1-419b-a010-0968997e0002', nombre: 'Lácteos y Huevos', color: '#facc15', icono: '🥛' },
-  { id: '3606f157-8df1-419b-a010-0968997e0003', nombre: 'Azúcares y Endulzantes', color: '#3b82f6', icono: '🍬' },
-  { id: '3606f157-8df1-419b-a010-0968997e0004', nombre: 'Levaduras y Aditivos', color: '#10b981', icono: '🧪' },
-  { id: '3606f157-8df1-419b-a010-0968997e0005', nombre: 'Empaques y Desechables', color: '#6366f1', icono: '📦' },
+  { id: '3606f157-8df1-419b-a010-0968997e0001', nombre: 'Harinas y Materia Prima', color: '#8b5e3c', icono: '🌾', tipo: 'insumo' },
+  { id: '3606f157-8df1-419b-a010-0968997e0002', nombre: 'Lácteos y Huevos', color: '#facc15', icono: '🥛', tipo: 'insumo' },
+  { id: '3606f157-8df1-419b-a010-0968997e0003', nombre: 'Azúcares y Endulzantes', color: '#3b82f6', icono: '🍬', tipo: 'insumo' },
+  { id: '3606f157-8df1-419b-a010-0968997e0004', nombre: 'Levaduras y Aditivos', color: '#10b981', icono: '🧪', tipo: 'insumo' },
+  { id: '3606f157-8df1-419b-a010-0968997e0005', nombre: 'Empaques y Desechables', color: '#6366f1', icono: '📦', tipo: 'insumo' },
 ];
 
 /**

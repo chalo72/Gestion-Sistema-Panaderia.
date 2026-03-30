@@ -38,7 +38,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Producto, Proveedor, PrecioProveedor, ProductoTipo } from '@/types';
+import type { Producto, Proveedor, PrecioProveedor, ProductoTipo, Categoria } from '@/types';
 import { ProveedorForm, type ProductoCatalogo } from '@/components/proveedores/ProveedorForm';
 
 /* ── Tipos para la vista ── */
@@ -106,12 +106,15 @@ interface ProveedoresProps {
   onDeleteProveedor: (id: string) => void;
   onAddProducto?: (p: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
   onAddOrUpdatePrecio?: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string; destino?: 'venta' | 'insumo'; tipoEmbalaje?: string; cantidadEmbalaje?: number }) => Promise<void>;
+  onDeletePrecio?: (id: string) => void;
+  onDeleteProducto?: (id: string) => Promise<void>;
   getPreciosByProveedor: (proveedorId: string) => PrecioProveedor[];
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
   onUpdateProducto?: (id: string, updates: Partial<Producto>) => void;
   onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida', motivo: string) => Promise<void>;
   onNavigateTo?: (view: string) => void;
+  categorias?: Categoria[];
 }
 
 type OrdenTipo = 'nombre' | 'calificacion' | 'insumos';
@@ -142,12 +145,15 @@ export function Proveedores({
   onDeleteProveedor,
   onAddProducto,
   onAddOrUpdatePrecio,
+  onDeletePrecio,
+  onDeleteProducto,
   getPreciosByProveedor,
   getProductoById,
   formatCurrency,
   onUpdateProducto,
   onAjustarStock,
   onNavigateTo,
+  categorias = [],
 }: ProveedoresProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -232,7 +238,7 @@ export function Proveedores({
     try {
       let provId: string;
       if (editingProveedor) {
-        onUpdateProveedor(editingProveedor.id, data);
+        await onUpdateProveedor(editingProveedor.id, data);
         provId = editingProveedor.id;
         toast.success('Proveedor actualizado');
       } else {
@@ -240,16 +246,46 @@ export function Proveedores({
         provId = nuevo.id;
         toast.success('Proveedor creado');
       }
+
+      // Eliminar precios que el usuario quitó del catálogo
+      if (editingProveedor && onDeletePrecio) {
+        const preciosOriginales = getPreciosByProveedor(editingProveedor.id);
+        const uidsActuales = new Set(items.map(i => i.uid));
+        const preciosAEliminar = preciosOriginales.filter(p => !uidsActuales.has(p.id));
+        const idsAEliminar = new Set(preciosAEliminar.map(p => p.id));
+        for (const precio of preciosAEliminar) {
+          await onDeletePrecio(precio.id);
+        }
+        // Eliminar el producto si quedó sin ningún proveedor que lo venda
+        if (onDeleteProducto) {
+          for (const precio of preciosAEliminar) {
+            const otrosPrecios = _precios.filter(
+              p => p.productoId === precio.productoId && !idsAEliminar.has(p.id)
+            );
+            if (otrosPrecios.length === 0) {
+              await onDeleteProducto(precio.productoId);
+            }
+          }
+        }
+      }
+
       // Guardar productos del catálogo
       if (onAddOrUpdatePrecio && items.length > 0) {
         for (const item of items) {
           let productoId = item.productoId;
-          if (!productoId && onAddProducto) {
+          
+          // Buscar etiquetas de embalaje con seguridad (Nexus-Shield-Guard)
+          const infoEmbalaje = EMBALAJES.find(e => e.value === item.tipoEmbalaje) || { label: 'Unidad', emoji: '🔹' };
+          const descripcionGenerada = `${infoEmbalaje.label} x${item.cantidadEmbalaje || 1}`;
+
+          // Crear producto si no existe o si el ID apunta a un producto eliminado (huérfano)
+          const productoExiste = productoId ? !!getProductoById(productoId) : false;
+          if ((!productoId || !productoExiste) && onAddProducto) {
             const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
             const np = await onAddProducto({
               nombre: item.nombre,
-              categoria: item.categoria,
-              descripcion: `${EMBALAJES.find(e => e.value === item.tipoEmbalaje)?.label} x${item.cantidadEmbalaje}`,
+              categoria: item.categoria || 'Otro',
+              descripcion: descripcionGenerada,
               precioVenta: item.precioVenta,
               margenUtilidad: item.margenVenta,
               tipo,
@@ -262,15 +298,20 @@ export function Proveedores({
               productoId,
               proveedorId: provId,
               precioCosto: item.precioCosto,
-              notas: item.notas || `${EMBALAJES.find(e => e.value === item.tipoEmbalaje)?.label} x${item.cantidadEmbalaje}`,
+              notas: item.notas || descripcionGenerada,
               destino: item.destino,
               tipoEmbalaje: item.tipoEmbalaje,
               cantidadEmbalaje: item.cantidadEmbalaje,
             });
 
-            // Sincronización Automática con Inventario (Materia Prima / Producto Venta)
+            // Sincronización Completa con Módulo de Productos
             if (onUpdateProducto) {
-              onUpdateProducto(productoId, {
+              const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
+              await onUpdateProducto(productoId, {
+                nombre: item.nombre,
+                categoria: item.categoria || 'Otro',
+                descripcion: descripcionGenerada,
+                tipo,
                 costoBase: item.costoUnitario,
                 margenUtilidad: item.margenVenta,
                 precioVenta: item.precioVenta,
@@ -278,25 +319,24 @@ export function Proveedores({
               });
             }
 
-            // AJUSTE DE STOCK AUTOMÁTICO (NUEVO)
+            // AJUSTE DE STOCK AUTOMÁTICO
             if (onAjustarStock && item.stockRecibido > 0) {
               await onAjustarStock(
                 productoId,
                 item.stockRecibido,
                 'entrada',
-                `Factura: ${data.nombre} (Auto-Scan)`
+                `Proveedor: ${data.nombre} (Sincronización)`
               );
             }
           }
         }
-        toast.success(`${items.length} producto(s) vinculados`);
+        toast.success(`${items.length} producto(s) gestionados correctamente`);
       }
       setIsDialogOpen(false);
       setEditingProveedor(null);
     } catch (err) {
-      console.error(err);
-      toast.error('Error al guardar. Intenta de nuevo.');
-      throw err; // Re-throw para que el Form maneje el estado de carga
+      console.error("❌ [Nexus-Volt] Error al guardar datos:", err);
+      toast.error('Error al guardar. Verifica los datos e intenta de nuevo.');
     }
   };
 
@@ -352,7 +392,7 @@ export function Proveedores({
         const venta = Number(prod.precioVenta || 0);
         return costo > 0 ? ((venta - costo) / costo) * 100 : 0;
       });
-      margenPromedio = Math.round(margenes.reduce((s, m) => s + m, 0) / margenes.length);
+      margenPromedio = margenes.length > 0 ? Math.round(margenes.reduce((s, m) => s + m, 0) / margenes.length) : 0;
     }
     return { calidad, cobertura, margenPromedio };
   };
@@ -732,6 +772,7 @@ export function Proveedores({
         productosExistentes={_productos}
         initialCatalogo={catalogoParaForm}
         formatCurrency={formatCurrency}
+        categoriasVenta={categorias}
       />
 
       {/* ── DIALOG: Detalle proveedor ── */}

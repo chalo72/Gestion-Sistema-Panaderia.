@@ -24,11 +24,12 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Venta } from '@/types';
+import type { Venta, Gasto } from '@/types';
 
 interface AhorrosProps {
     ventas: Venta[];
     ahorros: any[];
+    gastos?: Gasto[];
     formatCurrency: (value: number) => string;
 }
 
@@ -40,9 +41,44 @@ interface MetaAhorro {
     creadaEn: string;
 }
 
-export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProps) {
+export default function Ahorros({ ventas, ahorros, gastos = [], formatCurrency }: AhorrosProps) {
+    const mesActualStr = new Date().toISOString().slice(0, 7);
+
+    // Ventas y gastos del mes actual
+    const ventasMesActual = useMemo(() =>
+        ventas.filter(v => v.fecha?.startsWith(mesActualStr)).reduce((a, v) => a + v.total, 0),
+    [ventas, mesActualStr]);
+
+    const gastosMesActual = useMemo(() =>
+        gastos.filter(g => (g.fecha || '').startsWith(mesActualStr)).reduce((a, g) => a + g.monto, 0),
+    [gastos, mesActualStr]);
+
+    // Utilidad neta del mes actual = base real para ahorro
+    const utilidadNetaMes = Math.max(0, ventasMesActual - gastosMesActual);
+
+    // Ahorro estimado = 15% de ventas brutas totales (acumulado histórico)
     const totalRecaudado = useMemo(() => ventas.reduce((acc, v) => acc + v.total, 0), [ventas]);
     const ahorroEstimado = totalRecaudado * 0.15;
+
+    // Goteo diario dinámico basado en utilidad neta real del mes
+    const diasDelMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+    const goteoDiario = utilidadNetaMes > 0 ? (utilidadNetaMes * 0.15) / diasDelMes : totalRecaudado * 0.05;
+
+    // Egresos fijos reales del mes: Servicios + Arriendo (de gastos reales)
+    const gastosFijosReales = useMemo(() => {
+        const categoriasFijas = ['Servicios', 'Arriendo', 'Nomina'];
+        return gastos
+            .filter(g => (g.fecha || '').startsWith(mesActualStr) && categoriasFijas.includes(g.categoria))
+            .reduce((sum, g) => sum + g.monto, 0);
+    }, [gastos, mesActualStr]);
+
+    const gastosFijosPorCategoria = useMemo(() => {
+        const mapa: Record<string, number> = {};
+        gastos
+            .filter(g => (g.fecha || '').startsWith(mesActualStr) && ['Servicios', 'Arriendo', 'Nomina'].includes(g.categoria))
+            .forEach(g => { mapa[g.categoria] = (mapa[g.categoria] || 0) + g.monto; });
+        return mapa;
+    }, [gastos, mesActualStr]);
 
     const [showMetaModal, setShowMetaModal] = useState(false);
     const [metas, setMetas] = useState<MetaAhorro[]>(() => {
@@ -118,8 +154,8 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                 <div className="absolute top-10 right-20 w-32 h-32 bg-emerald-400 opacity-10 rounded-full blur-3xl animate-pulse" />
                 <div className="absolute bottom-10 left-20 w-48 h-48 bg-indigo-500 opacity-5 rounded-full blur-3xl animate-pulse" />
 
-                <CardContent className="p-12 relative z-10 w-full">
-                    <div className="flex flex-col md:flex-row items-center justify-between gap-12">
+                <CardContent className="p-4 sm:p-8 md:p-12 relative z-10 w-full">
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-6 md:gap-12">
                         <div className="space-y-8 text-center md:text-left flex-1">
                             <div className="flex items-center justify-center md:justify-start gap-3">
                                 <div className="p-3 rounded-2xl bg-emerald-500/20 text-emerald-400 backdrop-blur-md border border-emerald-500/30 shadow-lg">
@@ -157,13 +193,19 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 w-full md:w-auto shrink-0">
-                            {[
-                                { icon: TrendingUp, label: 'Mensual', value: crecimientoMensual, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
-                                { icon: ShieldCheck, label: 'Reserva', value: '100%', color: 'text-blue-400', bg: 'bg-blue-500/10' },
-                                { icon: Sparkles, label: 'Capital', value: 'Activo', color: 'text-amber-400', bg: 'bg-amber-500/10' },
-                                { icon: Rocket, label: 'Proy.', value: 'Q4', color: 'text-purple-400', bg: 'bg-purple-500/10' },
-                            ].map((stat, idx) => (
+                        <div className="grid grid-cols-2 gap-4 w-full md:w-auto shrink-0">
+                            {(() => {
+                                const ahorroMensual = totalRecaudado > 0 ? (ventasMesActual * 0.15) : 0;
+                                const faltante = Math.max(0, metaAhorro - ahorroEstimado);
+                                const mesesRestantes = ahorroMensual > 0 ? Math.ceil(faltante / ahorroMensual) : null;
+                                const proyLabel = mesesRestantes === null ? '—' : mesesRestantes <= 0 ? '¡Lograda!' : mesesRestantes <= 12 ? `${mesesRestantes} meses` : `${Math.ceil(mesesRestantes / 12)}+ años`;
+                                return [
+                                    { icon: TrendingUp, label: 'Crecimiento', value: crecimientoMensual, color: 'text-emerald-400', bg: 'bg-emerald-500/10' },
+                                    { icon: DollarSign, label: 'Goteo Diario', value: formatCurrency(goteoDiario), color: 'text-amber-400', bg: 'bg-amber-500/10' },
+                                    { icon: ShieldCheck, label: 'Utilidad Neta', value: formatCurrency(utilidadNetaMes), color: 'text-blue-400', bg: 'bg-blue-500/10' },
+                                    { icon: Rocket, label: 'Meta en', value: proyLabel, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+                                ];
+                            })().map((stat, idx) => (
                                 <div key={idx} className="bg-white/5 backdrop-blur-3xl border border-white/10 p-6 rounded-[2rem] text-center shadow-xl hover:scale-110 transition-transform duration-500">
                                     <div className={cn("p-2 rounded-xl inline-block mb-3", stat.bg)}>
                                         <stat.icon className={cn("w-5 h-5", stat.color)} />
@@ -183,22 +225,35 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                     {
                         icon: Zap,
                         title: 'Ahorro Inteligente',
-                        desc: 'Basado en márgenes de utilidad reales vs teóricos.',
+                        desc: 'Basado en utilidad neta real del mes.',
                         color: 'text-amber-500',
                         bg: 'bg-amber-500/10',
                         content: (
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 <p className="text-xs text-muted-foreground font-medium leading-relaxed opacity-70">
-                                    Algoritmo Yimi sugiere destinar el <span className="font-bold text-slate-900 dark:text-white">15%</span> de ventas brutas para expansión de sede.
+                                    Algoritmo Yimi destina el <span className="font-bold text-slate-900 dark:text-white">15%</span> de tu utilidad neta mensual.
                                 </p>
                                 <div className="p-4 bg-slate-50 dark:bg-gray-800/40 rounded-2xl flex items-center gap-4 border border-slate-100 dark:border-gray-700/50">
                                     <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600">
                                         <DollarSign className="w-5 h-5" />
                                     </div>
                                     <div>
-                                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Goteo Diario Sugerido</p>
-                                        <p className="text-sm font-black text-emerald-600">{formatCurrency(totalRecaudado * 0.05)}</p>
+                                        <p className="text-[9px] font-black text-muted-foreground uppercase tracking-widest opacity-60">Goteo Diario Real</p>
+                                        <p className="text-sm font-black text-emerald-600">{formatCurrency(goteoDiario)}</p>
+                                        <p className="text-[9px] text-muted-foreground">Base: utilidad neta {formatCurrency(utilidadNetaMes)}</p>
                                     </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    {[
+                                        { label: 'Ventas mes', value: ventasMesActual, color: 'text-emerald-600' },
+                                        { label: 'Gastos mes', value: -gastosMesActual, color: 'text-rose-500' },
+                                        { label: 'Utilidad neta', value: utilidadNetaMes, color: 'text-indigo-600', bold: true },
+                                    ].map((row, i) => (
+                                        <div key={i} className={cn('flex justify-between items-center text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg', row.bold ? 'bg-indigo-50 dark:bg-indigo-950/20' : '')}>
+                                            <span className="text-muted-foreground">{row.label}</span>
+                                            <span className={row.color}>{row.value >= 0 ? '' : '-'}{formatCurrency(Math.abs(row.value))}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         )
@@ -215,18 +270,30 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                                     const colores = ['bg-indigo-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500'];
                                     const color = colores[i % colores.length];
                                     const progreso = Math.min((ahorroEstimado / meta.monto) * 100, 100);
+                                    const faltante = Math.max(0, meta.monto - ahorroEstimado);
+                                    const ahorroMensual = ventasMesActual * 0.15;
+                                    const mesesRestantes = ahorroMensual > 0 ? Math.ceil(faltante / ahorroMensual) : null;
+                                    const esAlcanzable = mesesRestantes !== null && mesesRestantes <= 24;
                                     return (
                                         <div key={meta.id} className="group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-gray-800/20 transition-all">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-sm", color)} />
-                                                    <span className="text-[10px] font-black uppercase tracking-tight text-slate-800 dark:text-gray-300">{meta.nombre}</span>
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <div className={cn("w-1.5 h-1.5 rounded-full shadow-sm shrink-0", color)} />
+                                                    <span className="text-[10px] font-black uppercase tracking-tight text-slate-800 dark:text-gray-300 truncate">{meta.nombre}</span>
                                                 </div>
-                                                <Badge variant="outline" className="text-[8px] font-black border-none bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 px-2 py-0.5 rounded-md">
-                                                    {progreso >= 100 ? 'LISTO' : `${progreso.toFixed(0)}%`}
+                                                <Badge variant="outline" className={cn('text-[8px] font-black border-none px-2 py-0.5 rounded-md shrink-0 ml-1',
+                                                    progreso >= 100 ? 'bg-emerald-50 text-emerald-600' : 'bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600')}>
+                                                    {progreso >= 100 ? 'LOGRADA ✓' : `${progreso.toFixed(0)}%`}
                                                 </Badge>
                                             </div>
                                             <Progress value={progreso} className="h-1 bg-slate-100 dark:bg-gray-800" indicatorClassName={color} />
+                                            {progreso < 100 && (
+                                                <p className={cn('text-[8px] font-bold mt-1', esAlcanzable ? 'text-emerald-600' : 'text-amber-500')}>
+                                                    {mesesRestantes === null ? 'Sin ventas este mes' :
+                                                     mesesRestantes <= 0 ? '¡Meta alcanzada!' :
+                                                     `~${mesesRestantes} ${mesesRestantes === 1 ? 'mes' : 'meses'} restantes · ${formatCurrency(faltante)} faltante`}
+                                                </p>
+                                            )}
                                         </div>
                                     );
                                 }) : (
@@ -238,21 +305,34 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                     {
                         icon: CreditCard,
                         title: 'Flujo de Egresos',
-                        desc: 'Monitorización de pasivos y gastos fijos críticos.',
+                        desc: 'Gastos fijos reales del mes actual.',
                         color: 'text-rose-500',
                         bg: 'bg-rose-500/10',
                         content: (
-                            <div className="space-y-4">
-                                <div className="space-y-2">
-                                    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest p-2 rounded-lg bg-rose-50/50 dark:bg-rose-950/10">
-                                        <span className="text-rose-600/60">Servicios Públicos</span>
-                                        <span className="text-rose-600">-$450k</span>
-                                    </div>
-                                    <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest p-2 rounded-lg bg-rose-50/50 dark:bg-rose-950/10">
-                                        <span className="text-rose-600/60">Arriendo Operativo</span>
-                                        <span className="text-rose-600">-$1.2M</span>
-                                    </div>
-                                </div>
+                            <div className="space-y-3">
+                                {gastosFijosReales > 0 ? (
+                                    <>
+                                        <div className="space-y-2">
+                                            {Object.entries(gastosFijosPorCategoria).map(([cat, monto]) => (
+                                                <div key={cat} className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest p-2 rounded-lg bg-rose-50/50 dark:bg-rose-950/10">
+                                                    <span className="text-rose-600/60">{cat}</span>
+                                                    <span className="text-rose-600">-{formatCurrency(monto)}</span>
+                                                </div>
+                                            ))}
+                                            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest px-2 py-1.5 rounded-lg bg-rose-100/50 dark:bg-rose-950/30 border border-rose-200/50">
+                                                <span className="text-rose-700">Total Egresos Fijos</span>
+                                                <span className="text-rose-700">-{formatCurrency(gastosFijosReales)}</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-[9px] text-muted-foreground">
+                                            {ventasMesActual > 0 ? `${((gastosFijosReales / ventasMesActual) * 100).toFixed(1)}% de las ventas del mes` : 'Sin ventas este mes'}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <p className="text-[10px] text-muted-foreground text-center py-4 opacity-60 font-bold uppercase tracking-widest">
+                                        Sin egresos fijos registrados este mes.<br/>Registra Servicios, Arriendo o Nómina en Gastos.
+                                    </p>
+                                )}
                                 <Button variant="ghost" className="w-full text-[9px] font-black uppercase tracking-widest h-11 border-2 border-slate-100 dark:border-gray-800 rounded-2xl hover:bg-slate-50 gap-2">
                                     Ver Centro de Gastos <ArrowRight className="w-3 h-3" />
                                 </Button>
@@ -261,14 +341,14 @@ export default function Ahorros({ ventas, ahorros, formatCurrency }: AhorrosProp
                     }
                 ].map((insight, idx) => (
                     <Card key={idx} className="border-none bg-white/40 dark:bg-black/20 backdrop-blur-xl rounded-[2.5rem] shadow-xl hover:shadow-2xl transition-all duration-300 group overflow-hidden border border-white/20">
-                        <CardHeader className="p-8 pb-4">
+                        <CardHeader className="p-4 sm:p-8 pb-4">
                             <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center mb-6 shadow-lg transition-transform group-hover:rotate-12", insight.bg)}>
                                 <insight.icon className={cn("w-6 h-6", insight.color)} />
                             </div>
                             <CardTitle className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">{insight.title}</CardTitle>
                             <CardDescription className="text-[10px] font-bold uppercase tracking-widest opacity-50 mt-1">{insight.desc}</CardDescription>
                         </CardHeader>
-                        <CardContent className="p-8 pt-4">
+                        <CardContent className="p-4 sm:p-8 pt-4">
                             {insight.content}
                         </CardContent>
                     </Card>

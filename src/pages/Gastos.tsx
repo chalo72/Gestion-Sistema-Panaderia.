@@ -82,13 +82,30 @@ export default function Gastos({
     }, [gastos, searchTerm, selectedCategory]);
 
     const stats = useMemo(() => {
+        const mesActual = new Date().toISOString().slice(0, 7);
+        const mesAnterior = (() => {
+            const d = new Date();
+            d.setMonth(d.getMonth() - 1);
+            return d.toISOString().slice(0, 7);
+        })();
+
         const porCat: Record<string, number> = {};
+        const porCatAnterior: Record<string, number> = {};
         let total = 0;
+        let totalAnterior = 0;
+
         gastos.forEach(g => {
-            porCat[g.categoria] = (porCat[g.categoria] || 0) + g.monto;
-            total += g.monto;
+            const mes = (g.fecha || '').slice(0, 7);
+            if (mes === mesActual) {
+                porCat[g.categoria] = (porCat[g.categoria] || 0) + g.monto;
+                total += g.monto;
+            } else if (mes === mesAnterior) {
+                porCatAnterior[g.categoria] = (porCatAnterior[g.categoria] || 0) + g.monto;
+                totalAnterior += g.monto;
+            }
         });
-        return { total, porCat };
+
+        return { total, porCat, totalAnterior, porCatAnterior };
     }, [gastos]);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -198,6 +215,8 @@ export default function Gastos({
             <ExpenseKPIs
                 totalMensual={stats.total}
                 gastosPorCategoria={stats.porCat}
+                promedioMesAnterior={stats.totalAnterior}
+                gastosPorCategoriaAnterior={stats.porCatAnterior}
                 formatCurrency={formatCurrency}
             />
 

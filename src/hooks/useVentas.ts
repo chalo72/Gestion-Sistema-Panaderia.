@@ -26,12 +26,20 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
 
   // --- Gestión de Caja ---
   const abrirCaja = useCallback(async (montoApertura: number) => {
+    const usuarioApertura = (() => {
+      try {
+        const u = localStorage.getItem('pricecontrol_local_user');
+        return u ? (JSON.parse(u)?.id || 'admin') : 'admin';
+      } catch { return 'admin'; }
+    })();
     const sesion: CajaSesion = {
       id: crypto.randomUUID(),
-      usuarioId: 'admin', // Demo, ideally from AuthContext
+      usuarioId: usuarioApertura,
       fechaApertura: new Date().toISOString(),
       montoApertura,
       totalVentas: 0,
+      totalVentasEfectivo: 0,
+      totalCreditos: 0,
       montoCierre: undefined,
       estado: 'abierta',
       movimientos: [],
@@ -130,25 +138,28 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       );
     }
 
-    // 3. Actualizar caja activa con integridad (Atomic update pattern)
+    // 3. Actualizar caja activa — separar efectivo de crédito para cuadre correcto
+    const esCredito = venta.metodoPago === 'credito';
     setCajaActiva(current => {
       if (!current) return undefined;
       const updated = {
         ...current,
         totalVentas: (current.totalVentas || 0) + venta.total,
+        // Solo suma al efectivo si NO es crédito — evita descuadres ficticios
+        totalVentasEfectivo: (current.totalVentasEfectivo ?? current.totalVentas ?? 0) + (esCredito ? 0 : venta.total),
+        totalCreditos: (current.totalCreditos || 0) + (esCredito ? venta.total : 0),
         ventasIds: [...(current.ventasIds || []), venta.id]
       };
-      
-      // Persistencia en DB
       db.updateSesionCaja(updated as any).catch(console.error);
-      
       return updated;
     });
 
-    setSesionesCaja(prev => prev.map(s => s.id === cajaActiva.id ? { 
-      ...s, 
+    setSesionesCaja(prev => prev.map(s => s.id === cajaActiva.id ? {
+      ...s,
       totalVentas: (s.totalVentas || 0) + venta.total,
-      ventasIds: [...(s.ventasIds || []), venta.id] 
+      totalVentasEfectivo: (s.totalVentasEfectivo ?? s.totalVentas ?? 0) + (esCredito ? 0 : venta.total),
+      totalCreditos: (s.totalCreditos || 0) + (esCredito ? venta.total : 0),
+      ventasIds: [...(s.ventasIds || []), venta.id]
     } : s));
 
     toast.success(`Venta registrada por $${venta.total}`);

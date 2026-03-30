@@ -2,11 +2,9 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
   Star, X, UserCheck, CheckCircle2, Tag, Store,
-  Wrench, Building2, Search, FileText, Save, Scan, Camera,
+  Wrench, Building2, Search, FileText, Save, Camera,
   ShieldCheck, Info, ImageIcon, ShoppingCart,
   Zap,
-  Bot,
-  ScanLine,
   Fingerprint,
   Activity,
   Cpu,
@@ -15,7 +13,7 @@ import {
   History
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { procesarImagenFactura, sugerirCategoria, normalizarTexto, type ResultadoOCR, type ProductoDetectado } from '@/lib/ocr-service';
+import { analizarFacturaForense, sugerirCategoria, type ResultadoOCR } from '@/lib/ocr-service';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +24,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Producto, Proveedor } from '@/types';
+import type { Producto, Proveedor, Categoria } from '@/types';
 
 /* ── Tipos y Constantes ── */
 type TipoEmbalaje =
@@ -79,17 +77,24 @@ const RUBROS = [
   'Carnes y Proteínas', 'Bebidas', 'Limpieza e Higiene', 'Equipamiento', 'Otro',
 ];
 
-const CATEGORIAS_PROD = [
+const CATEGORIAS_INSUMO = [
   'Harinas', 'Lácteos', 'Azúcares', 'Huevos', 'Aceites', 
   'Frutas y Verduras', 'Chocolates', 'Levaduras', 'Esencias', 
   'Empaques', 'Limpieza', 'Rellenos y Cárnicos', 
   'Decoración y Coberturas', 'Frutos Secos y Semillas', 
-  'Aditivos y Conservantes', 'Utensilios y Despacho', 
-  'Servicios/Varios', 'Otro'
+  'Aditivos y Conservantes', 'Condimentos y Salsas',
+  'Cereales y Granos', 'Utensilios y Despacho', 
+  'Servicios / Varios', 'Otro'
+];
+
+const CATEGORIAS_VENTA = [
+  'Panes', 'Pastelería', 'Repostería', 'Hojaldres', 'Dulces',
+  'Bebidas', 'Micheladas', 'Cafetería', 'Galletería',
+  'Avena y Granola', 'Pasabocas', 'Piñatería', 'Otro'
 ];
 
 const PROD_INIT: Omit<ProductoCatalogo, 'uid' | 'costoUnitario' | 'precioVenta' | 'precioVentaPack'> = {
-  productoId: '', nombre: '', categoria: CATEGORIAS_PROD[0],
+  productoId: '', nombre: '', categoria: '',
   precioCosto: 0, margenVenta: 30, cantidadEmbalaje: 1,
   tipoEmbalaje: 'unidad', destino: 'insumo', notas: '',
   stockRecibido: 0,
@@ -103,6 +108,7 @@ interface ProveedorFormProps {
   productosExistentes: Producto[];
   initialCatalogo: ProductoCatalogo[];
   formatCurrency: (v: number) => string;
+  categoriasVenta?: Categoria[];
 }
 
 export function ProveedorForm({
@@ -113,7 +119,14 @@ export function ProveedorForm({
   productosExistentes,
   initialCatalogo,
   formatCurrency,
+  categoriasVenta = [],
 }: ProveedorFormProps) {
+  // Categorías sincronizadas con el sistema (mismas que ProductFormModal)
+  const catInsumoSistema = categoriasVenta.filter(c => c.tipo !== 'venta').map(c => c.nombre);
+  const catVentaSistema  = categoriasVenta.filter(c => c.tipo !== 'insumo').map(c => c.nombre);
+  const CATS_INSUMO = catInsumoSistema.length > 0 ? catInsumoSistema : CATEGORIAS_INSUMO;
+  const CATS_VENTA  = catVentaSistema.length  > 0 ? catVentaSistema  : CATEGORIAS_VENTA;
+
   const [guardando, setGuardando] = useState(false);
   const [isAnalizando, setIsAnalizando] = useState(false);
   const [formData, setFormData] = useState({
@@ -127,14 +140,59 @@ export function ProveedorForm({
   const [editingUid, setEditingUid] = useState<string | null>(null);
   const [buscarProd, setBuscarProd] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
-  const [fotoCapturada, setFotoCapturada] = useState<string | null>(null);
+  const [ fotoCapturada, setFotoCapturada] = useState<string | null>(null);
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrResult, setOcrResult] = useState<ResultadoOCR | null>(null);
-  const [activeItemsScan, setActiveItemsScan] = useState<ProductoDetectado[]>([]);
   const [isCategoriaIA, setIsCategoriaIA] = useState(false);
 
   const fileInputUploadRef = useRef<HTMLInputElement>(null);
   const fileInputCameraRef = useRef<HTMLInputElement>(null);
+
+  // ── BORRADOR AUTOMÁTICO ──
+  const [hayBorrador, setHayBorrador] = useState(false);
+  const draftKey = `proveedor_draft_${editingProveedor?.id || 'nuevo'}`;
+
+  // Guardar borrador en localStorage cada vez que cambia el catálogo o formData
+  useEffect(() => {
+    if (!isOpen) return;
+    if (catalogoItems.length === 0 && !formData.nombre.trim()) return;
+    try {
+      localStorage.setItem(draftKey, JSON.stringify({
+        formData,
+        catalogoItems,
+        savedAt: new Date().toISOString(),
+      }));
+    } catch { /* localStorage lleno — ignorar */ }
+  }, [catalogoItems, formData, isOpen, draftKey]);
+
+  // Detectar borrador al abrir
+  useEffect(() => {
+    if (isOpen) {
+      const raw = localStorage.getItem(draftKey);
+      setHayBorrador(!!raw);
+    }
+  }, [isOpen, draftKey]);
+
+  const restaurarBorrador = () => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (!raw) return;
+      const { formData: fd, catalogoItems: ci } = JSON.parse(raw);
+      setFormData(fd);
+      setCatalogoItems(ci);
+      setHayBorrador(false);
+      toast.success(`Borrador restaurado — ${ci.length} producto(s) recuperado(s)`);
+    } catch {
+      toast.error('No se pudo restaurar el borrador');
+    }
+  };
+
+  const descartarBorrador = () => {
+    localStorage.removeItem(draftKey);
+    setHayBorrador(false);
+  };
+
+  const limpiarBorrador = () => localStorage.removeItem(draftKey);
 
   // Inicializar formulario al abrir/editar
   useEffect(() => {
@@ -162,7 +220,12 @@ export function ProveedorForm({
         setCatalogoItems([]);
       }
     }
-  }, [isOpen, editingProveedor, initialCatalogo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editingProveedor]);
+  // NOTA: initialCatalogo se excluye de las deps a propósito.
+  // El catálogo solo se inicializa al ABRIR el formulario (isOpen cambia a true).
+  // Si initialCatalogo estuviera en las deps, cualquier re-render del padre con
+  // una nueva referencia de [] resetearía el catálogo mientras el usuario edita.
 
   const costUnit = useMemo(() => {
     const cost = Number(prodActual.precioCosto || 0);
@@ -171,8 +234,8 @@ export function ProveedorForm({
   }, [prodActual.precioCosto, prodActual.cantidadEmbalaje]);
 
   const sellPrice = useMemo(() => {
-    // Si no hay margen, el precio de venta es igual al costo unitario
-    if (!prodActual.margenVenta) return costUnit;
+    // Si no hay margen definido, el precio de venta es igual al costo unitario
+    if (prodActual.margenVenta === undefined || prodActual.margenVenta === null) return costUnit;
     return costUnit * (1 + Number(prodActual.margenVenta) / 100);
   }, [costUnit, prodActual.margenVenta]);
 
@@ -189,6 +252,7 @@ export function ProveedorForm({
     setGuardando(true);
     try {
       await onSubmit(formData, catalogoItems);
+      limpiarBorrador();
       onClose();
     } catch (err) {
       console.error(err);
@@ -201,13 +265,15 @@ export function ProveedorForm({
   const addProductoCatalogo = () => {
     if (!prodActual.nombre.trim()) { toast.error('Nombre de producto requerido'); return; }
     if (prodActual.precioCosto <= 0) { toast.error('Costo debe ser mayor a 0'); return; }
+    if (!prodActual.categoria) { toast.error('Selecciona una categoría para el producto'); return; }
 
     const itemData: ProductoCatalogo = {
       ...prodActual,
       uid: editingUid || crypto.randomUUID(),
-      costoUnitario: costUnit, // Ya calculado por el useMemo
-      precioVenta: Math.round(sellPrice), // Precio por UNIDAD basado en margen
-      precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1)), 
+      precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
+      costoUnitario: Math.round(costUnit / 100) * 100,
+      precioVenta: Math.round(sellPrice / 100) * 100,
+      precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1) / 100) * 100,
       stockRecibido: prodActual.stockRecibido
     };
 
@@ -223,83 +289,93 @@ export function ProveedorForm({
     setBuscarProd('');
   };
 
-  // --- IA VISION: EXTRACTOR DE DATOS ---
+  // --- AGENTE FORENSE v3.0 — Identificación campo por campo ---
   const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = async (ev) => {
-        const base64 = ev.target?.result as string;
-        setFotoCapturada(base64);
-        setIsAnalizando(true);
-        setOcrProgress(0);
-        setOcrResult(null);
-        
-        // Protocolo AI-Forensic-Analyzer (Integración OCR Real)
-        toast.promise(
-          procesarImagenFactura(base64, (p) => setOcrProgress(p)),
-          {
-            loading: (
-              <div className="flex flex-col gap-1">
-                <span className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2">
-                  <Activity className="w-3 h-3 animate-pulse" />
-                  Scanner Forense Nexus
-                </span>
-                <span className="text-[10px] text-slate-500">Mapeando estructura de datos... {ocrProgress}%</span>
-              </div>
-            ),
-            success: (result: ResultadoOCR) => {
-              setIsAnalizando(false);
-              setOcrResult(result);
-              
-              if (result.errores.length > 0 && result.productos.length === 0) {
-                return result.errores[0];
-              }
+    if (!file) return;
+    setFotoCapturada(URL.createObjectURL(file));
+    setIsAnalizando(true);
+    setOcrProgress(0);
+    setOcrResult(null);
 
-              // Mapeo Inteligente del Proveedor (Si no tiene nombre)
-              if (result.proveedor && !formData.nombre) {
-                setFormData(prev => ({
-                  ...prev,
-                  nombre: result.proveedor?.nombre || prev.nombre,
-                  telefono: result.proveedor?.telefono || prev.telefono,
-                  notas: result.proveedor?.nit ? `NIT: ${result.proveedor.nit}\n${prev.notas}` : prev.notas
-                }));
-              }
+    toast.promise(
+      analizarFacturaForense(file, (pct) => setOcrProgress(pct)),
+      {
+        loading: (
+          <div className="flex flex-col gap-1">
+            <span className="font-black text-xs uppercase tracking-widest text-indigo-600 flex items-center gap-2">
+              <Activity className="w-3 h-3 animate-pulse" />
+              Agente Forense — Analizando factura...
+            </span>
+            <span className="text-[10px] text-slate-500">Identificando tipo · Mapeando campos · {ocrProgress}%</span>
+          </div>
+        ),
+        success: (resultado) => {
+          setIsAnalizando(false);
 
-              // Mapeo Inteligente de Productos
-              if (result.productos.length > 0) {
-                setActiveItemsScan(result.productos);
-                const first = result.productos[0];
-                const catSug = sugerirCategoria(first.nombre);
-                
-                setProdActual(curr => ({
-                  ...curr,
-                  nombre: first.nombre,
-                  precioCosto: first.precioUnitario || first.costoTotal,
-                  categoria: catSug !== 'General' ? catSug : curr.categoria,
-                  cantidadEmbalaje: first.cantidad || 1,
-                  notas: `Detectado vía Scanner Forense (Confianza: ${first.confianza}%)`
-                }));
-                setBuscarProd(first.nombre);
-                if (catSug !== 'General') setIsCategoriaIA(true);
-                return `Análisis completado: ${result.productos.length} items detectados`;
-              }
-              
-              return "Factura analizada (Sin productos detectados)";
-            },
-            error: () => {
-              setIsAnalizando(false);
-              return 'Error crítico en el motor forense. Intenta con una imagen más clara.';
-            }
+          if (resultado.errores.length > 0 && resultado.productos.length === 0) {
+            return resultado.errores[0];
           }
-        );
-      };
-      reader.readAsDataURL(file);
-    }
+
+          // ── PASO 1: Datos del proveedor campo por campo ──
+          const prov = resultado.proveedor;
+          if (prov.razonSocial && !formData.nombre) {
+            setFormData(prev => ({
+              ...prev,
+              nombre:    prov.razonSocial || prev.nombre,
+              rubro:     prov.rubro       || prev.rubro,
+              contacto:  prov.asesor      || prev.contacto,
+              telefono:  prov.telefono    || prev.telefono,
+              email:     prov.email       || prev.email,
+              direccion: prov.direccion   || prev.direccion,
+              notas:     prov.nit ? `NIT: ${prov.nit}\n${prev.notas}` : prev.notas,
+            }));
+          }
+
+          // ── PASO 2: Agregar TODOS los productos detectados al catálogo ──
+          if (resultado.productos.length > 0) {
+            const nuevosItems: ProductoCatalogo[] = resultado.productos.map(p => {
+              const catSug = sugerirCategoria(p.nombre);
+              return {
+                uid: crypto.randomUUID(),
+                productoId: '',
+                nombre: p.nombre,
+                categoria: catSug !== 'General' ? catSug : '',
+                precioCosto: p.precioCosto,
+                margenVenta: 30,
+                cantidadEmbalaje: p.cantidadEmbalaje || 1,
+                tipoEmbalaje: 'unidad' as const,
+                destino: p.destino,
+                notas: p.notasExtra || `Factura (${resultado.tipoFactura}) · Confianza: ${p.confianza}%`,
+                costoUnitario: Math.round(p.precioCosto / (p.cantidadEmbalaje || 1) / 100) * 100,
+                precioVenta: Math.round(p.precioCosto / (p.cantidadEmbalaje || 1) * 1.3 / 100) * 100,
+                precioVentaPack: Math.round(p.precioCosto * 1.3 / 100) * 100,
+                stockRecibido: p.cantidadRecibida || 0,
+              };
+            });
+
+            setCatalogoItems(prev => [...nuevosItems, ...prev]);
+            return `Forense completado: ${nuevosItems.length} producto(s) agregado(s) al catálogo (${resultado.tipoFactura})`;
+          }
+
+          return `Proveedor identificado. Sin productos detectados — verifica la imagen.`;
+        },
+        error: () => {
+          setIsAnalizando(false);
+          return 'Error en el agente forense. Intenta con imagen más nítida.';
+        },
+      }
+    );
   };
 
   const handleEditItem = (item: ProductoCatalogo) => {
-    setProdActual({ ...item });
+    // Buscar categoría con coincidencia exacta primero, luego insensible a mayúsculas/espacios
+    const listaValida = item.destino === 'venta' ? CATS_VENTA : CATS_INSUMO;
+    const catNorm = (item.categoria || '').toLowerCase().trim();
+    const catMatch = listaValida.find(c => c === item.categoria)
+        || listaValida.find(c => c.toLowerCase().trim() === catNorm);
+    const categoriaValida = catMatch || item.categoria || '';
+    setProdActual({ ...item, categoria: categoriaValida });
     setBuscarProd(item.nombre);
     setEditingUid(item.uid);
     toast.info(`Editando: ${item.nombre}`);
@@ -342,6 +418,29 @@ export function ProveedorForm({
         </div>
 
         <form onSubmit={handleSave} className="p-8 space-y-8">
+
+            {/* ── BANNER BORRADOR GUARDADO ── */}
+            {hayBorrador && (
+              <div className="flex items-center justify-between gap-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-5 py-4 animate-ag-fade-in">
+                <div className="flex items-center gap-3">
+                  <History className="w-5 h-5 text-amber-600 shrink-0" />
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Borrador guardado</p>
+                    <p className="text-[11px] text-amber-600 dark:text-amber-500">Tenías trabajo sin guardar. ¿Deseas recuperarlo?</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button type="button" onClick={restaurarBorrador}
+                    className="h-9 px-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest">
+                    Restaurar
+                  </Button>
+                  <Button type="button" onClick={descartarBorrador} variant="ghost"
+                    className="h-9 px-3 text-amber-600 hover:bg-amber-100 dark:hover:bg-amber-900/30 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                    Descartar
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {/* ── SECCIÓN 1: IDENTIDAD ── */}
             <div className="space-y-6">
@@ -648,10 +747,11 @@ export function ProveedorForm({
                             Categoría
                             {isCategoriaIA && <Badge className="bg-cyan-100 text-cyan-700 py-0 px-1 text-[7px] border-cyan-200 animate-pulse">AUTO-IA</Badge>}
                           </Label>
-                          <Select 
-                            value={prodActual.categoria} 
+                          <Select
+                            key={`cat-select-${prodActual.destino}`}
+                            value={prodActual.categoria || undefined}
                             onValueChange={v => {
-                              setProdActual({ ...prodActual, categoria: v });
+                              setProdActual(prev => ({ ...prev, categoria: v }));
                               setIsCategoriaIA(false);
                             }}
                           >
@@ -661,8 +761,17 @@ export function ProveedorForm({
                             )}>
                                <SelectValue placeholder="Seleccionar..." />
                             </SelectTrigger>
-                            <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 p-1 max-h-60 overflow-y-auto">
-                               {CATEGORIAS_PROD.map(c => (
+                            <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 p-1">
+                               {/* Si la categoría guardada no está en la lista, mostrarla primero con aviso */}
+                               {prodActual.categoria && !(prodActual.destino === 'venta' ? CATS_VENTA : CATS_INSUMO).includes(prodActual.categoria) && (
+                                 <SelectItem key="__huerfana__" value={prodActual.categoria} className="rounded-lg font-black uppercase text-[10px] tracking-tight text-amber-600">
+                                   ⚠️ {prodActual.categoria} (cambiar)
+                                 </SelectItem>
+                               )}
+                               {(prodActual.destino === 'venta'
+                                 ? CATS_VENTA
+                                 : CATS_INSUMO
+                               ).map(c => (
                                  <SelectItem key={c} value={c} className="rounded-lg font-black uppercase text-[10px] tracking-tight">{c}</SelectItem>
                                ))}
                             </SelectContent>
@@ -679,7 +788,7 @@ export function ProveedorForm({
                           <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1.5 h-12 items-center">
                             <select
                               value={prodActual.tipoEmbalaje}
-                              onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje, cantidadEmbalaje: e.target.value === 'unidad' ? 1 : prev.cantidadEmbalaje }))}
+                              onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje }))}
                               className="flex-1 px-2 bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 dark:text-slate-300 cursor-pointer"
                             >
                               {EMBALAJES.map(em => (
@@ -692,9 +801,13 @@ export function ProveedorForm({
                             <input
                               type="number"
                               min="1"
-                              value={prodActual.cantidadEmbalaje}
-                              onChange={e => setProdActual(prev => ({ ...prev, cantidadEmbalaje: parseInt(e.target.value) || 1 }))}
-                              className="w-12 h-8 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px] hover:bg-indigo-100 transition-colors"
+                              value={prodActual.cantidadEmbalaje === 0 ? '' : prodActual.cantidadEmbalaje}
+                              onChange={e => {
+                                const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                setProdActual(prev => ({ ...prev, cantidadEmbalaje: val }));
+                              }}
+                              className="w-12 h-8 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px] hover:bg-indigo-100 transition-all focus:ring-2 focus:ring-indigo-400 group-focus-within:bg-white"
+                              placeholder="0"
                             />
                           </div>
                         </div>
@@ -705,7 +818,14 @@ export function ProveedorForm({
                           <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1 h-12 items-center gap-1">
                             <button
                               type="button"
-                              onClick={() => setProdActual(prev => ({ ...prev, destino: 'insumo' }))}
+                              onClick={() => {
+                                const newDestino = 'insumo';
+                                setProdActual(prev => ({ 
+                                  ...prev, 
+                                  destino: newDestino,
+                                  categoria: CATS_INSUMO.includes(prev.categoria) ? prev.categoria : CATS_INSUMO[0] ?? ''
+                                }));
+                              }}
                               className={cn(
                                 "flex-1 h-full rounded-lg flex items-center justify-center transition-all",
                                 prodActual.destino === 'insumo' ? "bg-amber-100 text-amber-600 shadow-sm" : "text-slate-300 hover:text-slate-400"
@@ -716,7 +836,13 @@ export function ProveedorForm({
                             </button>
                             <button
                               type="button"
-                              onClick={() => setProdActual(prev => ({ ...prev, destino: 'venta' }))}
+                              onClick={() => {
+                                setProdActual(prev => ({
+                                  ...prev,
+                                  destino: 'venta',
+                                  categoria: CATS_VENTA.includes(prev.categoria) ? prev.categoria : CATS_VENTA[0] ?? ''
+                                }));
+                              }}
                               className={cn(
                                 "flex-1 h-full rounded-lg flex items-center justify-center transition-all",
                                 prodActual.destino === 'venta' ? "bg-emerald-100 text-emerald-600 shadow-sm" : "text-slate-300 hover:text-slate-400"
@@ -738,8 +864,8 @@ export function ProveedorForm({
                                   value={prodActual.precioCosto || ''}
                                   onChange={e => {
                                     const val = parseFloat(e.target.value) || 0;
-                                    setProdActual(prev => ({ 
-                                      ...prev, 
+                                    setProdActual(prev => ({
+                                      ...prev,
                                       precioCosto: val
                                     }));
                                   }}
@@ -758,7 +884,7 @@ export function ProveedorForm({
                           <div className="relative group">
                               <Input 
                                 type="number"
-                                value={costUnit > 0 ? Math.round(costUnit) : ''}
+                                value={costUnit > 0 ? Math.round(costUnit / 100) * 100 : ''}
                                 onChange={e => {
                                   const val = parseFloat(e.target.value) || 0;
                                   // [Nexus-Volt] Si cambia el unitario, recalculamos el total de la paca (precioCosto)
@@ -796,7 +922,7 @@ export function ProveedorForm({
                               <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
                               <Input 
                                 type="number"
-                                value={sellPrice > 0 ? Math.round(sellPrice) : ''}
+                                value={sellPrice > 0 ? Math.round(sellPrice / 100) * 100 : ''}
                                 onChange={(e) => {
                                   const newPrice = parseFloat(e.target.value) || 0;
                                   if (costUnit > 0) {
@@ -899,10 +1025,20 @@ export function ProveedorForm({
                             </div>
                             <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
                             <div className="flex flex-col">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Inversión Estimada</span>
                                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Inversión Total</span>
                                 <span className="text-sm font-black text-indigo-600 tabular-nums">
                                     {formatCurrency(catalogoItems.reduce((acc, curr) => acc + curr.precioCosto, 0))}
+                                </span>
+                            </div>
+                            <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
+                            <div className="flex flex-col">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Ganancia Est.</span>
+                                <span className="text-sm font-black text-amber-500 tabular-nums">
+                                    +{formatCurrency(catalogoItems.reduce((acc, curr) => {
+                                      const stock = curr.stockRecibido || 0;
+                                      const ganancia = (curr.precioVenta - curr.costoUnitario) * (stock > 0 ? stock : 1);
+                                      return acc + ganancia;
+                                    }, 0))}
                                 </span>
                             </div>
                         </div>
@@ -919,6 +1055,7 @@ export function ProveedorForm({
                             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">Costo Aliado</th>
                             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">Ganancia %</th>
                             <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 text-right">Precio Venta</th>
+                            <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 text-right">Ganancia Est.</th>
                             <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Acción</th>
                           </tr>
                         </thead>
@@ -1011,6 +1148,22 @@ const TableRow = React.memo(({
     </td>
     <td className="px-4 py-4 text-right">
       <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(item.precioVenta)}</p>
+    </td>
+    <td className="px-4 py-4 text-right">
+      {(item.stockRecibido || 0) > 0 ? (
+        <>
+          <p className="text-sm font-black text-amber-500 tabular-nums">
+            +{formatCurrency((item.precioVenta - item.costoUnitario) * (item.stockRecibido || 0))}
+          </p>
+          <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">
+            {item.stockRecibido} und × {formatCurrency(item.precioVenta - item.costoUnitario)}
+          </p>
+        </>
+      ) : (
+        <p className="text-sm font-black text-amber-500 tabular-nums">
+          +{formatCurrency(item.precioVenta - item.costoUnitario)}<span className="text-[9px] text-slate-400">/u</span>
+        </p>
+      )}
     </td>
     <td className="px-6 py-4 text-center">
       <div className={cn(

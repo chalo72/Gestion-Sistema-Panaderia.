@@ -201,6 +201,7 @@ export interface Categoria {
   nombre: string;
   color: string;
   icono?: string;
+  tipo?: 'venta' | 'insumo';
 }
 
 export interface Proveedor {
@@ -308,9 +309,11 @@ export interface Configuracion {
   impuestoPorcentaje: number;
   mostrarUtilidadEnLista: boolean;
   presupuestoMensual?: number;
+  categoriasBorradas?: string[];  // NOMBRES de categorías eliminadas — nunca se re-agregan al iniciar
+  seedCompletado?: boolean;       // true = ya se sembró datos iniciales, no repetir
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas';
 
 // ============================================
 // SISTEMA DE ROLES Y PERMISOS
@@ -429,7 +432,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_PRODUCTOS',
     'VER_PRECIO_VENTA',
     'VER_DASHBOARD',
-    'VER_VENTAS', 'GESTIONAR_VENTAS',
+    'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA',
   ],
 };
 
@@ -564,6 +567,9 @@ export interface CajaSesion {
   montoApertura: number;
   montoCierre?: number;
   totalVentas: number;
+  // Desglose por tipo de pago (para cuadre de caja correcto)
+  totalVentasEfectivo?: number;  // Solo ventas con pago inmediato (efectivo, tarjeta, nequi, etc.)
+  totalCreditos?: number;        // Ventas a crédito — NO entran al cajón físico
   ventasIds: string[];
   movimientos: MovimientoCaja[];
   estado: 'abierta' | 'cerrada';

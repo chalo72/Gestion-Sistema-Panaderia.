@@ -46,6 +46,12 @@ export function useInventario({ productos }: UseInventarioParams) {
       });
 
       // 2. Registrar movimiento
+      const usuarioActual = (() => {
+        try {
+          const u = localStorage.getItem('pricecontrol_local_user');
+          return u ? (JSON.parse(u)?.nombre || 'sistema') : 'sistema';
+        } catch { return 'sistema'; }
+      })();
       const movimiento: MovimientoInventario = {
         id: crypto.randomUUID(),
         productoId,
@@ -53,7 +59,7 @@ export function useInventario({ productos }: UseInventarioParams) {
         cantidad,
         motivo,
         fecha: new Date().toISOString(),
-        usuario: 'admin'
+        usuario: usuarioActual
       };
       await db.addMovimiento(movimiento as any);
       setMovimientos(prev => [movimiento, ...prev]);

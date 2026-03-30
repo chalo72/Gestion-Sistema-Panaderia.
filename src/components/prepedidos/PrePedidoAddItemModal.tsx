@@ -139,8 +139,12 @@ export function PrePedidoAddItemModal({
                                         </Button>
                                         <Input
                                             type="number"
-                                            value={cantidad}
-                                            onChange={(e) => setCantidad(parseInt(e.target.value) || 1)}
+                                            min="0"
+                                            value={cantidad === 0 ? '' : cantidad}
+                                            onChange={(e) => {
+                                                const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                                setCantidad(val);
+                                            }}
                                             className="h-10 w-16 text-center font-bold text-lg bg-transparent border-none shadow-none text-slate-900 dark:text-white tabular-nums"
                                         />
                                         <Button

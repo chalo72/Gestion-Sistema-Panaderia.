@@ -2,6 +2,7 @@ import path from "path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 import { VitePWA } from 'vite-plugin-pwa'
+/// <reference types="vitest" />
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -98,6 +99,17 @@ export default defineConfig({
       }
     })
   ],
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/lib/**', 'src/hooks/**'],
+      exclude: ['src/**/*.test.*', 'src/lib/seed-data.ts'],
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

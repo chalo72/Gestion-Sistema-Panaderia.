@@ -291,7 +291,7 @@ export default function CargaMasiva({
               nombre: prod.nombre,
               categoria: prod.categoria || 'General',
               descripcion: prod.descripcion,
-              precioVenta: prod.precioUnitario * 1.3, // Margen 30%
+              precioVenta: Math.round(prod.precioUnitario * 1.3 / 100) * 100, // Margen 30%
               margenUtilidad: 30,
               tipo: 'ingrediente',
               costoBase: prod.precioUnitario,
@@ -312,7 +312,7 @@ export default function CargaMasiva({
               nombre: fila.nombre,
               categoria: fila.categoria || 'General',
               descripcion: fila.descripcion,
-              precioVenta: fila.precioUnitario || fila.costoCompra * 1.3,
+              precioVenta: Math.round((fila.precioUnitario || fila.costoCompra * 1.3) / 100) * 100,
               margenUtilidad: 30,
               tipo: 'ingrediente',
               costoBase: fila.costoCompra,

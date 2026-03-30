@@ -31,15 +31,27 @@ export function ProductCatalog({
     const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
     const [editForm, setEditForm] = useState({ nombre: '', precioVenta: 0, descripcion: '', stock: 0 });
 
-    // Contar productos por categoría
+    // Contar productos por categoría (normalizado: lowercase+trim para agrupar variantes)
     const productosPorCategoria = useMemo(() => {
         const counts: Record<string, number> = {};
-        productos.forEach(p => { counts[p.categoria] = (counts[p.categoria] || 0) + 1; });
+        productos.forEach(p => {
+            const key = (p.categoria || '').toLowerCase().trim();
+            counts[key] = (counts[key] || 0) + 1;
+        });
         return counts;
     }, [productos]);
 
     const categoriasConProductos = useMemo(() => {
-        return categorias.filter(c => (productosPorCategoria[c.nombre] || 0) > 0);
+        // Busca categorías conocidas con comparación insensible a mayúsculas/espacios
+        const conocidas = categorias.filter(c =>
+            (productosPorCategoria[c.nombre.toLowerCase().trim()] || 0) > 0
+        );
+        // Mostrar también categorías "huérfanas" (productos cuya categoría no está registrada en el sistema)
+        const nombresConocidosNorm = new Set(categorias.map(c => c.nombre.toLowerCase().trim()));
+        const huerfanas = Object.keys(productosPorCategoria)
+            .filter(key => !nombresConocidosNorm.has(key) && (productosPorCategoria[key] || 0) > 0)
+            .map(key => ({ id: `huerfana-${key}`, nombre: key, color: '#6b7280', icono: '📦' } as Categoria));
+        return [...conocidas, ...huerfanas];
     }, [categorias, productosPorCategoria]);
 
     const getCategoryIcon = (catNombre: string) => categorias.find(c => c.nombre === catNombre)?.icono || '📦';
@@ -72,7 +84,8 @@ export function ProductCatalog({
                 const itemInv = inventario.find(i => i.productoId === editingProduct.id);
                 const stockActual = itemInv?.stockActual || 0;
                 if (editForm.stock !== stockActual) {
-                    await onAjustarStock(editingProduct.id, editForm.stock, 'ajuste', 'Ajuste desde POS');
+                    const delta = editForm.stock - stockActual;
+                    await onAjustarStock(editingProduct.id, delta, 'ajuste', 'Ajuste desde POS');
                 }
             }
             toast.success('Producto actualizado');
@@ -143,7 +156,7 @@ export function ProductCatalog({
                     <>
                         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
                             {categoriasConProductos.map(cat => {
-                                const count = productosPorCategoria[cat.nombre] || 0;
+                                const count = productosPorCategoria[cat.nombre.toLowerCase().trim()] || 0;
                                 return (
                                     <div key={cat.id}
                                         onClick={() => setSelectedCategory(cat.nombre)}

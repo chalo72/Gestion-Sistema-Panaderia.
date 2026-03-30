@@ -1,5 +1,5 @@
-import React from 'react';
-import { Tag, Plus, Trash2, Palette, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { Tag, Plus, Trash2, Palette, X, Edit2, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ interface ProductCategoryManagerProps {
     onOpenChange: (open: boolean) => void;
     categorias: Categoria[];
     onDeleteCategoria: (id: string) => void;
+    onUpdateCategoria: (id: string, nombre: string, color: string) => void;
     onAddCategoria: (e: React.FormEvent) => void;
     nuevaCategoria: { nombre: string; color: string };
     setNuevaCategoria: (val: any) => void;
@@ -26,11 +27,30 @@ export function ProductCategoryManager({
     onOpenChange,
     categorias,
     onDeleteCategoria,
+    onUpdateCategoria,
     onAddCategoria,
     nuevaCategoria,
     setNuevaCategoria,
     coloresPreset
 }: ProductCategoryManagerProps) {
+    const [editingId, setEditingId]       = useState<string | null>(null);
+    const [editNombre, setEditNombre]     = useState('');
+    const [editColor, setEditColor]       = useState('');
+
+    const startEdit = (cat: Categoria) => {
+        setEditingId(cat.id);
+        setEditNombre(cat.nombre);
+        setEditColor(cat.color);
+    };
+
+    const cancelEdit = () => setEditingId(null);
+
+    const saveEdit = () => {
+        if (!editNombre.trim() || !editingId) return;
+        onUpdateCategoria(editingId, editNombre.trim(), editColor);
+        setEditingId(null);
+    };
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-xl rounded-[3rem] p-0 overflow-hidden border-none shadow-3xl bg-white dark:bg-gray-950">
@@ -67,28 +87,68 @@ export function ProductCategoryManager({
                     </div>
 
                     <TabsContent value="lista" className="p-10 pt-6">
-                        <ScrollArea className="h-64 pr-4">
+                        <ScrollArea className="h-72 pr-4">
                             <div className="space-y-3">
                                 {categorias.map((categoria) => (
-                                    <div
-                                        key={categoria.id}
-                                        className="flex items-center justify-between p-4 bg-slate-50 dark:bg-gray-900/50 rounded-2xl border border-slate-100 dark:border-gray-800 hover:shadow-md transition-all group"
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div
-                                                className="w-10 h-10 rounded-xl shadow-lg border-2 border-white dark:border-gray-800"
-                                                style={{ backgroundColor: categoria.color }}
-                                            />
-                                            <span className="font-black uppercase tracking-tight text-slate-800 dark:text-white">{categoria.nombre}</span>
-                                        </div>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            className="h-10 w-10 text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all rounded-xl opacity-0 group-hover:opacity-100"
-                                            onClick={() => onDeleteCategoria(categoria.id)}
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                    <div key={categoria.id}>
+                                        {editingId === categoria.id ? (
+                                            /* Formulario inline de edición */
+                                            <div className="p-4 rounded-2xl border-2 border-dashed border-indigo-300 bg-indigo-50/40 dark:bg-indigo-900/10 space-y-3">
+                                                <Input
+                                                    value={editNombre}
+                                                    onChange={e => setEditNombre(e.target.value)}
+                                                    className="h-10 font-bold rounded-xl bg-white dark:bg-gray-800 border-slate-200 dark:border-gray-700"
+                                                    onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                                                    autoFocus
+                                                />
+                                                <div className="grid grid-cols-5 gap-2">
+                                                    {coloresPreset.map(color => (
+                                                        <button
+                                                            key={color}
+                                                            type="button"
+                                                            onClick={() => setEditColor(color)}
+                                                            className={cn(
+                                                                "w-full aspect-square rounded-lg transition-all",
+                                                                editColor === color ? "ring-2 ring-offset-1 ring-slate-700 scale-110" : "hover:scale-105"
+                                                            )}
+                                                            style={{ backgroundColor: color }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <Button type="button" size="sm" onClick={saveEdit}
+                                                        disabled={!editNombre.trim()}
+                                                        className="flex-1 h-9 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black">
+                                                        <Check className="w-3.5 h-3.5 mr-1" /> Guardar
+                                                    </Button>
+                                                    <Button type="button" size="sm" variant="outline" onClick={cancelEdit}
+                                                        className="h-9 rounded-xl text-xs">
+                                                        Cancelar
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            /* Fila normal */
+                                            <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-gray-900/50 rounded-2xl border border-slate-100 dark:border-gray-800 hover:shadow-md transition-all group">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-xl shadow-lg border-2 border-white dark:border-gray-800"
+                                                        style={{ backgroundColor: categoria.color }} />
+                                                    <span className="font-black uppercase tracking-tight text-slate-800 dark:text-white">{categoria.nombre}</span>
+                                                </div>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                                                    <Button variant="ghost" size="icon"
+                                                        className="h-9 w-9 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl"
+                                                        onClick={() => startEdit(categoria)}>
+                                                        <Edit2 className="w-4 h-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon"
+                                                        className="h-9 w-9 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl"
+                                                        onClick={() => onDeleteCategoria(categoria.id)}>
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

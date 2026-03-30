@@ -593,7 +593,12 @@ export class SupabaseDatabase implements IDatabase {
         return data;
     }
     async updateMesa(mesa: any): Promise<void> {
-        await supabase.from('mesas').upsert(mesa);
+        const { error } = await supabase.from('mesas').upsert(mesa);
+        if (error) throw error;
+    }
+    async deleteMesa(id: string): Promise<void> {
+        const { error } = await supabase.from('mesas').delete().eq('id', id);
+        if (error) throw error;
     }
 
     // --- Pedidos Activos ---

@@ -24,20 +24,20 @@ export function ProductPriceItem({
 }: ProductPriceItemProps) {
     return (
         <div className={cn(
-            "flex items-center justify-between p-6 rounded-3xl transition-all border",
+            "flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 sm:p-6 rounded-3xl transition-all border gap-3 sm:gap-0",
             esMejorPrecio
                 ? "bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/40 shadow-md"
                 : "bg-white dark:bg-gray-900/60 border-slate-100 dark:border-gray-800"
         )}>
-            <div className="flex-1 flex items-center gap-6">
+            <div className="flex-1 flex items-center gap-4 min-w-0">
                 <div className={cn(
                     "w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xs",
                     esMejorPrecio ? "bg-blue-600 text-white shadow-lg" : "bg-slate-100 dark:bg-gray-800 text-slate-400"
                 )}>
                     <Store className="w-6 h-6" />
                 </div>
-                <div>
-                    <p className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg leading-none">{proveedor?.nombre || 'Aliado Desconocido'}</p>
+                <div className="min-w-0">
+                    <p className="font-black text-slate-800 dark:text-white uppercase tracking-tight text-lg leading-none truncate">{proveedor?.nombre || 'Aliado Desconocido'}</p>
                     <div className="flex items-center gap-3 mt-1">
                         <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest opacity-60">ID: {precio.proveedorId.substring(0, 8)}</span>
                         {precio.notas && (
@@ -49,7 +49,7 @@ export function ProductPriceItem({
                 </div>
             </div>
 
-            <div className="flex items-center gap-10">
+            <div className="flex items-center gap-4 sm:gap-10 flex-wrap sm:flex-nowrap shrink-0">
                 <div className="text-right">
                     <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground opacity-60 mb-0.5">Precio Costo</p>
                     <p className={cn("text-xl font-black tabular-nums tracking-tighter", esMejorPrecio ? "text-blue-600" : "text-slate-600 dark:text-gray-400")}>

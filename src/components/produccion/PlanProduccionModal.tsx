@@ -329,15 +329,19 @@ export function PlanProduccionModal({
                     </Button>
                     <Button
                         onClick={handleSubmit}
-                        disabled={isSubmitting || (!!selectedProductoId && !statsProduccion)}
-                        className="bg-gradient-to-r from-indigo-600 to-indigo-400 hover:from-indigo-500 hover:to-indigo-300 text-white rounded-[1.25rem] px-12 h-14 shadow-2xl shadow-indigo-500/40 uppercase font-black text-[12px] tracking-[0.25em] transition-all hover:scale-[1.02] active:scale-95 disabled:grayscale flex-1"
+                        disabled={isSubmitting || hayFaltantes || (!!selectedProductoId && !statsProduccion)}
+                        className={`rounded-[1.25rem] px-12 h-14 uppercase font-black text-[12px] tracking-[0.25em] transition-all hover:scale-[1.02] active:scale-95 disabled:grayscale flex-1 shadow-2xl text-white ${
+                            hayFaltantes
+                                ? 'bg-gradient-to-r from-rose-700 to-rose-500 shadow-rose-500/40 cursor-not-allowed'
+                                : 'bg-gradient-to-r from-indigo-600 to-indigo-400 hover:from-indigo-500 hover:to-indigo-300 shadow-indigo-500/40'
+                        }`}
                     >
                         {isSubmitting ? (
                             <div className="flex items-center gap-3">
                                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                                 Procesando...
                             </div>
-                        ) : 'Lanzar Producción'}
+                        ) : hayFaltantes ? 'Sin stock suficiente' : 'Lanzar Producción'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

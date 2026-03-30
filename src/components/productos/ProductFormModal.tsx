@@ -237,6 +237,15 @@ export function ProductFormModal({
                                         <SelectValue placeholder="Seleccionar categoría..." />
                                     </SelectTrigger>
                                     <SelectContent className="rounded-xl">
+                                        {/* Si la categoría guardada no existe en la lista, mostrarla como opción para que sea visible */}
+                                        {formData.categoria && !categorias.find(c => c.nombre === formData.categoria) && (
+                                            <SelectItem value={formData.categoria} className="text-sm text-amber-600 font-bold">
+                                                <div className="flex items-center gap-2">
+                                                    <span>⚠️</span>
+                                                    {formData.categoria} (sin registrar — cambia aquí)
+                                                </div>
+                                            </SelectItem>
+                                        )}
                                         {categorias.map(c => (
                                             <SelectItem key={c.id} value={c.nombre} className="text-sm">
                                                 <div className="flex items-center gap-2">
@@ -247,6 +256,12 @@ export function ProductFormModal({
                                         ))}
                                     </SelectContent>
                                 </Select>
+                                {/* Aviso si la categoría no está registrada en el sistema */}
+                                {formData.categoria && !categorias.find(c => c.nombre === formData.categoria) && (
+                                    <p className="text-xs text-amber-600 font-semibold mt-1 pl-1">
+                                        ⚠️ Categoría "{formData.categoria}" no está registrada. Selecciona una de la lista.
+                                    </p>
+                                )}
 
                                 {/* Mini-formulario inline para nueva categoría */}
                                 {showNueva && (

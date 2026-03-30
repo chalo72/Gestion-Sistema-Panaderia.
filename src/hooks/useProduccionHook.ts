@@ -83,21 +83,30 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     // 1. Obtener receta
     const receta = recetas.find(r => r.productoId === orden.productoId);
     if (!receta) {
-      toast.error('No hay receta definida para este producto. No se pueden descontar insumos.');
-    } else {
-      // 2. Descontar ingredientes
-      for (const ingrediente of receta.ingredientes) {
-        const cantidadTotal = (ingrediente.cantidad / receta.porcionesResultantes) * cantidadCompletada;
-        await onAjustarStock(
-          ingrediente.productoId,
-          cantidadTotal,
-          'salida',
-          `Producción Lote: ${orden.lote || 'N/A'} - Orden: ${orden.id.slice(0, 8)}`
-        );
-      }
+      toast.error('No hay receta definida para este producto. Configura la receta antes de finalizar la producción.');
+      return; // No continuar: sin receta no se pueden descontar insumos ni cargar producto terminado
     }
 
-    // 3. Cargar producto terminado
+    // 2. Obtener merma del modelo de pan asociado (default 0% si no hay modelo)
+    const modelo = orden.modeloPanId ? modelosPan.find(m => m.id === orden.modeloPanId) : null;
+    const mermaFactor = modelo?.mermaEstimada ? 1 + (modelo.mermaEstimada / 100) : 1;
+    const mermaKgEstimado = modelo?.mermaEstimada
+      ? Math.round(((mermaFactor - 1) * cantidadCompletada) * 100) / 100
+      : 0;
+
+    // 3. Descontar ingredientes con merma incluida
+    for (const ingrediente of receta.ingredientes) {
+      const cantidadBase = (ingrediente.cantidad / receta.porcionesResultantes) * cantidadCompletada;
+      const cantidadConMerma = Math.round(cantidadBase * mermaFactor * 1000) / 1000; // 3 decimales para precisión
+      await onAjustarStock(
+        ingrediente.productoId,
+        cantidadConMerma,
+        'salida',
+        `Producción Lote: ${orden.lote || 'N/A'} (merma ${modelo?.mermaEstimada ?? 0}%)`
+      );
+    }
+
+    // 4. Cargar producto terminado al inventario
     await onAjustarStock(
       orden.productoId,
       cantidadCompletada,
@@ -105,18 +114,20 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
       `Producción Finalizada Lote: ${orden.lote || 'N/A'}`
     );
 
-    // 4. Actualizar orden
+    // 5. Actualizar orden con datos reales de merma
     const updatedOrden: OrdenProduccion = {
       ...orden,
       cantidadCompletada,
       estado: 'completado',
-      fechaFin: new Date().toISOString()
+      fechaFin: new Date().toISOString(),
+      mermaKg: mermaKgEstimado,
     };
     await db.updateOrdenProduccion(updatedOrden as any);
     setProduccion(prev => prev.map(o => o.id === id ? updatedOrden : o));
 
-    toast.success(`Producción de ${cantidadCompletada} unidades completada y stock actualizado.`);
-  }, [produccion, recetas, onAjustarStock]);
+    const mermaTexto = mermaKgEstimado > 0 ? ` · merma ${modelo?.mermaEstimada}% registrada` : '';
+    toast.success(`✓ ${cantidadCompletada} unidades producidas y stock actualizado${mermaTexto}.`);
+  }, [produccion, recetas, modelosPan, onAjustarStock]);
 
   // --- Formulaciones ---
   const addFormulacion = useCallback(async (data: Omit<import('@/types').FormulacionBase, 'id'>) => {

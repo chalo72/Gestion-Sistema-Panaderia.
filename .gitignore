@@ -1,3 +1,6 @@
+# Credenciales E2E (nunca subir al repo)
+.env.e2e
+
 # Logs
 logs
 *.log

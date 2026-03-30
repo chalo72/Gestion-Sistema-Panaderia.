@@ -191,13 +191,13 @@ export function matchProveedorEnCatalogo<T>(
 
 const PATRONES = {
   // Línea completa: cantidad + unidad + desc + precio unitario + total
-  lineaCompleta: /(\d+(?:[.,]\d+)?)\s*(?:UND|UN|KG|GR|LB|LT|ML|PQ|CJ|BL|UNID|UNIDADES?)?\s+(.{4,50}?)\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)/gi,
+  lineaCompleta: /(\d+(?:[.,]\d+)?)\s*(?:UND|UN|KG|GR|LB|LT|ML|PQ|CJ|BL|UNID|UNIDADES?)?\s+(.{4,50}?)\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})/gi,
 
   // Línea con descripción y precio al final (sin cantidad explícita)
-  lineaSimple: /^(.{4,45}?)\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)(?:\s*$)/gm,
+  lineaSimple: /^(.{4,45}?)\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})(?:\s*$)/gm,
 
   // Línea con formato "CANT x DESC PRECIO"
-  lineaX: /(\d+)\s*[xX]\s*(.{4,40}?)\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)/gi,
+  lineaX: /(\d+)\s*[xX]\s*(.{4,40}?)\s+\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})/gi,
 
   // Metadatos de factura
   nit:           /(?:NIT|N\.I\.T|RUT)[\s:]*(\d{1,3}(?:[.,]\d{3})*-?\d?)/i,
@@ -205,7 +205,7 @@ const PATRONES = {
   fecha:         /(?:FECHA|FEC|DATE)[\s:]*(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/i,
   fechaTexto:    /(\d{1,2})\s+(?:DE\s+)?(?:ENE|FEB|MAR|ABR|MAY|JUN|JUL|AGO|SEP|OCT|NOV|DIC|ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)\s+(?:DE\s+)?(\d{4})/i,
   numeroFactura: /(?:FACTURA|FAC\.?|FACT\.?|INVOICE|No\.?|N[°º]\.?|NUMERO|FOLIO)\s*[:#]?\s*([A-Z0-9\-]+)/i,
-  total:         /(?:TOTAL\s+A\s+PAGAR|VALOR\s+TOTAL|TOTAL\s+FACTURA|TOTAL|SUBTOTAL|GRAN\s+TOTAL)\s*[:\$]?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)/i,
+  total:         /(?:TOTAL\s+A\s+PAGAR|VALOR\s+TOTAL|TOTAL\s+FACTURA|TOTAL|SUBTOTAL|GRAN\s+TOTAL)\s*[:\$]?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})/i,
   unidad:        /\b(UND|UN|KG|GR|LB|LT|ML|PQ|CJ|BL|UNIDAD|KILO|GRAMO|LIBRA|LITRO|BOLSA|CAJA)\b/i,
 };
 
@@ -350,7 +350,7 @@ function extraerProductos(texto: string): ProductoDetectado[] {
   for (const linea of lineas) {
     const limpia = linea.trim();
     if (limpia.length < 5) continue;
-    const precioMatch = limpia.match(/\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?)\s*$/);
+    const precioMatch = limpia.match(/\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})\s*$/);
     if (!precioMatch) continue;
     const descripcion = limpia.replace(precioMatch[0], '').trim();
     const precio = normalizarPrecio(precioMatch[1]);
@@ -468,4 +468,398 @@ export function sugerirCategoria(nombreProducto: string): string {
     if (palabras.some(p => nombre.includes(p))) return categoria;
   }
   return 'General';
+}
+
+// ============================================================
+// AGENTE FORENSE v3.0 — Identificación campo por campo
+// 8 tipos de factura — regla: si no hay certeza, dejar vacío
+// ============================================================
+
+export type TipoFactura =
+  | 'tipo1_dimensiones'   // NOMBRE A*B*Cg
+  | 'tipo2_columnas'      // columnas UNIDADES + CANTIDAD separadas
+  | 'tipo3_lista_precios' // columna PRESENTACIÓN
+  | 'tipo4_dian'          // factura electrónica DIAN con IVA
+  | 'tipo5_tiquete'       // tiquete simple CANT + PRECIO
+  | 'tipo6_remision'      // sin precios — nota de entrega
+  | 'tipo7_superficie'    // SKU + descripción (Makro/grandes)
+  | 'tipo8_compleja'      // todo desglosado IVA+DESC+PVP
+  | 'desconocido';
+
+export interface ProductoForense {
+  nombre: string;
+  gramaje: string;
+  cantidadEmbalaje: number;  // unidades por pack (B en A*B*Cg)
+  cantidadRecibida: number;  // cajas/pacas compradas
+  tipoEmbalaje: string;
+  precioCosto: number;       // precio limpio: sin IVA - descuento
+  precioConIva: number;
+  descuentoPct: number;
+  pvpSugerido: number;       // solo referencia — NO usar como precio venta
+  categoria: string;
+  destino: 'insumo' | 'venta';
+  confianza: number;
+  notasExtra: string;
+}
+
+export interface ProveedorForense {
+  razonSocial: string;
+  nit: string;
+  rubro: string;
+  asesor: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  confianza: number;
+}
+
+export interface ResultadoForense {
+  tipoFactura: TipoFactura;
+  proveedor: ProveedorForense;
+  productos: ProductoForense[];
+  numeroFactura: string;
+  fechaFactura: string;
+  totalFactura: number;
+  calidadOCR: number;
+  errores: string[];
+  textoOriginal: string;
+}
+
+// ── Detectar tipo de factura ─────────────────────────────────
+function detectarTipoFactura(texto: string): TipoFactura {
+  const t = texto.toUpperCase();
+
+  if (/CUFE|CUDE|FACTURA\s+ELECTRONICA/.test(t)) return 'tipo4_dian';
+  if (/PVP\s*SUG|PRECIO.*SUGERIDO|P\/UNIT.*DESC.*IVA/s.test(t)) return 'tipo8_compleja';
+  if (/\d+\*\d+\*\d+(?:[.,]\d+)?[gGkKmMlL]/.test(texto)) return 'tipo1_dimensiones';
+  if (/^\d{7,13}\s+/m.test(texto)) return 'tipo7_superficie';
+  if (/PRESENTACI[OÓ]N/.test(t)) return 'tipo3_lista_precios';
+  if (!/\$?\s*\d{3,}/.test(texto)) return 'tipo6_remision';
+  if (/UNIDADES?\s+CANTIDAD|CANT\s+UND/.test(t)) return 'tipo2_columnas';
+  return 'tipo5_tiquete';
+}
+
+// ── Parsear formato A*B*Cg ───────────────────────────────────
+// A = cajas por bulto, B = SIEMPRE unidades por embalaje, Cg = gramaje
+function parsearDimensiones(descripcion: string): {
+  nombre: string; gramaje: string;
+  cantidadEmbalaje: number; cantidadBulto: number;
+} {
+  // NOMBRE 40*30*3.8g
+  const m3 = descripcion.match(/^(.+?)\s+(\d+)\*(\d+)\*(\d+(?:[.,]\d+)?[gGkKmMlLkK]{0,3})\s*$/i);
+  if (m3) return {
+    nombre: m3[1].trim(), gramaje: m3[4],
+    cantidadEmbalaje: parseInt(m3[3]),  // B = medio = unidades
+    cantidadBulto: parseInt(m3[2]),     // A = primero = cajas
+  };
+
+  // NOMBRE 10*12 (sin gramaje)
+  const m2 = descripcion.match(/^(.+?)\s+(\d+)\*(\d+)\s*$/);
+  if (m2) return {
+    nombre: m2[1].trim(), gramaje: '',
+    cantidadEmbalaje: parseInt(m2[3]),
+    cantidadBulto: parseInt(m2[2]),
+  };
+
+  return { nombre: descripcion.trim(), gramaje: '', cantidadEmbalaje: 1, cantidadBulto: 1 };
+}
+
+// ── Inferir destino del producto ─────────────────────────────
+function inferirDestino(nombre: string): 'insumo' | 'venta' {
+  const n = normalizarTexto(nombre);
+  const esVenta = ['galleta', 'chicle', 'goma', 'caramelo', 'dulce', 'bebida',
+    'jugo', 'gaseosa', 'agua', 'snack', 'papa', 'maiz tostado', 'trident',
+    'bubbaloo', 'oreo', 'bon bon', 'colombina', 'bom bom'];
+  if (esVenta.some(v => n.includes(v))) return 'venta';
+  return 'insumo';
+}
+
+// ── Extraer proveedor campo por campo ────────────────────────
+function extraerProveedorForense(texto: string): ProveedorForense {
+  const lineas = texto.split('\n');
+  const t = texto.toUpperCase();
+
+  // 1. RAZÓN SOCIAL — primeras 8 líneas, la más representativa
+  let razonSocial = '';
+  for (const linea of lineas.slice(0, 8)) {
+    const l = linea.trim();
+    if (l.length > 4 && l.length < 70 &&
+        !/NIT|RUT|TEL|CEL|FAX|EMAIL|FECHA|FACTURA|DIRECCION/i.test(l) &&
+        !/^\d+$/.test(l) && /[A-ZÁÉÍÓÚ]{3,}/i.test(l)) {
+      razonSocial = l;
+      break;
+    }
+  }
+
+  // 2. NIT
+  const nitMatch = texto.match(/(?:NIT|N\.I\.T|RUT)[\s:.-]*(\d[\d.\-]+\d)/i);
+  const nit = nitMatch?.[1]?.replace(/\s/g, '') || '';
+
+  // 3. TELÉFONO — validar formato colombiano, confirmar varias veces
+  const telPatrones = [
+    /(?:TEL|TELEF|TELEFONO|CELULAR|CEL|MOVIL|WHATSAPP|WA)[\s:.]*(\+?57[\s]?\d[\d\s]{7,12})/i,
+    /(?:TEL|TELEF|TELEFONO|CELULAR|CEL|MOVIL|WHATSAPP|WA)[\s:.]*(\d{7,10})/i,
+    /\b(3\d{9})\b/,   // celular colombiano directo
+    /\b(60\d\s?\d{7})\b/, // fijo Bogotá
+  ];
+  let telefono = '';
+  for (const pat of telPatrones) {
+    const m = texto.match(pat);
+    if (m) { telefono = m[1].replace(/\s/g, ''); break; }
+  }
+
+  // 4. EMAIL
+  const emailMatch = texto.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  const email = emailMatch?.[0] || '';
+
+  // 5. ASESOR / VENDEDOR
+  const asesorMatch = texto.match(/(?:VENDEDOR|ASESOR|REPRESENTANTE|AGENTE|ATENDIDO\s+POR)[\s:.-]*([A-ZÁÉÍÓÚ][a-záéíóú]+(?:\s+[A-ZÁÉÍÓÚ][a-záéíóú]+)*)/i);
+  const asesor = asesorMatch?.[1]?.trim() || '';
+
+  // 6. DIRECCIÓN
+  const dirMatch = texto.match(/(?:DIRECCI[OÓ]N|DIR|DOMICILIO)[\s:.-]*([^\n]{5,60})/i);
+  const direccion = dirMatch?.[1]?.trim() || '';
+
+  // 7. RUBRO — inferir del tipo de empresa o productos
+  let rubro = '';
+  if (/DISTRIBUIDORA|DISTRIB/.test(t)) rubro = 'Distribuidora';
+  else if (/SUPERMERCADO|MERCADO|MERKA/.test(t)) rubro = 'Supermercado';
+  else if (/MAYORISTA|MAKRO/.test(t)) rubro = 'Mayorista';
+  else if (/LACTEOS|LÁCTEOS/.test(t)) rubro = 'Lácteos';
+  else if (/PANADERIA|PASTELERIA/.test(t)) rubro = 'Panadería / Pastelería';
+  else if (/DULCER|CONFITE|GOLOSINA/.test(t)) rubro = 'Dulces / Confitería';
+  else if (/HARINAS|GRANOS|CEREAL/.test(t)) rubro = 'Harinas y Cereales';
+
+  const confianza = [razonSocial, telefono, nit].filter(Boolean).length * 33;
+
+  return { razonSocial, nit, rubro, asesor, telefono, email, direccion, confianza };
+}
+
+// ── Extraer productos según tipo de factura ──────────────────
+function extraerProductosForense(texto: string, tipo: TipoFactura): ProductoForense[] {
+  const productos: ProductoForense[] = [];
+  const vistos = new Set<string>();
+
+  const agregar = (p: Partial<ProductoForense> & { nombre: string }) => {
+    const key = normalizarTexto(p.nombre).substring(0, 15);
+    if (vistos.has(key) || p.nombre.length < 3) return;
+    if (PALABRAS_RUIDO.some(r => normalizarTexto(p.nombre).startsWith(r))) return;
+    vistos.add(key);
+    const cat = sugerirCategoria(p.nombre);
+    productos.push({
+      nombre: p.nombre.trim().substring(0, 60),
+      gramaje: p.gramaje || '',
+      cantidadEmbalaje: p.cantidadEmbalaje || 1,
+      cantidadRecibida: p.cantidadRecibida || 1,
+      tipoEmbalaje: p.tipoEmbalaje || 'unidad',
+      precioCosto: p.precioCosto || 0,
+      precioConIva: p.precioConIva || 0,
+      descuentoPct: p.descuentoPct || 0,
+      pvpSugerido: p.pvpSugerido || 0,
+      categoria: cat === 'General' ? '' : cat,
+      destino: p.destino || inferirDestino(p.nombre),
+      confianza: p.confianza || 70,
+      notasExtra: p.notasExtra || '',
+    });
+  };
+
+  const lineas = texto.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+
+  if (tipo === 'tipo1_dimensiones') {
+    // Formato: CANTIDAD  DESCRIPCION_A*B*Cg  PRECIO
+    // CANTIDAD = columna separada = cajas/pacas compradas
+    // A = unidades por bulto (contexto del producto, va a notas)
+    // B = siempre unidades por embalaje → cantidadEmbalaje
+    // Cg = gramaje → se agrega al nombre
+    for (const linea of lineas) {
+      if (!/\d+\*\d+/.test(linea)) continue;
+      const precioM = linea.match(/\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})\s*$/);
+      const precio = precioM ? normalizarPrecio(precioM[1]) : 0;
+
+      // La CANTIDAD de cajas es el primer número aislado al inicio de la línea
+      const cantM = linea.match(/^\s*(\d+)\s+/);
+      const cantRecibida = cantM ? parseInt(cantM[1]) : 1;
+
+      // La descripción es todo lo que queda entre la cantidad y el precio
+      const desc = linea
+        .replace(/^\s*\d+\s+/, '')       // quitar cantidad del inicio
+        .replace(precioM?.[0] || '', '')  // quitar precio del final
+        .trim();
+
+      const dim = parsearDimensiones(desc);
+      const nombreFinal = dim.gramaje ? `${dim.nombre} ${dim.gramaje}` : dim.nombre;
+      if (nombreFinal.length < 3) continue;
+
+      agregar({
+        nombre: nombreFinal,
+        gramaje: dim.gramaje,
+        cantidadEmbalaje: dim.cantidadEmbalaje,  // B = unidades por pack
+        cantidadRecibida,                         // columna CANTIDAD = cajas compradas
+        precioCosto: precio,
+        // A (dim.cantidadBulto) = unidades por bulto, va solo a notas como referencia
+        notasExtra: dim.cantidadBulto > 1
+          ? `${dim.cantidadBulto} und/bulto · ${dim.cantidadEmbalaje} und/pack`
+          : '',
+        confianza: 92,
+      });
+    }
+  }
+
+  else if (tipo === 'tipo2_columnas') {
+    // PRODUCTO  UNIDADES  CANTIDAD  PRECIO
+    for (const linea of lineas) {
+      const partes = linea.split(/\s{2,}|\t/);
+      if (partes.length < 3) continue;
+      const nombre = partes[0];
+      const nums = partes.slice(1).map(p => parseInt(p)).filter(n => !isNaN(n) && n > 0);
+      if (nums.length < 2) continue;
+      const precio = normalizarPrecio(partes[partes.length - 1]);
+      agregar({
+        nombre,
+        cantidadEmbalaje: nums[0],    // unidades por pack
+        cantidadRecibida: nums[1],    // cantidad de packs comprados
+        precioCosto: precio,
+        confianza: 85,
+      });
+    }
+  }
+
+  else if (tipo === 'tipo8_compleja') {
+    // Tiene P/UNIT S/IVA, DESC%, IVA%, PVP — usar precio SIN IVA - descuento
+    for (const linea of lineas) {
+      if (PALABRAS_RUIDO.some(r => normalizarTexto(linea).startsWith(r))) continue;
+      const precios = [...linea.matchAll(/\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})/g)]
+        .map(m => normalizarPrecio(m[1])).filter(p => p >= 100);
+      if (precios.length < 2) continue;
+
+      // PVP sugerido suele ser el ÚLTIMO precio de la línea
+      const pvp = precios[precios.length - 1];
+      // Precio sin IVA suele ser el PRIMERO significativo
+      const precioBase = precios[0];
+
+      // Descuento: buscar %
+      const descM = linea.match(/(\d+(?:[.,]\d+)?)\s*%/);
+      const descPct = descM ? parseFloat(descM[1]) : 0;
+      const precioReal = descPct > 0 ? precioBase * (1 - descPct / 100) : precioBase;
+
+      // Nombre: texto antes del primer número
+      const nombreM = linea.match(/^([A-ZÁÉÍÓÚ][^\d$]{3,40})/);
+      if (!nombreM) continue;
+
+      // Cantidad
+      const cantM = linea.match(/^\s*(\d+)\s+/);
+      const cantRecibida = cantM ? parseInt(cantM[1]) : 1;
+
+      const dim = parsearDimensiones(nombreM[1].trim());
+      agregar({
+        nombre: dim.gramaje ? `${dim.nombre} ${dim.gramaje}` : dim.nombre,
+        gramaje: dim.gramaje,
+        cantidadEmbalaje: dim.cantidadEmbalaje,
+        cantidadRecibida,
+        precioCosto: Math.round(precioReal),
+        precioConIva: precios[1] || 0,
+        descuentoPct: descPct,
+        pvpSugerido: pvp,
+        confianza: 88,
+      });
+    }
+  }
+
+  else {
+    // TIPO 5 tiquete / TIPO 4 DIAN / TIPO 7 superficie — patrón general
+    for (const linea of lineas) {
+      if (PALABRAS_RUIDO.some(r => normalizarTexto(linea).startsWith(r))) continue;
+      const precioM = linea.match(/\$?\s*(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d{4,8})\s*$/);
+      if (!precioM) continue;
+      const precio = normalizarPrecio(precioM[1]);
+      if (precio < 100) continue;
+      const cantM = linea.match(/^\s*(\d+)\s+/);
+      const cant = cantM ? parseInt(cantM[1]) : 1;
+      let nombre = linea.replace(precioM[0], '').replace(/^\s*\d+\s+/, '').trim();
+      // TIPO 7: quitar SKU al inicio
+      nombre = nombre.replace(/^\d{7,13}\s+/, '');
+      const dim = parsearDimensiones(nombre);
+      agregar({
+        nombre: dim.gramaje ? `${dim.nombre} ${dim.gramaje}` : dim.nombre,
+        gramaje: dim.gramaje,
+        cantidadEmbalaje: dim.cantidadEmbalaje,
+        cantidadRecibida: cant,
+        precioCosto: precio,
+        confianza: 75,
+      });
+    }
+  }
+
+  return productos;
+}
+
+// ============================================================
+// FUNCIÓN PRINCIPAL FORENSE — exportar para usar en el form
+// ============================================================
+
+export async function analizarFacturaForense(
+  imagen: File | string,
+  onProgress?: (pct: number) => void
+): Promise<ResultadoForense> {
+  const errores: string[] = [];
+
+  try {
+    const Tesseract = await import('tesseract.js');
+    let textoFinal = '';
+
+    try {
+      const r = await Tesseract.recognize(imagen, 'spa', {
+        logger: (m: { status: string; progress: number }) => {
+          if (m.status === 'recognizing text' && onProgress) onProgress(Math.round(m.progress * 100));
+        },
+      });
+      textoFinal = r.data.text;
+    } catch {
+      const r = await Tesseract.recognize(imagen);
+      textoFinal = r.data.text;
+    }
+
+    if (!textoFinal || textoFinal.length < 15) {
+      errores.push('No se pudo leer texto. Imagen poco clara o sin contenido.');
+      return {
+        tipoFactura: 'desconocido', proveedor: { razonSocial: '', nit: '', rubro: '', asesor: '', telefono: '', email: '', direccion: '', confianza: 0 },
+        productos: [], numeroFactura: '', fechaFactura: '', totalFactura: 0,
+        calidadOCR: 0, errores, textoOriginal: '',
+      };
+    }
+
+    const textoLimpio = preprocesarTexto(textoFinal);
+    const calidadOCR = estimarCalidadOCR(textoLimpio);
+
+    if (calidadOCR < 20) errores.push(`Calidad baja (${calidadOCR}%). Mejora iluminación o sube imagen más nítida.`);
+
+    const tipoFactura = detectarTipoFactura(textoLimpio);
+    const proveedor = extraerProveedorForense(textoLimpio);
+    const productos = extraerProductosForense(textoLimpio, tipoFactura);
+
+    const fechaM = textoLimpio.match(PATRONES.fecha) || textoLimpio.match(PATRONES.fechaTexto);
+    const numM = textoLimpio.match(PATRONES.numeroFactura);
+    const totalM = textoLimpio.match(PATRONES.total);
+
+    if (productos.length === 0) errores.push('No se detectaron productos. Intenta con imagen más nítida.');
+
+    return {
+      tipoFactura,
+      proveedor,
+      productos,
+      numeroFactura: numM?.[1] || '',
+      fechaFactura: fechaM ? fechaM[1] : '',
+      totalFactura: totalM ? normalizarPrecio(totalM[1]) : 0,
+      calidadOCR,
+      errores,
+      textoOriginal: textoFinal,
+    };
+  } catch (e) {
+    errores.push('Error crítico: ' + (e as Error).message);
+    return {
+      tipoFactura: 'desconocido', proveedor: { razonSocial: '', nit: '', rubro: '', asesor: '', telefono: '', email: '', direccion: '', confianza: 0 },
+      productos: [], numeroFactura: '', fechaFactura: '', totalFactura: 0,
+      calidadOCR: 0, errores, textoOriginal: '',
+    };
+  }
 }

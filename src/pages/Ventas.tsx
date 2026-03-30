@@ -165,7 +165,9 @@ export function Ventas(props: VentasProps) {
     const productosVenta = useMemo(() => {
         return productos.filter(p => {
             const matchesSearch = safeString(p.nombre).toLowerCase().includes(searchTerm.toLowerCase());
-            const matchesCategory = !selectedCategory || p.categoria === selectedCategory;
+            // Comparación insensible a mayúsculas y espacios para evitar invisibilidad por variaciones de nombre
+            const matchesCategory = !selectedCategory ||
+                safeString(p.categoria).toLowerCase().trim() === selectedCategory.toLowerCase().trim();
             const precio = safeNumber(p.precioVenta);
             return matchesSearch && matchesCategory && precio > 0;
         });
@@ -303,7 +305,7 @@ export function Ventas(props: VentasProps) {
                 productoId: item.producto.id,
                 cantidad: item.cantidad,
                 precioUnitario: item.producto.precioVenta,
-                subtotal: item.producto.precioVenta * item.cantidad
+                subtotal: safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1)
             }));
             const nuevoTotal = nuevosItems.reduce((s, i) => s + i.subtotal, 0);
 
@@ -429,7 +431,7 @@ export function Ventas(props: VentasProps) {
                     productoId: item.producto.id,
                     cantidad: item.cantidad,
                     precioUnitario: safeNumber(item.producto.precioVenta),
-                    subtotal: safeNumber(item.producto.precioVenta) * item.cantidad
+                    subtotal: safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1)
                 })),
                 metodoPago: tipoTransaccion === 'credito' ? 'credito' as MetodoPago : metodoPago,
                 cliente: cliente.trim() || 'Cliente Anónimo',
@@ -515,9 +517,9 @@ export function Ventas(props: VentasProps) {
                 />
             </div>
 
-            <div className="flex-1 flex flex-row gap-2 overflow-hidden p-2">
+            <div className="flex-1 flex flex-col lg:flex-row gap-2 overflow-hidden p-2">
                 {/* Panel izquierdo: Catálogo o Mesas */}
-                <div className="flex-1 flex flex-col min-h-0 bg-card rounded-xl border shadow-sm overflow-hidden">
+                <div className="flex-1 flex flex-col min-h-0 bg-card rounded-xl border shadow-sm overflow-hidden min-h-[200px]">
                     {viewMode === 'pos' ? (
                         <ProductCatalog
                             productos={productosVenta}
@@ -545,8 +547,8 @@ export function Ventas(props: VentasProps) {
                     )}
                 </div>
 
-                {/* Panel derecho: Carrito / Orden - Aumentado para mejor visibilidad */}
-                <div className="w-[450px] shrink-0 flex flex-col min-h-0 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                {/* Panel derecho: Carrito / Orden */}
+                <div className="w-full lg:w-[400px] max-h-[50vh] lg:max-h-none shrink-0 flex flex-col min-h-0 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
                     <CartDetail
                         cart={cart}
                         onUpdateQuantity={updateQuantity}

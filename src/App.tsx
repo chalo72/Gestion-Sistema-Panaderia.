@@ -44,6 +44,7 @@ const CargaMasiva = lazy(() => import('@/pages/CargaMasiva'));
 const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial'));
 const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
 const Trabajadores = lazy(() => import('@/pages/Trabajadores'));
+const Mayoristas = lazy(() => import('@/pages/Mayoristas'));
 
 // Skeleton para durante la carga de secciones
 function SectionSkeleton() {
@@ -101,8 +102,8 @@ function AppContent() {
   const auth = useAuth();
   const { isAuthenticated, isLoading: authLoading, logout, usuario, hasPermission } = auth;
   
-  // ✅ Auto-actualización del sistema
-  const { currentVersion, updateAvailable, newVersion, isUpdating, aplicarActualizacion } = useAutoUpdate();
+  // ✅ Auto-actualización del sistema (completamente automática)
+  const { currentVersion, updateAvailable, newVersion, countdown, isUpdating } = useAutoUpdate();
 
   const priceControl = usePriceControl();
   const {
@@ -137,6 +138,7 @@ function AppContent() {
     clearAllAlertas,
     addCategoria,
     deleteCategoria,
+    updateCategoria,
     updateConfiguracion,
     onAjustarStock,
     addRecepcion,
@@ -241,7 +243,7 @@ function AppContent() {
       timer = setTimeout(() => {
         setShowForceLoad(true);
         console.warn("⚠️ [Nexus-Volt] Carga demorada. Activando modo de emergencia.");
-      }, 5000); // 5 segundos de cortesía
+      }, 3000); // 3 segundos
     }
     return () => clearTimeout(timer);
   }, [isLoading, isForceLoaded]);
@@ -250,19 +252,58 @@ function AppContent() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950">
-        <div className="text-center animate-ag-fade-in">
-          <div className="w-28 h-28 rounded-full flex items-center justify-center mx-auto mb-6 bg-transparent drop-shadow-[0_0_20px_rgba(255,0,127,0.5)] animate-ag-float">
-            <img src="logo_panaderia.png" alt="Loading" className="w-full h-full object-contain" />
+        <div className="text-center">
+
+          {/* Logo con anillos orbitales */}
+          <div className="relative w-44 h-44 mx-auto mb-8">
+
+            {/* Anillo exterior — gira lento en sentido horario */}
+            <div
+              className="absolute inset-0 rounded-full border-2 border-transparent animate-spin"
+              style={{ animationDuration: '4s', borderTopColor: 'rgba(255,0,127,0.7)', borderRightColor: 'rgba(255,0,127,0.2)' }}
+            >
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#ff007f] shadow-[0_0_8px_rgba(255,0,127,0.9)]" />
+            </div>
+
+            {/* Anillo medio — gira en sentido antihorario */}
+            <div
+              className="absolute inset-4 rounded-full border-2 border-transparent animate-spin"
+              style={{ animationDuration: '2.8s', animationDirection: 'reverse', borderTopColor: 'rgba(99,102,241,0.8)', borderRightColor: 'rgba(99,102,241,0.2)' }}
+            >
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.9)]" />
+            </div>
+
+            {/* Anillo interior — gira rápido horario */}
+            <div
+              className="absolute inset-8 rounded-full border border-transparent animate-spin"
+              style={{ animationDuration: '1.6s', borderTopColor: 'rgba(255,255,255,0.6)', borderRightColor: 'rgba(255,255,255,0.1)' }}
+            >
+              <span className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-white/80 shadow-[0_0_6px_rgba(255,255,255,0.8)]" />
+            </div>
+
+            {/* Logo centrado flotando — fondo placeholder visible siempre */}
+            <div className="absolute inset-0 flex items-center justify-center animate-ag-float">
+              <div className="absolute w-20 h-20 rounded-full bg-gradient-to-br from-[#ff007f]/20 to-indigo-900/40 shadow-[0_0_24px_rgba(255,0,127,0.3)]" />
+              <img
+                src="logo_panaderia.png"
+                alt="Dulce Placer"
+                loading="eager"
+                className="relative w-20 h-20 object-contain drop-shadow-[0_0_24px_rgba(255,0,127,0.6)]"
+              />
+            </div>
           </div>
+
           <div className="space-y-4">
             <p className="text-[#ff007f] font-black uppercase tracking-[0.4em] animate-pulse italic text-sm">Dulce Placer...</p>
             <div className="w-48 h-1 bg-white/5 rounded-full mx-auto overflow-hidden">
-              <div className="h-full bg-gradient-to-r from-blue-600 to-indigo-600 animate-ag-shimmer w-1/2" />
+              <div className="h-full bg-gradient-to-r from-[#ff007f] to-indigo-600 animate-ag-shimmer w-1/2" />
             </div>
 
             {showForceLoad && (
               <div className="pt-8 flex flex-col items-center gap-4 animate-ag-fade-in">
-                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest max-w-xs opacity-60">Sincronización demorada en el Nexus. ¿Quieres forzar la entrada?</p>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest max-w-xs opacity-60">
+                  Sincronización demorada. ¿Quieres forzar la entrada?
+                </p>
                 <Button
                   onClick={() => setIsForceLoaded(true)}
                   variant="outline"
@@ -320,6 +361,7 @@ function AppContent() {
               onDeleteProducto={deleteProducto}
               onAddCategoria={addCategoria}
               onDeleteCategoria={deleteCategoria}
+              onUpdateCategoria={updateCategoria}
               onAddOrUpdatePrecio={addOrUpdatePrecio}
               onDeletePrecio={deletePrecio}
               getMejorPrecio={getMejorPrecio}
@@ -341,11 +383,14 @@ function AppContent() {
               onDeleteProveedor={deleteProveedor}
               onAddProducto={addProducto}
               onAddOrUpdatePrecio={addOrUpdatePrecio}
+              onDeletePrecio={deletePrecio}
+              onDeleteProducto={deleteProducto}
               getPreciosByProveedor={getPreciosByProveedor}
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
               onUpdateProducto={updateProducto}
               onNavigateTo={setCurrentView}
+              categorias={configuracion.categorias || []}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -541,6 +586,7 @@ function AppContent() {
             <Ahorros
               ventas={ventas}
               ahorros={ahorros}
+              gastos={gastos}
               formatCurrency={formatCurrency}
             />
           </SectionErrorBoundary>
@@ -675,6 +721,19 @@ function AppContent() {
             </Suspense>
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
+      case 'mayoristas':
+        return hasPermission('VER_FINANZAS') ? (
+          <SectionErrorBoundary sectionName="Ventas al Mayor">
+            <Suspense fallback={<SectionSkeleton />}>
+              <Mayoristas
+                productos={productos}
+                precios={precios}
+                getMejorPrecio={getMejorPrecio}
+                formatCurrency={formatCurrency}
+              />
+            </Suspense>
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
       default:
         return hasPermission('VER_DASHBOARD') ? (
           <SectionErrorBoundary sectionName="Dashboard">
@@ -721,46 +780,54 @@ function AppContent() {
         "flex-1 w-full md:w-auto transition-all duration-300 h-screen flex flex-col bg-background overflow-hidden",
         isSidebarCollapsed ? "md:ml-20" : "md:ml-64"
       )}>
-        {/* Banner de actualización — no interrumpe, solo avisa */}
+        {/* Barra de modo desarrollo — solo visible con npm run dev */}
+        {import.meta.env.DEV && (
+          <div className="flex-none bg-amber-400 text-amber-950 px-4 py-1.5 flex items-center justify-center gap-3 z-50 text-xs font-black uppercase tracking-widest">
+            <span className="w-2 h-2 rounded-full bg-amber-800 animate-pulse inline-block" />
+            MODO DESARROLLO — Los cambios de Claude se ven al instante · localhost:5173
+            <span className="w-2 h-2 rounded-full bg-amber-800 animate-pulse inline-block" />
+          </div>
+        )}
+        {/* Banner de actualización automática — cuenta regresiva visible */}
         {updateAvailable && (
           <div className="flex-none bg-emerald-600 text-white px-4 py-2 flex items-center justify-between gap-4 z-50">
             <div className="flex items-center gap-2 text-sm">
-              <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-              <span className="font-bold">Nueva versión disponible {newVersion ? `(v${newVersion})` : ''}</span>
-              <span className="text-emerald-100 hidden sm:inline">— Actualiza cuando termines lo que estás haciendo</span>
+              <div className="w-2 h-2 rounded-full bg-white animate-ping" />
+              <span className="font-bold">
+                {isUpdating
+                  ? 'Actualizando...'
+                  : `Nueva versión${newVersion ? ` v${newVersion}` : ''} — Actualizando en ${countdown ?? ''}s`}
+              </span>
+              <span className="text-emerald-100 hidden sm:inline">— Todos los dispositivos se actualizarán solos</span>
             </div>
-            <button
-              onClick={aplicarActualizacion}
-              disabled={isUpdating}
-              className="flex-none bg-white text-emerald-700 text-xs font-black px-3 py-1 rounded-lg hover:bg-emerald-50 active:scale-95 transition-all"
-            >
-              {isUpdating ? 'Actualizando...' : 'Actualizar ahora'}
-            </button>
+            <div className="flex-none bg-white/20 text-white text-xs font-black px-3 py-1 rounded-lg">
+              {isUpdating ? '⟳' : `${countdown ?? ''}s`}
+            </div>
           </div>
         )}
 
         {/* Header (Restaurado) */}
-        <header className="flex-none bg-white dark:bg-slate-900 border-b border-border px-4 md:px-8 py-4 flex items-center justify-between z-40">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center border border-border">
+        <header className="flex-none bg-white dark:bg-slate-900 border-b border-border pl-16 pr-4 md:px-8 py-4 flex items-center justify-between z-40">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center border border-border shrink-0">
               <User className="w-5 h-5 text-slate-500" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="text-base font-bold text-foreground">{usuario?.nombre} {usuario?.apellido}</p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-base font-bold text-foreground truncate max-w-[140px] sm:max-w-none">{usuario?.nombre} {usuario?.apellido}</p>
                 <div className="flex gap-2">
                   {isOnline ? (
                     <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 bg-emerald-50/50">Online</Badge>
                   ) : (
                     <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 bg-amber-50/50 grayscale">Offline</Badge>
                   )}
-                  <Badge variant="outline" className="text-[10px] border-blue-500/30 text-blue-600 bg-blue-50/50 animate-pulse">Nexus v3.1-FIX</Badge>
+                  <Badge variant="outline" className="hidden sm:inline-flex text-[10px] border-blue-500/30 text-blue-600 bg-blue-50/50 animate-pulse">Nexus v3.1-FIX</Badge>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground font-medium">{usuario?.rol}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Control de Caja Antigravity Premium */}
             <div className="hidden lg:flex items-center gap-3 mr-4 pr-4 border-r border-slate-200/50 dark:border-slate-800/50">
               {cajaActiva ? (

@@ -71,7 +71,10 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
 
     const entradas   = (caja.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
     const salidas    = (caja.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
-    const esperado   = caja.montoApertura + caja.totalVentas + entradas - salidas;
+    // Usar solo ventas con pago efectivo real — los créditos NO entran al cajón
+    const ventasEfectivo = caja.totalVentasEfectivo ?? caja.totalVentas;
+    const creditosHoy    = caja.totalCreditos || 0;
+    const esperado   = caja.montoApertura + ventasEfectivo + entradas - salidas;
     const entregado  = parseFloat(monto) || 0;
     const diferencia = entregado - esperado;
     const hayMonto   = monto !== '' && entregado >= 0;
@@ -128,7 +131,7 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
                     <div className="grid grid-cols-3 gap-3">
                         {[
                             { label: 'Apertura',       val: caja.montoApertura, cls: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-900/10'       },
-                            { label: 'Ventas',         val: caja.totalVentas,   cls: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/10' },
+                            { label: 'V. Efectivo',    val: ventasEfectivo,     cls: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-900/10' },
                             { label: 'Sistema espera', val: esperado,           cls: 'text-indigo-600',  bg: 'bg-indigo-50 dark:bg-indigo-900/10'   },
                         ].map(item => (
                             <div key={item.label} className={cn("p-3 rounded-2xl text-center", item.bg)}>
@@ -137,6 +140,21 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
                             </div>
                         ))}
                     </div>
+
+                    {/* ── Aviso de créditos (solo si hay ventas a crédito hoy) ── */}
+                    {creditosHoy > 0 && (
+                        <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-2.5">
+                            <div className="flex items-center gap-2">
+                                <span className="text-amber-500 text-base">💳</span>
+                                <p className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-widest">
+                                    Créditos del turno — no entran al cajón
+                                </p>
+                            </div>
+                            <p className="text-sm font-black text-amber-600 dark:text-amber-400 tabular-nums">
+                                {formatCurrency(creditosHoy)}
+                            </p>
+                        </div>
+                    )}
 
                     {/* ── Input principal: efectivo entregado ── */}
                     <div className="space-y-2">

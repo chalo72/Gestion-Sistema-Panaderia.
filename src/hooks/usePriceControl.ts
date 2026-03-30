@@ -86,12 +86,10 @@ export function usePriceControl() {
   // ⚡ DATOS CRÍTICOS = Mostrar UI rápido (Productos, Precios, Config)
   const loadCriticalData = async () => {
     try {
-      // Config + Productos + Precios en paralelo
-      const [configData, productos, proveedores, precios] = await Promise.all([
+      // ETAPA 1 — Config + timer mínimo en paralelo → logo visible al menos 2.5s
+      const [configData] = await Promise.all([
         db.getConfiguracion(),
-        db.getAllProductos(),
-        db.getAllProveedores(),
-        db.getAllPrecios(),
+        new Promise<void>(res => setTimeout(res, 2500)),
       ]);
 
       let finalConfig = configData ? {
@@ -100,30 +98,81 @@ export function usePriceControl() {
         categorias: configData.categorias || defaultConfig.categorias,
       } as Configuracion : defaultConfig;
 
-      // Validar categorías
-      const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
-        cDef => !finalConfig.categorias.map(c => c.nombre).includes(cDef.nombre)
-      );
-
-      if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
-        const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
-          const catDefault = CATEGORIAS_DEFAULT.find(cd => cd.nombre === catExistente.nombre);
-          return catDefault && !catExistente.icono ? { ...catExistente, icono: catDefault.icono } : catExistente;
-        });
-        finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
+      // Categorías: solo agregar defaults en instalación nueva (length === 0)
+      if (finalConfig.categorias.length === 0) {
+        finalConfig.categorias = CATEGORIAS_DEFAULT.map(c => ({ ...c }));
         await db.saveConfiguracion({ ...finalConfig, id: 'main' });
       }
 
       setConfiguracion(finalConfig);
+      setLoaded(true); // ← UI visible aquí, sin esperar productos/precios
+
+      // ETAPA 2 — Resto de datos en paralelo (sin bloquear splash)
+      const [productos, proveedores, precios] = await Promise.all([
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllPrecios(),
+      ]);
+
+      // Si ya hay productos pero el flag no está → marcarlo (usuarios existentes)
+      if (productos.length > 0 && !finalConfig.seedCompletado) {
+        finalConfig.seedCompletado = true;
+        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+      }
+
       setProductos(productos);
       setProveedores(proveedores);
       setPrecios(precios);
 
-      // Auto-seed si no hay datos
-      const categoriasValidas = CATEGORIAS_DEFAULT.map(c => c.nombre);
-      const tieneProductosReales = productos.some(p => categoriasValidas.includes(p.categoria));
-      
-      if (productos.length === 0 || !tieneProductosReales) {
+      // LIMPIEZA INTELIGENTE: distingue borrado intencional vs pérdida accidental
+      if (productos.length > 0) {
+        const catNombres = new Set(
+          finalConfig.categorias.map((c: any) => c.nombre.toLowerCase().trim())
+        );
+        catNombres.add('otro');
+        const borradasNombres = new Set(
+          (finalConfig.categoriasBorradas || []).map((n: string) => n.toLowerCase().trim())
+        );
+        const huerfanos = (productos as any[]).filter(
+          p => !catNombres.has((p.categoria || '').toLowerCase().trim())
+        );
+        // ① Categoría borrada intencionalmente (está en categoriasBorradas) → mover a "Otro"
+        const moverAOtro = huerfanos.filter(
+          p => borradasNombres.has((p.categoria || '').toLowerCase().trim())
+        );
+        if (moverAOtro.length > 0) {
+          await Promise.all(
+            moverAOtro.map((p: any) =>
+              db.updateProducto({ ...p, categoria: 'Otro', updatedAt: new Date().toISOString() })
+            )
+          );
+          setProductos(prev => prev.map(p =>
+            moverAOtro.some((h: any) => h.id === p.id) ? { ...p, categoria: 'Otro' } : p
+          ));
+        }
+        // ② Categoría perdida por bug (NO está en categoriasBorradas) → recuperar la categoría
+        const porRecuperar = [...new Set(
+          huerfanos
+            .filter(p => !borradasNombres.has((p.categoria || '').toLowerCase().trim()))
+            .map(p => (p.categoria || '').trim())
+            .filter(Boolean)
+        )];
+        if (porRecuperar.length > 0) {
+          const nuevas = (porRecuperar as string[]).map(nombre => ({
+            id: `cat-rec-${nombre.replace(/\W/g, '').toLowerCase().slice(0, 12)}-${Date.now()}`,
+            nombre,
+            color: '#6b7280',
+            icono: '📦',
+          }));
+          finalConfig.categorias = [...finalConfig.categorias, ...nuevas];
+          await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+          setConfiguracion(finalConfig);
+        }
+      }
+
+      // Auto-seed solo en instalación limpia: sin productos Y nunca antes sembrado
+      if (productos.length === 0 && !finalConfig.seedCompletado) {
+        console.log("🌱 [Nexus-Volt] Primera instalación. Cargando catálogo inicial Dulce Placer...");
         await autoSeedData();
       }
     } catch (error) {
@@ -134,23 +183,15 @@ export function usePriceControl() {
   // 🌱 Auto-seed PARALELIZADO
   const autoSeedData = async () => {
     try {
-      const [productosEnDB, provsEnDB, ventasEnDB, recepcionesEnDB] = await Promise.all([
+      const [, provsEnDB, ventasEnDB, recepcionesEnDB] = await Promise.all([
         db.getAllProductos(),
         db.getAllProveedores(),
         db.getAllVentas(),
         db.getAllRecepciones(),
       ]);
 
-      const productosInvalidos = productosEnDB.filter(p => 
-        !CATEGORIAS_DEFAULT.map(c => c.nombre).includes(p.categoria)
-      );
-
-      // Limpiar productos obsoletos en paralelo
-      if (productosInvalidos.length > 0) {
-        await Promise.allSettled(
-          productosInvalidos.map(p => db.deleteProducto(p.id).catch(() => {}))
-        );
-      }
+      // [Nexus-Volt] ELIMINADO: Ya no se borran productos con categorías "inválidas"
+      // Se preserva la soberanía de datos del usuario.
 
       // Agregar proveedores, productos, precios EN PARALELO (no secuencial)
       const proveedoresParaAgregar = DATOS_EJEMPLO.proveedores.filter(
@@ -165,10 +206,22 @@ export function usePriceControl() {
         recepcionesEnDB.length === 0 ? Promise.allSettled((DATOS_EJEMPLO as any).recepciones?.map((r: any) => db.addRecepcion(r).catch(() => {})) ?? []) : Promise.resolve(),
       ]);
 
-      // Actualizar estado LOCAL después del seed (SIN re-queries)
-      setProductos(DATOS_EJEMPLO.productos as Producto[]);
-      setProveedores(DATOS_EJEMPLO.proveedores as Proveedor[]);
-      setPrecios(DATOS_EJEMPLO.precios as PrecioProveedor[]);
+      // Recargar desde DB para reflejar datos reales (usuario + ejemplos fusionados)
+      const [prodReales, provsReales, preciosReales, configActual] = await Promise.all([
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllPrecios(),
+        db.getConfiguracion(),
+      ]);
+      // Marcar seed como completado para nunca volver a ejecutarlo
+      if (configActual) {
+        const configConFlag = { ...configActual, seedCompletado: true, id: 'main' };
+        await db.saveConfiguracion(configConFlag);
+        setConfiguracion(configConFlag as any);
+      }
+      setProductos(prodReales as Producto[]);
+      setProveedores(provsReales as Proveedor[]);
+      setPrecios(preciosReales as PrecioProveedor[]);
     } catch (error) {
       console.error('Error en auto-seed:', error);
     }
@@ -234,7 +287,6 @@ export function usePriceControl() {
       }
 
       // [Nexus-Volt] Category Sanitizer v2: Asegurar TODAS las categorías de negocio
-      const categoriasRequeridas = CATEGORIAS_DEFAULT.map(c => c.nombre);
       const categoriasExistentes = finalConfig.categorias.map(c => c.nombre);
       const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
         cDef => !categoriasExistentes.includes(cDef.nombre)
@@ -365,7 +417,34 @@ export function usePriceControl() {
   }, [configuracion]);
 
   const deleteCategoria = useCallback(async (id: string) => {
+    const categoriaEliminada = configuracion.categorias.find(c => c.id === id);
     const newCategorias = configuracion.categorias.filter(c => c.id !== id);
+    // Guardar NOMBRE (no ID) para que la comparación funcione aunque cambie el ID
+    const nombreBorrado = categoriaEliminada?.nombre ?? id;
+    const categoriasBorradas = [...new Set([...(configuracion.categoriasBorradas || []), nombreBorrado])];
+    const newConfig = { ...configuracion, categorias: newCategorias, categoriasBorradas };
+    await db.saveConfiguracion({ ...newConfig, id: 'main' });
+    setConfiguracion(newConfig);
+    // Mover a "Otro" los productos que tenían esta categoría eliminada
+    if (categoriaEliminada) {
+      const afectados = productos.filter(
+        p => (p.categoria || '').toLowerCase().trim() === categoriaEliminada.nombre.toLowerCase().trim()
+      );
+      await Promise.all(
+        afectados.map(p => db.updateProducto({ ...p, categoria: 'Otro', updatedAt: new Date().toISOString() }))
+      );
+      if (afectados.length > 0) {
+        setProductos(prev => prev.map(p =>
+          afectados.some(a => a.id === p.id) ? { ...p, categoria: 'Otro' } : p
+        ));
+      }
+    }
+  }, [configuracion, productos]);
+
+  const updateCategoria = useCallback(async (id: string, nombre: string, color: string) => {
+    const newCategorias = configuracion.categorias.map(c =>
+      c.id === id ? { ...c, nombre, color } : c
+    );
     const newConfig = { ...configuracion, categorias: newCategorias };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
     setConfiguracion(newConfig);
@@ -390,30 +469,43 @@ export function usePriceControl() {
     setProductos(prev => [...prev, nuevoProducto]);
 
     // ── Sincronización automática: crear InventarioItem con stock 0 ──
-    // Así el producto aparece de inmediato en el módulo de Inventario
-    const existeEnInventario = await db.getInventarioItemByProducto(nuevoProducto.id).catch(() => null);
-    if (!existeEnInventario) {
-      const itemInventario: InventarioItem = {
-        id: crypto.randomUUID(),
-        productoId: nuevoProducto.id,
-        stockActual: 0,
-        stockMinimo: 5,
-        ubicacion: 'Almacén General',
-        ultimoMovimiento: now,
-      };
-      await db.updateInventarioItem(itemInventario);
-      inventarioHook.setInventario(prev => [...prev, itemInventario]);
+    // Envuelto en try-catch para que un error en inventario NO impida guardar el producto
+    try {
+      const existeEnInventario = await db.getInventarioItemByProducto(nuevoProducto.id).catch(() => null);
+      if (!existeEnInventario) {
+        const itemInventario: InventarioItem = {
+          id: crypto.randomUUID(),
+          productoId: nuevoProducto.id,
+          stockActual: 0,
+          stockMinimo: 5,
+          ubicacion: 'Almacén General',
+          ultimoMovimiento: now,
+        };
+        await db.updateInventarioItem(itemInventario);
+        inventarioHook.setInventario(prev => [...prev, itemInventario]);
+      }
+    } catch (e) {
+      console.warn('[Inventario] No se pudo crear item automático, pero el producto fue guardado:', e);
     }
 
     return nuevoProducto;
   }, []);
 
   const updateProducto = useCallback(async (id: string, updates: Partial<Producto>) => {
-    const producto = productos.find(p => p.id === id);
-    if (!producto) return;
+    // Buscar en estado; si no está (closure stale tras addProducto), leer de DB directamente
+    let producto = productos.find(p => p.id === id);
+    if (!producto) {
+      const fromDB = await db.getAllProductos().then(all => all.find(p => p.id === id)).catch(() => null);
+      if (!fromDB) return;
+      producto = fromDB as unknown as Producto;
+    }
     const updatedProducto = { ...producto, ...updates, updatedAt: new Date().toISOString() };
     await db.updateProducto(updatedProducto);
-    setProductos(prev => prev.map(p => p.id === id ? updatedProducto : p));
+    setProductos(prev => {
+      const idx = prev.findIndex(p => p.id === id);
+      if (idx === -1) return [...prev, updatedProducto]; // Si no estaba en estado, añadir
+      return prev.map(p => p.id === id ? updatedProducto : p);
+    });
   }, [productos]);
 
   const deleteProducto = useCallback(async (id: string) => {
@@ -469,7 +561,13 @@ export function usePriceControl() {
     cantidadEmbalaje?: number;
   }) => {
     const { productoId, proveedorId, precioCosto, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
-    const existingPrecio = await db.getPrecioByProductoProveedor(productoId, proveedorId);
+    // Buscar primero en estado React; si no se encuentra (posible closure stale tras addProducto),
+    // consultar IndexedDB directamente para evitar error de restricción de unicidad
+    let existingPrecio = precios.find(p => p.productoId === productoId && p.proveedorId === proveedorId);
+    if (!existingPrecio) {
+      const fromDB = await db.getPrecioByProductoProveedor(productoId, proveedorId).catch(() => null);
+      if (fromDB) existingPrecio = fromDB as PrecioProveedor;
+    }
 
     const now = new Date().toISOString();
 
@@ -477,7 +575,7 @@ export function usePriceControl() {
       // Si el precio cambió, registrar en historial y crear alerta
       if (existingPrecio.precioCosto !== precioCosto) {
         const diferencia = precioCosto - existingPrecio.precioCosto;
-        const porcentajeCambio = (diferencia / existingPrecio.precioCosto) * 100;
+        const porcentajeCambio = existingPrecio.precioCosto > 0 ? (diferencia / existingPrecio.precioCosto) * 100 : 0;
 
         // Registrar en historial y PERSISTIR en IndexedDB
         const historialEntry: HistorialPrecio = {
@@ -513,8 +611,10 @@ export function usePriceControl() {
         if (configuracion.ajusteAutomatico && diferencia > 0) {
           const producto = productos.find(p => p.id === productoId);
           if (producto) {
-            const nuevoPrecioVenta = precioCosto * (1 + producto.margenUtilidad / 100);
-            await updateProducto(productoId, { precioVenta: Math.round(nuevoPrecioVenta * 100) / 100 });
+            // Usar costo UNITARIO (precioCosto / cantidadEmbalaje) para calcular PVP
+            const costoUnitario = precioCosto / (cantidadEmbalaje || 1);
+            const nuevoPrecioVenta = Math.round(costoUnitario * (1 + producto.margenUtilidad / 100) / 100) * 100;
+            await updateProducto(productoId, { precioVenta: nuevoPrecioVenta });
           }
         }
       }
@@ -543,8 +643,10 @@ export function usePriceControl() {
       if (configuracion.ajusteAutomatico) {
         const producto = productos.find(p => p.id === productoId);
         if (producto && producto.precioVenta === 0) {
-          const nuevoPrecioVenta = precioCosto * (1 + producto.margenUtilidad / 100);
-          await updateProducto(productoId, { precioVenta: Math.round(nuevoPrecioVenta * 100) / 100 });
+          // Usar costo UNITARIO (precioCosto / cantidadEmbalaje) para calcular PVP
+          const costoUnitario = precioCosto / (cantidadEmbalaje || 1);
+          const nuevoPrecioVenta = Math.round(costoUnitario * (1 + producto.margenUtilidad / 100) / 100) * 100;
+          await updateProducto(productoId, { precioVenta: nuevoPrecioVenta });
         }
       }
     }
@@ -589,11 +691,11 @@ export function usePriceControl() {
     const newItem: PrePedidoItem = {
       ...item,
       id: crypto.randomUUID(),
-      subtotal: item.cantidad * item.precioUnitario,
+      subtotal: Math.round(item.cantidad * item.precioUnitario * 100) / 100,
     };
 
     const newItems = [...prepedido.items, newItem];
-    const newTotal = newItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const newTotal = Math.round(newItems.reduce((sum, i) => sum + i.subtotal, 0) * 100) / 100;
     const updatedPrePedido = {
       ...prepedido,
       items: newItems,
@@ -611,7 +713,7 @@ export function usePriceControl() {
     if (!prepedido) return;
 
     const newItems = prepedido.items.filter(i => i.id !== itemId);
-    const newTotal = newItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const newTotal = Math.round(newItems.reduce((sum, i) => sum + i.subtotal, 0) * 100) / 100;
     const updatedPrePedido = {
       ...prepedido,
       items: newItems,
@@ -631,9 +733,9 @@ export function usePriceControl() {
 
     const newItems = prepedido.items.map(i => {
       if (i.id !== itemId) return i;
-      return { ...i, cantidad, subtotal: cantidad * i.precioUnitario };
+      return { ...i, cantidad, subtotal: Math.round(cantidad * i.precioUnitario * 100) / 100 };
     });
-    const newTotal = newItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const newTotal = Math.round(newItems.reduce((sum, i) => sum + i.subtotal, 0) * 100) / 100;
     const updatedPrePedido = {
       ...prepedido,
       items: newItems,
@@ -681,6 +783,7 @@ export function usePriceControl() {
       return new Intl.NumberFormat(monedaConfig.locale, {
         style: 'currency',
         currency: monedaConfig.code,
+        maximumFractionDigits: 0,
       }).format(numValue);
     } catch (error) {
       console.error('Error en formatCurrency:', error);
@@ -758,9 +861,13 @@ export function usePriceControl() {
         } else if (p.tipo === 'ingrediente') {
           const mejorPrecio = getMejorPrecio(p.id);
           if (mejorPrecio) {
-            const nuevoCosto = mejorPrecio.precioCosto;
+            // costoBase = costo UNITARIO (precioCosto de paca / cantidadEmbalaje), redondeado a 2 decimales
+            const nuevoCosto = Math.round((mejorPrecio.precioCosto / (mejorPrecio.cantidadEmbalaje || 1)) * 100) / 100;
             const margen = p.margenUtilidad || 0;
-            const nuevoPrecioVenta = margen > 0 ? nuevoCosto * (1 + margen / 100) : p.precioVenta;
+            // Nunca llevar precioVenta a 0: si nuevoCosto=0 (precio corrupto en DB) conservar el precio actual
+            const nuevoPrecioVenta = (margen > 0 && nuevoCosto > 0)
+              ? Math.round(nuevoCosto * (1 + margen / 100) / 100) * 100
+              : p.precioVenta;
             const costoDistinto  = Math.abs((p.costoBase || 0) - nuevoCosto) > 0.01;
             const ventaDistinto  = margen > 0 && Math.abs((p.precioVenta || 0) - nuevoPrecioVenta) > 0.01;
             if (costoDistinto || ventaDistinto) {
@@ -841,7 +948,7 @@ export function usePriceControl() {
           proveedorId: proveedorId,
           cantidad: cantidadNecesaria,
           precioUnitario: mejorPrecio.precioCosto,
-          subtotal: cantidadNecesaria * mejorPrecio.precioCosto
+          subtotal: Math.round(cantidadNecesaria * mejorPrecio.precioCosto * 100) / 100
         });
       }
     }
@@ -850,7 +957,7 @@ export function usePriceControl() {
     const now = new Date().toISOString();
     for (const [proveedorId, items] of Object.entries(pedidosPorProveedor)) {
       if (items.length === 0) continue;
-      const total = items.reduce((sum, i) => sum + i.subtotal, 0);
+      const total = Math.round(items.reduce((sum, i) => sum + i.subtotal, 0) * 100) / 100;
       const nuevoPrePedido: PrePedido = {
         id: crypto.randomUUID(),
         nombre: `Pedido Auto ${new Date().toLocaleDateString()}`,
@@ -917,7 +1024,8 @@ export function usePriceControl() {
           const mejorPrecioCosto = safeNumber(mejorPrecioCache.get(p.id));
           const precioVenta = safeNumber(p.precioVenta);
           if (precioVenta === 0) return 0;
-          return ((precioVenta - mejorPrecioCosto) / precioVenta) * 100;
+          // Markup = (PVP - costo) / costo × 100 — consistente con auto-precio y Precios.tsx
+          return mejorPrecioCosto > 0 ? ((precioVenta - mejorPrecioCosto) / mejorPrecioCosto) * 100 : 0;
         } catch {
           return 0;
         }
@@ -1055,7 +1163,7 @@ export function usePriceControl() {
     },
     getRecetaByProducto: (pid: string) => recetas.find(r => r.productoId === pid),
     recetas,
-    addCategoria, deleteCategoria,
+    addCategoria, deleteCategoria, updateCategoria,
     addProducto, updateProducto, deleteProducto,
     addProveedor, updateProveedor, deleteProveedor,
     addOrUpdatePrecio, deletePrecio,

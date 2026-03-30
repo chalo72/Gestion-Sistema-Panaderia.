@@ -21,7 +21,8 @@ import {
   ChevronLeft as ChevronLeftIcon,
   Upload,
   CreditCard,
-  UserCircle2
+  UserCircle2,
+  Store
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -123,7 +124,8 @@ export function Sidebar({
         { id: 'alertas',   label: 'Alertas de Costos',    icon: Bell,       permission: 'VER_ALERTAS' },
         { id: 'gastos',    label: 'Egresos y Facturas',   icon: DollarSign, permission: 'VER_FINANZAS' },
         { id: 'reportes',  label: 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_FINANZAS' },
-        { id: 'ahorro',    label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
+        { id: 'ahorro',      label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
+        { id: 'mayoristas',  label: 'Ventas al Mayor',      icon: Store,      permission: 'VER_FINANZAS' },
       ],
     },
     {
@@ -159,11 +161,25 @@ export function Sidebar({
         isCollapsed && !isMobile ? "p-4 flex flex-col items-center" : ""
       )}>
         <div className="flex items-center gap-3">
+          {/* Logo con anillos orbitales */}
           <div className={cn(
-            "w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-transparent drop-shadow-[0_0_10px_rgba(255,0,127,0.3)] animate-ag-float transition-all",
-            isCollapsed && !isMobile ? "w-10 h-10" : ""
+            "relative flex-none transition-all",
+            isCollapsed && !isMobile ? "w-10 h-10" : "w-12 h-12"
           )}>
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-contain" />
+            {/* Anillo exterior — 4s horario, rosa */}
+            <div
+              className="absolute inset-0 rounded-full border border-transparent animate-spin"
+              style={{ animationDuration: '4s', borderTopColor: 'rgba(255,0,127,0.7)', borderRightColor: 'rgba(255,0,127,0.15)' }}
+            />
+            {/* Anillo interior — 2.4s antihorario, indigo */}
+            <div
+              className="absolute inset-[3px] rounded-full border border-transparent animate-spin"
+              style={{ animationDuration: '2.4s', animationDirection: 'reverse', borderTopColor: 'rgba(99,102,241,0.8)', borderRightColor: 'rgba(99,102,241,0.15)' }}
+            />
+            {/* Logo centrado flotando */}
+            <div className="absolute inset-0 flex items-center justify-center animate-ag-float">
+              <img src="/logo.png" alt="Logo" className="w-[70%] h-[70%] object-contain drop-shadow-[0_0_8px_rgba(255,0,127,0.5)]" />
+            </div>
           </div>
           {(!isCollapsed || isMobile) && (
             <div className="flex-1 min-w-0 animate-ag-fade-in">

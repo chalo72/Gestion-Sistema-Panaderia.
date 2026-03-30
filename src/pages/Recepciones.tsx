@@ -453,7 +453,7 @@ export default function Recepciones({
         }
 
         try {
-            const total = newRecepcion.items.reduce((sum, item) => sum + (item.cantidadRecibida * item.precioFacturado), 0);
+            const total = Math.round(newRecepcion.items.reduce((sum, item) => sum + (item.cantidadRecibida * item.precioFacturado), 0) * 100) / 100;
 
             const recepcionData: Omit<Recepcion, 'id'> = {
                 prePedidoId: newRecepcion.prePedidoId,
@@ -831,13 +831,46 @@ export default function Recepciones({
                                     )}
                                 </div>
                                 
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*,.pdf"
+                                    capture="environment"
+                                    className="hidden"
+                                    onChange={handleImageUpload}
+                                />
+
                                 <div
                                     className={`border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer
-                                        ${newRecepcion.imagenFactura 
-                                            ? 'border-emerald-300 bg-emerald-50/50' 
+                                        ${newRecepcion.imagenFactura
+                                            ? 'border-emerald-300 bg-emerald-50/50'
                                             : 'border-primary/30 hover:border-primary hover:bg-primary/5'}`}
                                     onClick={() => !isScanning && fileInputRef.current?.click()}
                                 >
+                                    {/* Estado vacío: guía visual para el usuario */}
+                                    {!newRecepcion.imagenFactura && (
+                                        <div className="flex flex-col items-center gap-3 py-6 select-none pointer-events-none">
+                                            <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                                <Camera className="w-8 h-8 text-primary/60" />
+                                            </div>
+                                            <div>
+                                                <p className="text-sm font-bold text-foreground/70">Clic para subir foto de la factura</p>
+                                                <p className="text-[11px] text-muted-foreground mt-0.5">o arrastrá la imagen aquí · JPG, PNG, PDF</p>
+                                            </div>
+                                            <div className="flex gap-2 pointer-events-auto" onClick={e => e.stopPropagation()}>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="text-[11px] font-black uppercase tracking-tight h-8 px-3 border-primary/30 text-primary hover:bg-primary/10"
+                                                    onClick={() => fileInputRef.current?.click()}
+                                                >
+                                                    <Camera className="w-3.5 h-3.5 mr-1.5" /> Cámara / Archivo
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
+
                                     {/* Preview Imagen Forense (Volt-Pixel) */}
                                     {newRecepcion.imagenFactura && (
                                         <div className="space-y-3">
@@ -964,9 +997,12 @@ export default function Recepciones({
                                                             <Label className="text-[10px] font-black uppercase text-indigo-500 ml-1">Cant. Recibida</Label>
                                                             <Input
                                                                 type="number"
-                                                                min="1"
-                                                                value={item.cantidadRecibida}
-                                                                onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseInt(e.target.value) || 0 })}
+                                                                min="0"
+                                                                value={item.cantidadRecibida === 0 ? '' : item.cantidadRecibida}
+                                                                onChange={e => {
+                                                                    const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                                                    handleUpdateItem(item.id, { cantidadRecibida: val });
+                                                                }}
                                                                 className="h-12 rounded-xl font-black text-center bg-slate-50 border-none text-indigo-600 text-lg"
                                                             />
                                                         </div>

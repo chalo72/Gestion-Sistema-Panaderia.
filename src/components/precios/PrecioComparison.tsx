@@ -26,7 +26,8 @@ export function PrecioComparison({
         const masBarato = ordenados[0];
         const masCaro = ordenados[ordenados.length - 1];
         const diferencia = masCaro.precioCosto - masBarato.precioCosto;
-        const porcentaje = (diferencia / masBarato.precioCosto) * 100;
+        // Ahorro real = cuánto menos pagas comprando al más barato vs el más caro
+        const porcentaje = masCaro.precioCosto > 0 ? (diferencia / masCaro.precioCosto) * 100 : 0;
 
         return {
             masBarato,

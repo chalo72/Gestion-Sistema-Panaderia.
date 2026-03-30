@@ -11,43 +11,41 @@
   <link rel="apple-touch-icon" href="/logo_panaderia.png" />
   <title>Panaderia Dulce Placer</title>
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
     body {
       background-color: #0f172a;
-      margin: 0;
       color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      width: 100%;
       height: 100vh;
+      overflow-x: hidden;
       font-family: sans-serif;
     }
 
-    #root:empty::before {
-      content: "Cargando Sistema Antigravity...";
-      font-weight: bold;
-      letter-spacing: 0.1em;
-      opacity: 0.5;
+    #root {
+      width: 100%;
+      height: 100%;
+      overflow-x: hidden;
+    }
+
+    /* ── Animaciones del loader HTML ── */
+    @keyframes spin-cw  { to { transform: rotate(360deg);  } }
+    @keyframes spin-ccw { to { transform: rotate(-360deg); } }
+    @keyframes float-logo {
+      0%, 100% { transform: translateY(0px);  }
+      50%       { transform: translateY(-6px); }
+    }
+    @keyframes pulse-text {
+      0%, 100% { opacity: 1;   }
+      50%       { opacity: 0.4; }
+    }
+    @keyframes bar-sweep {
+      0%   { transform: translateX(-150%); }
+      100% { transform: translateX(350%);  }
     }
   </style>
   <script>
     console.log("🚀 Antigravity Boot Probe: index.html loaded");
-    // NUCLEAR CACHE PURGE V2 (Slayer Protocol)
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.getRegistrations().then(function(registrations) {
-        for(let registration of registrations) {
-          registration.unregister().then(function(boolean) {
-            console.log("🧹 Service Worker Exorcizado:", boolean);
-          });
-        }
-      });
-      // Limpiar caches
-      caches.keys().then((keyList) => {
-        return Promise.all(keyList.map((key) => {
-          console.log("🧹 Borrando caché:", key);
-          return caches.delete(key);
-        }));
-      });
-    }
     window.onerror = (m, s, l, c, e) => {
       console.error("❌ CRITICAL BOOT ERROR:", m, s, l);
       document.body.innerHTML = `
@@ -62,7 +60,89 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <div id="root">
+    <!-- Pantalla de carga pre-React: se reemplaza cuando React monta -->
+    <div style="
+      position: fixed; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #020617 0%, #0f172a 50%, #1e1b4b 100%);
+    ">
+      <!-- Anillos orbitales -->
+      <div style="position: relative; width: 176px; height: 176px; margin-bottom: 32px;">
+
+        <!-- Anillo exterior: 4s horario, rosa -->
+        <div style="
+          position: absolute; inset: 0; border-radius: 50%;
+          border: 2px solid transparent;
+          border-top-color: rgba(255,0,127,0.7);
+          border-right-color: rgba(255,0,127,0.2);
+          animation: spin-cw 4s linear infinite;
+        "></div>
+
+        <!-- Anillo medio: 2.8s antihorario, indigo -->
+        <div style="
+          position: absolute; inset: 16px; border-radius: 50%;
+          border: 2px solid transparent;
+          border-top-color: rgba(99,102,241,0.8);
+          border-right-color: rgba(99,102,241,0.2);
+          animation: spin-ccw 2.8s linear infinite;
+        "></div>
+
+        <!-- Anillo interior: 1.6s horario, blanco -->
+        <div style="
+          position: absolute; inset: 32px; border-radius: 50%;
+          border: 1px solid transparent;
+          border-top-color: rgba(255,255,255,0.6);
+          border-right-color: rgba(255,255,255,0.1);
+          animation: spin-cw 1.6s linear infinite;
+        "></div>
+
+        <!-- Logo flotando -->
+        <div style="
+          position: absolute; inset: 0;
+          display: flex; align-items: center; justify-content: center;
+          animation: float-logo 3s ease-in-out infinite;
+        ">
+          <!-- Placeholder rosado mientras carga la imagen -->
+          <div style="
+            position: absolute; width: 80px; height: 80px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(255,0,127,0.25) 0%, rgba(30,27,75,0.5) 100%);
+            box-shadow: 0 0 24px rgba(255,0,127,0.35);
+          "></div>
+          <img
+            src="/logo_panaderia.png"
+            alt="Dulce Placer"
+            style="
+              position: relative; width: 80px; height: 80px; object-fit: contain;
+              filter: drop-shadow(0 0 16px rgba(255,0,127,0.6));
+            "
+          />
+        </div>
+      </div>
+
+      <!-- Texto -->
+      <p style="
+        color: #ff007f; font-weight: 900; text-transform: uppercase;
+        letter-spacing: 0.4em; font-style: italic; font-size: 13px;
+        animation: pulse-text 1.5s ease-in-out infinite;
+        margin-bottom: 16px;
+      ">Dulce Placer...</p>
+
+      <!-- Barra animada -->
+      <div style="
+        width: 192px; height: 4px;
+        background: rgba(255,255,255,0.06);
+        border-radius: 9999px; overflow: hidden;
+      ">
+        <div style="
+          height: 100%; width: 45%;
+          background: linear-gradient(to right, #ff007f, #6366f1);
+          border-radius: 9999px;
+          animation: bar-sweep 1.6s ease-in-out infinite;
+        "></div>
+      </div>
+    </div>
+  </div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
 

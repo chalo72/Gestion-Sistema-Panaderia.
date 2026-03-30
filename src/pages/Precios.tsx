@@ -116,15 +116,16 @@ export function Precios({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.productoId || !formData.proveedorId || !formData.precioCosto) {
-      toast.error('Campos de inteligencia incompletos');
+    const precioCostoNum = parseFloat(formData.precioCosto);
+    if (!formData.productoId || !formData.proveedorId || !formData.precioCosto || isNaN(precioCostoNum) || precioCostoNum <= 0) {
+      toast.error('Campos de inteligencia incompletos o precio inválido');
       return;
     }
 
     onAddOrUpdatePrecio({
       productoId: formData.productoId,
       proveedorId: formData.proveedorId,
-      precioCosto: parseFloat(formData.precioCosto),
+      precioCosto: precioCostoNum,
       notas: formData.notas,
     });
 

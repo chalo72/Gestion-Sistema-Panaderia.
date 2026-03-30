@@ -1,4 +1,4 @@
-import { List, LayoutGrid, Tag, Plus, Package } from 'lucide-react';
+import { List, LayoutGrid, Tag, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -7,6 +7,7 @@ interface ProductHeaderProps {
     setVistaActual: (vista: 'lista' | 'cuadricula') => void;
     onManageCategories: () => void;
     onAddProduct: () => void;
+    onAddInsumo: () => void;
     checkPermission: (perm: string) => boolean;
 }
 
@@ -15,6 +16,7 @@ export function ProductHeader({
     setVistaActual,
     onManageCategories,
     onAddProduct,
+    onAddInsumo,
     checkPermission
 }: ProductHeaderProps) {
     return (
@@ -68,7 +70,7 @@ export function ProductHeader({
                             onClick={onAddProduct}
                             className="flex items-center gap-2 bg-primary hover:bg-orange-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-lg shadow-primary/20 transition-all h-11 text-sm"
                         >
-                            <Plus className="w-4 h-4" /> Agregar Producto
+                            <Plus className="w-4 h-4" /> Nuevo Producto
                         </Button>
                     </>
                 )}
