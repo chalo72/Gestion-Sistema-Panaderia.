@@ -209,6 +209,7 @@ export function Usuarios() {
                       <SelectItem value="COMPRADOR" className="font-bold uppercase text-[10px] tracking-widest">Comprador</SelectItem>
                       <SelectItem value="VENDEDOR" className="font-bold uppercase text-[10px] tracking-widest">Vendedor</SelectItem>
                       <SelectItem value="PANADERO" className="font-bold uppercase text-[10px] tracking-widest">Panadero</SelectItem>
+                      <SelectItem value="AUXILIAR" className="font-bold uppercase text-[10px] tracking-widest">Auxiliar</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
