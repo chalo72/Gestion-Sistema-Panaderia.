@@ -79,11 +79,11 @@ export default defineConfig({
           },
           {
             urlPattern: /.*/i,
-            handler: 'NetworkFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'v3-app-cache-premium',
               expiration: {
-                maxEntries: 50,
+                maxEntries: 100,
                 maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
               },
               cacheableResponse: {
