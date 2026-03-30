@@ -115,7 +115,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Contraseña individual del usuario (si tiene una asignada)
     const tienePassPropia = !!(localUser as any)?.password;
     const passIndividualOk = tienePassPropia && password === (localUser as any).password;
-    const isGuest = !isAdmin && localUser?.rol !== 'ADMIN' && (passIndividualOk || password === passInvitado || password === passMaestra);
+    // Contraseña por rol (configurada en Configuración → Contraseñas por Rol)
+    const rolePasswords = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
+    const passRolOk = localUser?.rol && rolePasswords[localUser.rol] && password === rolePasswords[localUser.rol];
+    const isGuest = !isAdmin && localUser?.rol !== 'ADMIN' && (passIndividualOk || passRolOk || password === passInvitado || password === passMaestra);
     const isMasterPass = isAdmin || isGuest;
 
     if ((localUser || esOwner) && isMasterPass) {

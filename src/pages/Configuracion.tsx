@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +31,30 @@ function Configuracion(props: ConfiguracionProps) {
   const [notificaciones, setNotificaciones] = useState(true);
   const [presupuesto, setPresupuesto] = useState('0');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [showRolePass, setShowRolePass] = useState(false);
+  const [passGerente, setPassGerente] = useState('');
+  const [passComprador, setPassComprador] = useState('');
+  const [passVendedor, setPassVendedor] = useState('');
+
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
+    setPassGerente(saved.GERENTE || '');
+    setPassComprador(saved.COMPRADOR || '');
+    setPassVendedor(saved.VENDEDOR || '');
+  }, []);
+
+  const handleGuardarPassRoles = () => {
+    if (!passGerente || !passComprador || !passVendedor) {
+      toast.error('Completa todas las contraseñas antes de guardar.');
+      return;
+    }
+    localStorage.setItem('pricecontrol_role_passwords', JSON.stringify({
+      GERENTE: passGerente,
+      COMPRADOR: passComprador,
+      VENDEDOR: passVendedor,
+    }));
+    toast.success('Contraseñas por rol guardadas');
+  };
 
   useEffect(() => {
     if (configuracion) {
@@ -168,6 +192,45 @@ function Configuracion(props: ConfiguracionProps) {
                   Sincronizar Ahora
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+          {/* Contraseñas por Rol */}
+          <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-pink-500" />
+                Contraseñas por Rol
+              </CardTitle>
+              <CardDescription>Define la contraseña que usará cada tipo de usuario para entrar al sistema</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-muted-foreground">Mostrar contraseñas</span>
+                <button type="button" onClick={() => setShowRolePass(p => !p)} className="text-slate-400 hover:text-slate-600">
+                  {showRolePass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {[
+                { label: '👔 Gerente', value: passGerente, setter: setPassGerente },
+                { label: '🍞 Panadero / Comprador', value: passComprador, setter: setPassComprador },
+                { label: '🛒 Vendedor/a', value: passVendedor, setter: setPassVendedor },
+              ].map(({ label, value, setter }) => (
+                <div key={label} className="space-y-1">
+                  <Label className="text-xs font-bold uppercase tracking-widest opacity-70">{label}</Label>
+                  <Input
+                    type={showRolePass ? 'text' : 'password'}
+                    value={value}
+                    onChange={(e) => setter(e.target.value)}
+                    placeholder="Contraseña para este rol"
+                    className="h-10 rounded-xl border border-slate-200 dark:border-slate-700"
+                  />
+                </div>
+              ))}
+              <Button onClick={handleGuardarPassRoles} className="w-full h-10 bg-pink-600 hover:bg-pink-500 text-white rounded-xl font-bold mt-2">
+                <Save className="w-4 h-4 mr-2" />
+                Guardar Contraseñas
+              </Button>
             </CardContent>
           </Card>
         </div>
