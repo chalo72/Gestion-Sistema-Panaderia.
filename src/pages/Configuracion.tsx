@@ -35,16 +35,18 @@ function Configuracion(props: ConfiguracionProps) {
   const [passGerente, setPassGerente] = useState('');
   const [passComprador, setPassComprador] = useState('');
   const [passVendedor, setPassVendedor] = useState('');
+  const [passPanadero, setPassPanadero] = useState('');
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
     setPassGerente(saved.GERENTE || '');
     setPassComprador(saved.COMPRADOR || '');
     setPassVendedor(saved.VENDEDOR || '');
+    setPassPanadero(saved.PANADERO || '');
   }, []);
 
   const handleGuardarPassRoles = () => {
-    if (!passGerente || !passComprador || !passVendedor) {
+    if (!passGerente || !passComprador || !passVendedor || !passPanadero) {
       toast.error('Completa todas las contraseñas antes de guardar.');
       return;
     }
@@ -52,6 +54,7 @@ function Configuracion(props: ConfiguracionProps) {
       GERENTE: passGerente,
       COMPRADOR: passComprador,
       VENDEDOR: passVendedor,
+      PANADERO: passPanadero,
     }));
     toast.success('Contraseñas por rol guardadas');
   };
@@ -213,8 +216,9 @@ function Configuracion(props: ConfiguracionProps) {
               </div>
               {[
                 { label: '👔 Gerente', value: passGerente, setter: setPassGerente },
-                { label: '🍞 Panadero / Comprador', value: passComprador, setter: setPassComprador },
-                { label: '🛒 Vendedor/a', value: passVendedor, setter: setPassVendedor },
+                { label: '🍞 Panadero', value: passPanadero, setter: setPassPanadero },
+                { label: '🛒 Comprador', value: passComprador, setter: setPassComprador },
+                { label: '💰 Vendedor/a', value: passVendedor, setter: setPassVendedor },
               ].map(({ label, value, setter }) => (
                 <div key={label} className="space-y-1">
                   <Label className="text-xs font-bold uppercase tracking-widest opacity-70">{label}</Label>

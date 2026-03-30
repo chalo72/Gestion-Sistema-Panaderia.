@@ -319,7 +319,7 @@ export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | '
 // SISTEMA DE ROLES Y PERMISOS
 // ============================================
 
-export type UserRole = 'ADMIN' | 'GERENTE' | 'COMPRADOR' | 'VENDEDOR';
+export type UserRole = 'ADMIN' | 'GERENTE' | 'COMPRADOR' | 'VENDEDOR' | 'PANADERO';
 
 export interface Usuario {
   id: string;
@@ -435,6 +435,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_DASHBOARD',
     'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA',
   ],
+  PANADERO: [
+    'VER_PRODUCTOS',
+    'VER_DASHBOARD',
+    'VER_INVENTARIO', 'GESTIONAR_INVENTARIO',
+    'VER_PRODUCCION', 'GESTIONAR_PRODUCCION',
+    'VER_RECEPCIONES', 'CREAR_RECEPCIONES',
+  ],
 };
 
 // Descripción de roles
@@ -443,6 +450,7 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, { nombre: string; descripcion: 
   GERENTE: { nombre: 'Gerente', descripcion: 'Gestión completa excepto configuración crítica', color: '#3b82f6' },
   COMPRADOR: { nombre: 'Comprador', descripcion: 'Gestión de proveedores y costos', color: '#22c55e' },
   VENDEDOR: { nombre: 'Vendedor', descripcion: 'Solo visualización de productos y precios', color: '#f59e0b' },
+  PANADERO: { nombre: 'Panadero', descripcion: 'Producción, inventario y recetas', color: '#d97706' },
 };
 
 
