@@ -904,10 +904,13 @@ export function ProveedorForm({
                           <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-500 ml-1">Ganancia %</Label>
                           <div className="relative group">
                             <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
-                            <Input 
+                            <Input
                               type="number"
-                              value={prodActual.margenVenta}
-                              onChange={(e) => setProdActual({ ...prodActual, margenVenta: Number(e.target.value) })}
+                              min={0}
+                              max={500}
+                              step={1}
+                              value={Math.round(prodActual.margenVenta || 0)}
+                              onChange={(e) => setProdActual({ ...prodActual, margenVenta: Math.round(Number(e.target.value) || 0) })}
                               className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
                               placeholder="30"
                             />
