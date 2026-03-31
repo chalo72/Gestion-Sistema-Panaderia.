@@ -97,7 +97,7 @@ export function Usuarios() {
       apellido: user.apellido || '',
       rol: user.rol,
       activo: user.activo,
-      password: '',
+      password: (user as any).password || '', // Cargar la contraseña actual para que sea visible
     });
     setIsDialogOpen(true);
   };
@@ -140,7 +140,7 @@ export function Usuarios() {
               className="h-10 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs"
               onClick={() => {
                 setEditingUser(null);
-                setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true });
+                setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true, password: '' });
               }}
             >
               <UserPlus className="w-5 h-5" />
@@ -299,6 +299,21 @@ export function Usuarios() {
 
             {/* Acciones */}
             <div className="flex items-center gap-1 shrink-0">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                onClick={() => {
+                  const pass = (user as any).password || 'Sin clave';
+                  toast.info(`Contraseña de ${user.nombre}: ${pass}`, {
+                    icon: <Lock className="w-4 h-4 text-amber-500" />,
+                    duration: 5000
+                  });
+                }}
+                className="w-8 h-8 rounded-xl text-amber-500 hover:bg-amber-500/10" 
+                title="Ver Contraseña"
+              >
+                <Eye className="w-4 h-4" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={() => handleToggleActivo(user)}
                 className={cn("w-8 h-8 rounded-xl", user.activo ? "text-rose-500 hover:bg-rose-500/10" : "text-emerald-500 hover:bg-emerald-500/10")}
                 title={user.activo ? 'Desactivar' : 'Activar'}>

@@ -8,6 +8,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import {
     ShieldCheck,
     RefreshCcw,
@@ -104,14 +105,28 @@ export default function RoleManager() {
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Control de privilegios · Dulce Placer</p>
                     </div>
                 </div>
-                <Button
-                    variant="ghost"
-                    onClick={handleReset}
-                    className="h-10 px-4 rounded-xl font-black uppercase tracking-widest text-xs bg-rose-50 dark:bg-rose-950/30 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-200 dark:border-rose-800/40 gap-2"
-                >
-                    <RefreshCcw className="w-4 h-4" />
-                    Restaurar
-                </Button>
+                <div className="flex gap-2">
+                     <Button
+                        variant="outline"
+                        onClick={() => {
+                            const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
+                            const passList = ROLES.map(r => `${ROLE_DESCRIPTIONS[r].nombre}: ${saved[r] || 'No asignada'}`).join('\n');
+                            alert(`Contraseñas Maestras por Rol:\n\n${passList}`);
+                        }}
+                        className="h-10 px-4 rounded-xl font-black uppercase tracking-widest text-xs border-indigo-200 text-indigo-600"
+                    >
+                        <Lock className="w-4 h-4 mr-2" />
+                        Ver Claves Roles
+                    </Button>
+                    <Button
+                        variant="ghost"
+                        onClick={handleReset}
+                        className="h-10 px-4 rounded-xl font-black uppercase tracking-widest text-xs bg-rose-50 dark:bg-rose-950/30 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-200 dark:border-rose-800/40 gap-2"
+                    >
+                        <RefreshCcw className="w-4 h-4" />
+                        Restaurar
+                    </Button>
+                </div>
             </header>
 
             <Card className="rounded-[2.5rem] border-none bg-card/40 backdrop-blur-xl shadow-3xl overflow-hidden relative group">
