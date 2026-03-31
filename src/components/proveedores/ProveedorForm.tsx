@@ -94,7 +94,7 @@ const CATEGORIAS_VENTA = [
 ];
 
 const PROD_INIT: Omit<ProductoCatalogo, 'uid' | 'costoUnitario' | 'precioVenta' | 'precioVentaPack'> = {
-  productoId: '', nombre: '', categoria: '',
+  productoId: '', nombre: '', categoria: CATEGORIAS_INSUMO[0],
   precioCosto: 0, margenVenta: 30, cantidadEmbalaje: 1,
   tipoEmbalaje: 'unidad', destino: 'insumo', notas: '',
   stockRecibido: 0,

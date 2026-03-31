@@ -657,6 +657,76 @@ export class SupabaseDatabase implements IDatabase {
         await supabase.from('gastos').delete().eq('id', id);
     }
 
+    // --- Trabajadores ---
+    async getAllTrabajadores(): Promise<any[]> {
+        const { data, error } = await supabase.from('trabajadores').select('*');
+        if (error) return [];
+        return data.map((t: any) => ({
+            id: t.id,
+            nombre: t.nombre,
+            cargo: t.cargo,
+            telefono: t.telefono,
+            documento: t.documento,
+            salario: t.salario,
+            fechaIngreso: t.fecha_ingreso,
+            estado: t.estado,
+            horario: t.horario,
+            notas: t.notas,
+        }));
+    }
+    async addTrabajador(t: any): Promise<void> {
+        await supabase.from('trabajadores').upsert({
+            id: t.id,
+            nombre: t.nombre,
+            cargo: t.cargo,
+            telefono: t.telefono,
+            documento: t.documento,
+            salario: t.salario,
+            fecha_ingreso: t.fechaIngreso,
+            estado: t.estado,
+            horario: t.horario,
+            notas: t.notas,
+        });
+    }
+    async updateTrabajador(t: any): Promise<void> {
+        await this.addTrabajador(t);
+    }
+    async deleteTrabajador(id: string): Promise<void> {
+        await supabase.from('trabajadores').delete().eq('id', id);
+    }
+
+    // --- Créditos Trabajadores ---
+    async getAllCreditosTrabajadores(): Promise<any[]> {
+        const { data, error } = await supabase.from('creditos_trabajadores').select('*');
+        if (error) return [];
+        return data.map((c: any) => ({
+            id: c.id,
+            trabajadorId: c.trabajador_id,
+            monto: c.monto,
+            tipo: c.tipo,
+            descripcion: c.descripcion,
+            fecha: c.fecha,
+            estado: c.estado,
+        }));
+    }
+    async addCreditoTrabajador(c: any): Promise<void> {
+        await supabase.from('creditos_trabajadores').upsert({
+            id: c.id,
+            trabajador_id: c.trabajadorId,
+            monto: c.monto,
+            tipo: c.tipo,
+            descripcion: c.descripcion,
+            fecha: c.fecha,
+            estado: c.estado,
+        });
+    }
+    async updateCreditoTrabajador(c: any): Promise<void> {
+        await this.addCreditoTrabajador(c);
+    }
+    async deleteCreditoTrabajador(id: string): Promise<void> {
+        await supabase.from('creditos_trabajadores').delete().eq('id', id);
+    }
+
     async clearAll(): Promise<void> {
         // Not implemented for safety in cloud
         console.warn('clearAll called on Supabase DB - operation ignored for safety');

@@ -2,11 +2,13 @@
  * Datos de ejemplo y constantes de inicialización — Dulce Placer
  * Separado de types/index.ts para reducir el bundle de tipos
  */
-import type { Usuario, Categoria, ProductoTipo, MetodoPago } from '@/types';
+import type { Usuario, Categoria, ProductoTipo } from '@/types';
 
 // Usuarios Oficiales - Sistema Blindado 🛡️
 export const USUARIOS_PRUEBA: Usuario[] = [
   { id: 'owner-local-id', email: 'Chalo8321@gmail.com', nombre: 'Chalo', apellido: 'Dueño Dulce Placer', rol: 'ADMIN', activo: true, createdAt: new Date().toISOString() },
+  { id: 'vendedor-1-id', email: 'lucia@dulceplacer.com', nombre: 'Lucía', apellido: 'Ventas Heladería', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() },
+  { id: 'panadero-1-id', email: 'marcos@dulceplacer.com', nombre: 'Marcos', apellido: 'Maestro Panadero', rol: 'ADMIN', activo: true, createdAt: new Date().toISOString() },
   { id: 'guest-local-id', email: 'invitado@dulceplacer.com', nombre: 'Invitado', apellido: 'Dulce Placer', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() },
 ];
 
@@ -29,6 +31,14 @@ export const CATEGORIAS_DEFAULT: Categoria[] = [
   { id: 'cat-piat', nombre: 'Piñatería', color: '#a855f7', icono: '🎉', tipo: 'venta' },
   { id: 'cat-pasab', nombre: 'Pasabocas', color: '#f97316', icono: '🍿', tipo: 'venta' },
   { id: 'cat-otro', nombre: 'Otro', color: '#6b7280', icono: '📦' },
+
+  // === CATEGORÍAS DE INSUMOS (Uso Interno - Ocultas en POS) ===
+  { id: 'ins-pan', nombre: 'INS: Panadería', color: '#f59e0b', icono: '🥖', tipo: 'insumo' },
+  { id: 'ins-tort', nombre: 'INS: Tortas', color: '#ec4899', icono: '🎂', tipo: 'insumo' },
+  { id: 'ins-mich', nombre: 'INS: Micheladas', color: '#22c55e', icono: '🍺', tipo: 'insumo' },
+  { id: 'ins-hela', nombre: 'INS: Helados', color: '#3b82f6', icono: '🍦', tipo: 'insumo' },
+  { id: 'ins-cafe', nombre: 'INS: Cafetería', color: '#8b5cf6', icono: '☕', tipo: 'insumo' },
+
   // === MATERIA PRIMA (para inventario/compras) ===
   { id: '3606f157-8df1-419b-a010-0968997e0001', nombre: 'Harinas y Materia Prima', color: '#8b5e3c', icono: '🌾', tipo: 'insumo' },
   { id: '3606f157-8df1-419b-a010-0968997e0002', nombre: 'Lácteos y Huevos', color: '#facc15', icono: '🥛', tipo: 'insumo' },
@@ -57,6 +67,13 @@ export const DATOS_EJEMPLO = {
     { id: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00003', nombre: 'Mantequilla Sin Sal', categoria: 'Lácteos y Huevos', descripcion: 'Bloque de 5kg', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 6.50, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     { id: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00004', nombre: 'Huevos de Granja', categoria: 'Lácteos y Huevos', descripcion: 'Caja x 30 unidades', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 4.50, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
     { id: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00005', nombre: 'Levadura Fresca', categoria: 'Levaduras y Aditivos', descripcion: 'Paquete de 500g', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 3.20, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+
+    // === INSUMOS HELADERÍA ===
+    { id: 'ins-hela-001', nombre: 'Caja Helado 10L', categoria: 'INS: Helados', descripcion: 'Varios sabores', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 85000, unidadMedida: 'ml', stockActual: 10000, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'ins-hela-002', nombre: 'Vaso Helado 7oz', categoria: 'INS: Helados', descripcion: 'Paquete x 50', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 120, unidadMedida: 'und', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'ins-hela-003', nombre: 'Cucharita Helado', categoria: 'INS: Helados', descripcion: 'Desechable premium', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 15, unidadMedida: 'und', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'ins-hela-004', nombre: 'Salsa de Chocolate', categoria: 'INS: Helados', descripcion: 'Botella 1L', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 18000, unidadMedida: 'ml', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+    { id: 'ins-hela-005', nombre: 'Pepitas de Colores', categoria: 'INS: Helados', descripcion: 'Topping arcoiris', precioVenta: 0, margenUtilidad: 0, tipo: 'ingrediente' as ProductoTipo, costoBase: 25, unidadMedida: 'gr', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 
     // === 🍞 PANES (elaborados) ===
     { id: 'e1000000-0000-4000-b000-000000000001', nombre: 'Pan Francés Tradicional', categoria: 'Panes', descripcion: 'Baguette crujiente del día', precioVenta: 800, margenUtilidad: 65, tipo: 'elaborado' as ProductoTipo, costoBase: 280, modeloPanId: '9a8b7c6d-5e4f-4d3c-b2a1-0f9e8d7c6b51', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },

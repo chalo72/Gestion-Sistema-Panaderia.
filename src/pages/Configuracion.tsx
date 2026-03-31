@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
 import type { Configuracion, MonedaCode } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 
 
 interface ConfiguracionProps {
@@ -23,6 +24,7 @@ function Configuracion(props: ConfiguracionProps) {
     onSyncWithCloud,
     onClearAllData,
   } = props;
+  const { syncRolePasswordsToCloud } = useAuth();
   const [nombreNegocio, setNombreNegocio] = useState('Mi Negocio');
   const [monedaSeleccionada, setMonedaSeleccionada] = useState<MonedaCode>('COP');
   const [margen, setMargen] = useState('30');
@@ -52,14 +54,17 @@ function Configuracion(props: ConfiguracionProps) {
       toast.error('Completa todas las contraseñas antes de guardar.');
       return;
     }
-    localStorage.setItem('pricecontrol_role_passwords', JSON.stringify({
+    const passwords = {
       GERENTE: passGerente,
       COMPRADOR: passComprador,
       VENDEDOR: passVendedor,
       PANADERO: passPanadero,
       AUXILIAR: passAuxiliar,
-    }));
-    toast.success('Contraseñas por rol guardadas');
+    };
+    localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(passwords));
+    // Sincronizar a la nube para que funcione en Vercel y otros dispositivos
+    syncRolePasswordsToCloud(passwords);
+    toast.success('Contraseñas por rol guardadas y sincronizadas ☁️');
   };
 
   useEffect(() => {

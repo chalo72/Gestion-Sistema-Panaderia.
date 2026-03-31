@@ -1301,6 +1301,9 @@ class HybridDatabase implements IDatabase {
         { name: 'caja', fn: () => this.cloud.getAllSesionesCaja(), save: (d: any) => this.local.updateSesionCaja(d) },
         { name: 'gastos', fn: () => this.cloud.getAllGastos(), save: (d: any) => localGastos.has(d.id) ? Promise.resolve() : this.local.updateGasto(d) },
         { name: 'ahorros', fn: () => this.cloud.getAllAhorros(), save: (d: any) => localAhorros.has(d.id) ? Promise.resolve() : this.local.updateAhorro(d) },
+        // Trabajadores y créditos — nuevos en sync v5.2
+        { name: 'trabajadores', fn: () => this.cloud.getAllTrabajadores(), save: (d: any) => this.local.updateTrabajador(d) },
+        { name: 'creditos_trabajadores', fn: () => this.cloud.getAllCreditosTrabajadores(), save: (d: any) => this.local.updateCreditoTrabajador(d) },
       ];
 
       for (const table of tables) {
@@ -1357,6 +1360,13 @@ class HybridDatabase implements IDatabase {
       for (const re of recetas) await this.cloud.updateReceta(re).catch(() => this.cloud.addReceta(re));
       for (const v of ventas) await this.cloud.addVenta(v).catch(() => { });
       for (const s of sesiones) await this.cloud.updateSesionCaja(s).catch(() => this.cloud.addSesionCaja(s));
+      // Trabajadores y créditos — nuevos en sync v5.2
+      const [trabajadores, creditosTrabajadores] = await Promise.all([
+        this.local.getAllTrabajadores(),
+        this.local.getAllCreditosTrabajadores(),
+      ]);
+      for (const t of trabajadores) await this.cloud.updateTrabajador(t).catch(() => this.cloud.addTrabajador(t));
+      for (const c of creditosTrabajadores) await this.cloud.updateCreditoTrabajador(c).catch(() => this.cloud.addCreditoTrabajador(c));
       console.log('✅ Sincronización Local -> Nube Exitosa.');
     } catch (e) {
       console.error('❌ Error en sincronización Local a Nube:', e);
@@ -1608,15 +1618,33 @@ class HybridDatabase implements IDatabase {
 
   // Créditos Trabajadores Hybrid
   async getAllCreditosTrabajadores() { return this.local.getAllCreditosTrabajadores(); }
-  async addCreditoTrabajador(c: any) { await this.local.addCreditoTrabajador(c); }
-  async updateCreditoTrabajador(c: any) { await this.local.updateCreditoTrabajador(c); }
-  async deleteCreditoTrabajador(id: string) { await this.local.deleteCreditoTrabajador(id); }
+  async addCreditoTrabajador(c: any) {
+    await this.local.addCreditoTrabajador(c);
+    if (this.isOnline) await this.cloud.addCreditoTrabajador(c).catch(console.error);
+  }
+  async updateCreditoTrabajador(c: any) {
+    await this.local.updateCreditoTrabajador(c);
+    if (this.isOnline) await this.cloud.updateCreditoTrabajador(c).catch(console.error);
+  }
+  async deleteCreditoTrabajador(id: string) {
+    await this.local.deleteCreditoTrabajador(id);
+    if (this.isOnline) await this.cloud.deleteCreditoTrabajador(id).catch(console.error);
+  }
 
   // Trabajadores Hybrid
   async getAllTrabajadores() { return this.local.getAllTrabajadores(); }
-  async addTrabajador(t: any) { await this.local.addTrabajador(t); }
-  async updateTrabajador(t: any) { await this.local.updateTrabajador(t); }
-  async deleteTrabajador(id: string) { await this.local.deleteTrabajador(id); }
+  async addTrabajador(t: any) {
+    await this.local.addTrabajador(t);
+    if (this.isOnline) await this.cloud.addTrabajador(t).catch(console.error);
+  }
+  async updateTrabajador(t: any) {
+    await this.local.updateTrabajador(t);
+    if (this.isOnline) await this.cloud.updateTrabajador(t).catch(console.error);
+  }
+  async deleteTrabajador(id: string) {
+    await this.local.deleteTrabajador(id);
+    if (this.isOnline) await this.cloud.deleteTrabajador(id).catch(console.error);
+  }
 
   // Préstamos entre Cajas Hybrid (solo local — datos sensibles del admin)
   async getAllPrestamosCaja() { return this.local.getAllPrestamosCaja(); }

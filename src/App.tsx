@@ -20,20 +20,19 @@ import { CierreCajaModal } from '@/components/ventas/CierreCajaModal';
 import { CajaMovimientosModal } from '@/components/ventas/CajaMovimientosModal';
 
 
-import Dashboard from '@/pages/Dashboard';
-import Productos from '@/pages/Productos';
-import { Ventas } from '@/pages/Ventas';
-import { ControlCaja } from '@/pages/ControlCaja';
-import Produccion from '@/pages/Produccion';
-import Usuarios from '@/pages/Usuarios';
-import Reportes from '@/pages/Reportes';
-
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Productos = lazy(() => import('@/pages/Productos'));
+const Ventas = lazy(() => import('@/pages/Ventas').then(m => ({ default: m.Ventas })));
+const ControlCaja = lazy(() => import('@/pages/ControlCaja').then(m => ({ default: m.ControlCaja })));
+const Produccion = lazy(() => import('@/pages/Produccion'));
+const Usuarios = lazy(() => import('@/pages/Usuarios'));
+const Reportes = lazy(() => import('@/pages/Reportes'));
 const Inventario = lazy(() => import('@/pages/Inventario'));
 const Configuracion = lazy(() => import('@/pages/Configuracion'));
 const Proveedores = lazy(() => import('@/pages/Proveedores'));
 const Precios = lazy(() => import('@/pages/Precios'));
 const Recepciones = lazy(() => import('@/pages/Recepciones'));
-const Alertas = lazy(() => import('@/pages/Alertas'));
+const Alertas = lazy(() => import('@/pages/Alertas').then(m => ({ default: m.Alertas })));
 const PrePedidos = lazy(() => import('@/pages/PrePedidos'));
 const RoleManager = lazy(() => import('@/pages/RoleManager'));
 const Recetas = lazy(() => import('@/pages/Recetas'));

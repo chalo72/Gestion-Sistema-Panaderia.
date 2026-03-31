@@ -71,6 +71,8 @@ export default defineConfig({
         clientsClaim: true,      // Nuevo SW reclama todos los clientes inmediatamente
         // Limpiar caches viejos al activar nuevo SW
         cleanupOutdatedCaches: true,
+        // Navigation preload → acelera carga tras activar nuevo SW
+        navigationPreload: true,
         runtimeCaching: [
           {
             // version.json: siempre desde red para detectar nuevas versiones
@@ -78,13 +80,51 @@ export default defineConfig({
             handler: 'NetworkOnly',
           },
           {
-            urlPattern: /.*/i,
+            // Supabase API: siempre desde red (datos en tiempo real)
+            urlPattern: /supabase\.co/i,
+            handler: 'NetworkOnly',
+          },
+          {
+            // Assets con hash (JS/CSS de build): el precache se encarga,
+            // NO cachear con runtimeCaching para evitar versiones fantasma
+            urlPattern: /\/assets\/.*\.[a-f0-9]+\.(js|css)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'v4-assets-hashed',
+              expiration: {
+                maxEntries: 60,
+                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 año (hash cambia = nuevo archivo)
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            // Imágenes y fuentes: cache largo con revalidación
+            urlPattern: /\.(png|jpg|jpeg|webp|gif|svg|woff2|ico)$/i,
             handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'v3-app-cache-premium',
+              cacheName: 'v4-media-cache',
               expiration: {
-                maxEntries: 100,
+                maxEntries: 80,
                 maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            // Todo lo demás: red primero, fallback a cache
+            urlPattern: /.*/i,
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'v4-app-cache',
+              networkTimeoutSeconds: 5, // Si no responde en 5s, usa cache
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 días
               },
               cacheableResponse: {
                 statuses: [0, 200]

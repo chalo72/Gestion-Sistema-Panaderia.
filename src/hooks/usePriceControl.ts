@@ -21,6 +21,8 @@ import { useFinanzas } from './useFinanzas';
 import { useProduccionHook } from './useProduccionHook';
 import { useVentas } from './useVentas';
 import { useInventario } from './useInventario';
+import { usePrePedidos } from './usePrePedidos';
+import { useCatalogo } from './useCatalogo';
 
 import {
   CATEGORIAS_DEFAULT,
@@ -45,24 +47,22 @@ const defaultConfig: Configuracion = {
 // PROTEGIDO: No modificar sin revisión. Hook principal de gestión de precios, inventario y ventas validado en producción.
 export function usePriceControl() {
   // Estados
-  const [productos, setProductos] = useState<Producto[]>([]);
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
-  const [precios, setPrecios] = useState<PrecioProveedor[]>([]);
-  const [historial, setHistorial] = useState<HistorialPrecio[]>([]);
-  const [alertas, setAlertas] = useState<AlertaPrecio[]>([]);
-  const [configuracion, setConfiguracion] = useState<Configuracion>(defaultConfig);
-  const [prepedidos, setPrepedidos] = useState<PrePedido[]>([]);
-
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [loaded, setLoaded] = useState(false);
 
-  // Sub-hooks delegados (Fase 4 de refactoring)
+  // Sub-hooks delegados (Fase 5 de refactoring — hooks especializados)
   // onAjustarStock se define más abajo, así que usamos un ref para romper la dependencia circular
   const onAjustarStockRef = { current: async (_pid: string, _q: number, _t: 'entrada' | 'salida', _m: string) => { return; } };
-  const inventarioHook = useInventario({ productos });
+  const inventarioHook = useInventario({ productos: [] }); // Se re-asigna abajo
+  const catalogoHook = useCatalogo({ inventarioHook });
+  const prePedidosHook = usePrePedidos();
   const finanzas = useFinanzas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
   const produccionHook = useProduccionHook({ onAjustarStock: (...args) => onAjustarStockRef.current(...args), recetas });
   const ventasHook = useVentas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
+
+  // Alias para acceso directo al estado del catálogo
+  const { productos, setProductos, proveedores, setProveedores, precios, setPrecios, historial, setHistorial, alertas, setAlertas, configuracion, setConfiguracion } = catalogoHook;
+  const { prepedidos, setPrepedidos } = prePedidosHook;
 
   // Inicializar base de datos y cargar datos
   useEffect(() => {
@@ -1144,11 +1144,11 @@ export function usePriceControl() {
 
 
   return {
-    // Datos Base
-    productos, proveedores, precios, historial, alertas, configuracion, prepedidos, estadisticas, loaded,
+    // Datos Base (estadisticas, loaded y funciones de orquestación son propias)
+    estadisticas, loaded,
     downloadFromCloud, syncWithCloud, cargarDatosEjemplo, clearAllData, loadAllData, MONEDAS,
 
-    // Recetas, Categorías, Productos, Proveedores, Precios, Pre-Pedidos
+    // Recetas
     addReceta: async (r: Receta) => {
       await db.addReceta(r as any);
       setRecetas(prev => [...prev, r]);
@@ -1163,16 +1163,15 @@ export function usePriceControl() {
     },
     getRecetaByProducto: (pid: string) => recetas.find(r => r.productoId === pid),
     recetas,
-    addCategoria, deleteCategoria, updateCategoria,
-    addProducto, updateProducto, deleteProducto,
-    addProveedor, updateProveedor, deleteProveedor,
-    addOrUpdatePrecio, deletePrecio,
-    addPrePedido, updatePrePedido, deletePrePedido, addItemToPrePedido, removeItemFromPrePedido, updateItemCantidad,
-    marcarAlertaLeida, marcarTodasAlertasLeidas, deleteAlerta, clearAllAlertas,
-    updateConfiguracion,
-    formatCurrency, getMonedaActual, getPreciosByProducto, getPreciosByProveedor, getMejorPrecio, getMejorPrecioByProveedor,
-    generarSugerenciasPedido, getProductoById, getProveedorById, getPrecioByIds, getPrePedidoById, getPrePedidosByProveedor,
-    getAlertasNoLeidas, getEstadisticas,
+
+    // --- DELEGACIÓN A SUB-HOOK: CATÁLOGO (Productos, Proveedores, Precios, Alertas, Categorías) ---
+    ...catalogoHook,
+
+    // --- DELEGACIÓN A SUB-HOOK: PRE-PEDIDOS ---
+    ...prePedidosHook,
+
+    // Funciones que aún viven en usePriceControl (orquestación cross-hook)
+    generarSugerenciasPedido, getEstadisticas,
 
     // --- DELEGACIÓN A SUB-HOOK: PRODUCCIÓN ---
     ...produccionHook,

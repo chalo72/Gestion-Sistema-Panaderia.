@@ -165,11 +165,19 @@ export function Ventas(props: VentasProps) {
     const productosVenta = useMemo(() => {
         return productos.filter(p => {
             const matchesSearch = safeString(p.nombre).toLowerCase().includes(searchTerm.toLowerCase());
+            
+            // 🔥 Filtro de Seguridad: Ocultar si pertenece a categoría de Insumos
+            const categoriaLower = safeString(p.categoria).toLowerCase().trim();
+            const isNotInsumo = !categoriaLower.startsWith('ins:') && 
+                               !categoriaLower.startsWith('insumos');
+
             // Comparación insensible a mayúsculas y espacios para evitar invisibilidad por variaciones de nombre
             const matchesCategory = !selectedCategory ||
-                safeString(p.categoria).toLowerCase().trim() === selectedCategory.toLowerCase().trim();
+                categoriaLower === selectedCategory.toLowerCase().trim();
+                
             const precio = safeNumber(p.precioVenta);
-            return matchesSearch && matchesCategory && precio > 0;
+            
+            return matchesSearch && matchesCategory && precio > 0 && isNotInsumo;
         });
     }, [productos, searchTerm, selectedCategory]);
 

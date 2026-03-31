@@ -23,6 +23,7 @@ interface AuthContextType {
   addUsuario: (usuario: Omit<Usuario, 'id' | 'createdAt'>) => Promise<boolean>;
   updateUsuario: (id: string, updates: Partial<Usuario>) => Promise<boolean>;
   deleteUsuario: (id: string) => Promise<boolean>;
+  syncRolePasswordsToCloud: (passwords: Record<string, string>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,8 +34,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
 
-  // Gestión de Usuarios LOCAL
-  const loadUsuarios = useCallback(() => {
+  // Gestión de Usuarios LOCAL + NUBE
+  const syncUsuariosToCloud = useCallback(async (list: Usuario[]) => {
+    try {
+      const { error } = await supabase.from('configuracion').upsert({
+        id: 'usuarios_equipo',
+        categorias: list,
+      });
+      if (error) console.warn('⚠️ Error sincronizando usuarios a nube:', error.message);
+      else console.log('☁️ Usuarios del equipo sincronizados a la nube');
+    } catch (e) {
+      console.warn('⚠️ Sync usuarios a nube falló:', e);
+    }
+  }, []);
+
+  // Sincronizar contraseñas por rol a la nube
+  const syncRolePasswordsToCloud = useCallback(async (passwords: Record<string, string>) => {
+    try {
+      const { error } = await supabase.from('configuracion').upsert({
+        id: 'role_passwords',
+        categorias: passwords,
+      });
+      if (error) console.warn('⚠️ Error sincronizando contraseñas de rol a nube:', error.message);
+      else console.log('☁️ Contraseñas de rol sincronizadas a la nube');
+    } catch (e) {
+      console.warn('⚠️ Sync contraseñas de rol falló:', e);
+    }
+  }, []);
+
+  // Cargar contraseñas de rol desde la nube si no existen en local
+  const loadRolePasswordsFromCloud = useCallback(async () => {
+    try {
+      const localPasswords = localStorage.getItem('pricecontrol_role_passwords');
+      if (localPasswords && Object.keys(JSON.parse(localPasswords)).length > 0) return; // Ya hay datos locales
+      
+      const { data } = await supabase.from('configuracion').select('categorias').eq('id', 'role_passwords').maybeSingle();
+      if (data?.categorias && typeof data.categorias === 'object' && !Array.isArray(data.categorias)) {
+        console.log('☁️ Contraseñas de rol cargadas desde la nube');
+        localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(data.categorias));
+      }
+    } catch (e) {
+      console.warn('⚠️ No se pudieron cargar contraseñas de rol de la nube');
+    }
+  }, []);
+
+  // Sincronizar permisos personalizados a la nube
+  const syncPermissionsToCloud = useCallback(async (perms: Record<string, string[]>) => {
+    try {
+      const { error } = await supabase.from('configuracion').upsert({
+        id: 'role_permissions',
+        categorias: perms,
+      });
+      if (error) console.warn('⚠️ Error sincronizando permisos a nube:', error.message);
+      else console.log('☁️ Permisos de rol sincronizados a la nube');
+    } catch (e) {
+      console.warn('⚠️ Sync permisos falló:', e);
+    }
+  }, []);
+
+  // Cargar permisos personalizados desde la nube si no existen en local
+  const loadPermissionsFromCloud = useCallback(async (): Promise<Record<string, string[]> | null> => {
+    try {
+      const { data } = await supabase.from('configuracion').select('categorias').eq('id', 'role_permissions').maybeSingle();
+      if (data?.categorias && typeof data.categorias === 'object' && !Array.isArray(data.categorias)) {
+        console.log('☁️ Permisos de rol cargados desde la nube');
+        return data.categorias as Record<string, string[]>;
+      }
+    } catch (e) {
+      console.warn('⚠️ No se pudieron cargar permisos de la nube');
+    }
+    return null;
+  }, []);
+
+  const loadUsuarios = useCallback(async () => {
     try {
       const savedUsuariosStr = localStorage.getItem('pricecontrol_local_user_list');
       const savedUsuarios = savedUsuariosStr ? JSON.parse(savedUsuariosStr) : [];
@@ -47,11 +119,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         u.email === 'vendedor@example.com'
       );
 
-      if (!savedUsuariosStr || hasOldTestData) {
-        console.log("🧹 Limpiando usuarios de prueba antiguos...");
-        setUsuarios(USUARIOS_PRUEBA);
-        localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(USUARIOS_PRUEBA));
+      // SIEMPRE intentar cargar desde la nube primero si:
+      // 1. No hay datos locales
+      // 2. Hay datos de prueba antiguos
+      // 3. Solo están los 2 defaults
+      const isOnlyDefaults = savedUsuarios.length <= 2 && savedUsuarios.every((u: any) =>
+        u.id === 'owner-local-id' || u.id === 'guest-local-id'
+      );
+      const shouldLoadFromCloud = !savedUsuariosStr || hasOldTestData || isOnlyDefaults;
+
+      if (shouldLoadFromCloud) {
+        console.log('☁️ Intentando cargar usuarios desde la nube...');
+        try {
+          const { data } = await supabase.from('configuracion').select('categorias').eq('id', 'usuarios_equipo').maybeSingle();
+          if (data?.categorias && Array.isArray(data.categorias) && data.categorias.length > 0) {
+            console.log('☁️ Usuarios cargados desde la nube:', data.categorias.length);
+            setUsuarios(data.categorias as Usuario[]);
+            localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(data.categorias));
+            return;
+          }
+        } catch (e) { console.warn('⚠️ No se pudieron cargar usuarios de la nube:', e); }
+
+        // Si la nube no tiene datos y es primer uso, usar defaults
+        if (!savedUsuariosStr || hasOldTestData) {
+          setUsuarios(USUARIOS_PRUEBA);
+          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(USUARIOS_PRUEBA));
+        } else {
+          setUsuarios(savedUsuarios);
+        }
       } else {
+        // Local tiene datos reales — usarlos directamente
         setUsuarios(savedUsuarios);
       }
     } catch (e) {
@@ -89,8 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     initializeAuth();
     loadUsuarios();
+    loadRolePasswordsFromCloud();
     return () => { mounted = false; };
-  }, [loadUsuarios]);
+  }, [loadUsuarios, loadRolePasswordsFromCloud]);
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
@@ -161,9 +259,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return saved ? JSON.parse(saved) : ROLE_PERMISSIONS;
   });
 
+  // Al montar: si localStorage está vacío para permisos, cargar desde la nube
+  useEffect(() => {
+    const saved = localStorage.getItem('pricecontrol_permissions');
+    if (!saved) {
+      loadPermissionsFromCloud().then(cloudPerms => {
+        if (cloudPerms) {
+          const mergedPerms = { ...ROLE_PERMISSIONS, ...cloudPerms } as Record<UserRole, Permission[]>;
+          setRolePermissions(mergedPerms);
+          localStorage.setItem('pricecontrol_permissions', JSON.stringify(mergedPerms));
+        }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     localStorage.setItem('pricecontrol_permissions', JSON.stringify(rolePermissions));
-  }, [rolePermissions]);
+    // Sincronizar permisos a la nube cada vez que cambian
+    syncPermissionsToCloud(rolePermissions);
+  }, [rolePermissions, syncPermissionsToCloud]);
 
   const updateRolePermissions = useCallback((role: UserRole, newPermissions: Permission[]) => {
     setRolePermissions(prev => ({ ...prev, [role]: newPermissions }));
@@ -208,9 +323,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = [...usuarios, nuevo];
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
+    syncUsuariosToCloud(newList);
     toast.success('Usuario guardado localmente');
     return true;
-  }, [usuarios]);
+  }, [usuarios, syncUsuariosToCloud]);
 
   const updateUsuario = useCallback(async (id: string, updates: Partial<Usuario>): Promise<boolean> => {
     // El dueño (owner-local-id) no puede perder su rol ADMIN
@@ -221,13 +337,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = usuarios.map(u => u.id === id ? { ...u, ...updates } : u);
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
+    syncUsuariosToCloud(newList);
     if (usuario && id === usuario.id) {
       const updatedMe = { ...usuario, ...updates };
       setUsuario(updatedMe);
       localStorage.setItem('pricecontrol_local_user', JSON.stringify(updatedMe));
     }
     return true;
-  }, [usuarios, usuario]);
+  }, [usuarios, usuario, syncUsuariosToCloud]);
 
   const deleteUsuario = useCallback(async (id: string): Promise<boolean> => {
     if (id === 'owner-local-id' || (usuario && id === usuario.id)) {
@@ -237,14 +354,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = usuarios.filter(u => u.id !== id);
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
+    syncUsuariosToCloud(newList);
     return true;
-  }, [usuarios, usuario]);
+  }, [usuarios, usuario, syncUsuariosToCloud]);
 
   const value = {
     usuario, isAuthenticated: !!usuario, isLoading, login, logout,
     hasPermission, hasAnyPermission, hasAllPermissions,
     role: usuario?.rol || null, permissions, rolePermissions,
-    updateRolePermissions, resetPermissions, usuarios, addUsuario, updateUsuario, deleteUsuario
+    updateRolePermissions, resetPermissions, usuarios, addUsuario, updateUsuario, deleteUsuario,
+    syncRolePasswordsToCloud
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

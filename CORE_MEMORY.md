@@ -115,7 +115,9 @@
 1. ✅ **Producción Artesanal**: Implementada planificación de lotes con verificación de insumos.
 2. ✅ **Ejecución de Lotes**: Sincronización atómica entre producción terminada e inventario (recetas).
 3. ✅ **Seguridad Nexus**: Upgraded `Usuarios.tsx` y `RoleManager.tsx` a estética Premium Antigravity.
-4. ✅ **Navegación Dinámica**: Integración de nuevas sub-pantallas en el renderizador principal.
+4. ✅ **Heladería Dulce Placer**: Categorías `INS:` e insumos de heladería integrados y sincronizados.
+5. ✅ **Filtros de Privacidad**: POS blindado contra categorías de uso interno.
+6. ✅ **Equipo de Trabajo**: Usuarios y Roles actualizados para mayor automatización.
 5. ✅ App carga en RED LOCAL: `http://192.168.1.5:5173/` 
 6. ✅ Vite PWA configurado (Service Workers + Offline cache)
 

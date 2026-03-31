@@ -1,7 +1,7 @@
 {
-  "name": "my-app",
+  "name": "dulce-placer-erp",
   "private": true,
-  "version": "0.0.0",
+  "version": "5.1.5",
   "type": "module",
   "scripts": {
     "dev": "vite",

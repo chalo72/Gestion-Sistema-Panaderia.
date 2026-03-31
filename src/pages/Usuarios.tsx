@@ -268,88 +268,52 @@ export function Usuarios() {
         </div>
       </div>
 
-      {/* User Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {/* User List — filas compactas */}
+      <div className="space-y-2 max-w-3xl mx-auto">
         {filteredUsuarios.map((user) => (
-          <Card key={user.id} className={cn(
-            "rounded-[2.5rem] border-none bg-card/40 backdrop-blur-xl shadow-xl overflow-hidden group hover:scale-[1.02] transition-all duration-500 hover:shadow-2xl relative",
-            !user.activo && "opacity-60 grayscale"
+          <div key={user.id} className={cn(
+            "flex items-center gap-3 px-4 py-3 rounded-2xl bg-card/60 border border-white/5 hover:bg-card transition-all",
+            !user.activo && "opacity-50"
           )}>
-            <div className="absolute top-0 right-0 p-4">
-              <Badge variant="outline" className="bg-white/5 border-none text-[8px] font-black uppercase tracking-[0.2em] px-2 py-0.5 opacity-40 group-hover:opacity-100 transition-opacity">
-                ID: {user.id.slice(0, 8)}
-              </Badge>
+            {/* Avatar */}
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-sm font-black shrink-0"
+              style={{ background: `linear-gradient(135deg, ${ROLE_DESCRIPTIONS[user.rol]?.color ?? '#6b7280'}, ${ROLE_DESCRIPTIONS[user.rol]?.color ?? '#6b7280'}99)` }}
+            >
+              {user.nombre.charAt(0)}{user.apellido?.charAt(0)}
             </div>
 
-            <CardContent className="p-8">
-              <div className="flex flex-col items-center text-center gap-6">
-                <div className="relative">
-                  <div
-                    className="w-24 h-24 rounded-[2rem] flex items-center justify-center text-white text-3xl font-black shadow-2xl relative z-10 overflow-hidden transform group-hover:rotate-6 transition-transform duration-500"
-                    style={{ background: `linear-gradient(135deg, ${ROLE_DESCRIPTIONS[user.rol].color}, ${ROLE_DESCRIPTIONS[user.rol].color}99)` }}
-                  >
-                    {user.nombre.charAt(0)}{user.apellido?.charAt(0)}
-                    <div className="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,.15)_50%,rgba(255,255,255,.15)_75%,transparent_75%,transparent)] bg-[length:10px_10px] opacity-20" />
-                  </div>
-                  <div className="absolute -inset-4 bg-indigo-500/10 rounded-full blur-2xl opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
+            {/* Info */}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold truncate">{user.nombre} {user.apellido}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{user.email}</p>
+            </div>
 
-                <div className="space-y-1">
-                  <h3 className="text-xl font-black text-foreground uppercase tracking-tighter truncate max-w-[200px]">
-                    {user.nombre} {user.apellido}
-                  </h3>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest opacity-60 flex items-center justify-center gap-2">
-                    <Mail className="w-3 h-3" /> {user.email}
-                  </p>
-                </div>
+            {/* Rol badge */}
+            <Badge
+              className="text-[10px] font-black uppercase tracking-wide border-none shrink-0 hidden sm:flex"
+              style={{ backgroundColor: `${ROLE_DESCRIPTIONS[user.rol]?.color ?? '#6b7280'}22`, color: ROLE_DESCRIPTIONS[user.rol]?.color ?? '#6b7280' }}
+            >
+              {ROLE_DESCRIPTIONS[user.rol]?.nombre ?? user.rol}
+            </Badge>
 
-                <div className="flex items-center gap-3">
-                  <Badge
-                    className="text-[10px] font-black uppercase tracking-[0.2em] border-none shadow-lg px-4 py-1.5"
-                    style={{ backgroundColor: ROLE_DESCRIPTIONS[user.rol].color, color: 'white' }}
-                  >
-                    <Shield className="w-3 h-3 mr-2" /> {ROLE_DESCRIPTIONS[user.rol].nombre}
-                  </Badge>
-                  {!user.activo && (
-                    <Badge variant="secondary" className="text-[10px] font-black uppercase tracking-[0.2em]">Inactivo</Badge>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-4 pt-4 w-full border-t border-white/5 mt-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleToggleActivo(user)}
-                    className={cn(
-                      "flex-1 h-12 rounded-2xl transition-all",
-                      user.activo ? "hover:bg-rose-500/10 text-rose-500" : "hover:bg-emerald-500/10 text-emerald-500"
-                    )}
-                    title={user.activo ? 'Desactivar Entidad' : 'Activar Entidad'}
-                  >
-                    {user.activo ? <UserX className="w-5 h-5" /> : <UserCheck className="w-5 h-5" />}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleEdit(user)}
-                    className="flex-1 h-12 rounded-2xl hover:bg-blue-500/10 text-blue-500 transition-all font-black text-[10px]"
-                    title="Configurar Perfil"
-                  >
-                    <Edit2 className="w-5 h-5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDelete(user.id)}
-                    className="flex-1 h-12 rounded-2xl hover:bg-rose-600 text-rose-600 hover:text-white transition-all"
-                    title="Expulsar del Sistema"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+            {/* Acciones */}
+            <div className="flex items-center gap-1 shrink-0">
+              <Button variant="ghost" size="icon" onClick={() => handleToggleActivo(user)}
+                className={cn("w-8 h-8 rounded-xl", user.activo ? "text-rose-500 hover:bg-rose-500/10" : "text-emerald-500 hover:bg-emerald-500/10")}
+                title={user.activo ? 'Desactivar' : 'Activar'}>
+                {user.activo ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => handleEdit(user)}
+                className="w-8 h-8 rounded-xl text-blue-500 hover:bg-blue-500/10" title="Editar">
+                <Edit2 className="w-4 h-4" />
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => handleDelete(user.id)}
+                className="w-8 h-8 rounded-xl text-rose-500 hover:bg-rose-500/10" title="Eliminar">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
         ))}
       </div>
 
