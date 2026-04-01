@@ -136,6 +136,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log('☁️ Usuarios cargados desde la nube:', data.categorias.length);
             setUsuarios(data.categorias as Usuario[]);
             localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(data.categorias));
+            
+            // Sincronizar también contraseñas de rol si vienen de la nube
+            await loadRolePasswordsFromCloud();
             return;
           }
         } catch (e) { console.warn('⚠️ No se pudieron cargar usuarios de la nube:', e); }
@@ -195,12 +198,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const emailLower = email.toLowerCase().trim();
+    // ELIMINAR BLOQUEO MULTI-DISPOSITIVO: Forzar recarga de usuarios y contraseñas de rol antes de validar login
+    try {
+      const { data: uData } = await supabase.from('configuracion').select('categorias').eq('id', 'usuarios_equipo').maybeSingle();
+      if (uData?.categorias && Array.isArray(uData.categorias)) {
+        localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(uData.categorias));
+        setUsuarios(uData.categorias as Usuario[]);
+      }
+
+      const { data: rData } = await supabase.from('configuracion').select('categorias').eq('id', 'role_passwords').maybeSingle();
+      if (rData?.categorias && typeof rData.categorias === 'object') {
+        localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(rData.categorias));
+      }
+    } catch (e) { console.warn('⚠️ No se pudo pre-sincronizar antes de login'); }
+
     const localUserListStr = localStorage.getItem('pricecontrol_local_user_list');
     const localUserList = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
     const localUser = (localUserList as Usuario[]).find(u => u.email.toLowerCase() === emailLower);
 
     const passMaestra = import.meta.env.VITE_MASTER_PASSWORD;
     const passInvitado = import.meta.env.VITE_GUEST_PASSWORD;
+    
     if (!passMaestra) {
       setIsLoading(false);
       toast.error('Error de configuración del sistema.');
