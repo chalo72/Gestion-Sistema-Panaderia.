@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     X, Calculator, ShoppingCart, 
     ChevronRight, ChevronLeft, Package, 
-    Zap, DollarSign
+    Zap, DollarSign, Store, Utensils, ArrowRight, Info, CheckCircle2
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -29,449 +29,362 @@ export function IceCreamAssistantModal({
     onAddProducto, onAddOrUpdatePrecio, formatCurrency
 }: IceCreamAssistantModalProps) {
     const [step, setStep] = useState(1);
-    
-    // -- Estado del Asistente --
+    const [loading, setLoading] = useState(false);
+
+    // -- Estado Maestro --
     const [calcData, setCalcData] = useState({
-        // Paso 1: El Bulto/Caja
+        // Paso 1: Insumo
         insumoId: '',
         nombreCaja: '',
         costoCaja: '',
-        unidadesMedidaCaja: 'ml', // ml o gr
-        cantidadTotalCaja: '5000', // Ej: 5000ml (5 Litros)
-        tamanoBola: '60', // Ej: 60ml o 60gr
-        bolasPorCaja: '83',
-        proveedorId: '',
+        cantidadTotalCaja: '5000', 
+        tamanoBola: '60', 
         useManualPrice: false,
         
-        // Paso 2: La Presentación (Vaso 3oz, etc.)
-        nombreProducto: '',
-        cupSize: '3', // 3, 5, 7, 9
+        // Paso 2: Presentación
+        cupSize: '3', 
         bolasPorProducto: '1',
-        costoInsumos: '150', // Vaso + Cuchara
-        costoSalsa: '80', // Salsa/Toppings
+        costoInsumos: '150', 
+        costoSalsa: '80', 
+        nombreProducto: '',
         categoria: 'Helados',
         
         // Paso 3: Precio
-        margen: '40',
         targetPVP: '',
     });
 
-    const [loading, setLoading] = useState(false);
-
-    // Cálculos dinámicos (Filtro más inteligente para encontrar las cajas)
-    const insumosLista  = productos.filter(p => {
-        const nombreValido = p.nombre.toLowerCase().includes('helado') || p.nombre.toLowerCase().includes('caja') || p.nombre.toLowerCase().includes('vainilla') || p.nombre.toLowerCase().includes('choco');
-        const catValida = p.categoria?.toLowerCase().includes('helado') || p.categoria?.toLowerCase().includes('insumo') || p.categoria?.toLowerCase().includes('materia');
-        return p.tipo === 'ingrediente' && (nombreValido || catValida);
+    // Cálculos dinámicos (Filtro inteligente)
+    const insumosLista = productos.filter(p => {
+        const n = p.nombre.toLowerCase();
+        const c = (p.categoria || '').toLowerCase();
+        return p.tipo === 'ingrediente' && (n.includes('helado') || n.includes('caja') || n.includes('vainilla') || n.includes('choco') || c.includes('helado') || c.includes('insumo'));
     });
     
-    // Obtener promedio del insumo seleccionado de forma robusta
     const preciosInsumo = precios.filter(pr => pr.productoId === calcData.insumoId);
     const promedioInsumo = preciosInsumo.length > 0 
         ? preciosInsumo.reduce((acc, curr) => acc + (parseFloat(curr.precioCosto) || 0), 0) / preciosInsumo.length 
         : 0;
 
     const costoCajaNum  = calcData.useManualPrice ? (parseFloat(calcData.costoCaja) || 0) : (promedioInsumo || parseFloat(calcData.costoCaja) || 0);
-    const totalCajaNum  = parseFloat(calcData.cantidadTotalCaja) || 1;
-    const tamanoBolaNum = parseFloat(calcData.tamanoBola) || 1;
+    const totalCajaNum  = parseFloat(calcData.cantidadTotalCaja) || 5000;
+    const tamanoBolaNum = parseFloat(calcData.tamanoBola) || 60;
     
-    const rendAuto      = Math.floor(totalCajaNum / tamanoBolaNum);
-    const bolasCajaNum  = parseFloat(calcData.bolasPorCaja) || rendAuto || 1;
-    const costoPorBola  = costoCajaNum / bolasCajaNum;
+    const bolasCajaNum  = Math.floor(totalCajaNum / tamanoBolaNum);
+    const costoPorBola  = costoCajaNum / (bolasCajaNum || 1);
     
     const bolasProdNum  = parseFloat(calcData.bolasPorProducto) || 1;
-    const insumosNum    = parseFloat(calcData.costoInsumos) || 0;
-    const salsaNum      = parseFloat(calcData.costoSalsa) || 0;
-    const costoFinal    = (costoPorBola * bolasProdNum) + insumosNum + salsaNum;
+    const costoFinal    = (costoPorBola * bolasProdNum) + (parseFloat(calcData.costoInsumos) || 0) + (parseFloat(calcData.costoSalsa) || 0);
     
-    const margenNum     = parseFloat(calcData.margen) || 1;
-    const pvpCalculado  = costoFinal * (1 + margenNum / 100);
-    const targetPVPNum  = parseFloat(calcData.targetPVP) || pvpCalculado;
+    const targetPVPNum  = parseFloat(calcData.targetPVP) || (costoFinal * 1.6);
     const margenReal    = targetPVPNum > 1 ? ((targetPVPNum - costoFinal) / targetPVPNum) * 100 : 0;
 
-    // Reiniciar si se abre
     useEffect(() => {
-        if (isOpen) {
-            setStep(1);
-            // Intentar pre-seleccionar categoría Helados si existe
-            const catHelados = categorias.find(c => c.nombre.toLowerCase().includes('helado'));
-            if (catHelados) setCalcData(prev => ({ ...prev, categoria: catHelados.nombre }));
-        }
+        if (isOpen) setStep(1);
     }, [isOpen]);
-
-    const handleNext = () => setStep(s => s + 1);
-    const handlePrev = () => setStep(s => s - 1);
 
     const handleFinish = async () => {
         if (!calcData.nombreProducto || !calcData.categoria) {
-            toast.error('Completa los campos obligatorios');
+            toast.error('Nombre y Categoría son obligatorios');
             return;
         }
-
         setLoading(true);
         try {
-            const pvp = parseFloat(calcData.targetPVP) || pvpCalculado;
-            
-            const nuevoProd = await onAddProducto({
+            await onAddProducto({
                 nombre: calcData.nombreProducto,
                 categoria: calcData.categoria,
-                descripcion: `Helado calculado: ${calcData.bolasPorProducto} bola(s) de ${calcData.nombreCaja || 'Helado'}.`,
-                precioVenta: pvp,
+                descripcion: `Creado con Asistente: ${calcData.bolasPorProducto} bolas de ${calcData.nombreCaja || 'Helado'} (${calcData.tamanoBola}g/bola).`,
+                precioVenta: targetPVPNum,
                 margenUtilidad: margenReal.toFixed(0),
                 tipo: 'elaborado',
                 unidadMedida: 'unidad',
                 costoBase: costoFinal
             });
-
-            if (calcData.proveedorId && calcData.costoCaja) {
-                // Registramos el precio del bulto/caja para referencia histórica o futura
-                onAddOrUpdatePrecio({
-                    productoId: nuevoProd.id,
-                    proveedorId: calcData.proveedorId,
-                    precioCosto: costoFinal, // Guardamos el costo unitario derivado
-                    notas: `Calculado desde bulto de $${calcData.costoCaja} / ${calcData.bolasPorCaja} bolas`
-                });
-            }
-
-            toast.success('Producto de heladería creado exitosamente');
+            toast.success('¡Helado Pro creado con éxito!');
             onOpenChange(false);
-        } catch (error) {
+        } catch (e) {
             toast.error('Error al crear el producto');
         } finally {
             setLoading(false);
         }
     };
 
+    const steps = [
+        { id: 1, title: 'Insumo', sub: 'Caja y Costo', icon: Package },
+        { id: 2, title: 'Rendimiento', sub: 'Bolas de 60g', icon: Zap },
+        { id: 3, title: 'Presentación', sub: 'Vasos y Extras', icon: ShoppingCart },
+        { id: 4, title: 'Precio', sub: 'Venta y Ganancia', icon: Calculator },
+    ];
+
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-xl p-0 overflow-hidden border-none shadow-2xl rounded-3xl bg-slate-50 dark:bg-slate-900 animate-ag-scale-in">
+            <DialogContent className="max-w-2xl p-0 overflow-hidden bg-slate-50 dark:bg-slate-900 border-none rounded-[32px] shadow-2xl">
+                <DialogTitle className="sr-only">Asistente Heladería Pro</DialogTitle>
                 
-                {/* Header Wizard */}
-                <div className="bg-indigo-600 p-6 text-white">
-                    <div className="flex justify-between items-center mb-6">
-                        <div className="flex items-center gap-2">
-                            <Zap className="w-5 h-5 text-indigo-200 fill-indigo-200" />
-                            <DialogTitle className="text-xl font-black uppercase tracking-tight">Asistente Heladería Pro</DialogTitle>
+                {/* Header Premium */}
+                <div className="bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 p-8 text-white relative">
+                    <button onClick={() => onOpenChange(false)} className="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all">
+                        <X className="w-5 h-5" />
+                    </button>
+                    <div className="flex items-center gap-4 mb-6">
+                        <div className="w-14 h-14 bg-white/20 backdrop-blur-xl rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3">
+                            <Store className="w-8 h-8 text-white" />
                         </div>
-                        <Button variant="ghost" size="icon" onClick={() => onOpenChange(false)} className="text-white/50 hover:text-white hover:bg-white/10 rounded-full">
-                            <X className="w-5 h-5" />
-                        </Button>
+                        <div>
+                            <h2 className="text-2xl font-black tracking-tight leading-none mb-1">Heladería Maestro v4</h2>
+                            <p className="text-white/70 text-xs font-bold uppercase tracking-widest">Crea productos ganadores en pasos</p>
+                        </div>
                     </div>
 
-                    {/* Progress Bar Simple */}
-                    <div className="flex gap-2">
-                        {[1, 2, 3].map(i => (
-                            <div key={i} className={cn(
-                                "h-1.5 flex-1 rounded-full transition-all duration-500",
-                                step >= i ? "bg-white" : "bg-white/20"
-                            )} />
+                    {/* Stepper Visual */}
+                    <div className="flex items-center justify-between gap-2 px-2">
+                        {steps.map((s) => (
+                            <div key={s.id} className="flex-1 flex flex-col items-center gap-2 group">
+                                <div className={cn(
+                                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-500 font-black text-sm",
+                                    step >= s.id ? "bg-white text-indigo-600 shadow-xl scale-110" : "bg-white/20 text-white/50"
+                                )}>
+                                    {step > s.id ? <CheckCircle2 className="w-6 h-6" /> : s.id}
+                                </div>
+                                <span className={cn("text-[9px] font-black uppercase tracking-tighter transition-all", step >= s.id ? "text-white opacity-100" : "text-white/40")}>{s.title}</span>
+                            </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="p-8">
-                    {/* STEP 1: LA MATERIA PRIMA (CAJA) */}
+                <div className="p-8 max-h-[65vh] overflow-y-auto custom-scrollbar">
+                    
+                    {/* PASO 1: LA CAJA (INSUMO) */}
                     {step === 1 && (
                         <div className="space-y-6 animate-ag-fade-in">
-                            <div className="space-y-2">
-                                <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                    <Package className="w-5 h-5 text-indigo-500" /> Paso 1: Datos de la Caja/Bulto
-                                </h3>
-                                <p className="text-xs text-slate-500 font-medium italic">Define cuánto pagas por el helado al por mayor y cuánto rinde.</p>
+                            <div className="space-y-1">
+                                <h3 className="text-xl font-black text-slate-800 dark:text-white">¿Cuál es el sabor base?</h3>
+                                <p className="text-slate-500 text-sm font-medium">Selecciona la caja de helado que compraste.</p>
                             </div>
 
                             <div className="grid gap-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Seleccionar Caja / Bulto (Desde Proveedores)</Label>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400 pl-1">Insumos Registrados en Proveedores</Label>
                                     <select 
                                         value={calcData.insumoId}
                                         onChange={e => {
-                                            if (e.target.value === 'manual') {
-                                                setCalcData({...calcData, insumoId: 'manual', useManualPrice: true});
-                                                return;
-                                            }
+                                            if (e.target.value === 'manual') { setCalcData({...calcData, insumoId: 'manual', useManualPrice: true}); return; }
                                             const p = productos.find(prod => prod.id === e.target.value);
-                                            // Al seleccionar, intentamos extraer el precio costo actual si no hay promedios
-                                            const mejorPrecio = precios.find(pr => pr.productoId === e.target.value)?.precioCosto || '';
-                                            setCalcData({
-                                                ...calcData, 
-                                                insumoId: e.target.value, 
-                                                nombreCaja: p?.nombre || '', 
-                                                costoCaja: mejorPrecio.toString(),
-                                                useManualPrice: false
-                                            });
+                                            const pr = precios.find(pr => pr.productoId === e.target.value)?.precioCosto || '';
+                                            setCalcData({...calcData, insumoId: e.target.value, nombreCaja: p?.nombre || '', costoCaja: pr.toString(), useManualPrice: false});
                                         }}
-                                        className="w-full h-12 text-base font-black rounded-2xl bg-white border-2 border-indigo-100 px-4 focus:ring-indigo-500 shadow-sm"
+                                        className="h-14 w-full bg-white dark:bg-slate-800 rounded-2xl border-2 border-indigo-50 px-5 text-base font-black shadow-sm focus:border-indigo-500 focus:ring-0 transition-all outline-none"
                                     >
-                                        <option value="">-- Elige un Insumo Registrado --</option>
+                                        <option value="">-- Buscar Sabor / Caja --</option>
                                         {insumosLista.map(p => {
-                                            const count = precios.filter(pr => pr.productoId === p.id).length;
-                                            return <option key={p.id} value={p.id}>{p.nombre} ({count} precios listados)</option>
+                                            const c = precios.filter(pr => pr.productoId === p.id).length;
+                                            return <option key={p.id} value={p.id}>{p.nombre} ({c} {c === 1 ? 'precio' : 'precios'})</option>
                                         })}
-                                        <option value="manual">+ Ingresar costo manual</option>
+                                        <option value="manual">+ Costo manual (Nuevo sabor)</option>
                                     </select>
                                 </div>
 
                                 {calcData.insumoId && calcData.insumoId !== 'manual' && (
-                                    <div className="p-4 rounded-2xl bg-indigo-600 dark:bg-indigo-900 border border-indigo-500 flex justify-between items-center animate-ag-fade-in shadow-xl">
-                                        <div className="text-white">
-                                            <p className="text-[10px] font-black opacity-70 uppercase tracking-tighter">Costo Base Detectado</p>
-                                            <p className="text-xl font-black">{formatCurrency(promedioInsumo || parseFloat(calcData.costoCaja) || 0)}</p>
-                                            <p className="text-[9px] font-bold opacity-80">
-                                                {preciosInsumo.length > 1 
-                                                    ? `⭐ Promediado entre ${preciosInsumo.length} proveedores` 
-                                                    : `📍 Precio único registrado`}
-                                            </p>
-                                        </div>
-                                        <Button variant="outline" size="sm" onClick={() => setCalcData({...calcData, useManualPrice: true})} className="text-[10px] uppercase font-black bg-white/10 border-white/20 text-white hover:bg-white/20">
-                                            Ajustar Precio
-                                        </Button>
+                                    <div className="p-6 bg-indigo-50 dark:bg-indigo-900/30 rounded-3xl border-2 border-indigo-100 flex flex-col items-center text-center gap-2 group hover:border-indigo-300 transition-all">
+                                        <span className="px-3 py-1 bg-indigo-500 text-white rounded-full text-[9px] font-black uppercase tracking-widest">Costo Detectado</span>
+                                        <span className="text-4xl font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(promedioInsumo || parseFloat(calcData.costoCaja) || 0)}</span>
+                                        <p className="text-xs font-bold text-indigo-400">
+                                            {preciosInsumo.length > 1 ? `✅ Promedio de ${preciosInsumo.length} proveedores` : '✅ Precio único registrado'}
+                                        </p>
+                                        <Button variant="ghost" size="sm" onClick={() => setCalcData({...calcData, useManualPrice: true})} className="text-indigo-500 font-bold hover:bg-white text-[10px]">¿El precio cambió? Ajustar aquí</Button>
                                     </div>
                                 )}
 
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[9px] font-black uppercase text-slate-400">Total Caja (ml/gr)</Label>
-                                        <Input 
-                                            type="number" 
-                                            value={calcData.cantidadTotalCaja} 
-                                            onChange={e => setCalcData({...calcData, cantidadTotalCaja: e.target.value, bolasPorCaja: Math.floor(parseFloat(e.target.value)/parseFloat(calcData.tamanoBola)).toString()})}
-                                            className="h-11 font-black rounded-xl bg-white border-slate-200 text-center"
-                                        />
+                                {(calcData.insumoId === 'manual' || calcData.useManualPrice) && (
+                                    <div className="p-6 bg-white rounded-3xl border-2 border-dashed border-slate-200 animate-ag-scale-in grid grid-cols-2 gap-4">
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[10px] font-black uppercase text-indigo-500">Costo Caja ($)</Label>
+                                            <Input type="number" value={calcData.costoCaja} onChange={e => setCalcData({...calcData, costoCaja: e.target.value, useManualPrice: true})} className="h-12 text-lg font-black bg-indigo-50/50 border-none rounded-xl" />
+                                        </div>
+                                        <div className="space-y-1.5">
+                                            <Label className="text-[10px] font-black uppercase text-slate-400">Nombre Sabor</Label>
+                                            <Input value={calcData.nombreCaja} onChange={e => setCalcData({...calcData, nombreCaja: e.target.value})} className="h-12 font-bold bg-slate-50 border-none rounded-xl" />
+                                        </div>
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[9px] font-black uppercase text-slate-400">Bola (ml/gr)</Label>
-                                        <Input 
-                                            type="number" 
-                                            value={calcData.tamanoBola} 
-                                            onChange={e => setCalcData({...calcData, tamanoBola: e.target.value, bolasPorCaja: Math.floor(parseFloat(calcData.cantidadTotalCaja)/parseFloat(e.target.value)).toString()})}
-                                            className="h-11 font-black rounded-xl bg-white border-slate-200 text-center"
-                                        />
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[9px] font-black uppercase text-indigo-600">Rendimiento (Bolas)</Label>
-                                        <Input 
-                                            type="number" 
-                                            value={calcData.bolasPorCaja} 
-                                            onChange={e => setCalcData({...calcData, bolasPorCaja: e.target.value})}
-                                            className="h-11 font-black rounded-xl bg-indigo-50 border-indigo-200 text-center text-indigo-700"
-                                        />
-                                    </div>
-                                </div>
+                                )}
                             </div>
-
-                            {/* Live Result Step 1 */}
-                            {costoCajaNum > 0 && (
-                                <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800 flex items-center justify-between">
-                                    <span className="text-xs font-bold text-indigo-700">Costo aproximado por bola:</span>
-                                    <span className="text-xl font-black text-indigo-600">{formatCurrency(costoPorBola)}</span>
-                                </div>
-                            )}
                         </div>
                     )}
 
-                    {/* STEP 2: EL PRODUCTO FINAL (PRESENTACIÓN INTERACTIVA) */}
+                    {/* PASO 2: RENDIMIENTO (LA BOLA) */}
                     {step === 2 && (
-                        <div className="space-y-6 animate-ag-fade-in">
-                            <div className="space-y-1">
-                                <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                    <ShoppingCart className="w-5 h-5 text-indigo-500" /> Paso 2: Configurar Helado
-                                </h3>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Personaliza el tamaño y complementos</p>
+                        <div className="space-y-8 animate-ag-fade-in">
+                            <div className="space-y-1 text-center">
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">¿Cuánto rinde la caja?</h3>
+                                <p className="text-slate-500 text-sm font-medium">💡 El estándar es una bola de 60g.</p>
                             </div>
 
-                            {/* Preset Buttons */}
-                            <div className="flex gap-2">
-                                {['3', '5', '7', '9'].map(size => (
+                            <div className="grid grid-cols-2 gap-6">
+                                <div className="space-y-3 p-6 bg-white rounded-[40px] shadow-xl shadow-slate-200/50 border border-slate-100 flex flex-col items-center">
+                                    <Label className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Peso de la Bola (gr/ml)</Label>
+                                    <div className="flex items-center gap-4">
+                                        <button onClick={() => setCalcData({...calcData, tamanoBola: (tamanoBolaNum - 5).toString()})} className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center font-black text-xl hover:bg-slate-200 transition-all">-</button>
+                                        <div className="text-4xl font-black text-slate-800">{calcData.tamanoBola}</div>
+                                        <button onClick={() => setCalcData({...calcData, tamanoBola: (tamanoBolaNum + 5).toString()})} className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xl hover:bg-indigo-200 transition-all">+</button>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 p-6 bg-emerald-500 rounded-[40px] shadow-xl shadow-emerald-200/50 text-white flex flex-col items-center justify-center">
+                                    <Label className="text-[10px] font-black uppercase text-white/70 tracking-widest">Bolas por Caja</Label>
+                                    <div className="text-6xl font-black">{bolasCajaNum}</div>
+                                    <p className="text-[10px] font-bold opacity-80 uppercase tracking-widest">Rendimiento Total</p>
+                                </div>
+                            </div>
+
+                            <div className="p-6 bg-slate-100 dark:bg-slate-800 rounded-3xl flex justify-between items-center px-10">
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Precio x Bola</p>
+                                    <p className="text-3xl font-black text-slate-800 dark:text-white">{formatCurrency(costoPorBola)}</p>
+                                </div>
+                                <ArrowRight className="w-6 h-6 text-slate-300" />
+                                <div className="text-right">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Total Caja</p>
+                                    <Input 
+                                        type="number" 
+                                        value={calcData.cantidadTotalCaja} 
+                                        onChange={e => setCalcData({...calcData, cantidadTotalCaja: e.target.value})}
+                                        className="h-10 w-24 bg-transparent border-none text-right font-black text-xl p-0 focus-visible:ring-0"
+                                    />
+                                    <p className="text-[9px] text-slate-400 font-black">MILILITROS/GRAMOS</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* PASO 3: CONFIGURACIÓN (EL VASO) */}
+                    {step === 3 && (
+                        <div className="space-y-8 animate-ag-fade-in">
+                            <div className="space-y-1 text-center">
+                                <h3 className="text-2xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Armar Presentación</h3>
+                                <p className="text-slate-500 text-sm font-medium italic">Selecciona el tipo de vaso y complementos.</p>
+                            </div>
+
+                            <div className="flex gap-2 p-2 bg-slate-200/50 rounded-3xl">
+                                {['3', '5', '7', '9'].map(sz => (
                                     <button 
-                                        key={size}
-                                        onClick={() => setCalcData({...calcData, cupSize: size, nombreProducto: `Vaso de ${size} OZ`, bolasPorProducto: size === '3' ? '1' : size === '5' ? '2' : '3'})}
+                                        key={sz}
+                                        onClick={() => setCalcData({...calcData, cupSize: sz, nombreProducto: `Helado Vaso ${sz}oz`, bolasPorProducto: sz === '3' ? '1' : sz === '5' ? '2' : '3'})}
                                         className={cn(
-                                            "flex-1 py-3 rounded-2xl text-xs font-black transition-all border-2",
-                                            calcData.cupSize === size 
-                                                ? "bg-indigo-600 border-indigo-200 text-white shadow-lg shadow-indigo-100" 
-                                                : "bg-white border-slate-100 text-slate-400 hover:bg-slate-50"
+                                            "flex-1 py-4 rounded-2xl text-xs font-black transition-all",
+                                            calcData.cupSize === sz ? "bg-white text-indigo-600 shadow-lg scale-105" : "text-slate-400 hover:bg-white/50"
                                         )}
                                     >
-                                        {size} OZ
+                                        VASO {sz} OZ
                                     </button>
                                 ))}
                             </div>
 
-                            <div className="grid gap-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Helado</Label>
-                                    <Input 
-                                        value={calcData.nombreProducto} 
-                                        onChange={e => setCalcData({...calcData, nombreProducto: e.target.value})}
-                                        placeholder="Ej: Copa Especial 3oz..." 
-                                        className="h-12 text-base font-bold rounded-2xl bg-white border-slate-200"
-                                    />
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1.5 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                                        <Label className="text-[10px] font-black uppercase text-indigo-500">Gramos/Bola</Label>
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => setCalcData({...calcData, tamanoBola: (tamanoBolaNum - 5).toString()})} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold">-</button>
-                                            <Input 
-                                                type="number" 
-                                                value={calcData.tamanoBola} 
-                                                onChange={e => setCalcData({...calcData, tamanoBola: e.target.value})}
-                                                className="border-none text-xl font-black text-center p-0 h-8 focus-visible:ring-0"
-                                            />
-                                            <button onClick={() => setCalcData({...calcData, tamanoBola: (tamanoBolaNum + 5).toString()})} className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">+</button>
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1.5 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
-                                        <Label className="text-[10px] font-black uppercase text-indigo-500">Cantidad Bolas</Label>
-                                        <div className="flex items-center gap-2">
-                                            <button onClick={() => setCalcData({...calcData, bolasPorProducto: (bolasProdNum - 1).toString()})} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold">-</button>
-                                            <Input 
-                                                type="number" 
-                                                value={calcData.bolasPorProducto} 
-                                                onChange={e => setCalcData({...calcData, bolasPorProducto: e.target.value})}
-                                                className="border-none text-xl font-black text-center p-0 h-8 focus-visible:ring-0"
-                                            />
-                                            <button onClick={() => setCalcData({...calcData, bolasPorProducto: (bolasProdNum + 1).toString()})} className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">+</button>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-6 bg-white rounded-3xl border border-slate-100 space-y-4">
+                                    <div className="space-y-1 flex flex-col items-center">
+                                        <Label className="text-[10px] font-black uppercase text-slate-400">¿Cuántas Bolas?</Label>
+                                        <div className="flex items-center gap-3">
+                                            <button onClick={() => setCalcData({...calcData, bolasPorProducto: (bolasProdNum - 1).toString()})} className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center font-black">-</button>
+                                            <span className="text-3xl font-black text-slate-800">{calcData.bolasPorProducto}</span>
+                                            <button onClick={() => setCalcData({...calcData, bolasPorProducto: (bolasProdNum + 1).toString()})} className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black">+</button>
                                         </div>
                                     </div>
                                 </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-slate-400">Vaso/Cuchara ($)</Label>
+                                <div className="p-6 bg-indigo-600 rounded-3xl flex flex-col items-center justify-center text-white shadow-xl shadow-indigo-200/50">
+                                    <Label className="text-[10px] font-black uppercase text-white/60 tracking-widest mb-1">Costo Otros</Label>
+                                    <div className="flex items-baseline gap-1">
+                                        <span className="text-[10px] font-black">$</span>
                                         <Input 
                                             type="number" 
-                                            value={calcData.costoInsumos} 
-                                            onChange={e => setCalcData({...calcData, costoInsumos: e.target.value})}
-                                            className="h-10 font-bold rounded-xl bg-white border-slate-100 text-center"
+                                            value={(parseFloat(calcData.costoInsumos) + parseFloat(calcData.costoSalsa))}
+                                            onChange={e => setCalcData({...calcData, costoInsumos: (parseFloat(e.target.value) - 80).toString()})}
+                                            className="h-10 w-24 bg-transparent border-none text-center font-black text-3xl p-0 focus-visible:ring-0 text-white"
                                         />
                                     </div>
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-slate-400">Salsa/Extras ($)</Label>
-                                        <Input 
-                                            type="number" 
-                                            value={calcData.costoSalsa} 
-                                            onChange={e => setCalcData({...calcData, costoSalsa: e.target.value})}
-                                            className="h-10 font-bold rounded-xl bg-white border-slate-100 text-center"
-                                        />
-                                    </div>
+                                    <p className="text-[9px] font-bold opacity-80 uppercase tracking-widest mt-1">Vaso + Salsa + Extras</p>
                                 </div>
                             </div>
 
-                            {/* Dynamic Indicator */}
-                            <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border-l-4 border-emerald-500 flex justify-between items-center animate-ag-scale-in">
-                                <div>
-                                    <p className="text-[9px] font-black text-emerald-700 uppercase">Costo Final Unitario</p>
-                                    <p className="text-2xl font-black text-emerald-600">{formatCurrency(costoFinal)}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-[9px] font-black text-emerald-700 uppercase">Utilidad Proyectada</p>
-                                    <p className="text-lg font-black text-emerald-500">~{formatCurrency(pvpCalculado - costoFinal)}</p>
-                                </div>
+                            {/* Nombre del Producto */}
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-slate-400 pl-1">Nombre Final (Para el Menú)</Label>
+                                <Input 
+                                    value={calcData.nombreProducto} 
+                                    onChange={e => setCalcData({...calcData, nombreProducto: e.target.value})}
+                                    placeholder="Ej: Copa Especial 3oz Chocolate..." 
+                                    className="h-14 text-lg font-black bg-white border-2 border-slate-100 rounded-2xl px-5"
+                                />
                             </div>
                         </div>
                     )}
 
-                    {/* STEP 3: PRECIO Y MARGEN (TARGET PVP) */}
-                    {step === 3 && (
-                        <div className="space-y-6 animate-ag-fade-in">
-                            <div className="space-y-2">
-                                <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                    <Calculator className="w-5 h-5 text-indigo-500" /> Paso 3: Definir Precio y Ganancia
-                                </h3>
-                                <p className="text-[10px] text-slate-500 font-bold italic">Ajusta el precio hasta que llegues a la utilidad que quieres.</p>
+                    {/* PASO 4: PRECIO (ULTRA SIMPLE) */}
+                    {step === 4 && (
+                        <div className="space-y-10 animate-ag-fade-in">
+                            <div className="text-center space-y-2">
+                                <h3 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">¡Listo para Vender!</h3>
+                                <p className="text-slate-500 text-sm font-medium">Ajusta el precio y mira tu ganancia real.</p>
                             </div>
 
-                            <div className="p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/40 space-y-6">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1">
-                                        <DollarSign className="w-3 h-3" /> Precio al que quieres vender (PVP)
+                            <div className="p-10 bg-white dark:bg-slate-800 rounded-[48px] shadow-2xl border border-slate-100 space-y-8 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4">
+                                     <Badge className="bg-emerald-500 text-white font-black text-[10px] px-3 py-1">ULTRA PRO</Badge>
+                                </div>
+                                
+                                <div className="space-y-4 text-center">
+                                    <Label className="text-[11px] font-black uppercase text-indigo-500 flex items-center justify-center gap-2 tracking-[0.2em]">
+                                        Precio de Venta Final ($)
                                     </Label>
-                                    <Input 
-                                        type="number" 
-                                        value={calcData.targetPVP} 
-                                        onChange={e => setCalcData({...calcData, targetPVP: e.target.value})}
-                                        placeholder={pvpCalculado.toFixed(0)}
-                                        className="h-20 text-5xl font-black text-emerald-600 rounded-2xl bg-slate-50 border-none text-center focus:ring-emerald-500"
-                                    />
+                                    <div className="relative inline-block w-full">
+                                        <Input 
+                                            type="number" 
+                                            value={calcData.targetPVP} 
+                                            onChange={e => setCalcData({...calcData, targetPVP: e.target.value})}
+                                            placeholder={(costoFinal * 1.6).toFixed(0)}
+                                            className="h-28 text-7xl font-black text-emerald-600 rounded-[32px] bg-slate-50 border-none text-center focus:ring-emerald-500"
+                                        />
+                                        <div className="absolute bottom-4 left-0 right-0 text-[10px] font-black text-emerald-400 uppercase opacity-50 tracking-[0.3em]">PVP CLIENTE</div>
+                                    </div>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-4 bg-indigo-50 rounded-2xl text-center">
-                                        <p className="text-[9px] font-black text-indigo-400 uppercase">Margen Real</p>
-                                        <p className={cn(
-                                            "text-2xl font-black",
-                                            margenReal > 30 ? "text-indigo-600" : "text-orange-500"
-                                        )}>
-                                            {margenReal.toFixed(1)}%
+                                <div className="grid grid-cols-2 gap-8 px-4">
+                                    <div className="text-center group">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 group-hover:text-indigo-500 transition-colors">Margen de Ganancia</p>
+                                        <p className={cn("text-4xl font-black", margenReal > 40 ? "text-indigo-600" : "text-orange-500")}>
+                                            {margenReal.toFixed(0)}%
                                         </p>
                                     </div>
-                                    <div className="p-4 bg-emerald-50 rounded-2xl text-center">
-                                        <p className="text-[9px] font-black text-emerald-400 uppercase">Ganancia Limpia</p>
-                                        <p className="text-2xl font-black text-emerald-600">
+                                    <div className="text-center group">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 group-hover:text-emerald-500 transition-colors">Dinero Limpio</p>
+                                        <p className="text-4xl font-black text-emerald-600">
                                             {formatCurrency(targetPVPNum - costoFinal)}
                                         </p>
                                     </div>
                                 </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Categoría Final</Label>
-                                <div className="flex flex-wrap gap-2">
-                                    {categorias.filter(c => c.tipo !== 'insumo').slice(0, 4).map(c => (
-                                        <button 
-                                            key={c.id}
-                                            onClick={() => setCalcData({...calcData, categoria: c.nombre})}
-                                            className={cn(
-                                                "px-4 py-2 rounded-xl text-xs font-black transition-all",
-                                                calcData.categoria === c.nombre 
-                                                    ? "bg-indigo-600 text-white shadow-md" 
-                                                    : "bg-white text-slate-500 border border-slate-100 hover:bg-slate-50"
-                                            )}
-                                        >
-                                            {c.nombre}
-                                        </button>
-                                    ))}
+                                <div className="p-4 bg-slate-50 rounded-2xl flex justify-center gap-8">
+                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-indigo-500"></div><span className="text-[10px] font-black text-slate-500 uppercase">Costo Base: {formatCurrency(costoFinal)}</span></div>
+                                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500"></div><span className="text-[10px] font-black text-slate-500 uppercase">Categoria: {calcData.categoria}</span></div>
                                 </div>
                             </div>
                         </div>
                     )}
-
-                    {/* Footer Buttons */}
-                    <div className="flex gap-3 mt-10 pt-6 border-t border-slate-100 dark:border-slate-800">
-                        {step > 1 && (
-                            <Button variant="outline" onClick={handlePrev} className="h-12 flex-1 rounded-2xl font-bold uppercase tracking-tight">
-                                <ChevronLeft className="w-4 h-4 mr-1" /> Atrás
-                            </Button>
-                        )}
-                        
-                        {step < 3 ? (
-                            <Button 
-                                onClick={handleNext} 
-                                disabled={step === 1 && !calcData.costoCaja}
-                                className="h-12 flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase tracking-tight shadow-lg shadow-indigo-200"
-                            >
-                                Siguiente <ChevronRight className="w-4 h-4 ml-1" />
-                            </Button>
-                        ) : (
-                            <Button 
-                                onClick={handleFinish} 
-                                disabled={loading || !calcData.nombreProducto}
-                                className="h-12 flex-[2] bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase tracking-tight shadow-lg shadow-emerald-200"
-                            >
-                                {loading ? 'Creando...' : '✓ Crear Producto Final'}
-                            </Button>
-                        )}
-                    </div>
                 </div>
 
-                {/* Corner Info Badge */}
-                <div className="absolute top-24 right-4 animate-ag-bounce">
-                    <Badge variant="outline" className="bg-white/80 backdrop-blur-sm border-indigo-200 text-indigo-600 font-black text-[9px] uppercase px-3 py-1 rounded-full shadow-sm">
-                        Modo Pro
-                    </Badge>
+                {/* Footer Navegación */}
+                <div className="p-8 pb-10 bg-white dark:bg-slate-900 flex justify-between gap-4 border-t border-slate-100">
+                    <Button 
+                        variant="ghost" 
+                        onClick={() => step > 1 ? setStep(step - 1) : onOpenChange(false)}
+                        className="h-16 flex-1 rounded-2xl text-slate-400 font-black uppercase text-xs hover:bg-slate-50"
+                    >
+                        {step === 1 ? 'Cancelar' : <><ChevronLeft className="w-5 h-5 mr-2" /> Atrás</>}
+                    </Button>
+                    <Button 
+                        disabled={loading}
+                        onClick={() => step < 4 ? setStep(step + 1) : handleFinish()}
+                        className="h-16 flex-[2] bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black uppercase text-xs shadow-xl shadow-indigo-100 transition-all hover:scale-[1.02] active:scale-95"
+                    >
+                        {loading ? 'Creando PRODUCTO...' : (step === 4 ? '¡Crear Helado Final!' : <>{step === 1 ? 'Empezar Cálculos' : 'Siguiente Paso'} <ChevronRight className="w-5 h-5 ml-2" /></>)}
+                    </Button>
                 </div>
             </DialogContent>
         </Dialog>
