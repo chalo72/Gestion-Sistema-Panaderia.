@@ -16,7 +16,31 @@ export function Login({ onLoginSuccess }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [version, setVersion] = useState('...');
   const { login } = useAuth();
+
+  // Cargar versión para que el usuario sepa si tiene el arreglo
+  useState(() => {
+    fetch('/version.json')
+      .then(r => r.json())
+      .then(data => setVersion(data.version))
+      .catch(() => setVersion('1.0.215+'));
+  });
+
+  const handleEmergencyReset = async () => {
+    if (confirm('⚠️ ¿Quieres limpiar la memoria del navegador? Se cerrarán todas las sesiones y se actualizará el sistema.')) {
+      localStorage.clear();
+      sessionStorage.clear();
+      // Borrar Service Workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+      window.location.reload();
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +48,8 @@ export function Login({ onLoginSuccess }: LoginProps) {
     setIsLoading(true);
     const result = await login(email, password);
     if (result.success) {
-      setTimeout(() => onLoginSuccess(), 100);
+      // Retraso aumentado para asegurar que el estado de AuthContext se propague
+      setTimeout(() => onLoginSuccess(), 500);
     } else {
       setError(result.error || 'Error al iniciar sesión');
     }
@@ -207,10 +232,18 @@ export function Login({ onLoginSuccess }: LoginProps) {
             </Button>
           </form>
 
-          <p className="text-slate-600 text-xs text-center mt-4">
-            © 2026 Panadería Dulce Placer —{' '}
-            <span className="text-[#ff007f]/40 italic">Sistema Premium 100% Offline</span>
-          </p>
+          <div className="flex flex-col items-center gap-3 mt-4">
+            <p className="text-slate-600 text-[10px] text-center">
+              © 2026 Panadería Dulce Placer — <span className="text-[#ff007f] font-bold">Nexus v{version}</span>
+            </p>
+            
+            <button
+              onClick={handleEmergencyReset}
+              className="text-[9px] text-slate-500 hover:text-rose-400 uppercase font-black tracking-widest border border-slate-800 hover:border-rose-900/30 px-3 py-1 rounded-lg transition-all"
+            >
+              ⚠️ Limpiar Caché y Reiniciar
+            </button>
+          </div>
         </div>
       </div>
 
