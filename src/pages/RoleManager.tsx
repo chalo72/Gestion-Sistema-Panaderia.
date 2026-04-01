@@ -66,7 +66,11 @@ const PERMISSION_GROUPS: { name: string; permissions: Permission[]; icon?: any }
 
 const ROLES: UserRole[] = ['ADMIN', 'GERENTE', 'COMPRADOR', 'VENDEDOR'];
 
-export default function RoleManager({ publicAppUrl }: { publicAppUrl?: string }) {
+interface RoleManagerProps {
+    publicAppUrl?: string;
+}
+
+export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
     const { rolePermissions, updateRolePermissions, resetPermissions } = useAuth();
 
     // Toggle de permiso

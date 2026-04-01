@@ -34,7 +34,7 @@ const Precios = lazy(() => import('@/pages/Precios'));
 const Recepciones = lazy(() => import('@/pages/Recepciones'));
 const Alertas = lazy(() => import('@/pages/Alertas').then(m => ({ default: m.Alertas })));
 const PrePedidos = lazy(() => import('@/pages/PrePedidos'));
-const RoleManager = lazy(() => import('@/pages/RoleManager'));
+const RoleManager = lazy(() => import('@/pages/RoleManager')) as any;
 const Recetas = lazy(() => import('@/pages/Recetas'));
 const Ahorros = lazy(() => import('@/pages/Ahorros'));
 const Gastos = lazy(() => import('@/pages/Gastos'));
@@ -388,7 +388,7 @@ function AppContent() {
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
               onUpdateProducto={updateProducto}
-              onNavigateTo={setCurrentView}
+              onNavigateTo={setCurrentView as any}
               categorias={configuracion.categorias || []}
             />
           </SectionErrorBoundary>
@@ -641,7 +641,7 @@ function AppContent() {
               getProductoById={getProductoById}
               getMejorPrecio={getMejorPrecio}
               formatCurrency={formatCurrency}
-              onNavigateTo={setCurrentView}
+              onNavigateTo={setCurrentView as any}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
