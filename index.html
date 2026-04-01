@@ -53,28 +53,43 @@
   <script>
     console.log("🚀 Antigravity Boot Probe: index.html loaded");
     
-    // Detector de versión fantasma (Anti-Cache)
+    // [Nexus-Volt] Cache Slayer v2.1 - Fuerza la actualización inmediata del PWA
     (function() {
-      const STORAGE_KEY = 'dp_build_timestamp';
-      fetch('/version.json?v=' + Date.now(), { cache: 'no-store' })
-        .then(r => r.json())
-        .then(data => {
-          const localTs = parseInt(localStorage.getItem(STORAGE_KEY) || '0');
-          if (localTs !== 0 && data.timestamp > localTs) {
-            console.warn("⚠️ Nueva versión detectada en carga inicial. Forzando purga de caché...");
-            localStorage.setItem(STORAGE_KEY, data.timestamp);
-            
-            // Limpiar Service Workers antes de recargar
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker.getRegistrations().then(regs => {
-                for(let reg of regs) reg.unregister();
-                window.location.reload(true);
-              });
-            } else {
-              window.location.reload(true);
+      const STORAGE_KEY = 'nexus_build_ts';
+      const checkVersion = () => {
+        fetch('/version.json?cb=' + Date.now(), { cache: 'no-store' })
+          .then(r => r.json())
+          .then(data => {
+            const localTs = parseInt(localStorage.getItem(STORAGE_KEY) || '0');
+            if (localTs !== 0 && data.timestamp > localTs) {
+              console.warn("🚨 [Shield] Nueva versión detectada. Purgando caché profundo...");
+              localStorage.setItem(STORAGE_KEY, data.timestamp);
+              
+              // 1. Desregistrar Service Workers
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(regs => {
+                  for(let reg of regs) reg.unregister();
+                });
+              }
+              
+              // 2. Borrar todos los caches del navegador (CacheStorage)
+              if ('caches' in window) {
+                caches.keys().then(names => {
+                  for (let name of names) caches.delete(name);
+                });
+              }
+
+              // 3. Forzar recarga completa desde el servidor
+              setTimeout(() => window.location.reload(true), 500);
+            } else if (localTs === 0) {
+              localStorage.setItem(STORAGE_KEY, data.timestamp);
             }
-          }
-        }).catch(e => console.log("Auto-Update Probe Bypass"));
+          }).catch(() => {});
+      };
+      
+      // Ejecutar inmediatamente y cada 10 minutos
+      checkVersion();
+      setInterval(checkVersion, 600000);
     })();
 
     window.onerror = (m, s, l, c, e) => {
