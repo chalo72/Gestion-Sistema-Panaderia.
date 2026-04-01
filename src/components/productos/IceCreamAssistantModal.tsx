@@ -58,16 +58,20 @@ export function IceCreamAssistantModal({
 
     const [loading, setLoading] = useState(false);
 
-    // Cálculos dinámicos
-    const insumosLista  = productos.filter(p => p.tipo === 'ingrediente' && (p.categoria?.toLowerCase().includes('helado') || p.nombre.toLowerCase().includes('helado') || p.nombre.toLowerCase().includes('caja')));
+    // Cálculos dinámicos (Filtro más inteligente para encontrar las cajas)
+    const insumosLista  = productos.filter(p => {
+        const nombreValido = p.nombre.toLowerCase().includes('helado') || p.nombre.toLowerCase().includes('caja') || p.nombre.toLowerCase().includes('vainilla') || p.nombre.toLowerCase().includes('choco');
+        const catValida = p.categoria?.toLowerCase().includes('helado') || p.categoria?.toLowerCase().includes('insumo') || p.categoria?.toLowerCase().includes('materia');
+        return p.tipo === 'ingrediente' && (nombreValido || catValida);
+    });
     
-    // Obtener promedio del insumo seleccionado
+    // Obtener promedio del insumo seleccionado de forma robusta
     const preciosInsumo = precios.filter(pr => pr.productoId === calcData.insumoId);
     const promedioInsumo = preciosInsumo.length > 0 
-        ? preciosInsumo.reduce((acc, curr) => acc + curr.precioCosto, 0) / preciosInsumo.length 
+        ? preciosInsumo.reduce((acc, curr) => acc + (parseFloat(curr.precioCosto) || 0), 0) / preciosInsumo.length 
         : 0;
 
-    const costoCajaNum  = calcData.useManualPrice ? (parseFloat(calcData.costoCaja) || 0) : promedioInsumo;
+    const costoCajaNum  = calcData.useManualPrice ? (parseFloat(calcData.costoCaja) || 0) : (promedioInsumo || parseFloat(calcData.costoCaja) || 0);
     const totalCajaNum  = parseFloat(calcData.cantidadTotalCaja) || 1;
     const tamanoBolaNum = parseFloat(calcData.tamanoBola) || 1;
     
@@ -178,56 +182,49 @@ export function IceCreamAssistantModal({
 
                             <div className="grid gap-4">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Seleccionar Caja de Helado (Insumo)</Label>
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Seleccionar Caja / Bulto (Desde Proveedores)</Label>
                                     <select 
                                         value={calcData.insumoId}
                                         onChange={e => {
+                                            if (e.target.value === 'manual') {
+                                                setCalcData({...calcData, insumoId: 'manual', useManualPrice: true});
+                                                return;
+                                            }
                                             const p = productos.find(prod => prod.id === e.target.value);
-                                            setCalcData({...calcData, insumoId: e.target.value, nombreCaja: p?.nombre || '', useManualPrice: false});
+                                            // Al seleccionar, intentamos extraer el precio costo actual si no hay promedios
+                                            const mejorPrecio = precios.find(pr => pr.productoId === e.target.value)?.precioCosto || '';
+                                            setCalcData({
+                                                ...calcData, 
+                                                insumoId: e.target.value, 
+                                                nombreCaja: p?.nombre || '', 
+                                                costoCaja: mejorPrecio.toString(),
+                                                useManualPrice: false
+                                            });
                                         }}
-                                        className="w-full h-12 text-base font-bold rounded-2xl bg-white border-slate-200 px-4 focus:ring-indigo-500"
+                                        className="w-full h-12 text-base font-black rounded-2xl bg-white border-2 border-indigo-100 px-4 focus:ring-indigo-500 shadow-sm"
                                     >
-                                        <option value="">-- Selecciona un Insumo --</option>
-                                        {insumosLista.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                                        <option value="">-- Elige un Insumo Registrado --</option>
+                                        {insumosLista.map(p => {
+                                            const count = precios.filter(pr => pr.productoId === p.id).length;
+                                            return <option key={p.id} value={p.id}>{p.nombre} ({count} precios listados)</option>
+                                        })}
                                         <option value="manual">+ Ingresar costo manual</option>
                                     </select>
                                 </div>
 
-                                {(calcData.insumoId === 'manual' || calcData.useManualPrice) && (
-                                    <div className="animate-ag-fade-in space-y-4">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <Label className="text-[10px] font-black uppercase text-indigo-500">Costo Manual de la Caja ($)</Label>
-                                                <Input 
-                                                    type="number" 
-                                                    value={calcData.costoCaja} 
-                                                    onChange={e => setCalcData({...calcData, costoCaja: e.target.value, useManualPrice: true})}
-                                                    placeholder="90000" 
-                                                    className="h-12 text-lg font-black text-indigo-600 rounded-2xl bg-white border-indigo-100"
-                                                />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Sabor</Label>
-                                                <Input 
-                                                    value={calcData.nombreCaja} 
-                                                    onChange={e => setCalcData({...calcData, nombreCaja: e.target.value})}
-                                                    placeholder="Ej: Chocolate..." 
-                                                    className="h-12 text-base font-bold rounded-2xl bg-white border-slate-200"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
                                 {calcData.insumoId && calcData.insumoId !== 'manual' && (
-                                    <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 flex justify-between items-center animate-ag-fade-in">
-                                        <div>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase">Precio Promedio de Lista</p>
-                                            <p className="text-lg font-black text-slate-800 dark:text-white">{formatCurrency(promedioInsumo)}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold">Basado en {preciosInsumo.length} proveedores</p>
+                                    <div className="p-4 rounded-2xl bg-indigo-600 dark:bg-indigo-900 border border-indigo-500 flex justify-between items-center animate-ag-fade-in shadow-xl">
+                                        <div className="text-white">
+                                            <p className="text-[10px] font-black opacity-70 uppercase tracking-tighter">Costo Base Detectado</p>
+                                            <p className="text-xl font-black">{formatCurrency(promedioInsumo || parseFloat(calcData.costoCaja) || 0)}</p>
+                                            <p className="text-[9px] font-bold opacity-80">
+                                                {preciosInsumo.length > 1 
+                                                    ? `⭐ Promediado entre ${preciosInsumo.length} proveedores` 
+                                                    : `📍 Precio único registrado`}
+                                            </p>
                                         </div>
-                                        <Button variant="ghost" size="sm" onClick={() => setCalcData({...calcData, useManualPrice: true})} className="text-[10px] uppercase font-black text-indigo-600">
-                                            Editar Precio
+                                        <Button variant="outline" size="sm" onClick={() => setCalcData({...calcData, useManualPrice: true})} className="text-[10px] uppercase font-black bg-white/10 border-white/20 text-white hover:bg-white/20">
+                                            Ajustar Precio
                                         </Button>
                                     </div>
                                 )}
