@@ -7,6 +7,7 @@
     "dev": "vite",
     "dev:electron": "vite build && electron .",
     "update-version": "node scripts/update-version.js",
+    "verify-integrity": "node scripts/verify-integrity.js",
     "build": "npm run update-version && vite build",
     "build:electron": "npm run update-version && tsc -b && vite build && electron-builder",
     "test": "vitest run",

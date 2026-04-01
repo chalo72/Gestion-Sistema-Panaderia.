@@ -39,6 +39,7 @@ function Configuracion(props: ConfiguracionProps) {
   const [passVendedor, setPassVendedor] = useState('');
   const [passPanadero, setPassPanadero] = useState('');
   const [passAuxiliar, setPassAuxiliar] = useState('');
+  const [publicUrl, setPublicUrl] = useState('');
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
@@ -76,6 +77,7 @@ function Configuracion(props: ConfiguracionProps) {
       setAutoAjuste(configuracion.ajusteAutomatico !== false);
       setNotificaciones(configuracion.notificarSubidas !== false);
       setPresupuesto((configuracion.presupuestoMensual || 0).toString());
+      setPublicUrl(configuracion.publicUrl || '');
     }
   }, [configuracion]);
 
@@ -100,6 +102,7 @@ function Configuracion(props: ConfiguracionProps) {
         ajusteAutomatico: autoAjuste,
         notificarSubidas: notificaciones,
         presupuestoMensual: parseFloat(presupuesto) || 0,
+        publicUrl: publicUrl.trim(),
       });
       toast.success('✨ Configuración actualizada y protegida');
     } catch (error) {
@@ -111,6 +114,34 @@ function Configuracion(props: ConfiguracionProps) {
     onClearAllData();
     setShowConfirmClear(false);
     toast.success('♻️ Sistema restablecido correctamente');
+  };
+
+  const handleManualPurge = async () => {
+    const id = toast.loading('Ejecutando limpieza nuclear de caché...');
+    
+    try {
+      // 1. Eliminar todos los cachés registrados
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(name => caches.delete(name)));
+      }
+
+      // 2. Desregistrar todos los Service Workers
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for(let reg of regs) {
+          await reg.unregister();
+        }
+      }
+
+      // 3. Forzar recarga desde red
+      toast.success('✨ Caché purgada. Reiniciando...', { id });
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (e) {
+      toast.error('Error al purgar caché: ' + (e as Error).message, { id });
+    }
   };
 
 
@@ -126,10 +157,16 @@ function Configuracion(props: ConfiguracionProps) {
             Personaliza la inteligencia y los parámetros financieros de tu agente.
           </p>
         </div>
-        <Button variant="outline" onClick={() => window.location.reload()} className="gap-2 border-primary/20 hover:bg-primary/5 transition-all hover:scale-105">
-          <RefreshCw className="w-4 h-4" />
-          Reiniciar Sistema
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={handleManualPurge} className="gap-2 border-emerald-500/20 text-emerald-600 hover:bg-emerald-50 bg-emerald-50/10 transition-all hover:scale-105">
+            <RefreshCw className="w-4 h-4" />
+            Limpiar Caché (NUEVO)
+          </Button>
+          <Button variant="outline" onClick={() => window.location.reload()} className="gap-2 border-primary/20 hover:bg-primary/5 transition-all hover:scale-105">
+            <RefreshCw className="w-4 h-4" />
+            Reiniciar App
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -158,6 +195,22 @@ function Configuracion(props: ConfiguracionProps) {
                   />
                   <p className="text-xs text-muted-foreground mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     Visible en reportes y encabezados.
+                  </p>
+                </div>
+
+                <div className="group">
+                  <Label htmlFor="publicUrl" className="text-secondary font-bold flex items-center gap-2">
+                    <Globe className="w-3.5 h-3.5" /> URL Pública del Sistema (Vercel)
+                  </Label>
+                  <Input
+                    id="publicUrl"
+                    value={publicUrl}
+                    onChange={(e) => setPublicUrl(e.target.value)}
+                    placeholder="https://tu-app.vercel.app"
+                    className="mt-2 h-12 border-primary/20 focus:border-primary focus:ring-primary/20 bg-background/50 transition-all font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-2 italic px-1">
+                    Esta es la dirección que se enviará por WhatsApp a los trabajadores para que entren desde su celular.
                   </p>
                 </div>
               </div>

@@ -25,9 +25,9 @@ interface ProductosProps {
     onAddProducto: (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
     onUpdateProducto: (id: string, updates: Partial<Producto>) => void;
     onDeleteProducto: (id: string) => void;
-    onAddCategoria: (nombre: string, color: string) => Promise<Categoria>;
+    onAddCategoria: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
     onDeleteCategoria: (id: string) => void;
-    onUpdateCategoria: (id: string, nombre: string, color: string) => void;
+    onUpdateCategoria: (id: string, nombre: string, color: string, tipo?: 'venta' | 'insumo') => void;
     onAddOrUpdatePrecio: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string }) => void;
     onDeletePrecio: (id: string) => void;
     getMejorPrecio: (productoId: string) => PrecioProveedor | null;
@@ -64,7 +64,7 @@ export default function Productos({
         nombre: '', categoria: '', descripcion: '', precioVenta: '',
         margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
     });
-    const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0] });
+    const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0], tipo: 'venta' as 'venta' | 'insumo' });
 
     const categoriasUnicas = useMemo(() => {
         const normalizadas = productos
@@ -113,9 +113,9 @@ export default function Productos({
     const handleHandleAddCategoria = (e: React.FormEvent) => {
         e.preventDefault();
         if (!nuevaCategoria.nombre) { toast.error('Nombre obligatorio'); return; }
-        onAddCategoria(nuevaCategoria.nombre, nuevaCategoria.color);
+        onAddCategoria(nuevaCategoria.nombre, nuevaCategoria.color, nuevaCategoria.tipo);
         toast.success('Categoría agregada');
-        setNuevaCategoria({ nombre: '', color: COLORES_PRESET[0] });
+        setNuevaCategoria({ nombre: '', color: COLORES_PRESET[0], tipo: 'venta' });
         setIsCategoriaDialogOpen(false);
     };
 

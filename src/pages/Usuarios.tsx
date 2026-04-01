@@ -21,7 +21,8 @@ import {
   Lock,
   Eye,
   EyeOff,
-  MoreVertical
+  MoreVertical,
+  Share2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ROLE_DESCRIPTIONS, type UserRole, type Usuario } from '@/types';
@@ -118,6 +119,19 @@ export function Usuarios() {
     if (success) {
       toast.success(`Estado de entidad conmutado: ${!user.activo ? 'ACTIVO' : 'INACTIVO'}`);
     }
+  };
+
+  const handleShareWhatsApp = (user: Usuario) => {
+    const rolePasswords = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
+    const password = (user as any).password || rolePasswords[user.rol] || 'Pendiente asignar';
+
+    const appUrl = window.location.origin;
+    const message = `👤 *DULCE PLACER - ACCESO PERSONAL* 👤\n\nHola *${user.nombre}*, aquí tienes tus credenciales para el sistema ERP:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${user.email}\n🔑 *Tu Clave:* ${password}\n\n⚠️ *SEGURIDAD:* Favor guardar estos datos de forma privada.`;
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+
+    window.open(whatsappUrl, '_blank');
+    toast.success(`Compartiendo acceso de ${user.nombre}`);
   };
 
   return (
@@ -299,6 +313,15 @@ export function Usuarios() {
 
             {/* Acciones */}
             <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleShareWhatsApp(user)}
+                className="w-8 h-8 rounded-xl text-emerald-500 hover:bg-emerald-500/10"
+                title="Compartir por WhatsApp"
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
               <Button 
                 variant="ghost" 
                 size="icon" 

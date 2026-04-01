@@ -122,8 +122,8 @@ export function ProveedorForm({
   categoriasVenta = [],
 }: ProveedorFormProps) {
   // Categorías sincronizadas con el sistema (mismas que ProductFormModal)
-  const catInsumoSistema = categoriasVenta.filter(c => c.tipo !== 'venta').map(c => c.nombre);
-  const catVentaSistema  = categoriasVenta.filter(c => c.tipo !== 'insumo').map(c => c.nombre);
+  const catInsumoSistema = (categoriasVenta || []).filter(c => c.tipo === 'insumo').map(c => c.nombre);
+  const catVentaSistema  = (categoriasVenta || []).filter(c => c.tipo === 'venta' || !c.tipo).map(c => c.nombre);
   const CATS_INSUMO = catInsumoSistema.length > 0 ? catInsumoSistema : CATEGORIAS_INSUMO;
   const CATS_VENTA  = catVentaSistema.length  > 0 ? catVentaSistema  : CATEGORIAS_VENTA;
 

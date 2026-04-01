@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Tag, Plus, Trash2, Palette, X, Edit2, Check } from 'lucide-react';
+import { Tag, Plus, Trash2, Palette, X, Edit2, Check, ShoppingCart, Warehouse } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,9 @@ interface ProductCategoryManagerProps {
     onOpenChange: (open: boolean) => void;
     categorias: Categoria[];
     onDeleteCategoria: (id: string) => void;
-    onUpdateCategoria: (id: string, nombre: string, color: string) => void;
+    onUpdateCategoria: (id: string, nombre: string, color: string, tipo?: 'venta' | 'insumo') => void;
     onAddCategoria: (e: React.FormEvent) => void;
-    nuevaCategoria: { nombre: string; color: string };
+    nuevaCategoria: { nombre: string; color: string; tipo: 'venta' | 'insumo' };
     setNuevaCategoria: (val: any) => void;
     coloresPreset: string[];
 }
@@ -36,18 +36,20 @@ export function ProductCategoryManager({
     const [editingId, setEditingId]       = useState<string | null>(null);
     const [editNombre, setEditNombre]     = useState('');
     const [editColor, setEditColor]       = useState('');
+    const [editTipo, setEditTipo]         = useState<'venta' | 'insumo'>('venta');
 
     const startEdit = (cat: Categoria) => {
         setEditingId(cat.id);
         setEditNombre(cat.nombre);
         setEditColor(cat.color);
+        setEditTipo(cat.tipo || 'venta');
     };
 
     const cancelEdit = () => setEditingId(null);
 
     const saveEdit = () => {
         if (!editNombre.trim() || !editingId) return;
-        onUpdateCategoria(editingId, editNombre.trim(), editColor);
+        onUpdateCategoria(editingId, editNombre.trim(), editColor, editTipo);
         setEditingId(null);
     };
 
@@ -115,6 +117,16 @@ export function ProductCategoryManager({
                                                         />
                                                     ))}
                                                 </div>
+                                                <div className="flex gap-2 p-1 bg-slate-100 dark:bg-gray-800 rounded-xl">
+                                                    <button type="button" onClick={() => setEditTipo('venta')}
+                                                        className={cn("flex-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-all", editTipo === 'venta' ? "bg-white dark:bg-gray-700 shadow-sm text-slate-800" : "text-slate-400")}>
+                                                        🛒 Venta
+                                                    </button>
+                                                    <button type="button" onClick={() => setEditTipo('insumo')}
+                                                        className={cn("flex-1 px-3 py-2 rounded-lg text-[10px] font-black uppercase transition-all", editTipo === 'insumo' ? "bg-white dark:bg-gray-700 shadow-sm text-slate-800" : "text-slate-400")}>
+                                                        📦 Insumo
+                                                    </button>
+                                                </div>
                                                 <div className="flex gap-2">
                                                     <Button type="button" size="sm" onClick={saveEdit}
                                                         disabled={!editNombre.trim()}
@@ -131,9 +143,19 @@ export function ProductCategoryManager({
                                             /* Fila normal */
                                             <div className="flex items-center justify-between p-4 bg-slate-50 dark:bg-gray-900/50 rounded-2xl border border-slate-100 dark:border-gray-800 hover:shadow-md transition-all group">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl shadow-lg border-2 border-white dark:border-gray-800"
-                                                        style={{ backgroundColor: categoria.color }} />
-                                                    <span className="font-black uppercase tracking-tight text-slate-800 dark:text-white">{categoria.nombre}</span>
+                                                    <div className="relative">
+                                                        <div className="w-10 h-10 rounded-xl shadow-lg border-2 border-white dark:border-gray-800"
+                                                            style={{ backgroundColor: categoria.color }} />
+                                                        <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-white dark:bg-gray-800 flex items-center justify-center border border-slate-200 dark:border-gray-700">
+                                                            {categoria.tipo === 'insumo' ? <Warehouse className="w-2.5 h-2.5 text-blue-600" /> : <ShoppingCart className="w-2.5 h-2.5 text-orange-600" />}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="font-black uppercase tracking-tight text-slate-800 dark:text-white leading-none mb-0.5">{categoria.nombre}</span>
+                                                        <span className={cn("text-[8px] font-bold uppercase tracking-widest", categoria.tipo === 'insumo' ? "text-blue-500" : "text-orange-500")}>
+                                                            {categoria.tipo === 'insumo' ? 'Insumo' : 'Venta'}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
                                                     <Button variant="ghost" size="icon"
@@ -171,6 +193,42 @@ export function ProductCategoryManager({
                                     placeholder="Ej: Repostería Fina"
                                     className="h-14 font-black uppercase bg-slate-50 dark:bg-gray-800 border-none rounded-2xl shadow-inner px-6"
                                 />
+                            </div>
+
+                            <div className="space-y-4">
+                                <Label className="text-[10px] font-black uppercase tracking-widest opacity-50 ml-1">Uso Destino</Label>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <button
+                                        type="button"
+                                        onClick={() => setNuevaCategoria({ ...nuevaCategoria, tipo: 'venta' })}
+                                        className={cn(
+                                            "flex items-center gap-3 p-4 rounded-2xl border-2 transition-all",
+                                            nuevaCategoria.tipo === 'venta' 
+                                                ? "border-orange-400 bg-orange-50 dark:bg-orange-900/20" 
+                                                : "border-slate-100 dark:border-gray-800 opacity-60"
+                                        )}
+                                    >
+                                        <div className={cn("p-2 rounded-lg", nuevaCategoria.tipo === 'venta' ? "bg-orange-500 text-white" : "bg-slate-200")}>
+                                            <ShoppingCart className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-xs font-black uppercase tracking-widest">Venta POS</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setNuevaCategoria({ ...nuevaCategoria, tipo: 'insumo' })}
+                                        className={cn(
+                                            "flex items-center gap-3 p-4 rounded-2xl border-2 transition-all",
+                                            nuevaCategoria.tipo === 'insumo' 
+                                                ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20" 
+                                                : "border-slate-100 dark:border-gray-800 opacity-60"
+                                        )}
+                                    >
+                                        <div className={cn("p-2 rounded-lg", nuevaCategoria.tipo === 'insumo' ? "bg-blue-500 text-white" : "bg-slate-200")}>
+                                            <Warehouse className="w-4 h-4" />
+                                        </div>
+                                        <span className="text-xs font-black uppercase tracking-widest">Insumos/Compu</span>
+                                    </button>
+                                </div>
                             </div>
 
                             <div className="space-y-4">

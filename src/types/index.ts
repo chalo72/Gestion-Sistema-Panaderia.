@@ -311,6 +311,7 @@ export interface Configuracion {
   presupuestoMensual?: number;
   categoriasBorradas?: string[];  // NOMBRES de categorías eliminadas — nunca se re-agregan al iniciar
   seedCompletado?: boolean;       // true = ya se sembró datos iniciales, no repetir
+  publicUrl?: string;             // URL de producción (Vercel) para enlaces de acceso
 }
 
 export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas';

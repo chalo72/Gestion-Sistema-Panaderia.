@@ -24,7 +24,7 @@ interface CargaMasivaProps {
   categorias: Categoria[];
   onAddProducto: (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
   onAddProveedor: (proveedor: Omit<Proveedor, 'id' | 'createdAt'>) => Promise<Proveedor>;
-  onAddCategoria: (nombre: string, color: string) => Promise<Categoria>;
+  onAddCategoria: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
   formatCurrency: (value: number) => string;
 }
 
@@ -275,7 +275,7 @@ export default function CargaMasiva({
         try {
           const colorIndex = Array.from(categoriasNuevas).indexOf(nombreCat) % COLORES_CATEGORIA.length;
           const color = COLORES_CATEGORIA[colorIndex];
-          await onAddCategoria(nombreCat, color);
+          await onAddCategoria(nombreCat, color, 'insumo');
         } catch (err) {
           console.error('Error creando categoría:', err);
         }

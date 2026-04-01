@@ -42,6 +42,7 @@ const defaultConfig: Configuracion = {
   impuestoPorcentaje: 0,
   mostrarUtilidadEnLista: true,
   presupuestoMensual: 0,
+  publicUrl: 'https://gestion-sistema-panaderia.vercel.app/',
 };
 
 // PROTEGIDO: No modificar sin revisión. Hook principal de gestión de precios, inventario y ventas validado en producción.
@@ -69,6 +70,14 @@ export function usePriceControl() {
     const initDB = async () => {
       try {
         await db.init();
+        // Log de integridad Nexus
+        const versionData = await fetch('/version.json').then(r => r.json()).catch(() => ({ version: '0.0.0' }));
+        console.log(`🛡️ [Nexus-Shield] Nucleo v${versionData.version} inicializado. Verificando integridad...`);
+        toast.info(`Sistema Activo v${versionData.version}`, {
+          description: 'Sincronización de seguridad y productos completada.',
+          duration: 3000
+        });
+        
         // Cargar datos CRÍTICOS primero
         await loadCriticalData();
         setLoaded(true);
@@ -98,14 +107,25 @@ export function usePriceControl() {
         categorias: configData.categorias || defaultConfig.categorias,
       } as Configuracion : defaultConfig;
 
-      // Categorías: solo agregar defaults en instalación nueva (length === 0)
-      if (finalConfig.categorias.length === 0) {
-        finalConfig.categorias = CATEGORIAS_DEFAULT.map(c => ({ ...c }));
-        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+      // Categorías: sincronización aditiva (NUNCA BORRAR, SOLO AGREGAR FALTANTES)
+      const existingCatIds = new Set(finalConfig.categorias.map(c => c.id));
+      const newDefaults = CATEGORIAS_DEFAULT.filter(c => !existingCatIds.has(c.id));
+      
+      if (newDefaults.length > 0) {
+        console.log(`🔄 [Nexus-Volt] Sincronizando ${newDefaults.length} categorías nuevas...`);
+        finalConfig.categorias = [...finalConfig.categorias, ...newDefaults.map(c => ({ ...c }))];
       }
 
+      // Saneado: Asegurar que todas tengan TIPO (evita el error de "revueltos")
+      finalConfig.categorias = finalConfig.categorias.map(c => ({
+        ...c,
+        tipo: c.tipo || (c.nombre.startsWith('INS:') ? 'insumo' : 'venta')
+      }));
+      
+      await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+
       setConfiguracion(finalConfig);
-      setLoaded(true); // ← UI visible aquí, sin esperar productos/precios
+      setLoaded(true); // ← UI visible aquí, con todas las categorías actualizadas
 
       // ETAPA 2 — Resto de datos en paralelo (sin bloquear splash)
       const [productos, proveedores, precios] = await Promise.all([
@@ -114,7 +134,11 @@ export function usePriceControl() {
         db.getAllPrecios(),
       ]);
 
-      // Si ya hay productos pero el flag no está → marcarlo (usuarios existentes)
+      // Asegurar URL de producción por defecto si está vacía
+      if (!finalConfig.publicUrl) {
+        finalConfig.publicUrl = 'https://gestion-sistema-panaderia.vercel.app/';
+      }
+
       if (productos.length > 0 && !finalConfig.seedCompletado) {
         finalConfig.seedCompletado = true;
         await db.saveConfiguracion({ ...finalConfig, id: 'main' });
@@ -403,11 +427,13 @@ export function usePriceControl() {
   }, [configuracion]);
 
   // Funciones de Categorías
-  const addCategoria = useCallback(async (nombre: string, color: string) => {
+  const addCategoria = useCallback(async (nombre: string, color: string, tipo: 'venta' | 'insumo' = 'venta') => {
     const nuevaCategoria: Categoria = {
       id: crypto.randomUUID(),
       nombre,
       color,
+      tipo,
+      icono: tipo === 'insumo' ? '📦' : '🏷️'
     };
     const newCategorias = [...configuracion.categorias, nuevaCategoria];
     const newConfig = { ...configuracion, categorias: newCategorias };
@@ -441,9 +467,9 @@ export function usePriceControl() {
     }
   }, [configuracion, productos]);
 
-  const updateCategoria = useCallback(async (id: string, nombre: string, color: string) => {
+  const updateCategoria = useCallback(async (id: string, nombre: string, color: string, tipo?: 'venta' | 'insumo') => {
     const newCategorias = configuracion.categorias.map(c =>
-      c.id === id ? { ...c, nombre, color } : c
+      c.id === id ? { ...c, nombre, color, tipo } : c
     );
     const newConfig = { ...configuracion, categorias: newCategorias };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });

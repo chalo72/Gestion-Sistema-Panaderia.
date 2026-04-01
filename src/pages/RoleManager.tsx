@@ -17,7 +17,8 @@ import {
     Fingerprint,
     ShieldAlert,
     ChevronRight,
-    Zap
+    Zap,
+    Share2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -65,7 +66,7 @@ const PERMISSION_GROUPS: { name: string; permissions: Permission[]; icon?: any }
 
 const ROLES: UserRole[] = ['ADMIN', 'GERENTE', 'COMPRADOR', 'VENDEDOR'];
 
-export default function RoleManager() {
+export default function RoleManager({ publicAppUrl }: { publicAppUrl?: string }) {
     const { rolePermissions, updateRolePermissions, resetPermissions } = useAuth();
 
     // Toggle de permiso
@@ -92,20 +93,41 @@ export default function RoleManager() {
         }
     };
 
+    const handleShareWhatsApp = (role: UserRole) => {
+        const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
+        const password = saved[role];
+
+        if (!password) {
+            toast.error(`No hay una contraseña asignada para el rol ${ROLE_DESCRIPTIONS[role].nombre}. Por favor, asígnala en Configuración primero.`);
+            return;
+        }
+
+        // Prioridad: URL pública configurada > URL actual
+        const appUrl = publicAppUrl || window.location.origin;
+        
+        const message = `🌟 *DULCE PLACER - ACCESO SISTEMA* 🌟\n\n👤 *Rol:* ${ROLE_DESCRIPTIONS[role].nombre}\n🔗 *App:* ${appUrl}\n🔑 *Clave Maestro:* ${password}\n\n⚠️ *SEGURIDAD:* Favor guardar esta clave. Este enlace es para abrir en celular y PC de venta remoto. No compartirla.`;
+        
+        const encodedMessage = encodeURIComponent(message);
+        const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
+
+        window.open(whatsappUrl, '_blank');
+        toast.success(`Preparando envío para ${ROLE_DESCRIPTIONS[role].nombre}`);
+    };
+
     return (
-        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+        <div className="min-h-full flex flex-col gap-8 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in pb-20">
             {/* Header */}
-            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-6 py-5 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/50 dark:shadow-none">
                 <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center shrink-0">
-                        <Lock className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-200 dark:shadow-none">
+                        <Lock className="w-6 h-6 text-white" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-black text-slate-900 dark:text-white">Seguridad y Roles</h1>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">Control de privilegios · Dulce Placer</p>
+                        <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Seguridad y Roles</h1>
+                        <p className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-[0.3em] mt-0.5 opacity-80">Arquitectura de Control · Dulce Placer</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex items-center gap-3 w-full sm:w-auto">
                      <Button
                         variant="outline"
                         onClick={() => {
@@ -113,21 +135,70 @@ export default function RoleManager() {
                             const passList = ROLES.map(r => `${ROLE_DESCRIPTIONS[r].nombre}: ${saved[r] || 'No asignada'}`).join('\n');
                             alert(`Contraseñas Maestras por Rol:\n\n${passList}`);
                         }}
-                        className="h-10 px-4 rounded-xl font-black uppercase tracking-widest text-xs border-indigo-200 text-indigo-600"
+                        className="flex-1 sm:flex-none h-11 px-5 rounded-2xl font-black uppercase tracking-widest text-[10px] border-indigo-100 text-indigo-600 hover:bg-indigo-50"
                     >
-                        <Lock className="w-4 h-4 mr-2" />
-                        Ver Claves Roles
+                        <Lock className="w-3.5 h-3.5 mr-2" />
+                        Ver Claves
                     </Button>
                     <Button
                         variant="ghost"
                         onClick={handleReset}
-                        className="h-10 px-4 rounded-xl font-black uppercase tracking-widest text-xs bg-rose-50 dark:bg-rose-950/30 text-rose-500 hover:bg-rose-500 hover:text-white border border-rose-200 dark:border-rose-800/40 gap-2"
+                        className="flex-1 sm:flex-none h-11 px-5 rounded-2xl font-black uppercase tracking-widest text-[10px] bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition-all gap-2"
                     >
-                        <RefreshCcw className="w-4 h-4" />
-                        Restaurar
+                        <RefreshCcw className="w-3.5 h-3.5" />
+                        Resetear
                     </Button>
                 </div>
             </header>
+
+            {/* PANEL DE ENVIOS RAPIDOS NEXUS (NUEVA SECCIÓN INTUITIVA) */}
+            <section className="animate-ag-fade-in-up">
+                <div className="flex items-center gap-3 mb-6 ml-2">
+                    <div className="w-8 h-1 bg-emerald-500 rounded-full shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                    <h2 className="text-sm font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
+                        <Share2 className="w-4 h-4" /> Envío de Accesos por WhatsApp
+                    </h2>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {ROLES.filter(r => r !== 'ADMIN').map(role => (
+                        <Card 
+                            key={`share-${role}`} 
+                            className="rounded-3xl border-none bg-white dark:bg-slate-900 shadow-xl overflow-hidden group hover:scale-[1.03] transition-all cursor-pointer"
+                            onClick={() => handleShareWhatsApp(role)}
+                        >
+                            <CardContent className="p-6">
+                                <div className="flex flex-col items-center text-center gap-4">
+                                    {/* Icon Container */}
+                                    <div 
+                                        className="w-16 h-16 rounded-2xl flex items-center justify-center shadow-2xl group-hover:rotate-12 transition-transform duration-500"
+                                        style={{ backgroundColor: `${ROLE_DESCRIPTIONS[role].color}20` }}
+                                    >
+                                        <Fingerprint className="w-8 h-8" style={{ color: ROLE_DESCRIPTIONS[role].color }} />
+                                    </div>
+                                    
+                                    <div>
+                                        <h3 className="font-black text-slate-900 dark:text-white uppercase tracking-tight italic">
+                                            {ROLE_DESCRIPTIONS[role].nombre}
+                                        </h3>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest leading-tight">
+                                            Click para enviar acceso de {ROLE_DESCRIPTIONS[role].nombre.toLowerCase()}
+                                        </p>
+                                    </div>
+
+                                    {/* WhatsApp Button Prompt */}
+                                    <div className="w-full pt-4 mt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-center gap-2 text-emerald-500 font-bold text-xs uppercase tracking-tighter">
+                                        <div className="w-6 h-6 rounded-full bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center">
+                                            <Share2 className="w-3.5 h-3.5" />
+                                        </div>
+                                        Enviar WhatsApp
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+            </section>
 
             <Card className="rounded-[2.5rem] border-none bg-card/40 backdrop-blur-xl shadow-3xl overflow-hidden relative group">
                 <CardHeader className="bg-slate-900/5 dark:bg-slate-950/20 p-8 border-b border-white/5">
@@ -162,6 +233,15 @@ export default function RoleManager() {
                                                 >
                                                     {ROLE_DESCRIPTIONS[role].nombre}
                                                 </Badge>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    onClick={() => handleShareWhatsApp(role)}
+                                                    className="h-8 w-8 rounded-full text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-all"
+                                                    title="Enviar credenciales por WhatsApp"
+                                                >
+                                                    <Share2 className="w-3.5 h-3.5" />
+                                                </Button>
                                             </div>
                                         </th>
                                     ))}

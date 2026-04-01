@@ -507,7 +507,7 @@ function AppContent() {
       case 'roles':
         return hasPermission('VER_USUARIOS') ? (
           <SectionErrorBoundary sectionName="Gestión de Roles">
-            <RoleManager />
+            <RoleManager publicAppUrl={configuracion.publicUrl} />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
       case 'recetas':

@@ -7,6 +7,10 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0f172a">
+  <!-- PWA Anti-Cache Shield v2 -->
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <link rel="preload" as="image" href="/logo_panaderia.png" />
   <link rel="icon" type="image/png" href="/logo_panaderia.png" />
   <link rel="apple-touch-icon" href="/logo_panaderia.png" />
@@ -48,6 +52,31 @@
   </style>
   <script>
     console.log("🚀 Antigravity Boot Probe: index.html loaded");
+    
+    // Detector de versión fantasma (Anti-Cache)
+    (function() {
+      const STORAGE_KEY = 'dp_build_timestamp';
+      fetch('/version.json?v=' + Date.now(), { cache: 'no-store' })
+        .then(r => r.json())
+        .then(data => {
+          const localTs = parseInt(localStorage.getItem(STORAGE_KEY) || '0');
+          if (localTs !== 0 && data.timestamp > localTs) {
+            console.warn("⚠️ Nueva versión detectada en carga inicial. Forzando purga de caché...");
+            localStorage.setItem(STORAGE_KEY, data.timestamp);
+            
+            // Limpiar Service Workers antes de recargar
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(regs => {
+                for(let reg of regs) reg.unregister();
+                window.location.reload(true);
+              });
+            } else {
+              window.location.reload(true);
+            }
+          }
+        }).catch(e => console.log("Auto-Update Probe Bypass"));
+    })();
+
     window.onerror = (m, s, l, c, e) => {
       console.error("❌ CRITICAL BOOT ERROR:", m, s, l);
       document.body.innerHTML = `

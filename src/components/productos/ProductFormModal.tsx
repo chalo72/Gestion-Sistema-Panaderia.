@@ -44,7 +44,7 @@ interface ProductFormModalProps {
     setFormData: (data: any) => void;
     onSubmit: (e: React.FormEvent) => void;
     formatCurrency: (val: number) => string;
-    onAddCategoria?: (nombre: string, color: string) => Promise<Categoria>;
+    onAddCategoria?: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
 }
 
 export function ProductFormModal({
@@ -79,7 +79,8 @@ export function ProductFormModal({
         if (!miniNombre.trim() || !onAddCategoria) return;
         setGuardandoCat(true);
         try {
-            await onAddCategoria(miniNombre.trim(), miniColor);
+            const tipoCat = tipoActual === 'ingrediente' ? 'insumo' : 'venta';
+            await onAddCategoria(miniNombre.trim(), miniColor, tipoCat);
             setFormData({ ...formData, categoria: miniNombre.trim() });
             setMiniNombre('');
             setMiniColor(COLORES_RAPIDOS[0]);
