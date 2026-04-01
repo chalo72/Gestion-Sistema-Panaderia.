@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Plus, Edit2, X, DollarSign, Store, Info,
     ShoppingCart, Warehouse, Check, Percent,
-    Package, ImageIcon, Tag, TrendingUp,
+    Package, ImageIcon, Tag, TrendingUp, ChefHat,
     AlertCircle, CheckCircle2
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -64,13 +64,29 @@ export function ProductFormModal({
     useEffect(() => { setImgError(false); }, [formData.imagen]);
 
     // Cálculos de rentabilidad
-    const costo       = parseFloat(formData.precioCosto)    || 0;
+    const costoInput  = parseFloat(formData.precioCosto)     || 0;
+    const costoCaja   = parseFloat(formData.costoCaja)       || 0;
+    const rend        = parseFloat(formData.unidadesPorCaja) || 1;
+    const extra       = parseFloat(formData.costoInsumoExtra) || 0;
+
+    // Si la calculadora está activa, el costo real es el calculado
+    const costoReal = formData.useHeladeriaCalc && rend > 0
+        ? (costoCaja / rend) + extra
+        : costoInput;
+
     const margen      = parseFloat(formData.margenUtilidad) || 0;
     const pvpManual   = parseFloat(formData.precioVenta)    || 0;
-    const pvpSugerido = costo > 0 && margen > 0 ? costo * (1 + margen / 100) : null;
-    const margenReal  = pvpManual > 0 && costo > 0
-        ? ((pvpManual - costo) / costo) * 100
+    const pvpSugerido = costoReal > 0 && margen > 0 ? costoReal * (1 + margen / 100) : null;
+    const margenReal  = pvpManual > 0 && costoReal > 0
+        ? ((pvpManual - costoReal) / costoReal) * 100
         : null;
+
+    // Sincronizar costo calculado con el campo principal si la calculadora está activa
+    useEffect(() => {
+        if (formData.useHeladeriaCalc && costoReal > 0 && costoReal.toString() !== formData.precioCosto) {
+            setFormData({ ...formData, precioCosto: costoReal.toFixed(2) });
+        }
+    }, [formData.useHeladeriaCalc, costoCaja, rend, extra]);
 
     const imagenUrl      = formData.imagen?.trim();
     const mostrarPreview = imagenUrl && imagenUrl.startsWith('http') && !imgError;
@@ -368,21 +384,85 @@ export function ProductFormModal({
                                 </Select>
                             </div>
 
-                            {/* Precio de costo con ícono $ */}
+                            {/* Precio de costo con ícono $ y Toggle Heladería */}
                             <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-slate-500">Precio de Costo</Label>
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs font-semibold text-slate-500">Precio de Costo</Label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, useHeladeriaCalc: !formData.useHeladeriaCalc })}
+                                        className={cn(
+                                            "text-[9px] font-black uppercase tracking-tighter px-2 py-0.5 rounded-full border transition-all",
+                                            formData.useHeladeriaCalc 
+                                                ? "bg-indigo-600 text-white border-indigo-500" 
+                                                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600"
+                                        )}
+                                    >
+                                        {formData.useHeladeriaCalc ? '🎯 Calculadora Activa' : '🪄 Modo Heladería'}
+                                    </button>
+                                </div>
                                 <div className="relative">
                                     <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <Input
                                         type="number" step="0.01" min="0"
+                                        readOnly={formData.useHeladeriaCalc}
                                         value={formData.precioCosto}
                                         onChange={e => setFormData({ ...formData, precioCosto: e.target.value })}
-                                        className="h-11 pl-9 text-base font-bold rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700"
+                                        className={cn(
+                                            "h-11 pl-9 text-base font-bold rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
+                                            formData.useHeladeriaCalc && "bg-slate-50 text-indigo-600 border-indigo-200 cursor-not-allowed"
+                                        )}
                                         placeholder="0.00"
                                     />
                                 </div>
                             </div>
                         </div>
+
+                        {/* [Nexus-Volt] Heladería Smart Calculator Mini-Form */}
+                        {formData.useHeladeriaCalc && (
+                            <div className="mt-3 p-4 bg-indigo-50/50 dark:bg-indigo-950/20 border-2 border-indigo-200/50 dark:border-indigo-800/40 rounded-2xl space-y-4 animate-ag-slide-up">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <ChefHat className="w-4 h-4 text-indigo-600" />
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700 dark:text-indigo-400">Calculadora de Rendimiento (Helados/Varios)</p>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] font-black text-slate-400 uppercase">Costo Caja/Bulto</Label>
+                                        <Input
+                                            type="number"
+                                            value={formData.costoCaja}
+                                            onChange={e => setFormData({ ...formData, costoCaja: e.target.value })}
+                                            className="h-10 text-xs font-bold rounded-lg border-indigo-100"
+                                            placeholder="90000"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] font-black text-slate-400 uppercase">Rendimiento (Vasos)</Label>
+                                        <Input
+                                            type="number"
+                                            value={formData.unidadesPorCaja}
+                                            onChange={e => setFormData({ ...formData, unidadesPorCaja: e.target.value })}
+                                            className="h-10 text-xs font-bold rounded-lg border-indigo-100"
+                                            placeholder="50"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] font-black text-slate-400 uppercase">Extra (Vaso+Cuch)</Label>
+                                        <Input
+                                            type="number"
+                                            value={formData.costoInsumoExtra}
+                                            onChange={e => setFormData({ ...formData, costoInsumoExtra: e.target.value })}
+                                            className="h-10 text-xs font-bold rounded-lg border-indigo-100"
+                                            placeholder="150"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-center pt-2 border-t border-indigo-100/50">
+                                    <span className="text-[9px] font-black text-indigo-400 uppercase">Costo real por unidad:</span>
+                                    <span className="text-sm font-black text-indigo-600">{formatCurrency(costoReal)}</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* ── PRECIO DE VENTA Y MARGEN (solo Para Venta) ── */}
@@ -426,7 +506,7 @@ export function ProductFormModal({
                             </div>
 
                             {/* Panel de rentabilidad */}
-                            {costo > 0 && (
+                            {costoReal > 0 && (
                                 <div className="grid grid-cols-2 gap-3">
                                     {pvpSugerido && (
                                         <div className={cn(

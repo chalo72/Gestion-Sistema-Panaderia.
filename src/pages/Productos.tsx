@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
     Package, Plus, Search, Edit2, Trash2, ChevronDown, ChevronUp,
-    DollarSign, Info, Store, ChefHat, Building2, Tag, ShoppingCart, Warehouse
+    DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,18 +63,12 @@ export default function Productos({
     const [formData, setFormData] = useState({
         nombre: '', categoria: '', descripcion: '', precioVenta: '',
         margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
+        // [Nexus-Volt] Heladería Smart Fields
+        useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
     });
     const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0], tipo: 'venta' as 'venta' | 'insumo' });
 
-    const categoriasUnicas = useMemo(() => {
-        const normalizadas = productos
-            .map(p => p.categoria?.trim())
-            .filter((c): c is string => !!c);
-        const unicas = [...new Set(normalizadas.map(c => c.toLowerCase()))].map(cLower =>
-            normalizadas.find(c => c.toLowerCase() === cLower) || cLower
-        );
-        return ['Todos', ...unicas];
-    }, [productos]);
+    // [Nexus-Volt] Note: categorasUnicas removed - using categories from props directly
 
     const filteredProductos = useMemo(() => {
         return productos.filter(p => {
@@ -120,7 +114,11 @@ export default function Productos({
     };
 
     const resetForm = () => {
-        setFormData({ nombre: '', categoria: '', descripcion: '', precioVenta: '', margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '' });
+        setFormData({
+            nombre: '', categoria: '', descripcion: '', precioVenta: '', margenUtilidad: '30',
+            proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
+            useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
+        });
         setEditingProducto(null);
     };
 
@@ -132,13 +130,26 @@ export default function Productos({
         const catMatch = categorias.find(c => c.nombre === catGuardada)
             || categorias.find(c => c.nombre.toLowerCase().trim() === catGuardada.toLowerCase().trim());
         const categoriaFinal = catMatch ? catMatch.nombre : catGuardada;
-        setFormData({ nombre: producto.nombre, categoria: categoriaFinal, descripcion: producto.descripcion || '', precioVenta: producto.precioVenta.toString(), margenUtilidad: producto.margenUtilidad.toString(), imagen: producto.imagen || '', proveedorId: mp?.proveedorId || '', precioCosto: mp?.precioCosto.toString() || '', notasPrecio: mp?.notas || '', tipo: producto.tipo || 'elaborado', unidadMedida: (producto as any).unidadMedida || '' });
+        setFormData({
+            nombre: producto.nombre,
+            categoria: categoriaFinal,
+            descripcion: producto.descripcion || '',
+            precioVenta: producto.precioVenta.toString(),
+            margenUtilidad: producto.margenUtilidad.toString(),
+            imagen: producto.imagen || '',
+            proveedorId: mp?.proveedorId || '',
+            precioCosto: mp?.precioCosto.toString() || '',
+            notasPrecio: mp?.notas || '',
+            tipo: producto.tipo || 'elaborado',
+            unidadMedida: (producto as any).unidadMedida || '',
+            useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
+        });
         setIsDialogOpen(true);
     };
 
     const handleAddInsumo = () => {
         resetForm();
-        setFormData((prev: any) => ({ ...prev, tipo: 'ingrediente' }));
+        setFormData(prev => ({ ...prev, tipo: 'ingrediente' as any }));
         setIsDialogOpen(true);
     };
 
@@ -165,7 +176,7 @@ export default function Productos({
                 onManageCategories={() => setIsCategoriaDialogOpen(true)}
                 onAddProduct={() => { resetForm(); setIsDialogOpen(true); }}
                 onAddInsumo={handleAddInsumo}
-                checkPermission={check} />
+                checkPermission={(p: any) => check(p)} />
 
             {/* KPI Cards Ultra Compactas */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -259,7 +270,7 @@ export default function Productos({
                             return <ProductCard key={producto.id} producto={producto} mejorPrecio={mp} utilidad={ut}
                                 categoriaColor={getCategoriaColor(producto.categoria)} formatCurrency={formatCurrency}
                                 onEdit={handleEdit} onDelete={handleDelete}
-                                onExpand={id => setExpandedProducto(expandedProducto === id ? null : id)} checkPermission={check} />;
+                                onExpand={id => setExpandedProducto(expandedProducto === id ? null : id)} checkPermission={(p: any) => check(p)} />;
                         })}
                     </div>
                 ) : (
