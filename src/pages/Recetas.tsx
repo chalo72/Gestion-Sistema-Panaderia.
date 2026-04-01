@@ -361,6 +361,35 @@ const Recetas: React.FC<RecetasProps> = ({
                     </div>
                 )}
             </div>
+
+            {/* [Nexus-Volt] Heladería & Composite Help Section */}
+            <div className="mt-12 p-8 rounded-[2.5rem] bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-slate-900 dark:to-slate-800 border border-indigo-100 dark:border-indigo-700 shadow-sm animate-ag-fade-in">
+                <div className="flex flex-col md:flex-row gap-8 items-center">
+                    <div className="w-20 h-20 bg-white dark:bg-slate-800 rounded-3xl flex items-center justify-center shadow-lg shadow-indigo-200 dark:shadow-none shrink-0">
+                        <UtensilsCrossed className="w-10 h-10 text-indigo-600" />
+                    </div>
+                    <div className="flex-1 space-y-4 text-center md:text-left">
+                        <h2 className="text-xl font-black text-slate-800 dark:text-white uppercase tracking-tight">💡 Guía: ¿Cómo crear Helados y Productos Compuestos?</h2>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 font-medium leading-relaxed">
+                            Para productos como <b>Helados de 3oz o 7oz</b>, sigue este flujo maestro:
+                        </p>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                            <div className="bg-white/60 dark:bg-slate-950/40 p-4 rounded-2xl border border-white dark:border-slate-700">
+                                <span className="text-[10px] font-black text-indigo-600 uppercase block mb-1">Paso 1: Insumos</span>
+                                <p className="text-[11px] font-bold text-slate-500">Crea la <b>Copa 3oz</b> y la <b>Base de Helado</b> como "Insumos" en Productos.</p>
+                            </div>
+                            <div className="bg-white/60 dark:bg-slate-950/40 p-4 rounded-2xl border border-white dark:border-slate-700">
+                                <span className="text-[10px] font-black text-indigo-600 uppercase block mb-1">Paso 2: Venta</span>
+                                <p className="text-[11px] font-bold text-slate-500">Crea el <b>Helado 3oz</b> como producto "Para Venta" con su precio ($1.600).</p>
+                            </div>
+                            <div className="bg-white/60 dark:bg-slate-950/40 p-4 rounded-2xl border border-white dark:border-slate-700">
+                                <span className="text-[10px] font-black text-indigo-600 uppercase block mb-1">Paso 3: Receta</span>
+                                <p className="text-[11px] font-bold text-slate-500">Aquí en Recetas, vincula el <b>Helado 3oz</b> con 1 copa y la porción de base.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </TabsContent>
 
             <TabsContent value="maestro" className="m-0 space-y-8 animate-ag-fade-in">
