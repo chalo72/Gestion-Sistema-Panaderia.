@@ -2,10 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
     X, Calculator, ShoppingCart, 
     ChevronRight, ChevronLeft, Package, 
-    Zap, DollarSign, Store, Utensils, ArrowRight, Info, CheckCircle2,
-    Layers, Plus, Minus
+    Zap, DollarSign, Store, Utensils, ArrowRight, Layers, Plus, Minus, Info
 } from 'lucide-react';
-import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogHeader } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,28 +36,23 @@ export function IceCreamAssistantModal({
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
 
-    // -- Estado Maestro v5 --
+    // -- Estado Consolidado Nexus Style --
     const [calcData, setCalcData] = useState({
-        // Insumo
         insumoId: '',
         nombreCaja: '',
         costoCaja: '',
         cantidadTotalCaja: '5000', 
         useManualPrice: false,
-        
-        // Presentación
         cupSize: '3', 
         scoops: [{ id: 1, weight: 60 }] as Scoop[],
         costoInsumos: '150', 
         costoSalsa: '80', 
         nombreProducto: '',
         categoria: 'Helados',
-        
-        // Precio
         targetPVP: '',
     });
 
-    // Insumos inteligentes
+    // Lógica de Filtrado Profesional
     const insumosLista = useMemo(() => productos.filter(p => {
         const n = p.nombre.toLowerCase();
         const c = (p.categoria || '').toLowerCase();
@@ -72,13 +66,11 @@ export function IceCreamAssistantModal({
 
     const costoCajaNum  = calcData.useManualPrice ? (parseFloat(calcData.costoCaja) || 0) : (promedioInsumo || parseFloat(calcData.costoCaja) || 0);
     const totalCajaNum  = parseFloat(calcData.cantidadTotalCaja) || 5000;
-    
-    // Cálculo de costo por GRAMO base
     const costoPorGramo = costoCajaNum / (totalCajaNum || 1);
     
-    // Costo total de todas las bolas configuradas independientemente
     const costoBolasTotal = calcData.scoops.reduce((acc, s) => acc + (s.weight * costoPorGramo), 0);
-    const costoFinal      = costoBolasTotal + (parseFloat(calcData.costoInsumos) || 0) + (parseFloat(calcData.costoSalsa) || 0);
+    const costoOtros      = (parseFloat(calcData.costoInsumos) || 0) + (parseFloat(calcData.costoSalsa) || 0);
+    const costoFinal      = costoBolasTotal + costoOtros;
     
     const targetPVPNum    = parseFloat(calcData.targetPVP) || (costoFinal * 1.6);
     const margenReal      = targetPVPNum > 1 ? ((targetPVPNum - costoFinal) / targetPVPNum) * 100 : 0;
@@ -88,29 +80,26 @@ export function IceCreamAssistantModal({
     }, [isOpen]);
 
     const handleUpdateScoop = (id: number, newWeight: number) => {
-        setCalcData({
-            ...calcData,
-            scoops: calcData.scoops.map(s => s.id === id ? { ...s, weight: Math.max(5, newWeight) } : s)
-        });
+        setCalcData(prev => ({
+            ...prev,
+            scoops: prev.scoops.map(s => s.id === id ? { ...s, weight: Math.max(5, newWeight) } : s)
+        }));
     };
 
     const handleSelectCup = (size: string) => {
-        let numScoops = 1;
-        if (size === '5') numScoops = 2;
-        if (size === '7' || size === '9') numScoops = 3;
-        
+        let numScoops = size === '3' ? 1 : size === '5' ? 2 : 3;
         const newScoops = Array.from({ length: numScoops }, (_, i) => ({ id: i + 1, weight: 60 }));
-        setCalcData({
-            ...calcData,
+        setCalcData(prev => ({
+            ...prev,
             cupSize: size,
-            nombreProducto: `Helado Vaso ${size}oz`,
+            nombreProducto: `Vaso de ${size}oz`,
             scoops: newScoops
-        });
+        }));
     };
 
     const handleFinish = async () => {
         if (!calcData.nombreProducto || !calcData.categoria) {
-            toast.error('Nombre y Categoría son obligatorios');
+            toast.error('Completa los campos obligatorios');
             return;
         }
         setLoading(true);
@@ -118,17 +107,17 @@ export function IceCreamAssistantModal({
             await onAddProducto({
                 nombre: calcData.nombreProducto,
                 categoria: calcData.categoria,
-                descripcion: `Personalizado: ${calcData.scoops.length} bolas (${calcData.scoops.map(s => s.weight + 'g').join('+')}) de ${calcData.nombreCaja || 'Helado'}.`,
+                descripcion: `${calcData.scoops.length} Bolas (${calcData.scoops.map(s => s.weight + 'g').join('+')}).`,
                 precioVenta: targetPVPNum,
                 margenUtilidad: margenReal.toFixed(0),
                 tipo: 'elaborado',
                 unidadMedida: 'unidad',
                 costoBase: costoFinal
             });
-            toast.success('¡Helado Maestro v5 creado!');
+            toast.success('Producto creado exitosamente');
             onOpenChange(false);
         } catch (e) {
-            toast.error('Error al crear el producto');
+            toast.error('Ocurrió un error al guardar');
         } finally {
             setLoading(false);
         }
@@ -136,101 +125,87 @@ export function IceCreamAssistantModal({
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="max-w-3xl p-0 overflow-hidden bg-slate-50 dark:bg-slate-930 border-none rounded-[40px] shadow-2xl">
-                <DialogTitle className="sr-only">Heladería Maestro v5</DialogTitle>
-                
-                {/* Header Premium Estilo Tablero */}
-                <div className="bg-indigo-600 p-8 text-white relative">
-                    <button onClick={() => onOpenChange(false)} className="absolute top-6 right-6 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-all z-10">
-                        <X className="w-5 h-5" />
-                    </button>
-                    <div className="flex items-center gap-4 mb-6">
-                        <div className="w-14 h-14 bg-indigo-500 rounded-3xl flex items-center justify-center shadow-inner shadow-white/20">
-                            <Layers className="w-8 h-8 text-white" />
+            <DialogContent className="max-w-2xl p-0 overflow-hidden bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl">
+                <DialogHeader className="p-6 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 rounded-xl">
+                                <Calculator className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <DialogTitle className="text-lg font-bold">Asistente Pro de Heladería</DialogTitle>
+                                <p className="text-xs text-slate-500 font-medium">Configuración de costos y rendimientos</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-3xl font-black italic tracking-tighter leading-none mb-1">MAESTRO v5</h2>
-                            <p className="text-indigo-200 text-xs font-black uppercase tracking-widest">Calculadora de Bolas Mixtas</p>
+                        <div className="flex gap-1">
+                            {[1, 2, 3].map(s => (
+                                <div key={s} className={cn("w-6 h-1.5 rounded-full", step >= s ? "bg-indigo-500" : "bg-slate-200")} />
+                            ))}
                         </div>
                     </div>
+                </DialogHeader>
 
-                    <div className="flex items-center justify-between gap-1">
-                        {[1, 2, 3].map((s) => (
-                            <div key={s} className={cn(
-                                "h-2 flex-1 rounded-full transition-all duration-500",
-                                step >= s ? "bg-white shadow-[0_0_12px_rgba(255,255,255,0.6)]" : "bg-indigo-800"
-                            )} />
-                        ))}
-                    </div>
-                </div>
-
-                <div className="p-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+                <div className="p-8 max-h-[60vh] overflow-y-auto">
                     
-                    {/* PASO 1: EL INSUMO */}
+                    {/* STEP 1: MATERIA PRIMA */}
                     {step === 1 && (
-                        <div className="space-y-8 animate-ag-fade-in">
-                            <div className="space-y-2">
-                                <h3 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">¿Qué helado usaremos?</h3>
-                                <p className="text-slate-400 font-bold text-sm">Elige el sabor base registrado en tus proveedores.</p>
+                        <div className="space-y-6 animate-ag-fade-in">
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-500 uppercase">Caja de Helado (Insumo)</Label>
+                                <select 
+                                    value={calcData.insumoId}
+                                    onChange={e => {
+                                        if (e.target.value === 'manual') { setCalcData(prev => ({...prev, insumoId: 'manual', useManualPrice: true})); return; }
+                                        const p = productos.find(prod => prod.id === e.target.value);
+                                        const pr = precios.find(pr => pr.productoId === e.target.value)?.precioCosto || '';
+                                        setCalcData(prev => ({...prev, insumoId: e.target.value, nombreCaja: p?.nombre || '', costoCaja: pr.toString(), useManualPrice: false}));
+                                    }}
+                                    className="w-full h-11 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-4 text-sm font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
+                                >
+                                    <option value="">-- Buscar Sabor / Insumo --</option>
+                                    {insumosLista.map(p => (
+                                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                                    ))}
+                                    <option value="manual">+ Costo manual</option>
+                                </select>
                             </div>
 
-                            <select 
-                                value={calcData.insumoId}
-                                onChange={e => {
-                                    if (e.target.value === 'manual') { setCalcData({...calcData, insumoId: 'manual', useManualPrice: true}); return; }
-                                    const p = productos.find(prod => prod.id === e.target.value);
-                                    const pr = precios.find(pr => pr.productoId === e.target.value)?.precioCosto || '';
-                                    setCalcData({...calcData, insumoId: e.target.value, nombreCaja: p?.nombre || '', costoCaja: pr.toString(), useManualPrice: false});
-                                }}
-                                className="h-20 w-full bg-white rounded-3xl border-4 border-slate-100 px-8 text-xl font-black shadow-lg focus:border-indigo-400 outline-none transition-all flex items-center justify-between"
-                            >
-                                <option value="">-- Buscar Sabor / Caja --</option>
-                                {insumosLista.map(p => (
-                                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                                ))}
-                                <option value="manual">+ Costo manual personalizado</option>
-                            </select>
-
                             {calcData.insumoId && (
-                                <div className="p-10 bg-indigo-50 rounded-[40px] border-4 border-indigo-100 flex flex-col items-center text-center gap-4 animate-ag-scale-in">
-                                    <span className="px-6 py-2 bg-indigo-600 text-white rounded-full text-xs font-black uppercase tracking-widest">Costo por Caja</span>
-                                    <span className="text-6xl font-black text-indigo-600 tracking-tighter">{formatCurrency(costoCajaNum)}</span>
-                                    <p className="text-sm font-black text-indigo-400 opacity-80 uppercase tracking-widest">
-                                        {preciosInsumo.length > 1 ? `⭐ Promediado de ${preciosInsumo.length} precios` : '⭐ Precio actual de lista'}
-                                    </p>
-                                    <div className="flex gap-4 mt-2">
-                                        <div className="text-center">
-                                            <Label className="text-[10px] font-black uppercase text-slate-400">Total Caja (g/ml)</Label>
-                                            <Input type="number" value={calcData.cantidadTotalCaja} onChange={e => setCalcData({...calcData, cantidadTotalCaja: e.target.value})} className="h-10 w-28 bg-white border-2 border-slate-100 rounded-xl text-center font-black" />
+                                <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                                    <div className="flex flex-col items-center gap-2">
+                                        <span className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Costo de la Caja</span>
+                                        <div className="text-4xl font-black text-slate-800 dark:text-white">{formatCurrency(costoCajaNum)}</div>
+                                        <div className="flex items-center gap-4 mt-2">
+                                            <div className="text-center">
+                                                <Label className="text-[10px] text-slate-400 uppercase font-bold">Peso Total (gr)</Label>
+                                                <Input type="number" value={calcData.cantidadTotalCaja} onChange={e => setCalcData(prev => ({...prev, cantidadTotalCaja: e.target.value}))} className="h-9 w-24 text-center text-sm font-bold mt-1" />
+                                            </div>
+                                            <div className="h-8 w-px bg-slate-200" />
+                                            <div className="text-center">
+                                                <Label className="text-[10px] text-slate-400 uppercase font-bold">Costo/g</Label>
+                                                <div className="text-sm font-black mt-1">{formatCurrency(costoPorGramo)}</div>
+                                            </div>
                                         </div>
                                     </div>
+                                    {preciosInsumo.length > 1 && (
+                                        <p className="text-[10px] text-center text-emerald-600 font-bold mt-4 uppercase">⭐ Precio detectado como promedio de lista</p>
+                                    )}
                                 </div>
                             )}
                         </div>
                     )}
 
-                    {/* PASO 2: BOLAS MIXTAS (ESTRELLA) */}
+                    {/* STEP 2: PERSONALIZACIÓN DE BOLAS */}
                     {step === 2 && (
-                        <div className="space-y-8 animate-ag-fade-in">
-                            <div className="flex justify-between items-end">
-                                <div className="space-y-1">
-                                    <h3 className="text-3xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Armar Combinación</h3>
-                                    <p className="text-slate-400 font-bold text-sm">Ajusta el gramaje de cada bola por separado.</p>
-                                </div>
-                                <div className="p-4 bg-indigo-600 rounded-2xl text-white text-right">
-                                    <p className="text-[9px] font-black uppercase opacity-60">Costo Bolas</p>
-                                    <p className="text-2xl font-black">{formatCurrency(costoBolasTotal)}</p>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-2 p-2 bg-slate-100 rounded-3xl mb-4">
+                        <div className="space-y-6 animate-ag-fade-in">
+                            <div className="flex justify-between items-center bg-slate-50 p-1 rounded-xl">
                                 {['3', '5', '7', '9'].map(sz => (
                                     <button 
-                                        key={sz}
+                                        key={sz} 
                                         onClick={() => handleSelectCup(sz)}
                                         className={cn(
-                                            "flex-1 py-4 rounded-2xl text-[10px] font-bold transition-all uppercase tracking-widest",
-                                            calcData.cupSize === sz ? "bg-white text-indigo-600 shadow-xl scale-105" : "text-slate-400 hover:bg-white/40"
+                                            "flex-1 py-2 text-xs font-bold rounded-lg transition-all",
+                                            calcData.cupSize === sz ? "bg-white text-indigo-600 shadow-sm" : "text-slate-500 hover:bg-white/50"
                                         )}
                                     >
                                         Vaso {sz}oz
@@ -238,131 +213,93 @@ export function IceCreamAssistantModal({
                                 ))}
                             </div>
 
-                            <div className="grid gap-6">
+                            <div className="space-y-3">
                                 {calcData.scoops.map((scoop, idx) => (
-                                    <div key={scoop.id} className="p-6 bg-white rounded-3xl border-2 border-slate-100 flex items-center justify-between group hover:border-indigo-200 transition-all shadow-sm">
-                                        <div className="flex items-center gap-6">
-                                            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200 text-slate-400">
-                                                <Utensils className="w-6 h-6 mb-1" />
-                                                <span className="text-[9px] font-black">BOLA {idx + 1}</span>
-                                            </div>
-                                            <div className="space-y-1">
-                                                <div className="text-4xl font-black text-slate-800 tracking-tighter">{scoop.weight} <span className="text-sm text-slate-300">gr</span></div>
-                                                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Costo: +{formatCurrency(scoop.weight * costoPorGramo)}</p>
+                                    <div key={scoop.id} className="flex items-center justify-between p-4 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl">
+                                        <div className="flex items-center gap-4">
+                                            <div className="w-10 h-10 bg-indigo-50 text-indigo-500 rounded-lg flex items-center justify-center font-bold text-xs uppercase">B{idx+1}</div>
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-800 dark:text-white">Bola {idx+1} ({scoop.weight}g)</p>
+                                                <p className="text-[10px] text-slate-500 font-medium">Costo: {formatCurrency(scoop.weight * costoPorGramo)}</p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-3">
-                                            <button onClick={() => handleUpdateScoop(scoop.id, scoop.weight - 5)} className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-2xl hover:bg-slate-200 transition-all">-</button>
-                                            <button onClick={() => handleUpdateScoop(scoop.id, scoop.weight + 5)} className="w-14 h-14 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl hover:bg-indigo-600 hover:text-white transition-all shadow-lg">+</button>
+                                        <div className="flex items-center gap-2">
+                                            <Button variant="outline" size="icon" onClick={() => handleUpdateScoop(scoop.id, scoop.weight - 5)} className="w-8 h-8 rounded-lg"><Minus className="w-3 h-3" /></Button>
+                                            <Button variant="outline" size="icon" onClick={() => handleUpdateScoop(scoop.id, scoop.weight + 5)} className="w-8 h-8 rounded-lg border-indigo-200 text-indigo-600"><Plus className="w-3 h-3" /></Button>
                                         </div>
                                     </div>
                                 ))}
-                                
                                 {calcData.scoops.length < 4 && (
-                                    <button 
-                                        onClick={() => setCalcData({...calcData, scoops: [...calcData.scoops, { id: Date.now(), weight: 60 }]})}
-                                        className="py-4 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-xs uppercase tracking-[0.3em] flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"
-                                    >
-                                        <Plus className="w-4 h-4" /> Agregar otra bola
-                                    </button>
+                                    <Button variant="ghost" size="sm" onClick={() => setCalcData(prev=> ({...prev, scoops: [...prev.scoops, { id: Date.now(), weight: 60 }]}))} className="w-full h-10 border border-dashed border-slate-200 text-slate-400 text-[10px] uppercase font-bold">
+                                        + Agregar Bola Extra
+                                    </Button>
                                 )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="p-5 bg-white rounded-3xl border border-slate-100">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Vaso + Extras ($)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={calcData.costoInsumos} 
-                                        onChange={e => setCalcData({...calcData, costoInsumos: e.target.value})}
-                                        className="h-10 text-xl font-black border-none bg-slate-50 rounded-xl px-4"
-                                    />
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase">Vaso/Envase ($)</Label>
+                                    <Input type="number" value={calcData.costoInsumos} onChange={e => setCalcData(prev => ({...prev, costoInsumos: e.target.value}))} className="h-10 text-sm font-bold" />
                                 </div>
-                                <div className="p-5 bg-white rounded-3xl border border-slate-100">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400 mb-2 block">Salsa ($)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={calcData.costoSalsa} 
-                                        onChange={e => setCalcData({...calcData, costoSalsa: e.target.value})}
-                                        className="h-10 text-xl font-black border-none bg-slate-50 rounded-xl px-4"
-                                    />
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-bold text-slate-500 uppercase">Salsas/Extras ($)</Label>
+                                    <Input type="number" value={calcData.costoSalsa} onChange={e => setCalcData(prev => ({...prev, costoSalsa: e.target.value}))} className="h-10 text-sm font-bold" />
                                 </div>
                             </div>
 
                             <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400 pl-1 tracking-widest">Nombre del Helado</Label>
-                                <Input 
-                                    value={calcData.nombreProducto} 
-                                    onChange={e => setCalcData({...calcData, nombreProducto: e.target.value})}
-                                    placeholder="Ej: Copa Especial 3-Bolas..." 
-                                    className="h-14 text-lg font-black bg-white rounded-2xl px-6 border-2 border-slate-100"
-                                />
+                                <Label className="text-[10px] font-bold text-slate-500 uppercase">Nombre para el Menú</Label>
+                                <Input value={calcData.nombreProducto} onChange={e => setCalcData(prev => ({...prev, nombreProducto: e.target.value}))} className="h-11 text-sm font-bold" placeholder="Vaso de 5oz con 2 bolas..." />
                             </div>
                         </div>
                     )}
 
-                    {/* PASO 3: PRECIO FINAL */}
+                    {/* STEP 3: PRECIO Y MARGEN */}
                     {step === 3 && (
-                        <div className="space-y-8 animate-ag-fade-in text-center">
-                            <div className="space-y-2">
-                                <h3 className="text-4xl font-black text-slate-800 dark:text-white uppercase tracking-tighter">Venta y Ganancia</h3>
-                                <p className="text-slate-400 font-bold">Ajusta el precio para este helado personalizado.</p>
+                        <div className="space-y-6 animate-ag-fade-in">
+                            <div className="p-6 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900 rounded-xl space-y-6">
+                                <div className="text-center space-y-1">
+                                    <Label className="text-xs font-black text-emerald-600 uppercase tracking-widest">Precio de Venta Final</Label>
+                                    <Input 
+                                        type="number" 
+                                        value={calcData.targetPVP} 
+                                        onChange={e => setCalcData(prev => ({...prev, targetPVP: e.target.value}))}
+                                        placeholder={(costoFinal * 1.6).toFixed(0)}
+                                        className="h-16 text-4xl text-center font-black text-emerald-700 bg-transparent border-none focus-visible:ring-0"
+                                    />
+                                    <div className="w-full h-px bg-emerald-200 dark:bg-emerald-800" />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="text-center">
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Costo Total</p>
+                                        <p className="text-lg font-black text-slate-800 dark:text-white">{formatCurrency(costoFinal)}</p>
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-[10px] font-bold text-slate-500 uppercase mb-1">Margen Ganancia</p>
+                                        <p className={cn("text-lg font-black", margenReal > 40 ? "text-indigo-600" : "text-orange-500")}>{margenReal.toFixed(0)}%</p>
+                                    </div>
+                                </div>
                             </div>
-
-                            <div className="p-12 bg-white rounded-[60px] shadow-2xl border-2 border-slate-100 space-y-10 relative">
-                                <div className="space-y-4">
-                                    <Label className="text-[10px] font-black uppercase text-indigo-500 tracking-[0.5em]">PVP CLIENTE FINAL</Label>
-                                    <div className="relative">
-                                        <span className="absolute left-10 top-1/2 -translate-y-1/2 text-4xl font-black text-slate-300">$</span>
-                                        <Input 
-                                            type="number" 
-                                            value={calcData.targetPVP} 
-                                            onChange={e => setCalcData({...calcData, targetPVP: e.target.value})}
-                                            placeholder={(costoFinal * 1.6).toFixed(0)}
-                                            className="h-32 text-8xl font-black text-emerald-600 rounded-[40px] bg-slate-50 border-none text-center focus:ring-emerald-500 pl-16"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-10">
-                                    <div className="p-8 bg-indigo-50 rounded-3xl">
-                                        <p className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mb-2">Utilidad (%)</p>
-                                        <p className={cn("text-5xl font-black", margenReal > 45 ? "text-indigo-600" : "text-orange-500")}>
-                                            {margenReal.toFixed(0)}%
-                                        </p>
-                                    </div>
-                                    <div className="p-8 bg-emerald-50 rounded-3xl">
-                                        <p className="text-[11px] font-black text-emerald-400 uppercase tracking-widest mb-2">Ganancia ($)</p>
-                                        <p className="text-5xl font-black text-emerald-600">
-                                            {formatCurrency(targetPVPNum - costoFinal)}
-                                        </p>
-                                    </div>
-                                </div>
-                                
-                                <div className="flex justify-center gap-10 opacity-50">
-                                    <div className="text-[10px] font-black tracking-widest uppercase">Costo Base: {formatCurrency(costoFinal)}</div>
-                                    <div className="text-[10px] font-black tracking-widest uppercase">Categoría: {calcData.categoria}</div>
-                                </div>
+                            
+                            <div className="flex items-center gap-2 p-3 bg-indigo-50 dark:bg-indigo-900/10 rounded-lg text-indigo-600 dark:text-indigo-400">
+                                <Info className="w-4 h-4" />
+                                <p className="text-[10px] font-bold uppercase tracking-tight">Utilidad proyectada: {formatCurrency(targetPVPNum - costoFinal)} por unidad</p>
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* Footer Navegación Pro */}
-                <div className="p-10 bg-white border-t-4 border-slate-50 flex justify-between gap-6">
-                    <Button 
-                        variant="ghost" 
-                        onClick={() => step > 1 ? setStep(step - 1) : onOpenChange(false)}
-                        className="h-20 flex-1 rounded-3xl text-slate-400 font-black uppercase text-xs hover:bg-slate-100"
-                    >
-                        {step === 1 ? 'Cancelar' : <ChevronLeft className="w-6 h-6" />}
+                <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-between gap-3">
+                    <Button variant="outline" onClick={() => step > 1 ? setStep(step - 1) : onOpenChange(false)} className="px-6 h-11 text-xs font-bold uppercase tracking-widest">
+                        {step === 1 ? 'Cancelar' : 'Atrás'}
                     </Button>
                     <Button 
                         disabled={loading}
                         onClick={() => step < 3 ? setStep(step + 1) : handleFinish()}
-                        className="h-20 flex-[3] bg-indigo-600 hover:bg-indigo-700 text-white rounded-[32px] font-black uppercase text-sm shadow-2xl shadow-indigo-200 transition-all active:scale-95"
+                        className="flex-1 h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-widest"
                     >
-                        {loading ? 'Sincronizando...' : (step === 3 ? '¡GUARDAR PRODUCTO!' : <div className="flex items-center gap-3">SIGUIENTE PASO <ChevronRight className="w-6 h-6" /></div>)}
+                        {loading ? 'Guardando...' : (step === 3 ? 'Finalizar y Crear' : 'Siguiente Paso')}
                     </Button>
                 </div>
             </DialogContent>
