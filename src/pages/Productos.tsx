@@ -417,8 +417,9 @@ export default function Productos({
             <IceCreamAssistantModal 
                 isOpen={isIceCreamAssistantOpen} 
                 onOpenChange={setIsIceCreamAssistantOpen}
+                productos={productos}
+                precios={_precios}
                 categorias={categorias}
-                proveedores={proveedores}
                 onAddProducto={onAddProducto}
                 onAddOrUpdatePrecio={onAddOrUpdatePrecio}
                 formatCurrency={formatCurrency}

@@ -11,20 +11,21 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Categoria, Proveedor } from '@/types';
+import type { Categoria } from '@/types';
 
 interface IceCreamAssistantModalProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
+    productos: any[];
+    precios: any[]; 
     categorias: Categoria[];
-    proveedores: Proveedor[];
     onAddProducto: (producto: any) => Promise<any>;
     onAddOrUpdatePrecio: (data: any) => void;
     formatCurrency: (val: number) => string;
 }
 
 export function IceCreamAssistantModal({
-    isOpen, onOpenChange, categorias, proveedores, 
+    isOpen, onOpenChange, productos, precios, categorias, 
     onAddProducto, onAddOrUpdatePrecio, formatCurrency
 }: IceCreamAssistantModalProps) {
     const [step, setStep] = useState(1);
@@ -32,10 +33,15 @@ export function IceCreamAssistantModal({
     // -- Estado del Asistente --
     const [calcData, setCalcData] = useState({
         // Paso 1: El Bulto/Caja
+        insumoId: '',
         nombreCaja: '',
         costoCaja: '',
-        bolasPorCaja: '50',
+        unidadesMedidaCaja: 'ml', // ml o gr
+        cantidadTotalCaja: '5000', // Ej: 5000ml (5 Litros)
+        tamanoBola: '60', // Ej: 60ml o 60gr
+        bolasPorCaja: '83',
         proveedorId: '',
+        useManualPrice: false,
         
         // Paso 2: La Presentación (Vaso 3oz, etc.)
         nombreProducto: '',
@@ -52,8 +58,21 @@ export function IceCreamAssistantModal({
     const [loading, setLoading] = useState(false);
 
     // Cálculos dinámicos
-    const costoCajaNum  = parseFloat(calcData.costoCaja) || 0;
-    const bolasCajaNum  = parseFloat(calcData.bolasPorCaja) || 1;
+    const insumosLista  = productos.filter(p => p.tipo === 'ingrediente' && (p.categoria?.toLowerCase().includes('helado') || p.nombre.toLowerCase().includes('helado') || p.nombre.toLowerCase().includes('caja')));
+    
+    // Obtener promedio del insumo seleccionado
+    const preciosInsumo = precios.filter(pr => pr.productoId === calcData.insumoId);
+    const promedioInsumo = preciosInsumo.length > 0 
+        ? preciosInsumo.reduce((acc, curr) => acc + curr.precioCosto, 0) / preciosInsumo.length 
+        : 0;
+
+    const costoCajaNum  = calcData.useManualPrice ? (parseFloat(calcData.costoCaja) || 0) : promedioInsumo;
+    const totalCajaNum  = parseFloat(calcData.cantidadTotalCaja) || 1;
+    const tamanoBolaNum = parseFloat(calcData.tamanoBola) || 1;
+    
+    // Si el usuario cambia el tamaño de bola, recalculamos rendimiento
+    const rendAuto      = Math.floor(totalCajaNum / tamanoBolaNum);
+    const bolasCajaNum  = parseFloat(calcData.bolasPorCaja) || rendAuto || 1;
     const costoPorBola  = costoCajaNum / bolasCajaNum;
     
     const bolasProdNum  = parseFloat(calcData.bolasPorProducto) || 1;
@@ -156,33 +175,86 @@ export function IceCreamAssistantModal({
 
                             <div className="grid gap-4">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Sabor / Caja (Opcional)</Label>
-                                    <Input 
-                                        value={calcData.nombreCaja} 
-                                        onChange={e => setCalcData({...calcData, nombreCaja: e.target.value})}
-                                        placeholder="Ej: Caja Vainilla Colombina 5L..." 
-                                        className="h-12 text-base font-bold rounded-2xl bg-white border-slate-200"
-                                    />
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Seleccionar Caja de Helado (Insumo)</Label>
+                                    <select 
+                                        value={calcData.insumoId}
+                                        onChange={e => {
+                                            const p = productos.find(prod => prod.id === e.target.value);
+                                            setCalcData({...calcData, insumoId: e.target.value, nombreCaja: p?.nombre || '', useManualPrice: false});
+                                        }}
+                                        className="w-full h-12 text-base font-bold rounded-2xl bg-white border-slate-200 px-4 focus:ring-indigo-500"
+                                    >
+                                        <option value="">-- Selecciona un Insumo --</option>
+                                        {insumosLista.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                                        <option value="manual">+ Ingresar costo manual</option>
+                                    </select>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4">
+                                {(calcData.insumoId === 'manual' || calcData.useManualPrice) && (
+                                    <div className="animate-ag-fade-in space-y-4">
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[10px] font-black uppercase text-indigo-500">Costo Manual de la Caja ($)</Label>
+                                                <Input 
+                                                    type="number" 
+                                                    value={calcData.costoCaja} 
+                                                    onChange={e => setCalcData({...calcData, costoCaja: e.target.value, useManualPrice: true})}
+                                                    placeholder="90000" 
+                                                    className="h-12 text-lg font-black text-indigo-600 rounded-2xl bg-white border-indigo-100"
+                                                />
+                                            </div>
+                                            <div className="space-y-1.5">
+                                                <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Sabor</Label>
+                                                <Input 
+                                                    value={calcData.nombreCaja} 
+                                                    onChange={e => setCalcData({...calcData, nombreCaja: e.target.value})}
+                                                    placeholder="Ej: Chocolate..." 
+                                                    className="h-12 text-base font-bold rounded-2xl bg-white border-slate-200"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {calcData.insumoId && calcData.insumoId !== 'manual' && (
+                                    <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-800 border border-slate-200 flex justify-between items-center animate-ag-fade-in">
+                                        <div>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase">Precio Promedio de Lista</p>
+                                            <p className="text-lg font-black text-slate-800 dark:text-white">{formatCurrency(promedioInsumo)}</p>
+                                            <p className="text-[9px] text-slate-400 font-bold">Basado en {preciosInsumo.length} proveedores</p>
+                                        </div>
+                                        <Button variant="ghost" size="sm" onClick={() => setCalcData({...calcData, useManualPrice: true})} className="text-[10px] uppercase font-black text-indigo-600">
+                                            Editar Precio
+                                        </Button>
+                                    </div>
+                                )}
+
+                                <div className="grid grid-cols-3 gap-3">
                                     <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-slate-400">Costo de la Caja ($)</Label>
+                                        <Label className="text-[9px] font-black uppercase text-slate-400">Total Caja (ml/gr)</Label>
                                         <Input 
                                             type="number" 
-                                            value={calcData.costoCaja} 
-                                            onChange={e => setCalcData({...calcData, costoCaja: e.target.value})}
-                                            placeholder="90000" 
-                                            className="h-12 text-lg font-black text-indigo-600 rounded-2xl bg-white border-indigo-100"
+                                            value={calcData.cantidadTotalCaja} 
+                                            onChange={e => setCalcData({...calcData, cantidadTotalCaja: e.target.value, bolasPorCaja: Math.floor(parseFloat(e.target.value)/parseFloat(calcData.tamanoBola)).toString()})}
+                                            className="h-11 font-black rounded-xl bg-white border-slate-200 text-center"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-slate-400">Bolas por Caja (Rendimiento)</Label>
+                                        <Label className="text-[9px] font-black uppercase text-slate-400">Bola (ml/gr)</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={calcData.tamanoBola} 
+                                            onChange={e => setCalcData({...calcData, tamanoBola: e.target.value, bolasPorCaja: Math.floor(parseFloat(calcData.cantidadTotalCaja)/parseFloat(e.target.value)).toString()})}
+                                            className="h-11 font-black rounded-xl bg-white border-slate-200 text-center"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] font-black uppercase text-indigo-600">Rendimiento (Bolas)</Label>
                                         <Input 
                                             type="number" 
                                             value={calcData.bolasPorCaja} 
                                             onChange={e => setCalcData({...calcData, bolasPorCaja: e.target.value})}
-                                            className="h-12 text-lg font-black rounded-2xl bg-white border-slate-200 text-center"
+                                            className="h-11 font-black rounded-xl bg-indigo-50 border-indigo-200 text-center text-indigo-700"
                                         />
                                     </div>
                                 </div>
