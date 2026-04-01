@@ -15,6 +15,17 @@ import type {
     DBCajaSesion
 } from './database';
 
+// BLINDAJE NEXUS-VOLT: Sanitizador de valores numéricos para evitar Error 22003 (Numeric Overflow)
+const safeN = (val: any): number => {
+    if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return 0;
+    // Postgres numeric(10,2) soporta hasta 99,999,999.99
+    // Limitamos a 9,999,999 para dejar margen de seguridad
+    const LIMIT = 99999999;
+    if (val > LIMIT) return LIMIT;
+    if (val < -LIMIT) return -LIMIT;
+    return Number(Number(val).toFixed(2));
+};
+
 export class SupabaseDatabase implements IDatabase {
 
     async init(): Promise<void> {
@@ -754,10 +765,10 @@ export class SupabaseDatabase implements IDatabase {
             nombre: p.nombre,
             categoria: p.categoria,
             descripcion: p.descripcion,
-            precio_venta: p.precioVenta,
-            margen_utilidad: p.margenUtilidad,
+            precio_venta: safeN(p.precioVenta),
+            margen_utilidad: safeN(p.margenUtilidad),
             tipo: p.tipo,
-            costo_base: p.costoBase,
+            costo_base: safeN(p.costoBase),
             created_at: p.createdAt,
             updated_at: p.updatedAt
         };
@@ -779,7 +790,7 @@ export class SupabaseDatabase implements IDatabase {
             id: p.id,
             producto_id: p.productoId,
             proveedor_id: p.proveedorId,
-            precio_costo: p.precioCosto,
+            precio_costo: safeN(p.precioCosto),
             fecha_actualizacion: p.fechaActualizacion,
             notas: p.notas
         };

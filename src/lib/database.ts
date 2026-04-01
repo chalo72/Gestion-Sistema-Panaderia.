@@ -1330,18 +1330,38 @@ class HybridDatabase implements IDatabase {
 
   public async syncLocalToCloud() {
     if (!this.isOnline) return;
-    console.log('🚀 Sincronizando cambios locales con la nube...');
+    console.log('🚀 [Nexus-Volt] Iniciando sincronización robusta con la nube...');
     try {
+      const logError = (table: string, id: string, err: any) => 
+        console.warn(`⚠️ [Sync] Error en ${table} (ID: ${id}):`, err.message || err);
+
       const productos = await this.local.getAllProductos();
-      for (const p of productos) await this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p));
+      for (const p of productos) 
+        await this.cloud.updateProducto(p).catch(err => {
+          logError('productos', p.id, err);
+          return this.cloud.addProducto(p).catch(e => logError('productos-add', p.id, e));
+        });
+
       const proveedores = await this.local.getAllProveedores();
-      for (const p of proveedores) await this.cloud.updateProveedor(p).catch(() => this.cloud.addProveedor(p));
+      for (const p of proveedores) 
+        await this.cloud.updateProveedor(p).catch(err => {
+          logError('proveedores', p.id, err);
+          return this.cloud.addProveedor(p).catch(e => logError('proveedores-add', p.id, e));
+        });
+
       const precios = await this.local.getAllPrecios();
-      for (const p of precios) await this.cloud.updatePrecio(p).catch(() => this.cloud.addPrecio(p));
+      for (const p of precios) 
+        await this.cloud.updatePrecio(p).catch(err => {
+          logError('precios', p.id, err);
+          return this.cloud.addPrecio(p).catch(e => logError('precios-add', p.id, e));
+        });
+
       const inventario = await this.local.getAllInventario();
-      for (const i of inventario) await this.cloud.updateInventarioItem(i);
+      for (const i of inventario) await this.cloud.updateInventarioItem(i).catch(e => logError('inventario', i.id, e));
+
       const config = await this.local.getConfiguracion();
-      if (config) await this.cloud.saveConfiguracion(config);
+      if (config) await this.cloud.saveConfiguracion(config).catch(e => logError('config', 'main', e));
+
       const [alertas, movimientos, prepedidos, recepciones, historial, recetas, ventas, sesiones] = await Promise.all([
         this.local.getAllAlertas(),
         this.local.getAllMovimientos(),
@@ -1352,24 +1372,27 @@ class HybridDatabase implements IDatabase {
         this.local.getAllVentas(),
         this.local.getAllSesionesCaja()
       ]);
-      for (const a of alertas) await this.cloud.updateAlerta(a).catch(() => this.cloud.addAlerta(a));
-      for (const m of movimientos) await this.cloud.addMovimiento(m);
-      for (const p of prepedidos) await this.cloud.updatePrePedido(p).catch(() => this.cloud.addPrePedido(p));
-      for (const r of recepciones) await this.cloud.updateRecepcion(r).catch(() => this.cloud.addRecepcion(r));
+
+      // Sincronización atomizada para evitar bloqueos por fallos numéricos o de esquema
+      for (const a of alertas) await this.cloud.updateAlerta(a).catch(e => logError('alertas', a.id, e));
+      for (const m of movimientos) await this.cloud.addMovimiento(m).catch(e => logError('movimientos', m.id, e));
+      for (const p of prepedidos) await this.cloud.updatePrePedido(p).catch(e => logError('prepedidos', p.id, e));
+      for (const r of recepciones) await this.cloud.updateRecepcion(r).catch(e => logError('recepciones', r.id, e));
       for (const h of historial) await this.cloud.addHistorial(h).catch(() => { });
-      for (const re of recetas) await this.cloud.updateReceta(re).catch(() => this.cloud.addReceta(re));
+      for (const re of recetas) await this.cloud.updateReceta(re).catch(e => logError('recetas', re.id, e));
       for (const v of ventas) await this.cloud.addVenta(v).catch(() => { });
-      for (const s of sesiones) await this.cloud.updateSesionCaja(s).catch(() => this.cloud.addSesionCaja(s));
-      // Trabajadores y créditos — nuevos en sync v5.2
+      for (const s of sesiones) await this.cloud.updateSesionCaja(s).catch(() => { });
+
       const [trabajadores, creditosTrabajadores] = await Promise.all([
         this.local.getAllTrabajadores(),
         this.local.getAllCreditosTrabajadores(),
       ]);
-      for (const t of trabajadores) await this.cloud.updateTrabajador(t).catch(() => this.cloud.addTrabajador(t));
-      for (const c of creditosTrabajadores) await this.cloud.updateCreditoTrabajador(c).catch(() => this.cloud.addCreditoTrabajador(c));
-      console.log('✅ Sincronización Local -> Nube Exitosa.');
+      for (const t of trabajadores) await this.cloud.updateTrabajador(t).catch(e => logError('trabajadores', t.id, e));
+      for (const c of creditosTrabajadores) await this.cloud.updateCreditoTrabajador(c).catch(e => logError('creditos', c.id, e));
+
+      console.log('✅ [Nexus-Volt] Sincronización Local -> Nube Completada (con protección de errores).');
     } catch (e) {
-      console.error('❌ Error en sincronización Local a Nube:', e);
+      console.error('❌ Error crítico en orquestación de sincronización:', e);
     }
   }
 
