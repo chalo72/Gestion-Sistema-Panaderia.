@@ -743,6 +743,50 @@ export class SupabaseDatabase implements IDatabase {
         console.warn('clearAll called on Supabase DB - operation ignored for safety');
     }
 
+    // --- Ordenes Producción ---
+    async getAllOrdenesProduccion(): Promise<any[]> {
+        const { data, error } = await supabase.from('produccion').select('*');
+        if (error) return [];
+        return data;
+    }
+    async addOrdenProduccion(o: any): Promise<void> {
+        await supabase.from('produccion').upsert(o);
+    }
+    async updateOrdenProduccion(o: any): Promise<void> {
+        await this.addOrdenProduccion(o);
+    }
+    async deleteOrdenProduccion(id: string): Promise<void> {
+        await supabase.from('produccion').delete().eq('id', id);
+    }
+
+    // --- Facturas Escaneadas (Not synced to cloud by default) ---
+    async getAllFacturasEscaneadas(): Promise<any[]> { return []; }
+    async addFacturaEscaneada(): Promise<void> { }
+    async deleteFacturaEscaneada(): Promise<void> { }
+    async getFacturasEscaneadasByProveedor(): Promise<any[]> { return []; }
+    async getFacturasEscaneadasByFecha(): Promise<any[]> { return []; }
+
+    // --- Préstamos Caja ---
+    async getAllPrestamosCaja(): Promise<any[]> { return []; }
+    async addPrestamoCaja(): Promise<void> { }
+    async updatePrestamoCaja(): Promise<void> { }
+
+    // --- Créditos Clientes ---
+    async getAllCreditosClientes(): Promise<any[]> {
+        const { data, error } = await supabase.from('creditos_clientes').select('*');
+        if (error) return [];
+        return data;
+    }
+    async addCreditoCliente(c: any): Promise<void> {
+        await supabase.from('creditos_clientes').upsert(c);
+    }
+    async updateCreditoCliente(c: any): Promise<void> {
+        await this.addCreditoCliente(c);
+    }
+    async deleteCreditoCliente(id: string): Promise<void> {
+        await supabase.from('creditos_clientes').delete().eq('id', id);
+    }
+
     // --- Helpers (Mappers) ---
     private mapProductoFromDB(p: any): DBProducto {
         return {
