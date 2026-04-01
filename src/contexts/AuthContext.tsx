@@ -167,18 +167,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       try {
         const savedLocalUser = localStorage.getItem('pricecontrol_local_user');
-        if (savedLocalUser) {
-          const userData = JSON.parse(savedLocalUser) as Usuario;
-          // Validar que la sesion no tenga mas de 30 dias de antiguedad
-          const SESSION_MAX_MS = 30 * 24 * 60 * 60 * 1000;
-          const ultimoAcceso = userData.ultimoAcceso ? new Date(userData.ultimoAcceso).getTime() : 0;
-          const sesionExpirada = ultimoAcceso > 0 && (Date.now() - ultimoAcceso) > SESSION_MAX_MS;
-          if (sesionExpirada) {
-            console.info('⏰ [Auth] Sesion expirada (>12h). Requiere nuevo inicio de sesion.');
-            localStorage.removeItem('pricecontrol_local_user');
-          } else {
-            setUsuario(userData);
-          }
+        const savedSessionUser = sessionStorage.getItem('pricecontrol_session_user');
+        const sessionToLoad = savedLocalUser || savedSessionUser;
+
+        if (sessionToLoad) {
+          const userData = JSON.parse(sessionToLoad) as Usuario;
+          // BLINDAJE NEXUS-VOLT: Se ha eliminado la expiración por reloj (Date.now) 
+          // para evitar bloqueos en dispositivos con fecha/hora desincronizada.
+          setUsuario(userData);
+          console.log('🛡️ [Auth] Sesión restaurada desde persistencia local');
         }
       } catch (err) {
         console.error('❌ Error cargando sesión local:', err);
@@ -198,19 +195,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await new Promise(resolve => setTimeout(resolve, 500));
 
     const emailLower = email.toLowerCase().trim();
-    // ELIMINAR BLOQUEO MULTI-DISPOSITIVO: Forzar recarga de usuarios y contraseñas de rol antes de validar login
+    // ELIMINAR BLOQUEO MULTI-DISPOSITIVO: Sincronización ultrarrápida con tiempo de espera (2s)
     try {
-      const { data: uData } = await supabase.from('configuracion').select('categorias').eq('id', 'usuarios_equipo').maybeSingle();
-      if (uData?.categorias && Array.isArray(uData.categorias)) {
-        localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(uData.categorias));
-        setUsuarios(uData.categorias as Usuario[]);
-      }
-
-      const { data: rData } = await supabase.from('configuracion').select('categorias').eq('id', 'role_passwords').maybeSingle();
-      if (rData?.categorias && typeof rData.categorias === 'object') {
-        localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(rData.categorias));
-      }
-    } catch (e) { console.warn('⚠️ No se pudo pre-sincronizar antes de login'); }
+      const cloudSync = async () => {
+        const { data: uData } = await supabase.from('configuracion').select('categorias').eq('id', 'usuarios_equipo').maybeSingle();
+        if (uData?.categorias && Array.isArray(uData.categorias)) {
+          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(uData.categorias));
+          setUsuarios(uData.categorias as Usuario[]);
+        }
+        const { data: rData } = await supabase.from('configuracion').select('categorias').eq('id', 'role_passwords').maybeSingle();
+        if (rData?.categorias && typeof rData.categorias === 'object') {
+          localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(rData.categorias));
+        }
+      };
+      
+      // Correr sincronización en paralelo con un timeout para no bloquear el login
+      await Promise.race([
+        cloudSync(),
+        new Promise(resolve => setTimeout(resolve, 2000)) 
+      ]);
+    } catch (e) { console.warn('⚠️ Sincronización saltada (usando local)'); }
 
     const localUserListStr = localStorage.getItem('pricecontrol_local_user_list');
     const localUserList = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
@@ -239,20 +243,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if ((localUser || esOwner) && isMasterPass) {
       const baseUser = localUser ?? USUARIOS_PRUEBA[0];
-      // Restaurar rol ADMIN si fue modificado accidentalmente
       const rolFinal = esOwner ? 'ADMIN' : baseUser.rol;
       const userData = { ...baseUser, rol: rolFinal, ultimoAcceso: new Date().toISOString() };
-      // Corregir también en la lista guardada
-      if (esOwner && localUser?.rol !== 'ADMIN') {
-        const listCorregida = (localUserList as Usuario[]).map(u =>
-          u.email.toLowerCase() === emailLower ? { ...u, rol: 'ADMIN' } : u
-        );
-        localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(listCorregida));
-      }
-      setUsuario(userData);
+      
+      // PERSISTENCIA DUAL (para navegadores restrictivos)
       localStorage.setItem('pricecontrol_local_user', JSON.stringify(userData));
+      sessionStorage.setItem('pricecontrol_session_user', JSON.stringify(userData));
+      
+      setUsuario(userData);
       setIsLoading(false);
-      toast.success('¡Bienvenido! Iniciando en modo local seguro.');
+      
+      toast.success('¡Bienvenido! Sesión activada en todos los sistemas.');
       return { success: true };
     }
 
