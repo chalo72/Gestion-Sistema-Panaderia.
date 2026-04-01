@@ -16,6 +16,7 @@ import { ProductCard } from '@/components/productos/ProductCard';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import { ProductCategoryManager } from '@/components/productos/ProductCategoryManager';
 import { ProductPriceItem } from '@/components/productos/ProductPriceItem';
+import { IceCreamAssistantModal } from '@/components/productos/IceCreamAssistantModal';
 
 interface ProductosProps {
     productos: Producto[];
@@ -55,6 +56,7 @@ export default function Productos({
     const [editingProducto, setEditingProducto] = useState<Producto | null>(null);
     const [expandedProducto, setExpandedProducto] = useState<string | null>(null);
     const [vistaActual, setVistaActual] = useState<'lista' | 'cuadricula'>('lista');
+    const [isIceCreamAssistantOpen, setIsIceCreamAssistantOpen] = useState(false);
     const { check } = useCan();
     const [addingPrecioForProducto, setAddingPrecioForProducto] = useState<string | null>(null);
     const [selectedProveedorId, setSelectedProveedorId] = useState('');
@@ -176,6 +178,7 @@ export default function Productos({
                 onManageCategories={() => setIsCategoriaDialogOpen(true)}
                 onAddProduct={() => { resetForm(); setIsDialogOpen(true); }}
                 onAddInsumo={handleAddInsumo}
+                onOpenIceCreamAssistant={() => setIsIceCreamAssistantOpen(true)}
                 checkPermission={(p: any) => check(p)} />
 
             {/* KPI Cards Ultra Compactas */}
@@ -410,6 +413,16 @@ export default function Productos({
                 categorias={categorias} onDeleteCategoria={onDeleteCategoria} onUpdateCategoria={onUpdateCategoria}
                 onAddCategoria={handleHandleAddCategoria}
                 nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} coloresPreset={COLORES_PRESET} />
+
+            <IceCreamAssistantModal 
+                isOpen={isIceCreamAssistantOpen} 
+                onOpenChange={setIsIceCreamAssistantOpen}
+                categorias={categorias}
+                proveedores={proveedores}
+                onAddProducto={onAddProducto}
+                onAddOrUpdatePrecio={onAddOrUpdatePrecio}
+                formatCurrency={formatCurrency}
+            />
         </div>
     );
 }

@@ -8,6 +8,7 @@ interface ProductHeaderProps {
     onManageCategories: () => void;
     onAddProduct: () => void;
     onAddInsumo: () => void;
+    onOpenIceCreamAssistant: () => void;
     checkPermission: (perm: string) => boolean;
 }
 
@@ -17,6 +18,7 @@ export function ProductHeader({
     onManageCategories,
     onAddProduct,
     onAddInsumo,
+    onOpenIceCreamAssistant,
     checkPermission
 }: ProductHeaderProps) {
     return (
@@ -59,6 +61,12 @@ export function ProductHeader({
 
                 {checkPermission('CREAR_PRODUCTOS') && (
                     <>
+                        <button
+                            onClick={onOpenIceCreamAssistant}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold border border-indigo-200 dark:border-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 hover:bg-indigo-100 transition-all h-11 text-sm shadow-sm"
+                        >
+                            🍦 Asistente Helados
+                        </button>
                         <button
                             onClick={onManageCategories}
                             style={{ color: '#475569' }}
