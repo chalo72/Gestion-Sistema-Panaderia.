@@ -120,6 +120,14 @@ export function IceCreamAssistantModal({
         }));
     };
 
+    const removeExtra = (idx: number) => {
+        setCalcData(prev => ({
+            ...prev,
+            selectedExtras: prev.selectedExtras.filter((_, i) => i !== idx)
+        }));
+        toast.success('Ingrediente quitado');
+    };
+
     const handleFinish = async () => {
         setLoading(true);
         try {
@@ -237,7 +245,12 @@ export function IceCreamAssistantModal({
                                                         <span className="text-[10px] font-black text-slate-800 leading-none">{ex.nombre}</span>
                                                         <span className={cn("text-[9px] font-bold mt-1", ex.type === 'gift' ? "text-amber-600 line-through" : "text-slate-400")}>{formatCurrency(ex.costo)}</span>
                                                     </div>
-                                                    <button onClick={() => setCalcData(prev => ({...prev, selectedExtras: prev.selectedExtras.filter((_, idx) => idx !== i)})) } className="p-1 text-slate-300 hover:text-red-500"><Trash2 className="w-3 h-3" /></button>
+                                                    <button 
+                                                        onClick={() => removeExtra(i)} 
+                                                        className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                                 <div className="flex gap-1">
                                                     <button onClick={() => setExtraType(i, 'fixed')} className={cn("flex-1 h-6 text-[8px] font-black uppercase rounded-md border", ex.type === 'fixed' ? "bg-slate-800 text-white border-slate-800" : "bg-white text-slate-400 border-slate-100")}>Base</button>
