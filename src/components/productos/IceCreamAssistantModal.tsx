@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
     X, Calculator, ShoppingCart, 
     ChevronRight, ChevronLeft, Package, 
-    Zap, DollarSign, Percent
+    Zap, DollarSign
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -45,14 +45,15 @@ export function IceCreamAssistantModal({
         
         // Paso 2: La Presentación (Vaso 3oz, etc.)
         nombreProducto: '',
-        tipoEnvase: 'Vaso',
+        cupSize: '3', // 3, 5, 7, 9
         bolasPorProducto: '1',
-        costoInsumos: '200', // Vaso + Cuchara
+        costoInsumos: '150', // Vaso + Cuchara
+        costoSalsa: '80', // Salsa/Toppings
         categoria: 'Helados',
         
         // Paso 3: Precio
         margen: '40',
-        precioVenta: '',
+        targetPVP: '',
     });
 
     const [loading, setLoading] = useState(false);
@@ -70,17 +71,19 @@ export function IceCreamAssistantModal({
     const totalCajaNum  = parseFloat(calcData.cantidadTotalCaja) || 1;
     const tamanoBolaNum = parseFloat(calcData.tamanoBola) || 1;
     
-    // Si el usuario cambia el tamaño de bola, recalculamos rendimiento
     const rendAuto      = Math.floor(totalCajaNum / tamanoBolaNum);
     const bolasCajaNum  = parseFloat(calcData.bolasPorCaja) || rendAuto || 1;
     const costoPorBola  = costoCajaNum / bolasCajaNum;
     
     const bolasProdNum  = parseFloat(calcData.bolasPorProducto) || 1;
     const insumosNum    = parseFloat(calcData.costoInsumos) || 0;
-    const costoFinal    = (costoPorBola * bolasProdNum) + insumosNum;
+    const salsaNum      = parseFloat(calcData.costoSalsa) || 0;
+    const costoFinal    = (costoPorBola * bolasProdNum) + insumosNum + salsaNum;
     
     const margenNum     = parseFloat(calcData.margen) || 1;
     const pvpCalculado  = costoFinal * (1 + margenNum / 100);
+    const targetPVPNum  = parseFloat(calcData.targetPVP) || pvpCalculado;
+    const margenReal    = targetPVPNum > 1 ? ((targetPVPNum - costoFinal) / targetPVPNum) * 100 : 0;
 
     // Reiniciar si se abre
     useEffect(() => {
@@ -103,14 +106,14 @@ export function IceCreamAssistantModal({
 
         setLoading(true);
         try {
-            const pvp = parseFloat(calcData.precioVenta) || pvpCalculado;
+            const pvp = parseFloat(calcData.targetPVP) || pvpCalculado;
             
             const nuevoProd = await onAddProducto({
                 nombre: calcData.nombreProducto,
                 categoria: calcData.categoria,
                 descripcion: `Helado calculado: ${calcData.bolasPorProducto} bola(s) de ${calcData.nombreCaja || 'Helado'}.`,
                 precioVenta: pvp,
-                margenUtilidad: calcData.margen,
+                margenUtilidad: margenReal.toFixed(0),
                 tipo: 'elaborado',
                 unidadMedida: 'unidad',
                 costoBase: costoFinal
@@ -270,116 +273,164 @@ export function IceCreamAssistantModal({
                         </div>
                     )}
 
-                    {/* STEP 2: EL PRODUCTO FINAL (PRESENTACIÓN) */}
+                    {/* STEP 2: EL PRODUCTO FINAL (PRESENTACIÓN INTERACTIVA) */}
                     {step === 2 && (
                         <div className="space-y-6 animate-ag-fade-in">
-                            <div className="space-y-2">
+                            <div className="space-y-1">
                                 <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                    <ShoppingCart className="w-5 h-5 text-indigo-500" /> Paso 2: Producto de Venta
+                                    <ShoppingCart className="w-5 h-5 text-indigo-500" /> Paso 2: Configurar Helado
                                 </h3>
-                                <p className="text-xs text-slate-500 font-medium italic">¿Qué vas a vender? (Vaso de 1 bola, Cono, etc.)</p>
+                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Personaliza el tamaño y complementos</p>
+                            </div>
+
+                            {/* Preset Buttons */}
+                            <div className="flex gap-2">
+                                {['3', '5', '7', '9'].map(size => (
+                                    <button 
+                                        key={size}
+                                        onClick={() => setCalcData({...calcData, cupSize: size, nombreProducto: `Vaso de ${size} OZ`, bolasPorProducto: size === '3' ? '1' : size === '5' ? '2' : '3'})}
+                                        className={cn(
+                                            "flex-1 py-3 rounded-2xl text-xs font-black transition-all border-2",
+                                            calcData.cupSize === size 
+                                                ? "bg-indigo-600 border-indigo-200 text-white shadow-lg shadow-indigo-100" 
+                                                : "bg-white border-slate-100 text-slate-400 hover:bg-slate-50"
+                                        )}
+                                    >
+                                        {size} OZ
+                                    </button>
+                                ))}
                             </div>
 
                             <div className="grid gap-4">
                                 <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nombre de Venta</Label>
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nombre del Helado</Label>
                                     <Input 
                                         value={calcData.nombreProducto} 
                                         onChange={e => setCalcData({...calcData, nombreProducto: e.target.value})}
-                                        placeholder="Ej: Vaso de 3 OZ..." 
+                                        placeholder="Ej: Copa Especial 3oz..." 
                                         className="h-12 text-base font-bold rounded-2xl bg-white border-slate-200"
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-slate-400">Bolas por envase</Label>
-                                        <Input 
-                                            type="number" 
-                                            value={calcData.bolasPorProducto} 
-                                            onChange={e => setCalcData({...calcData, bolasPorProducto: e.target.value})}
-                                            className="h-12 font-black rounded-2xl bg-white border-slate-200 text-center"
-                                        />
+                                    <div className="space-y-1.5 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                                        <Label className="text-[10px] font-black uppercase text-indigo-500">Gramos/Bola</Label>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => setCalcData({...calcData, tamanoBola: (tamanoBolaNum - 5).toString()})} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold">-</button>
+                                            <Input 
+                                                type="number" 
+                                                value={calcData.tamanoBola} 
+                                                onChange={e => setCalcData({...calcData, tamanoBola: e.target.value})}
+                                                className="border-none text-xl font-black text-center p-0 h-8 focus-visible:ring-0"
+                                            />
+                                            <button onClick={() => setCalcData({...calcData, tamanoBola: (tamanoBolaNum + 5).toString()})} className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">+</button>
+                                        </div>
                                     </div>
+                                    <div className="space-y-1.5 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
+                                        <Label className="text-[10px] font-black uppercase text-indigo-500">Cantidad Bolas</Label>
+                                        <div className="flex items-center gap-2">
+                                            <button onClick={() => setCalcData({...calcData, bolasPorProducto: (bolasProdNum - 1).toString()})} className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center font-bold">-</button>
+                                            <Input 
+                                                type="number" 
+                                                value={calcData.bolasPorProducto} 
+                                                onChange={e => setCalcData({...calcData, bolasPorProducto: e.target.value})}
+                                                className="border-none text-xl font-black text-center p-0 h-8 focus-visible:ring-0"
+                                            />
+                                            <button onClick={() => setCalcData({...calcData, bolasPorProducto: (bolasProdNum + 1).toString()})} className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">+</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
-                                        <Label className="text-[10px] font-black uppercase text-slate-400">Costo Otros (Vaso/Cuchara)</Label>
+                                        <Label className="text-[10px] font-black uppercase text-slate-400">Vaso/Cuchara ($)</Label>
                                         <Input 
                                             type="number" 
                                             value={calcData.costoInsumos} 
                                             onChange={e => setCalcData({...calcData, costoInsumos: e.target.value})}
-                                            className="h-12 font-black rounded-2xl bg-white border-slate-200 text-center"
+                                            className="h-10 font-bold rounded-xl bg-white border-slate-100 text-center"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[10px] font-black uppercase text-slate-400">Salsa/Extras ($)</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={calcData.costoSalsa} 
+                                            onChange={e => setCalcData({...calcData, costoSalsa: e.target.value})}
+                                            className="h-10 font-bold rounded-xl bg-white border-slate-100 text-center"
                                         />
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Live Result Step 2 */}
-                            <div className="p-5 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border-2 border-emerald-100 dark:border-emerald-800 flex flex-col gap-1 items-center text-center">
-                                <span className="text-[10px] font-black uppercase text-emerald-700 tracking-widest">Costo Bruto por Porción</span>
-                                <span className="text-3xl font-black text-emerald-600">{formatCurrency(costoFinal)}</span>
-                                <p className="text-[10px] text-emerald-500 font-bold mt-1">
-                                    ({calcData.bolasPorProducto} x {formatCurrency(costoPorBola)}) + {formatCurrency(insumosNum)}
-                                </p>
+                            {/* Dynamic Indicator */}
+                            <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-2xl border-l-4 border-emerald-500 flex justify-between items-center animate-ag-scale-in">
+                                <div>
+                                    <p className="text-[9px] font-black text-emerald-700 uppercase">Costo Final Unitario</p>
+                                    <p className="text-2xl font-black text-emerald-600">{formatCurrency(costoFinal)}</p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="text-[9px] font-black text-emerald-700 uppercase">Utilidad Proyectada</p>
+                                    <p className="text-lg font-black text-emerald-500">~{formatCurrency(pvpCalculado - costoFinal)}</p>
+                                </div>
                             </div>
                         </div>
                     )}
 
-                    {/* STEP 3: PRECIO Y MARGEN */}
+                    {/* STEP 3: PRECIO Y MARGEN (TARGET PVP) */}
                     {step === 3 && (
                         <div className="space-y-6 animate-ag-fade-in">
                             <div className="space-y-2">
                                 <h3 className="text-lg font-black text-slate-800 dark:text-white flex items-center gap-2">
-                                    <Calculator className="w-5 h-5 text-indigo-500" /> Paso 3: Precio de Venta
+                                    <Calculator className="w-5 h-5 text-indigo-500" /> Paso 3: Definir Precio y Ganancia
                                 </h3>
-                                <p className="text-xs text-slate-500 font-medium italic">Define cuánto quieres ganar con este producto.</p>
+                                <p className="text-[10px] text-slate-500 font-bold italic">Ajusta el precio hasta que llegues a la utilidad que quieres.</p>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-6 items-end">
-                                <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400 flex items-center gap-1">
-                                        <Percent className="w-3 h-3" /> Margen de Utilidad (%)
+                            <div className="p-6 bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/40 space-y-6">
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1">
+                                        <DollarSign className="w-3 h-3" /> Precio al que quieres vender (PVP)
                                     </Label>
                                     <Input 
                                         type="number" 
-                                        value={calcData.margen} 
-                                        onChange={e => setCalcData({...calcData, margen: e.target.value})}
-                                        className="h-14 text-2xl font-black rounded-2xl bg-white border-slate-200 text-center"
+                                        value={calcData.targetPVP} 
+                                        onChange={e => setCalcData({...calcData, targetPVP: e.target.value})}
+                                        placeholder={pvpCalculado.toFixed(0)}
+                                        className="h-20 text-5xl font-black text-emerald-600 rounded-2xl bg-slate-50 border-none text-center focus:ring-emerald-500"
                                     />
                                 </div>
-                                <div className="space-y-4">
-                                    <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-2xl">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">Precio Sugerido</p>
-                                        <p className="text-xl font-black text-slate-800 dark:text-white">{formatCurrency(pvpCalculado)}</p>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-indigo-50 rounded-2xl text-center">
+                                        <p className="text-[9px] font-black text-indigo-400 uppercase">Margen Real</p>
+                                        <p className={cn(
+                                            "text-2xl font-black",
+                                            margenReal > 30 ? "text-indigo-600" : "text-orange-500"
+                                        )}>
+                                            {margenReal.toFixed(1)}%
+                                        </p>
+                                    </div>
+                                    <div className="p-4 bg-emerald-50 rounded-2xl text-center">
+                                        <p className="text-[9px] font-black text-emerald-400 uppercase">Ganancia Limpia</p>
+                                        <p className="text-2xl font-black text-emerald-600">
+                                            {formatCurrency(targetPVPNum - costoFinal)}
+                                        </p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-indigo-600 flex items-center gap-1">
-                                    <DollarSign className="w-3 h-3" /> Precio de Venta Final
-                                </Label>
-                                <Input 
-                                    type="number" 
-                                    value={calcData.precioVenta} 
-                                    onChange={e => setCalcData({...calcData, precioVenta: e.target.value})}
-                                    placeholder={pvpCalculado.toFixed(0)}
-                                    className="h-16 text-4xl font-black text-emerald-600 rounded-2xl bg-white border-emerald-200 focus:ring-emerald-500 shadow-xl shadow-emerald-100/50"
-                                />
-                                <p className="text-[10px] text-slate-400 font-medium pl-1 italic">Si lo dejas vacío, se usará el sugerido.</p>
-                            </div>
-
-                            {/* Category Selector Quick */}
                             <div className="space-y-2">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Categoría del Producto</Label>
+                                <Label className="text-[10px] font-black uppercase text-slate-400">Categoría Final</Label>
                                 <div className="flex flex-wrap gap-2">
-                                    {categorias.filter(c => c.tipo !== 'insumo').slice(0, 6).map(c => (
+                                    {categorias.filter(c => c.tipo !== 'insumo').slice(0, 4).map(c => (
                                         <button 
                                             key={c.id}
                                             onClick={() => setCalcData({...calcData, categoria: c.nombre})}
                                             className={cn(
-                                                "px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                                                "px-4 py-2 rounded-xl text-xs font-black transition-all",
                                                 calcData.categoria === c.nombre 
-                                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-200" 
+                                                    ? "bg-indigo-600 text-white shadow-md" 
                                                     : "bg-white text-slate-500 border border-slate-100 hover:bg-slate-50"
                                             )}
                                         >
