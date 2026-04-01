@@ -11,7 +11,8 @@ import {
   X,
   Search,
   Trash2,
-  ChevronLeft
+  ChevronLeft,
+  Share2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -178,6 +179,50 @@ export default function PrePedidos({
         });
       }
     }
+  };
+
+  const handleShareWhatsApp = () => {
+    const draft = activeDraft;
+    if (!draft || draft.items.length === 0) {
+      toast.error('No hay productos en el ticket para enviar');
+      return;
+    }
+
+    const prov = getProveedorById(draft.proveedorId);
+    if (!prov) return;
+
+    let message = `📦 *ORDEN DE COMPRA - DULCE PLACER* 🍞\n\n`;
+    message += `Hola *${prov.contacto || prov.nombre}*, quisiera realizar el siguiente pedido:\n\n`;
+
+    draft.items.forEach((item, index) => {
+      const prod = getProductoById(item.productoId);
+      const bestPrice = getMejorPrecioByProveedor(item.productoId, draft.proveedorId);
+      const bulkAmount = Number(bestPrice?.cantidadEmbalaje || 1);
+      const embalajeNombre = bestPrice?.tipoEmbalaje || 'UND';
+      
+      const pacas = item.cantidad / bulkAmount;
+      const esEntero = pacas % 1 === 0;
+      
+      message += `${index + 1}. *${prod?.nombre}*\n`;
+      message += `   🔹 Cantidad: ${item.cantidad} unidades`;
+      
+      if (bulkAmount > 1) {
+        message += ` (${esEntero ? pacas : pacas.toFixed(1)} ${embalajeNombre})`;
+      }
+      
+      message += `\n   💰 Ref: ${formatCurrency(item.precioUnitario)} c/u\n\n`;
+    });
+
+    message += `*TOTAL ESTIMADO:* ${formatCurrency(draft.total)}\n\n`;
+    message += `_Generado automáticamente desde Dulce Placer ERP_ 🚀`;
+
+    const encodedMessage = encodeURIComponent(message);
+    const whatsappUrl = prov.telefono 
+      ? `https://wa.me/${prov.telefono.replace(/\D/g, '')}?text=${encodedMessage}`
+      : `https://wa.me/?text=${encodedMessage}`;
+
+    window.open(whatsappUrl, '_blank');
+    toast.success('Abriendo WhatsApp para enviar pedido...');
   };
 
   if (activeTab === 'gestion') {
@@ -463,6 +508,15 @@ export default function PrePedidos({
                       </div>
                       <div className="flex gap-2">
                          <Button variant="outline" onClick={() => setActiveTab('gestion')} className="h-14 w-14 rounded-2xl border-slate-200 text-slate-500 hover:bg-slate-100"><LayoutGrid className="w-5 h-5" /></Button>
+                         <Button 
+                            variant="outline" 
+                            disabled={!activeDraft || activeDraft.items.length === 0}
+                            onClick={handleShareWhatsApp}
+                            className="h-14 w-14 rounded-2xl border-emerald-100 text-emerald-600 hover:bg-emerald-50 shadow-sm"
+                            title="Compartir por WhatsApp"
+                          >
+                            <Share2 className="w-5 h-5" />
+                          </Button>
                           <Button 
                             disabled={!activeDraft || activeDraft.items.length === 0} 
                             onClick={() => { 

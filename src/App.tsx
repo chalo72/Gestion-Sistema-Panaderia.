@@ -501,7 +501,7 @@ function AppContent() {
       case 'usuarios':
         return hasPermission('VER_USUARIOS') ? (
           <SectionErrorBoundary sectionName="Usuarios">
-            <Usuarios />
+            <Usuarios publicAppUrl={configuracion.publicUrl} />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
       case 'roles':

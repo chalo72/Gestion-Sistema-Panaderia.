@@ -28,7 +28,7 @@ import { toast } from 'sonner';
 import { ROLE_DESCRIPTIONS, type UserRole, type Usuario } from '@/types';
 import { cn } from '@/lib/utils';
 
-export function Usuarios() {
+export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
   const { usuarios, addUsuario, updateUsuario, deleteUsuario } = useAuth();
   const { isAdmin } = useCan();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -125,8 +125,10 @@ export function Usuarios() {
     const rolePasswords = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
     const password = (user as any).password || rolePasswords[user.rol] || 'Pendiente asignar';
 
-    const appUrl = window.location.origin;
-    const message = `👤 *DULCE PLACER - ACCESO PERSONAL* 👤\n\nHola *${user.nombre}*, aquí tienes tus credenciales para el sistema ERP:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${user.email}\n🔑 *Tu Clave:* ${password}\n\n⚠️ *SEGURIDAD:* Favor guardar estos datos de forma privada.`;
+    // Prioridad: URL configurada > window.location.origin
+    const appUrl = publicAppUrl || window.location.origin;
+
+    const message = `🌟 *DULCE PLACER - ACCESO PERSONAL* 🌟\n\nHola *${user.nombre}*, aquí tienes tus credenciales para el sistema ERP:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${user.email}\n🔑 *Tu Clave:* ${password}\n\n⚠️ *SEGURIDAD:* Favor guardar estos datos de forma privada. No compartirlos con nadie.`;
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
 
