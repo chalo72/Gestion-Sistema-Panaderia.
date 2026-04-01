@@ -48,8 +48,16 @@ export function Login({ onLoginSuccess }: LoginProps) {
     setIsLoading(true);
     const result = await login(email, password);
     if (result.success) {
-      // Retraso aumentado para asegurar que el estado de AuthContext se propague
-      setTimeout(() => onLoginSuccess(), 500);
+      // PERSISTENCIA DUAL NEXUS-VOLT: Guardar en ambos para máxima resiliencia
+      const sessionData = JSON.stringify(result.usuario);
+      localStorage.setItem('pricecontrol_local_user', sessionData);
+      sessionStorage.setItem('pricecontrol_session_user', sessionData);
+      
+      // Limpiar conteo de redirecciones tras login exitoso
+      sessionStorage.removeItem('nexus_redirect_count');
+      
+      // Retraso controlado para estabilidad
+      setTimeout(() => onLoginSuccess(), 300);
     } else {
       setError(result.error || 'Error al iniciar sesión');
     }

@@ -161,33 +161,47 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    let mounted = true;
-    const initializeAuth = async () => {
-      console.log('🚀 Inicializando Sistema en MODO LOCAL SEGURO...');
-      setIsLoading(true);
+    const checkSession = async () => {
       try {
-        const savedLocalUser = localStorage.getItem('pricecontrol_local_user');
-        const savedSessionUser = sessionStorage.getItem('pricecontrol_session_user');
-        const sessionToLoad = savedLocalUser || savedSessionUser;
-
-        if (sessionToLoad) {
-          const userData = JSON.parse(sessionToLoad) as Usuario;
-          // BLINDAJE NEXUS-VOLT: Se ha eliminado la expiración por reloj (Date.now) 
-          // para evitar bloqueos en dispositivos con fecha/hora desincronizada.
-          setUsuario(userData);
-          console.log('🛡️ [Auth] Sesión restaurada desde persistencia local');
+        // DETECCIÓN DE BUCLE DE REDIRECCIÓN NEXUS-VOLT
+        // Si hay más de 3 recargas en 30 segundos, es un bucle corrupto
+        const now = Date.now();
+        const lastReset = Number(localStorage.getItem('nexus_last_reset') || 0);
+        const redirectCount = Number(sessionStorage.getItem('nexus_redirect_count') || 0);
+        
+        if (now - lastReset < 30000 && redirectCount > 3) {
+          console.error('🚨 [Nexus-Volt] Bucle de login detectado. Ejecutando Nuke de emergencia...');
+          localStorage.clear();
+          sessionStorage.clear();
+          localStorage.setItem('nexus_last_reset', Date.now().toString());
+          window.location.href = '/?reset=force';
+          return;
         }
-      } catch (err) {
-        console.error('❌ Error cargando sesión local:', err);
-      } finally {
-        if (mounted) setIsLoading(false);
+
+        const savedUser = localStorage.getItem('pricecontrol_local_user') || sessionStorage.getItem('pricecontrol_session_user');
+        if (savedUser) {
+          const userData = JSON.parse(savedUser);
+          setUsuario(userData);
+          
+          // BLINDAJE: Carga inmediata (Background Sync)
+          // No bloqueamos la UI esperando a loadCriticalData si ya tenemos sesión.
+          // El Dashboard se mostrará con datos locales mientras la nube sincroniza.
+          setIsLoading(false); 
+          
+          // La sincronización ocurre en paralelo, silenciosamente
+          console.log('⚡ [Nexus-Volt] Sesión restaurada. Sincronización en segundo plano iniciada.');
+        } else {
+          setIsLoading(false);
+        }
+      } catch (error) {
+        console.error('Error checking session:', error);
+        setIsLoading(false);
       }
     };
 
-    initializeAuth();
+    checkSession();
     loadUsuarios();
     loadRolePasswordsFromCloud();
-    return () => { mounted = false; };
   }, [loadUsuarios, loadRolePasswordsFromCloud]);
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
