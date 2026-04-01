@@ -419,9 +419,7 @@ export default function Productos({
                 onOpenChange={setIsIceCreamAssistantOpen}
                 productos={productos}
                 precios={_precios}
-                categorias={categorias}
                 onAddProducto={onAddProducto}
-                onAddOrUpdatePrecio={onAddOrUpdatePrecio}
                 formatCurrency={formatCurrency}
             />
         </div>

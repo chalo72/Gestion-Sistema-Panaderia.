@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-    X, Calculator, ShoppingCart, 
     ChevronRight, ChevronLeft, Package, 
-    Layers, Plus, Minus, Info, Check, Search, Trash2, TrendingUp, DollarSign, Gift, Star, MousePointer2
+    Plus, Minus, Trash2, MousePointer2
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogHeader } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -25,15 +24,13 @@ interface IceCreamAssistantModalProps {
     onOpenChange: (open: boolean) => void;
     productos: any[];
     precios: any[]; 
-    categorias: Categoria[];
     onAddProducto: (producto: any) => Promise<any>;
-    onAddOrUpdatePrecio: (data: any) => void;
     formatCurrency: (val: number) => string;
 }
 
 export function IceCreamAssistantModal({
-    isOpen, onOpenChange, productos, precios, categorias, 
-    onAddProducto, onAddOrUpdatePrecio, formatCurrency
+    isOpen, onOpenChange, productos, precios, 
+    onAddProducto, formatCurrency
 }: IceCreamAssistantModalProps) {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
@@ -95,6 +92,15 @@ export function IceCreamAssistantModal({
     const actualMargin     = displayPVP > 0 ? ((displayPVP - costoBaseFinal) / displayPVP) * 100 : 0;
 
     useEffect(() => { if (isOpen) setStep(1); }, [isOpen]);
+
+    const toggleInsumo = (id: string) => {
+        setCalcData(prev => ({
+            ...prev,
+            selectedInsumosIds: prev.selectedInsumosIds.includes(id) 
+                ? prev.selectedInsumosIds.filter(i => i !== id) 
+                : [...prev.selectedInsumosIds, id]
+        }));
+    };
 
     const addExtra = (id: string) => {
         const prod = productos.find(p => p.id === id);
