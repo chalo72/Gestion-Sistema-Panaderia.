@@ -1204,27 +1204,6 @@ class HybridDatabase implements IDatabase {
     }
   }
 
-  // --- Tombstone: registro de IDs eliminados localmente para evitar que la nube los restaure ---
-  private readonly TOMBSTONE_KEY = 'pricecontrol_deleted_proveedores';
-
-  private getTombstone(): Set<string> {
-    try {
-      const saved = localStorage.getItem(this.TOMBSTONE_KEY);
-      return new Set(saved ? JSON.parse(saved) : []);
-    } catch { return new Set(); }
-  }
-
-  private addTombstone(id: string) {
-    const t = this.getTombstone();
-    t.add(id);
-    localStorage.setItem(this.TOMBSTONE_KEY, JSON.stringify([...t]));
-  }
-
-  private removeTombstone(id: string) {
-    const t = this.getTombstone();
-    t.delete(id);
-    localStorage.setItem(this.TOMBSTONE_KEY, JSON.stringify([...t]));
-  }
 
   async init(): Promise<void> {
     await this.local.init();
@@ -1234,95 +1213,113 @@ class HybridDatabase implements IDatabase {
     }
   }
 
+  private getTombstones(): Record<string, Set<string>> {
+    const data = localStorage.getItem('nexus_tombstones');
+    if (!data) return { proveedores: new Set(), productos: new Set(), precios: new Set() };
+    const parsed = JSON.parse(data);
+    return {
+      proveedores: new Set(parsed.proveedores || []),
+      productos: new Set(parsed.productos || []),
+      precios: new Set(parsed.precios || []),
+    };
+  }
+
+  private saveTombstones(ts: Record<string, Set<string>>) {
+    const toSave = {
+      proveedores: Array.from(ts.proveedores),
+      productos: Array.from(ts.productos),
+      precios: Array.from(ts.precios),
+    };
+    localStorage.setItem('nexus_tombstones', JSON.stringify(toSave));
+  }
+
+  private addTombstone(table: 'proveedores' | 'productos' | 'precios', id: string) {
+    const ts = this.getTombstones();
+    ts[table].add(id);
+    this.saveTombstones(ts);
+  }
+
+  private removeTombstone(table: 'proveedores' | 'productos' | 'precios', id: string) {
+    const ts = this.getTombstones();
+    ts[table].delete(id);
+    this.saveTombstones(ts);
+  }
+
   public async syncCloudToLocal() {
     try {
-      console.log('🔄 Sincronizando datos de la nube a local...');
+      console.log('🔄 [Nexus-Volt] Iniciando Reconciliación Inteligente...');
 
-      // LOCAL SIEMPRE GANA: cargar IDs locales antes de sincronizar.
-      // Nunca sobreescribir con versiones de la nube — la nube puede tener datos más viejos.
-      const [localProductos, localProveedores, localPrecios, localPrepedidos, localRecepciones, localGastos, localAhorros] = await Promise.all([
-        this.local.getAllProductos().then(arr => new Set(arr.map((p: any) => p.id))),
-        this.local.getAllProveedores().then(arr => new Set(arr.map((p: any) => p.id))),
-        this.local.getAllPrecios().then(arr => new Set(arr.map((p: any) => p.id))),
-        this.local.getAllPrePedidos().then(arr => new Set(arr.map((p: any) => p.id))),
-        this.local.getAllRecepciones().then(arr => new Set(arr.map((p: any) => p.id))),
-        this.local.getAllGastos().then(arr => new Set(arr.map((p: any) => p.id))),
-        this.local.getAllAhorros().then(arr => new Set(arr.map((p: any) => p.id))),
+      const [localProds, localProvs, localPrcs] = await Promise.all([
+        this.local.getAllProductos(),
+        this.local.getAllProveedores(),
+        this.local.getAllPrecios(),
       ]);
 
-      // Lápidas: IDs de proveedores eliminados localmente que la nube aún no ha procesado
-      const tombstone = this.getTombstone();
+      const localProdsMap = new Map(localProds.map(p => [p.id, p]));
+      const localProvsMap = new Map(localProvs.map(p => [p.id, p]));
+      const localPrcsMap = new Map(localPrcs.map(p => [p.id, p]));
+      const tombstones = this.getTombstones();
 
-      const tables = [
-        // Para productos/proveedores/precios: SOLO agregar los que no existen localmente.
-        // Esto protege los datos completos del local ante versiones reducidas de la nube.
-        {
-          name: 'productos',
-          fn: () => this.cloud.getAllProductos(),
-          save: (d: any) => localProductos.has(d.id) ? Promise.resolve() : this.local.updateProducto(d)
-        },
-        {
-          name: 'proveedores',
-          fn: () => this.cloud.getAllProveedores(),
-          save: async (d: any) => {
-            // Si este proveedor tiene lápida: fue eliminado localmente — borrarlo de la nube también
-            if (tombstone.has(d.id)) {
-              const eliminado = await this.cloud.deleteProveedor(d.id).then(() => true).catch(e => { console.error(e); return false; });
-              if (eliminado) this.removeTombstone(d.id); // Solo quitar lápida si el delete en nube fue exitoso
-              return;
+      const processTable = async (name: string, cloudData: any[], localMap: Map<string, any>, tombstoneSet: Set<string>, saveFn: (d: any) => Promise<any>, deleteCloudFn?: (id: string) => Promise<any>) => {
+        if (!cloudData) return;
+        for (const item of cloudData) {
+          // 1. Si tiene lápida, borrar de la nube
+          if (tombstoneSet.has(item.id)) {
+            if (deleteCloudFn) {
+              await deleteCloudFn(item.id).then(() => this.removeTombstone(name as any, item.id)).catch(() => { });
             }
-            // Si ya existe localmente: no sobreescribir (la nube tiene versión reducida)
-            if (localProveedores.has(d.id)) return;
-            return this.local.updateProveedor(d);
+            continue;
           }
-        },
-        {
-          name: 'precios',
-          fn: () => this.cloud.getAllPrecios(),
-          save: (d: any) => localPrecios.has(d.id) ? Promise.resolve() : this.local.updatePrecio(d)
-        },
-        // LOCAL GANA para todos: solo agregar de la nube lo que NO existe localmente
+
+          const localItem = localMap.get(item.id);
+          if (!localItem) {
+            // No existe local: agregar
+            await saveFn(item).catch(() => { });
+          } else {
+            // Existe local: comparar fechas
+            const cloudDate = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
+            const localDate = new Date(localItem.fechaActualizacion || localItem.createdAt || 0).getTime();
+
+            if (cloudDate > localDate) {
+              console.log(`📡 [Sync] Actualizando ${name} ID: ${item.id} (Nube es más reciente)`);
+              await saveFn(item).catch(() => { });
+            }
+          }
+        }
+      };
+
+      const cloudProds = await this.cloud.getAllProductos();
+      await processTable('productos', cloudProds, localProdsMap, tombstones.productos, (d) => this.local.updateProducto(d), (id) => this.cloud.deleteProducto(id));
+
+      const cloudProvs = await this.cloud.getAllProveedores();
+      await processTable('proveedores', cloudProvs, localProvsMap, tombstones.proveedores, (d) => this.local.updateProveedor(d), (id) => this.cloud.deleteProveedor(id));
+
+      const cloudPrcs = await this.cloud.getAllPrecios();
+      await processTable('precios', cloudPrcs, localPrcsMap, tombstones.precios, (d) => this.local.updatePrecio(d), (id) => this.cloud.deletePrecio(id));
+
+      // Otras tablas con lógica estandarizada
+      const otherTables = [
         { name: 'inventario', fn: () => this.cloud.getAllInventario(), save: (d: any) => this.local.updateInventarioItem(d) },
-        {
-          name: 'configuracion', fn: () => this.cloud.getConfiguracion(),
-          save: async (d: any) => {
-            const localConfig = await this.local.getConfiguracion();
-            if (localConfig) return; // LOCAL GANA: si ya existe config local, no sobreescribir
-            return this.local.saveConfiguracion(d);
-          },
-          single: true
-        },
         { name: 'alertas', fn: () => this.cloud.getAllAlertas(), save: (d: any) => this.local.updateAlerta(d) },
-        { name: 'prepedidos', fn: () => this.cloud.getAllPrePedidos(), save: (d: any) => localPrepedidos.has(d.id) ? Promise.resolve() : this.local.updatePrePedido(d) },
-        { name: 'recepciones', fn: () => this.cloud.getAllRecepciones(), save: (d: any) => localRecepciones.has(d.id) ? Promise.resolve() : this.local.updateRecepcion(d) },
-        { name: 'historialPrecios', fn: () => this.cloud.getAllHistorial(), save: (d: any) => this.local.addHistorial(d) },
+        { name: 'prepedidos', fn: () => this.cloud.getAllPrePedidos(), save: (d: any) => this.local.updatePrePedido(d) },
+        { name: 'recepciones', fn: () => this.cloud.getAllRecepciones(), save: (d: any) => this.local.updateRecepcion(d) },
         { name: 'recetas', fn: () => this.cloud.getAllRecetas(), save: (d: any) => this.local.updateReceta(d) },
-        { name: 'ventas', fn: () => this.cloud.getAllVentas(), save: (d: any) => this.local.addVenta(d) },
-        { name: 'caja', fn: () => this.cloud.getAllSesionesCaja(), save: (d: any) => this.local.updateSesionCaja(d) },
-        { name: 'gastos', fn: () => this.cloud.getAllGastos(), save: (d: any) => localGastos.has(d.id) ? Promise.resolve() : this.local.updateGasto(d) },
-        { name: 'ahorros', fn: () => this.cloud.getAllAhorros(), save: (d: any) => localAhorros.has(d.id) ? Promise.resolve() : this.local.updateAhorro(d) },
-        // Trabajadores y créditos — nuevos en sync v5.2
         { name: 'trabajadores', fn: () => this.cloud.getAllTrabajadores(), save: (d: any) => this.local.updateTrabajador(d) },
         { name: 'creditos_trabajadores', fn: () => this.cloud.getAllCreditosTrabajadores(), save: (d: any) => this.local.updateCreditoTrabajador(d) },
       ];
 
-      for (const table of tables) {
+      for (const table of otherTables) {
         try {
           const data = await table.fn();
-          if (data) {
-            if ((table as any).single) {
-              await table.save(data);
-            } else if (Array.isArray(data)) {
-              for (const item of data) {
-                await table.save(item).catch(() => { });
-              }
-            }
+          if (Array.isArray(data)) {
+            for (const item of data) await table.save(item).catch(() => { });
           }
         } catch (err) {
-          console.warn(`⚠️ Error sincronizando tabla ${table.name}:`, err);
+          console.warn(`⚠️ Error en tabla ${table.name}:`, err);
         }
       }
-      console.log('✅ Sincronización Nube -> Local completada.');
+
+      console.log('✅ [Nexus-Volt] Reconciliación Nube -> Local completada.');
     } catch (e) {
       console.warn('⚠️ Sync cloud to local failed:', e);
     }
@@ -1402,11 +1399,13 @@ class HybridDatabase implements IDatabase {
     if (this.isOnline) await this.cloud.addProducto(p).catch(console.error);
   }
   async updateProducto(p: DBProducto) {
-    await this.local.updateProducto(p);
-    if (this.isOnline) await this.cloud.updateProducto(p).catch(console.error);
+    const updated = { ...p, fechaActualizacion: new Date().toISOString() };
+    await this.local.updateProducto(updated);
+    if (this.isOnline) await this.cloud.updateProducto(updated).catch(console.error);
   }
   async deleteProducto(id: string) {
     await this.local.deleteProducto(id);
+    this.addTombstone('productos', id);
     if (this.isOnline) await this.cloud.deleteProducto(id).catch(console.error);
   }
 
@@ -1416,20 +1415,19 @@ class HybridDatabase implements IDatabase {
     if (this.isOnline) await this.cloud.addProveedor(p).catch(console.error);
   }
   async updateProveedor(p: DBProveedor) {
-    await this.local.updateProveedor(p);
-    if (this.isOnline) await this.cloud.updateProveedor(p).catch(console.error);
+    const updated = { ...p, fechaActualizacion: new Date().toISOString() };
+    await this.local.updateProveedor(updated);
+    if (this.isOnline) await this.cloud.updateProveedor(updated).catch(console.error);
   }
   async deleteProveedor(id: string) {
     await this.local.deleteProveedor(id);
-    // Marcar como eliminado para que syncCloudToLocal no lo restaure si la nube falla
-    this.addTombstone(id);
+    this.addTombstone('proveedores', id);
     if (this.isOnline) {
       try {
         await this.cloud.deleteProveedor(id);
-        this.removeTombstone(id); // Eliminado de la nube con éxito — limpiar lápida
+        this.removeTombstone('proveedores', id);
       } catch (e) {
-        console.error('⚠️ Error eliminando proveedor de la nube (se reintentará al sincronizar):', e);
-        // La lápida queda activa para el próximo syncCloudToLocal
+        console.error('⚠️ Error eliminando proveedor de la nube:', e);
       }
     }
   }
@@ -1443,11 +1441,13 @@ class HybridDatabase implements IDatabase {
     if (this.isOnline) await this.cloud.addPrecio(p).catch(console.error);
   }
   async updatePrecio(p: DBPrecio) {
-    await this.local.updatePrecio(p);
-    if (this.isOnline) await this.cloud.updatePrecio(p).catch(console.error);
+    const updated = { ...p, fechaActualizacion: new Date().toISOString() };
+    await this.local.updatePrecio(updated);
+    if (this.isOnline) await this.cloud.updatePrecio(updated).catch(console.error);
   }
   async deletePrecio(id: string) {
     await this.local.deletePrecio(id);
+    this.addTombstone('precios', id);
     if (this.isOnline) await this.cloud.deletePrecio(id).catch(console.error);
   }
 
