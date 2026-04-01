@@ -17,6 +17,7 @@ import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import { ProductCategoryManager } from '@/components/productos/ProductCategoryManager';
 import { ProductPriceItem } from '@/components/productos/ProductPriceItem';
 import { IceCreamAssistantModal } from '@/components/productos/IceCreamAssistantModal';
+import { BeverageAssistantModal } from '@/components/productos/BeverageAssistantModal';
 
 interface ProductosProps {
     productos: Producto[];
@@ -57,6 +58,7 @@ export default function Productos({
     const [expandedProducto, setExpandedProducto] = useState<string | null>(null);
     const [vistaActual, setVistaActual] = useState<'lista' | 'cuadricula'>('lista');
     const [isIceCreamAssistantOpen, setIsIceCreamAssistantOpen] = useState(false);
+    const [isBeverageAssistantOpen, setIsBeverageAssistantOpen] = useState(false);
     const { check } = useCan();
     const [addingPrecioForProducto, setAddingPrecioForProducto] = useState<string | null>(null);
     const [selectedProveedorId, setSelectedProveedorId] = useState('');
@@ -179,6 +181,7 @@ export default function Productos({
                 onAddProduct={() => { resetForm(); setIsDialogOpen(true); }}
                 onAddInsumo={handleAddInsumo}
                 onOpenIceCreamAssistant={() => setIsIceCreamAssistantOpen(true)}
+                onOpenBeverageAssistant={() => setIsBeverageAssistantOpen(true)}
                 checkPermission={(p: any) => check(p)} />
 
             {/* KPI Cards Ultra Compactas */}
@@ -417,6 +420,15 @@ export default function Productos({
             <IceCreamAssistantModal 
                 isOpen={isIceCreamAssistantOpen} 
                 onOpenChange={setIsIceCreamAssistantOpen}
+                productos={productos}
+                precios={_precios}
+                onAddProducto={onAddProducto}
+                formatCurrency={formatCurrency}
+            />
+
+            <BeverageAssistantModal
+                isOpen={isBeverageAssistantOpen}
+                onOpenChange={setIsBeverageAssistantOpen}
                 productos={productos}
                 precios={_precios}
                 onAddProducto={onAddProducto}
