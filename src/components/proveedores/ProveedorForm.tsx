@@ -131,7 +131,7 @@ export function ProveedorForm({
   const [isAnalizando, setIsAnalizando] = useState(false);
   const [formData, setFormData] = useState({
     nombre: '', contacto: '', telefono: '', email: '',
-    direccion: '', imagen: '', calificacion: 5,
+    direccion: '', ubicacion: '', imagen: '', calificacion: 5,
     activo: true, rubro: '', notas: '',
   });
 
@@ -204,6 +204,7 @@ export function ProveedorForm({
           telefono: editingProveedor.telefono || '',
           email: editingProveedor.email || '',
           direccion: editingProveedor.direccion || '',
+          ubicacion: editingProveedor.ubicacion || '',
           imagen: editingProveedor.imagen || '',
           calificacion: editingProveedor.calificacion || 5,
           activo: (editingProveedor as any).activo !== false,
@@ -214,7 +215,7 @@ export function ProveedorForm({
       } else {
         setFormData({
           nombre: '', contacto: '', telefono: '', email: '',
-          direccion: '', imagen: '', calificacion: 5,
+          direccion: '', ubicacion: '', imagen: '', calificacion: 5,
           activo: true, rubro: '', notas: '',
         });
         setCatalogoItems([]);
@@ -336,20 +337,24 @@ export function ProveedorForm({
           if (resultado.productos.length > 0) {
             const nuevosItems: ProductoCatalogo[] = resultado.productos.map(p => {
               const catSug = sugerirCategoria(p.nombre);
+              const cantEmb = p.cantidadEmbalaje || 1;
+              const margenOCR = 30;
+              const costoUnit = Math.round(p.precioCosto / cantEmb / 100) * 100;
+              const precioVentaUnit = Math.round(costoUnit * (1 + margenOCR / 100) / 100) * 100;
               return {
                 uid: crypto.randomUUID(),
                 productoId: '',
                 nombre: p.nombre,
                 categoria: catSug !== 'General' ? catSug : '',
                 precioCosto: p.precioCosto,
-                margenVenta: 30,
-                cantidadEmbalaje: p.cantidadEmbalaje || 1,
+                margenVenta: margenOCR,
+                cantidadEmbalaje: cantEmb,
                 tipoEmbalaje: 'unidad' as const,
                 destino: p.destino,
                 notas: p.notasExtra || `Factura (${resultado.tipoFactura}) · Confianza: ${p.confianza}%`,
-                costoUnitario: Math.round(p.precioCosto / (p.cantidadEmbalaje || 1) / 100) * 100,
-                precioVenta: Math.round(p.precioCosto / (p.cantidadEmbalaje || 1) * 1.3 / 100) * 100,
-                precioVentaPack: Math.round(p.precioCosto * 1.3 / 100) * 100,
+                costoUnitario: costoUnit,
+                precioVenta: precioVentaUnit,
+                precioVentaPack: Math.round(precioVentaUnit * cantEmb / 100) * 100,
                 stockRecibido: p.cantidadRecibida || 0,
               };
             });
@@ -390,10 +395,14 @@ export function ProveedorForm({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-[95vw] md:max-w-5xl max-h-[95vh] overflow-y-auto rounded-[2.5rem] p-0 border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950 scrollbar-hide">
+      <DialogContent 
+        showCloseButton={false}
+        className="w-[98vw] max-w-7xl max-h-[95vh] overflow-y-auto overflow-x-hidden rounded-[2.5rem] p-0 border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-950 scrollbar-hide resize-x"
+        style={{ minWidth: '340px' }}
+      >
         
         {/* ── HEADER PREMIUM ── */}
-        <div className="p-8 text-white relative bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
+        <div className="p-4 sm:p-6 md:p-8 text-white relative bg-gradient-to-br from-indigo-600 via-blue-600 to-blue-700">
           <div className="flex items-center gap-4">
              <div className="p-3.5 bg-white/20 rounded-[1.5rem] backdrop-blur-md border border-white/10 shadow-lg animate-ag-float">
                 {editingProveedor ? <Edit2 className="w-7 h-7" /> : <Building2 className="w-7 h-7" />}
@@ -417,16 +426,16 @@ export function ProveedorForm({
           </Button>
         </div>
 
-        <form onSubmit={handleSave} className="p-8 space-y-8">
+        <form onSubmit={handleSave} className="p-4 sm:p-6 md:p-8 space-y-6 md:space-y-8">
 
             {/* ── BANNER BORRADOR GUARDADO ── */}
             {hayBorrador && (
-              <div className="flex items-center justify-between gap-4 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-5 py-4 animate-ag-fade-in">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-3 animate-ag-fade-in">
+                <div className="flex items-center gap-3 min-w-0">
                   <History className="w-5 h-5 text-amber-600 shrink-0" />
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Borrador guardado</p>
-                    <p className="text-[11px] text-amber-600 dark:text-amber-500">Tenías trabajo sin guardar. ¿Deseas recuperarlo?</p>
+                    <p className="text-[11px] text-amber-600 dark:text-amber-500 truncate">Tenías trabajo sin guardar. ¿Deseas recuperarlo?</p>
                   </div>
                 </div>
                 <div className="flex gap-2 shrink-0">
@@ -444,7 +453,7 @@ export function ProveedorForm({
 
             {/* ── SECCIÓN 1: IDENTIDAD ── */}
             <div className="space-y-6">
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-4">
                     <div className="flex items-center gap-2.5">
                         <div className="w-1.5 h-6 bg-blue-500 rounded-full" />
                         <span className="text-xs font-black uppercase tracking-widest text-slate-500">Identidad Corporativa</span>
@@ -453,7 +462,7 @@ export function ProveedorForm({
                     <button
                         type="button"
                         className={cn(
-                          "cursor-pointer flex items-center gap-3 transition-all p-2 pr-5 rounded-2xl border-2",
+                          "cursor-pointer flex items-center gap-2 transition-all p-2 pr-4 rounded-2xl border-2",
                           formData.activo 
                             ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-400 shadow-sm shadow-emerald-500/10" 
                             : "bg-slate-50 border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-slate-500 shadow-sm"
@@ -466,13 +475,13 @@ export function ProveedorForm({
                          )}>
                             {formData.activo ? <CheckCircle2 className="w-5 h-5" /> : <X className="w-5 h-5" />}
                          </div>
-                         <span className="text-[11px] font-black uppercase tracking-widest">
-                           {formData.activo ? 'Empresa Operativa' : 'Cuenta Suspendida'}
+                         <span className="text-[10px] font-black uppercase tracking-wider">
+                           {formData.activo ? 'Activo' : 'Suspendido'}
                          </span>
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
                     {/* Nombre */}
                     <div className="space-y-2 md:col-span-8">
                          <Label className="text-[11px] font-black uppercase tracking-widest text-slate-400 ml-1">Razón Social <span className="text-rose-500">*</span></Label>
@@ -544,7 +553,7 @@ export function ProveedorForm({
             </div>
 
             {/* ── SECCIÓN 2: LOGÍSTICA ── */}
-            <div className="p-8 rounded-[2rem] bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 space-y-6">
+            <div className="p-4 sm:p-6 md:p-8 rounded-[2rem] bg-slate-50/50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800/60 space-y-6">
                 <div className="flex items-center gap-3 border-b border-slate-200/50 dark:border-slate-800/50 pb-4">
                     <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-xl">
                        <Truck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
@@ -574,7 +583,14 @@ export function ProveedorForm({
                             <Input type="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} className="h-12 pl-11 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold focus:ring-4 focus:ring-rose-500/10" placeholder="empresa@ejemplo.com" />
                          </div>
                     </div>
-                    <div className="space-y-2 md:col-span-2">
+                    <div className="space-y-2">
+                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">📍 Ubicación (Pueblo / Ciudad)</Label>
+                         <div className="relative group">
+                            <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                            <Input value={formData.ubicacion} onChange={e => setFormData({ ...formData, ubicacion: e.target.value })} className="h-12 pl-11 bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold focus:ring-4 focus:ring-emerald-500/10" placeholder="Ej: Sincelejo, Corozal, San Juan de Betulia..." />
+                         </div>
+                    </div>
+                    <div className="space-y-2">
                          <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Dirección de Suministro</Label>
                          <div className="relative group">
                             <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
@@ -646,8 +662,8 @@ export function ProveedorForm({
                   </div>
                 )}
 
-                <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/60 pb-4">
-                    <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800/60 pb-4">
+                    <div className="flex flex-wrap items-center gap-3">
                       <div className="flex items-center gap-2.5">
                           <div className="w-1.5 h-6 bg-indigo-500 rounded-full" />
                           <span className="text-xs font-black uppercase tracking-widest text-slate-500">Catálogo de Productos</span>
@@ -695,7 +711,7 @@ export function ProveedorForm({
                     </Badge>
                 </div>
                 
-                <Card className="rounded-[2rem] border-2 border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/20 dark:bg-slate-900/20 shadow-none overflow-visible">
+                <Card className="rounded-2xl md:rounded-[2rem] border-2 border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/20 dark:bg-slate-900/20 shadow-none overflow-visible">
                   <CardContent className="p-6 space-y-6 overflow-visible">
                     <div className="flex flex-col gap-6">
                       
@@ -780,16 +796,16 @@ export function ProveedorForm({
                       </div>
 
                       {/* FILA 2: ESPECIFICACIONES FINANCIERAS */}
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                      <div className="grid grid-cols-2 md:grid-cols-12 gap-3 items-end">
                         
-                        {/* Presentación (3 Cols) */}
-                        <div className="md:col-span-3 space-y-2">
+                        {/* Presentación (2 Cols) */}
+                        <div className="md:col-span-2 space-y-2">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Unidad / Pack</Label>
-                          <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1.5 h-12 items-center">
+                          <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1 h-12 items-center gap-1">
                             <select
                               value={prodActual.tipoEmbalaje}
                               onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje }))}
-                              className="flex-1 px-2 bg-transparent text-[10px] font-black uppercase outline-none text-slate-700 dark:text-slate-300 cursor-pointer"
+                              className="flex-1 min-w-0 px-1 bg-transparent text-[9px] font-black uppercase outline-none text-slate-700 dark:text-slate-300 cursor-pointer truncate"
                             >
                               {EMBALAJES.map(em => (
                                 <option key={em.value} value={em.value} className="bg-white text-slate-900 font-bold p-2">
@@ -806,7 +822,7 @@ export function ProveedorForm({
                                 const val = e.target.value === '' ? 0 : parseInt(e.target.value);
                                 setProdActual(prev => ({ ...prev, cantidadEmbalaje: val }));
                               }}
-                              className="w-12 h-8 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px] hover:bg-indigo-100 transition-all focus:ring-2 focus:ring-indigo-400 group-focus-within:bg-white"
+                              className="w-10 h-8 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px] hover:bg-indigo-100 transition-all focus:ring-2 focus:ring-indigo-400 shrink-0"
                               placeholder="0"
                             />
                           </div>
@@ -917,11 +933,11 @@ export function ProveedorForm({
                           </div>
                         </div>
 
-                        {/* Venta (3 Cols) */}
-                        <div className="md:col-span-3 space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Precio Venta Final</Label>
-                          <div className="relative group flex gap-2">
-                            <div className="relative flex-1">
+                        {/* Venta (2 Cols) */}
+                        <div className="md:col-span-2 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Venta Final</Label>
+                          <div className="relative group flex gap-1">
+                            <div className="relative flex-1 min-w-0">
                               <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
                               <Input 
                                 type="number"
@@ -1015,8 +1031,8 @@ export function ProveedorForm({
 
                 {catalogoItems.length > 0 && (
                   <div className="space-y-4">
-                    <div className="flex items-center gap-4 px-6 py-4 bg-slate-50/50 dark:bg-slate-900/40 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 animate-ag-slide-up">
-                        <div className="flex-1 flex gap-6">
+                    <div className="flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-6 py-3 sm:py-4 bg-slate-50/50 dark:bg-slate-900/40 rounded-2xl border border-slate-100 dark:border-slate-800 animate-ag-slide-up">
+                        <div className="flex-1 flex flex-wrap gap-4 sm:gap-6">
                             <div className="flex flex-col">
                                 <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Insumos</span>
                                 <span className="text-sm font-black text-amber-600 tabular-nums">{catalogoItems.filter(i => i.destino === 'insumo').length}</span>
@@ -1082,7 +1098,7 @@ export function ProveedorForm({
             </div>
 
             {/* ── PIE DE FORMULARIO ── */}
-            <div className="flex gap-4 pt-8 sticky bottom-0 bg-white dark:bg-slate-950 bg-opacity-90 backdrop-blur-sm">
+            <div className="flex gap-3 pt-6 md:pt-8 sticky bottom-0 bg-white dark:bg-slate-950 bg-opacity-90 backdrop-blur-sm pb-2">
                 <Button 
                     type="button" variant="outline" 
                     className="h-16 flex-1 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] border-2 border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all" 
@@ -1153,20 +1169,25 @@ const TableRow = React.memo(({
       <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(item.precioVenta)}</p>
     </td>
     <td className="px-4 py-4 text-right">
-      {(item.stockRecibido || 0) > 0 ? (
-        <>
+      {(() => {
+        const costoReal = item.cantidadEmbalaje > 1 ? item.precioCosto / item.cantidadEmbalaje : item.precioCosto;
+        const gananciaU = item.precioVenta - costoReal;
+        const stock = item.stockRecibido || 0;
+        return stock > 0 ? (
+          <>
+            <p className="text-sm font-black text-amber-500 tabular-nums">
+              +{formatCurrency(Math.round(gananciaU * stock / 100) * 100)}
+            </p>
+            <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">
+              {stock} und × {formatCurrency(Math.round(gananciaU / 100) * 100)}
+            </p>
+          </>
+        ) : (
           <p className="text-sm font-black text-amber-500 tabular-nums">
-            +{formatCurrency((item.precioVenta - item.costoUnitario) * (item.stockRecibido || 0))}
+            +{formatCurrency(Math.round(gananciaU / 100) * 100)}<span className="text-[9px] text-slate-400">/u</span>
           </p>
-          <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">
-            {item.stockRecibido} und × {formatCurrency(item.precioVenta - item.costoUnitario)}
-          </p>
-        </>
-      ) : (
-        <p className="text-sm font-black text-amber-500 tabular-nums">
-          +{formatCurrency(item.precioVenta - item.costoUnitario)}<span className="text-[9px] text-slate-400">/u</span>
-        </p>
-      )}
+        );
+      })()}
     </td>
     <td className="px-6 py-4 text-center">
       <div className={cn(

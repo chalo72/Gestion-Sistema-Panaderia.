@@ -19,7 +19,7 @@ export interface Producto {
   costoBase?: number;  // Costo calculado si es elaborado, o manual si es ingrediente sin proveedor
   imagen?: string;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string; // PROTEGIDO: Corregido para compatibilidad con DBProducto (opcional en DB)
 }
 
 export interface IngredienteReceta {
@@ -211,6 +211,7 @@ export interface Proveedor {
   telefono?: string;
   email?: string;
   direccion?: string;
+  ubicacion?: string; // pueblo, ciudad, corregimiento o vereda
   imagen?: string;
   calificacion?: number; // 1-5 estrellas
   createdAt: string;

@@ -91,15 +91,17 @@ export function BusquedaRapida({
       };
     }
 
-    const costoBase = safeNumber(mejorPrecio.precioCosto);
+    // SINCRONIZADO: Usar costo UNITARIO (dividido por cantidadEmbalaje) para comparar con precioVenta
+    const cantidadEmbalaje = safeNumber((mejorPrecio as any).cantidadEmbalaje) || 1;
+    const costoUnitario = safeNumber(mejorPrecio.precioCosto) / cantidadEmbalaje;
     const precioVenta = safeNumber(producto.precioVenta);
-    const utilidad = costoBase > 0 ? ((precioVenta - costoBase) / costoBase) * 100 : 0;
+    const utilidad = costoUnitario > 0 ? ((precioVenta - costoUnitario) / costoUnitario) * 100 : 0;
 
     return {
       tienePrecio: true,
       utilidad,
       numProveedores: todosPrecios.length,
-      mejorCosto: costoBase,
+      mejorCosto: costoUnitario,
     };
   };
 
@@ -178,115 +180,26 @@ export function BusquedaRapida({
                   return (
                     <div
                       key={producto.id}
-                      className="p-4 hover:bg-gray-50 transition-colors"
+                      className="px-4 py-3 hover:bg-gray-50 transition-colors flex items-center gap-3"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          {/* Nombre y categoría */}
-                          <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-semibold text-lg">{producto.nombre}</h3>
-                            <Badge variant="secondary" className="text-xs">
-                              {producto.categoria}
-                            </Badge>
-                          </div>
-
-                          {/* Descripción */}
-                          {producto.descripcion && (
-                            <p className="text-sm text-gray-500 mb-2">{producto.descripcion}</p>
-                          )}
-
-                          {/* Precios - Según permisos */}
-                          <div className="flex items-center gap-6 mt-3 flex-wrap">
-                            {/* Precio de Venta - Todos lo ven */}
-                            <button
-                              onClick={() => handleCopyPrice(producto.precioVenta, producto.nombre)}
-                              className="flex items-center gap-2 group"
-                              title="Click para copiar"
-                            >
-                              <div className="bg-emerald-100 p-2 rounded-lg">
-                                <DollarSign className="w-4 h-4 text-emerald-600" />
-                              </div>
-                              <div className="text-left">
-                                <p className="text-xs text-gray-500">Precio Venta</p>
-                                <p className="font-bold text-emerald-600 text-lg group-hover:underline">
-                                  {formatCurrency(producto.precioVenta)}
-                                </p>
-                              </div>
-                            </button>
-
-                            {/* Mejor Costo - Solo con permiso */}
-                            {canVerPrecioCosto && stats.tienePrecio && (
-                              <div className="flex items-center gap-2">
-                                <div className="bg-blue-100 p-2 rounded-lg">
-                                  <Store className="w-4 h-4 text-blue-600" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500">Mejor Costo</p>
-                                  <p className="font-semibold text-blue-600">
-                                    {formatCurrency(stats.mejorCosto)}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Utilidad - Solo con permiso */}
-                            {canVerMargen && stats.tienePrecio && (
-                              <div className="flex items-center gap-2">
-                                <div className="bg-purple-100 p-2 rounded-lg">
-                                  <TrendingUp className="w-4 h-4 text-purple-600" />
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500">Utilidad</p>
-                                  <p className={`font-semibold ${stats.utilidad >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    {stats.utilidad.toFixed(1)}%
-                                  </p>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Proveedores - Solo con permiso */}
-                            {canVerProveedores && stats.tienePrecio && (
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">
-                                  {stats.numProveedores} proveedor{stats.numProveedores !== 1 ? 'es' : ''}
-                                </Badge>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Lista de precios por proveedor - Solo con permiso */}
-                          {canVerProveedores && canVerPrecioCosto && stats.tienePrecio && stats.numProveedores > 0 && (
-                            <div className="mt-3 pt-3 border-t border-gray-100">
-                              <p className="text-xs text-gray-500 mb-2">Precios por proveedor:</p>
-                              <div className="flex flex-wrap gap-2">
-                                {getPreciosByProducto(producto.id).map((precio) => {
-                                  const proveedor = getProveedorById(precio.proveedorId);
-                                  const esMejor = precio.precioCosto === stats.mejorCosto;
-
-                                  return (
-                                    <button
-                                      key={precio.id}
-                                      onClick={() => handleCopyPrice(precio.precioCosto, `${producto.nombre} - ${proveedor?.nombre}`)}
-                                      className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-2 transition-colors ${esMejor
-                                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                                        }`}
-                                      title="Click para copiar precio"
-                                    >
-                                      <span className="font-medium">{proveedor?.nombre}</span>
-                                      <ArrowRight className="w-3 h-3" />
-                                      <span>{formatCurrency(precio.precioCosto)}</span>
-                                      {esMejor && (
-                                        <Badge className="bg-green-500 text-white text-[10px] px-1">MEJOR</Badge>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
+                      {/* Foto del producto */}
+                      {producto.imagen ? (
+                        <img
+                          src={producto.imagen}
+                          alt={producto.nombre}
+                          className="w-10 h-10 rounded-lg object-cover shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                          <Package className="w-5 h-5 text-gray-400" />
                         </div>
-                      </div>
+                      )}
+                      {/* Nombre completo */}
+                      <h3 className="font-semibold text-sm flex-1 min-w-0 text-gray-800">{producto.nombre}</h3>
+                      {/* Precio de venta */}
+                      <span className="font-bold text-emerald-600 text-base whitespace-nowrap shrink-0">
+                        {formatCurrency(producto.precioVenta)}
+                      </span>
                     </div>
                   );
                 })}

@@ -125,7 +125,7 @@ export function PrecioModal({
                             <AlignLeft className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 opacity-50" />
                             <Input
                                 value={formData.notas}
-                                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                onChange={(e) => setFormData({ ...formData, notas: e.target.value })}
                                 placeholder="Ej: Precio por volumen bajo, promoción temporal..."
                                 className="h-10 pl-9 rounded-xl border border-slate-200 dark:border-slate-700"
                             />

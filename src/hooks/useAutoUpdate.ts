@@ -59,8 +59,8 @@ export function useAutoUpdate() {
     if (!('serviceWorker' in navigator)) return;
 
     const handleControllerChange = () => {
-      // Nuevo SW tomó control — recargar de inmediato
-      recargar();
+      // Nuevo SW tomó control — esperar 3s para que IndexedDB termine operaciones pendientes
+      setTimeout(() => recargar(), 3000);
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);

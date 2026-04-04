@@ -88,7 +88,7 @@ export function ModelosPanView({
   // Margen de ganancia
   const margenPorcentaje = useMemo(() => {
     if (!precioVentaUnitario || !costoUnitario) return 0;
-    return ((precioVentaUnitario - costoUnitario) / precioVentaUnitario) * 100;
+    return costoUnitario > 0 ? ((precioVentaUnitario - costoUnitario) / costoUnitario) * 100 : 0;
   }, [precioVentaUnitario, costoUnitario]);
 
   // Filtrar modelos

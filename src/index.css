@@ -112,7 +112,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     background: linear-gradient(135deg, #0b1120 0%, #1e193a 100%) !important;
-    color: hsl(var(--foreground));
+    color: #f1f5f9;
     overflow-x: hidden;
   }
 

@@ -185,12 +185,12 @@ export function useCatalogo(deps: {
           setAlertas(prev => [alerta, ...prev]);
         }
 
-        if (configuracion.ajusteAutomatico && diferencia > 0) {
+        if (configuracion.ajusteAutomatico) {
           const producto = productos.find(p => p.id === productoId);
           if (producto) {
             const costoUnitario = precioCosto / (cantidadEmbalaje || 1);
             const nuevoPrecioVenta = Math.round(costoUnitario * (1 + producto.margenUtilidad / 100) / 100) * 100;
-            await updateProducto(productoId, { precioVenta: nuevoPrecioVenta });
+            await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
           }
         }
       }
@@ -215,10 +215,10 @@ export function useCatalogo(deps: {
 
       if (configuracion.ajusteAutomatico) {
         const producto = productos.find(p => p.id === productoId);
-        if (producto && producto.precioVenta === 0) {
+        if (producto) {
           const costoUnitario = precioCosto / (cantidadEmbalaje || 1);
           const nuevoPrecioVenta = Math.round(costoUnitario * (1 + producto.margenUtilidad / 100) / 100) * 100;
-          await updateProducto(productoId, { precioVenta: nuevoPrecioVenta });
+          await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
         }
       }
     }

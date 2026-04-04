@@ -13,6 +13,7 @@ import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
 import { GlobalActionSystem } from '@/components/GlobalActionSystem';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { SentinelWatcher } from '@/components/SentinelWatcher';
 
 // Modales de Caja (Movidos al global)
 import { AperturaCajaModal } from '@/components/ventas/AperturaCajaModal';
@@ -761,6 +762,7 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-background flex">
+      <SentinelWatcher />
       <Sidebar
         currentView={currentView}
         onViewChange={setCurrentView}

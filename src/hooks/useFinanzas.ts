@@ -93,6 +93,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
   const registrarPagoCredito = useCallback(async (creditoId: string, pago: Omit<PagoCredito, 'id' | 'creditoId'>) => {
     const credito = creditosClientes.find(c => c.id === creditoId);
     if (!credito) return;
+    if (pago.monto <= 0) return;
     const nuevoPago: PagoCredito = { ...pago, id: crypto.randomUUID(), creditoId };
     const nuevoSaldo = Math.max(0, credito.saldo - pago.monto);
     const updated: CreditoCliente = {
@@ -134,6 +135,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
   const registrarPagoCreditoTrabajador = useCallback(async (creditoId: string, pago: Omit<PagoCredito, 'id' | 'creditoId'>) => {
     const credito = creditosTrabajadores.find(c => c.id === creditoId);
     if (!credito) return;
+    if (pago.monto <= 0) return;
     const nuevoPago: PagoCredito = { ...pago, id: crypto.randomUUID(), creditoId };
     const nuevoSaldo = credito.saldo - pago.monto;
     const nuevoEstado = nuevoSaldo <= 0 ? (credito.descontarDeSalario ? 'descontado' : 'pagado') : credito.estado;

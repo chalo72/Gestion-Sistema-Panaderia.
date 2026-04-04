@@ -40,6 +40,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, PrecioProveedor, ProductoTipo, Categoria } from '@/types';
 import { ProveedorForm, type ProductoCatalogo } from '@/components/proveedores/ProveedorForm';
+import { AnalisisInteligente } from '@/components/proveedores/AnalisisInteligente';
 
 /* ── Tipos para la vista ── */
 type TipoEmbalaje =
@@ -159,7 +160,6 @@ export function Proveedores({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { check } = useCan();
   const [editingProveedor, setEditingProveedor] = useState<Proveedor | null>(null);
-  const [viewingProveedor, setViewingProveedor] = useState<Proveedor | null>(null);
   const [orden, setOrden] = useState<OrdenTipo>('nombre');
   const [vistaActual] = useState<VistasTipo>('lista');
   const [soloActivos, setSoloActivos] = useState(false);
@@ -357,9 +357,9 @@ export function Proveedores({
         tipoEmbalaje: (precio.tipoEmbalaje as any) || 'unidad',
         destino: precio.destino || 'insumo',
         notas: precio.notas || '',
-        costoUnitario: precio.cantidadEmbalaje ? precio.precioCosto / precio.cantidadEmbalaje : precio.precioCosto,
-        precioVenta: prod?.precioVenta || 0,
-        precioVentaPack: prod?.precioVenta ? prod.precioVenta * (precio.cantidadEmbalaje || 1) : 0,
+        costoUnitario: precio.cantidadEmbalaje ? Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100 : precio.precioCosto,
+        precioVenta: Math.round((prod?.precioVenta || 0) / 100) * 100,
+        precioVentaPack: prod?.precioVenta ? Math.round(prod.precioVenta * (precio.cantidadEmbalaje || 1) / 100) * 100 : 0,
       };
     });
     setCatalogoParaForm(itemsPreCargados);
@@ -373,7 +373,6 @@ export function Proveedores({
     onDeleteProveedor(deleteTarget.id);
     toast.success('Proveedor eliminado');
     setDeleteTarget(null);
-    if (viewingProveedor?.id === deleteTarget.id) setViewingProveedor(null);
   };
 
   // Avatar y Estrellas ahora son ProveedorAvatar y EstrellasRating — definidas fuera del componente
@@ -570,7 +569,10 @@ export function Proveedores({
                 )}>
                   <button
                     className={cn('w-full flex items-center gap-3 cursor-pointer group', vistaActual === 'lista' ? 'px-5 py-3' : 'p-3')}
-                    onClick={() => setSelectedProvId(isSel ? null : prov.id)}
+                    onClick={() => {
+                      if (!isSel) setTabDetalle('catalogo');
+                      setSelectedProvId(isSel ? null : prov.id);
+                    }}
                   >
                     {/* Avatar */}
                     <div className="relative shrink-0">
@@ -616,16 +618,13 @@ export function Proveedores({
                   {/* ── Panel acordeón inline ── */}
                   {isSel && (
                     <div className="border-t-2 border-blue-100 dark:border-blue-800/40 bg-white dark:bg-slate-900">
-                      {/* ── Header: avatar + datos completos + acciones ── */}
+                      {/* ── Header: avatar + datos + acciones ── */}
                       <div className="px-6 py-5 bg-gradient-to-r from-blue-50 to-indigo-50/30 dark:from-blue-900/20 dark:to-indigo-900/10 border-b border-blue-100 dark:border-blue-800/30 flex items-start gap-5 flex-wrap">
-                        {/* Avatar grande */}
                         <ProveedorAvatar proveedor={prov} size="lg" />
-                        {/* Datos del proveedor */}
                         <div className="min-w-0 flex-1 space-y-2">
                           <div>
                             {rubro && <p className="text-[10px] font-black uppercase tracking-widest text-violet-500 mb-0.5">{rubro}</p>}
                             <h3 className="text-lg font-black uppercase tracking-tight text-slate-800 dark:text-white">{prov.nombre}</h3>
-                            {/* Rating */}
                             <div className="flex items-center gap-1 mt-0.5">
                               {Array.from({ length: 5 }).map((_, i) => (
                                 <Star key={i} className={cn('w-3.5 h-3.5', i < (prov.calificacion || 5) ? 'fill-amber-400 text-amber-400' : 'text-slate-200')} />
@@ -633,29 +632,33 @@ export function Proveedores({
                               <span className="text-xs font-black text-amber-500 ml-1">{prov.calificacion || 5}.0</span>
                             </div>
                           </div>
-                          {/* Datos de contacto en grid — siempre visibles */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm mt-1">
-                            <span className={cn('flex items-center gap-1.5', prov.contacto ? 'text-slate-700 dark:text-slate-200 font-semibold' : 'text-slate-300 dark:text-slate-600 italic')}>
-                              <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                              {prov.contacto || 'Sin representante'}
-                            </span>
-                            <span className={cn('flex items-center gap-1.5 font-bold', prov.telefono ? 'text-emerald-600' : 'text-slate-300 dark:text-slate-600 italic font-normal')}>
-                              <Phone className="w-3.5 h-3.5 shrink-0" />
-                              {prov.telefono || 'Sin teléfono'}
-                            </span>
-                            <span className={cn('flex items-center gap-1.5', prov.email ? 'text-slate-500' : 'text-slate-300 dark:text-slate-600 italic')}>
-                              <Mail className="w-3.5 h-3.5 shrink-0" />
-                              {prov.email || 'Sin email'}
-                            </span>
-                            <span className={cn('flex items-center gap-1.5', prov.direccion ? 'text-slate-500' : 'text-slate-300 dark:text-slate-600 italic')}>
-                              <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />
-                              {prov.direccion || 'Sin dirección'}
-                            </span>
-                            <span className="text-slate-400 flex items-center gap-1.5 text-xs">
-                              <FileText className="w-3 h-3 shrink-0" />
-                              Registrado: {new Date(prov.createdAt).toLocaleDateString('es-CO')}
-                            </span>
-                            {notas && <span className="text-amber-600 italic flex items-center gap-1.5 text-xs md:col-span-2">"{notas}"</span>}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1.5 text-sm mt-1">
+                            {prov.telefono && (
+                              <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
+                                <Phone className="w-3.5 h-3.5 shrink-0" />{prov.telefono}
+                              </span>
+                            )}
+                            {prov.contacto && (
+                              <span className="flex items-center gap-1.5 text-slate-700 dark:text-slate-200 font-semibold">
+                                <UserCheck className="w-3.5 h-3.5 text-blue-400 shrink-0" />{prov.contacto}
+                              </span>
+                            )}
+                            {prov.ubicacion && (
+                              <span className="flex items-center gap-1.5 text-indigo-500 font-semibold">
+                                <MapPin className="w-3.5 h-3.5 shrink-0" />{prov.ubicacion}
+                              </span>
+                            )}
+                            {prov.email && (
+                              <span className="flex items-center gap-1.5 text-slate-500">
+                                <Mail className="w-3.5 h-3.5 shrink-0" />{prov.email}
+                              </span>
+                            )}
+                            {prov.direccion && (
+                              <span className="flex items-center gap-1.5 text-slate-500">
+                                <MapPin className="w-3.5 h-3.5 text-rose-400 shrink-0" />{prov.direccion}
+                              </span>
+                            )}
+                            {notas && <span className="text-amber-600 italic text-xs md:col-span-2">"{notas}"</span>}
                           </div>
                         </div>
                         {/* Acciones */}
@@ -677,52 +680,237 @@ export function Proveedores({
                         </div>
                       </div>
 
-                      {/* Tabla de productos */}
-                      {insumos.length === 0 ? (
-                        <div className="flex flex-col items-center py-10 gap-2 opacity-40">
-                          <Package className="w-10 h-10 text-slate-300" />
-                          <p className="text-sm font-bold text-slate-400">Sin productos registrados</p>
-                          <button onClick={() => handleEdit(prov)} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700">+ Agregar</button>
-                        </div>
-                      ) : (
+                      {/* ── Tabs sutiles ── */}
+                      <div className="flex gap-1.5 px-6 py-2 bg-slate-50/80 dark:bg-slate-900/80 border-b border-slate-100 dark:border-slate-800">
+                        {([
+                          { id: 'catalogo' as TabDetalle, label: `Catálogo (${totalInsumos}🏭 + ${totalVenta}🛒)`, icon: Package },
+                          { id: 'analisis' as TabDetalle, label: 'Análisis', icon: BarChart3 },
+                          { id: 'contacto' as TabDetalle, label: 'Contacto', icon: UserCheck },
+                        ]).map(({ id, label, icon: Icon }) => (
+                          <button
+                            key={id}
+                            onClick={() => setTabDetalle(id)}
+                            className={cn(
+                              'flex items-center gap-1.5 px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all',
+                              tabDetalle === id
+                                ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm ring-1 ring-slate-200/60 dark:ring-slate-700/60'
+                                : 'text-slate-400 hover:text-slate-600 hover:bg-white/50 dark:hover:bg-slate-800/40'
+                            )}
+                          >
+                            <Icon className="w-3 h-3" />
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* ── Tab: Catálogo (tabla de productos) ── */}
+                      {tabDetalle === 'catalogo' && (
                         <>
-                          <div className="grid grid-cols-12 gap-2 px-6 py-2 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-700">
-                            <div className="col-span-5 text-xs font-black uppercase tracking-widest text-slate-400">Producto</div>
-                            <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-center">Empaque</div>
-                            <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-right">Costo/u</div>
-                            <div className="col-span-3 text-xs font-black uppercase tracking-widest text-slate-400 text-right">P. Venta</div>
+                          {insumos.length === 0 ? (
+                            <div className="flex flex-col items-center py-10 gap-2 opacity-40">
+                              <Package className="w-10 h-10 text-slate-300" />
+                              <p className="text-sm font-bold text-slate-400">Sin productos registrados</p>
+                              <button onClick={() => handleEdit(prov)} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700">+ Agregar</button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="grid grid-cols-12 gap-2 px-6 py-2 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-700">
+                                <div className="col-span-4 text-xs font-black uppercase tracking-widest text-slate-400">Producto</div>
+                                <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-center">Empaque</div>
+                                <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-right">Costo Aliado</div>
+                                <div className="col-span-1 text-xs font-black uppercase tracking-widest text-slate-400 text-center">%</div>
+                                <div className="col-span-3 text-xs font-black uppercase tracking-widest text-slate-400 text-right">P. Venta</div>
+                              </div>
+                              {insumos.map((precio, idx) => {
+                                const prodItem = getProductoById(precio.productoId);
+                                const costoU   = precio.cantidadEmbalaje && precio.cantidadEmbalaje > 1 ? Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100 : precio.precioCosto;
+                                const pventa   = prodItem?.precioVenta || 0;
+                                const margenPct = costoU > 0 && pventa > 0 ? Math.round(((pventa - costoU) / costoU) * 100) : 0;
+                                const emb      = EMBALAJES.find(e => e.value === precio.tipoEmbalaje);
+                                const cantPack = precio.cantidadEmbalaje || 1;
+                                return (
+                                  <div key={precio.id} className={cn('grid grid-cols-12 gap-2 items-center px-6 py-3 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 transition-colors', idx < insumos.length - 1 && 'border-b border-slate-100 dark:border-slate-800')}>
+                                    <div className="col-span-4 flex items-center gap-2 min-w-0">
+                                      <span className="text-sm shrink-0">{precio.destino === 'venta' ? '🛒' : '🏭'}</span>
+                                      <div className="min-w-0">
+                                        <p className="text-sm font-bold text-slate-800 dark:text-white truncate uppercase">{prodItem?.nombre || 'Producto'}</p>
+                                        <p className="text-xs text-slate-400 truncate">{prodItem?.categoria || ''}</p>
+                                      </div>
+                                    </div>
+                                    <div className="col-span-2 text-center">
+                                      {cantPack > 1
+                                        ? (
+                                          <div>
+                                            <span className="text-xs font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded-lg">{emb?.emoji || '📦'} ×{cantPack}</span>
+                                            <p className="text-[9px] font-bold text-violet-400 mt-0.5">{cantPack} und/paca</p>
+                                          </div>
+                                        )
+                                        : <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">🔹 Unidad</span>}
+                                    </div>
+                                    <div className="col-span-2 text-right">
+                                      <p className="text-sm font-black text-blue-600 tabular-nums">{formatCurrency(precio.precioCosto)}</p>
+                                      {cantPack > 1 && (
+                                        <p className="text-[10px] font-black tracking-wide text-indigo-500 dark:text-indigo-400">P.U: {formatCurrency(costoU)}</p>
+                                      )}
+                                    </div>
+                                    <div className="col-span-1 text-center">
+                                      {margenPct > 0 ? (
+                                        <span className={cn(
+                                          'text-xs font-black px-1.5 py-0.5 rounded-lg',
+                                          margenPct >= 30 ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20'
+                                        )}>{margenPct}%</span>
+                                      ) : <span className="text-xs text-slate-300">—</span>}
+                                    </div>
+                                    <div className="col-span-3 text-right">
+                                      {pventa > 0
+                                        ? <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(pventa)}</p>
+                                        : <p className="text-sm text-slate-300">—</p>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </>
+                          )}
+
+                          {/* ── Asistente de Negocio ── */}
+                          {insumos.length > 0 && (
+                            <AnalisisInteligente
+                              precios={insumos}
+                              getProductoById={getProductoById}
+                              formatCurrency={formatCurrency}
+                              proveedorNombre={prov.nombre}
+                              proveedorUbicacion={prov.ubicacion}
+                            />
+                          )}
+                        </>
+                      )}
+
+                      {/* ── Tab: Análisis ── */}
+                      {tabDetalle === 'analisis' && (() => {
+                        const metricas = getMetricasProveedor(prov);
+                        return (
+                          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Card className="rounded-2xl border-none bg-indigo-600 text-white shadow-xl p-5 relative overflow-hidden">
+                              <Zap className="w-6 h-6 mb-2 text-emerald-300" />
+                              <h4 className="text-base font-black uppercase tracking-tight">Desempeño de {prov.nombre}</h4>
+                              <p className="text-[9px] font-bold uppercase tracking-widest text-indigo-200 mt-0.5 mb-5 opacity-70">
+                                {prov.ubicacion ? `📍 ${prov.ubicacion} — ` : ''}Basado en datos registrados
+                              </p>
+                              <div className="space-y-3">
+                                {[
+                                  { label: 'Calidad (rating)', pct: metricas.calidad, color: 'bg-amber-400' },
+                                  { label: 'Cobertura de catálogo', pct: metricas.cobertura, color: 'bg-blue-300' },
+                                ].map(({ label, pct, color }) => (
+                                  <div key={label}>
+                                    <div className="flex justify-between text-[9px] font-black uppercase mb-1">
+                                      <span>{label}</span><span>{pct}%</span>
+                                    </div>
+                                    <div className="h-2 w-full bg-white/10 rounded-full">
+                                      <div className={cn('h-full rounded-full transition-all duration-700', color)} style={{ width: `${pct}%` }} />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <ShieldCheck className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10" />
+                            </Card>
+
+                            <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-5">
+                              <h4 className="text-[9px] font-black uppercase tracking-widest text-blue-600 mb-4 flex items-center gap-2">
+                                <TrendingUp className="w-3.5 h-3.5" /> Resumen Financiero
+                              </h4>
+                              <div className="space-y-3">
+                                <div>
+                                  <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Insumos totales</span>
+                                  <p className="text-xl font-black text-slate-800 dark:text-white">{insumos.length}</p>
+                                </div>
+                                <div>
+                                  <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Valor total del catálogo</span>
+                                  <p className="text-xl font-black text-blue-600">
+                                    {formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0))}
+                                  </p>
+                                </div>
+                                <div>
+                                  <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Precio promedio</span>
+                                  <p className="text-lg font-black text-slate-700 dark:text-slate-200">
+                                    {insumos.length > 0 ? formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0) / insumos.length) : '—'}
+                                  </p>
+                                </div>
+                                {metricas.margenPromedio > 0 && (
+                                  <div>
+                                    <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Margen promedio</span>
+                                    <p className={cn('text-lg font-black', metricas.margenPromedio > 30 ? 'text-emerald-600' : 'text-amber-600')}>
+                                      {metricas.margenPromedio}%
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </Card>
                           </div>
-                          {insumos.map((precio, idx) => {
-                            const prodItem = getProductoById(precio.productoId);
-                            const costoU   = precio.cantidadEmbalaje && precio.cantidadEmbalaje > 1 ? precio.precioCosto / precio.cantidadEmbalaje : precio.precioCosto;
-                            const pventa   = prodItem?.precioVenta || 0;
-                            const emb      = EMBALAJES.find(e => e.value === precio.tipoEmbalaje);
-                            return (
-                              <div key={precio.id} className={cn('grid grid-cols-12 gap-2 items-center px-6 py-3 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 transition-colors', idx < insumos.length - 1 && 'border-b border-slate-100 dark:border-slate-800')}>
-                                <div className="col-span-5 flex items-center gap-2 min-w-0">
-                                  <span className="text-sm shrink-0">{precio.destino === 'venta' ? '🛒' : '🏭'}</span>
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-bold text-slate-800 dark:text-white truncate">{prodItem?.nombre || 'Producto'}</p>
-                                    <p className="text-xs text-slate-400 truncate">{prodItem?.categoria || ''}</p>
+                        );
+                      })()}
+
+                      {/* ── Tab: Contacto ── */}
+                      {tabDetalle === 'contacto' && (
+                        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-5">
+                            <h4 className="text-[9px] font-black uppercase tracking-widest text-blue-600 mb-4">Datos de Contacto</h4>
+                            <div className="space-y-4">
+                              {([
+                                { label: 'Teléfono', val: prov.telefono, icon: Phone },
+                                { label: 'Email', val: prov.email, icon: Mail },
+                                { label: 'Ubicación', val: prov.ubicacion, icon: MapPin },
+                                { label: 'Dirección', val: prov.direccion, icon: MapPin },
+                                { label: 'Rubro', val: rubro, icon: Tag },
+                                { label: 'Contacto', val: prov.contacto, icon: UserCheck },
+                              ] as { label: string; val: string | undefined; icon: any }[]).map(({ label, val, icon: Ic }) => val ? (
+                                <div key={label} className="flex items-start gap-3">
+                                  <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 mt-0.5">
+                                    <Ic className="w-3.5 h-3.5 text-blue-500" />
+                                  </div>
+                                  <div>
+                                    <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest block">{label}</span>
+                                    <p className="font-bold text-sm text-slate-800 dark:text-white mt-0.5">{val}</p>
                                   </div>
                                 </div>
-                                <div className="col-span-2 text-center">
-                                  {precio.tipoEmbalaje && precio.tipoEmbalaje !== 'unidad'
-                                    ? <span className="text-xs font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded-lg">{emb?.emoji} ×{precio.cantidadEmbalaje}</span>
-                                    : <span className="text-xs text-slate-400">Unidad</span>}
-                                </div>
-                                <div className="col-span-2 text-right">
-                                  <p className="text-sm font-black text-blue-600 tabular-nums">{formatCurrency(costoU)}</p>
-                                </div>
-                                <div className="col-span-3 text-right">
-                                  {pventa > 0
-                                    ? <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(pventa)}</p>
-                                    : <p className="text-sm text-slate-300">—</p>}
-                                </div>
+                              ) : null)}
+                            </div>
+                          </Card>
+
+                          <div className="space-y-4">
+                            {notas && (
+                              <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-5">
+                                <h4 className="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-3 flex items-center gap-2">
+                                  <FileText className="w-3.5 h-3.5" /> Notas Internas
+                                </h4>
+                                <p className="text-sm font-semibold text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{notas}</p>
+                              </Card>
+                            )}
+
+                            <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-5">
+                              <h4 className="text-[9px] font-black uppercase tracking-widest text-emerald-600 mb-3">Acciones Rápidas</h4>
+                              <div className="flex flex-wrap gap-2">
+                                {prov.telefono && (
+                                  <>
+                                    <button onClick={() => window.open(`https://wa.me/${(prov.telefono||'').replace(/\D/g,'')}`, '_blank')}
+                                      className="h-8 px-3 flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-200 dark:border-emerald-800 rounded-lg text-[10px] font-black transition-all">
+                                      <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                                    </button>
+                                    <button onClick={() => window.location.href = `tel:${prov.telefono}`}
+                                      className="h-8 px-3 flex items-center gap-1.5 bg-teal-50 dark:bg-teal-900/20 text-teal-700 hover:bg-teal-600 hover:text-white border border-teal-200 dark:border-teal-800 rounded-lg text-[10px] font-black transition-all">
+                                      <PhoneCall className="w-3.5 h-3.5" /> Llamar
+                                    </button>
+                                  </>
+                                )}
+                                {prov.email && (
+                                  <button onClick={() => window.location.href = `mailto:${prov.email}`}
+                                    className="h-8 px-3 flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-blue-800 rounded-lg text-[10px] font-black transition-all">
+                                    <Mail className="w-3.5 h-3.5" /> Email
+                                  </button>
+                                )}
                               </div>
-                            );
-                          })}
-                        </>
+                            </Card>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
@@ -775,345 +963,7 @@ export function Proveedores({
         categoriasVenta={categorias}
       />
 
-      {/* ── DIALOG: Detalle proveedor ── */}
-      <Dialog open={!!viewingProveedor} onOpenChange={() => setViewingProveedor(null)}>
-        <DialogContent className="max-w-4xl rounded-[2.5rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-gray-950">
-          {viewingProveedor && (() => {
-            const insumos = getPreciosByProveedor(viewingProveedor.id);
-            const activo = (viewingProveedor as any).activo !== false;
-            const rubro = (viewingProveedor as any).rubro as string | undefined;
-            const notas = (viewingProveedor as any).notas as string | undefined;
-            const metricas = getMetricasProveedor(viewingProveedor);
-            return (
-              <div className="flex flex-col max-h-[90vh] overflow-hidden">
-                {/* Header perfil */}
-                <div className="bg-gradient-to-br from-blue-700 via-indigo-800 to-indigo-950 p-8 md:p-10 text-white relative shrink-0">
-                  <div className="flex flex-col md:flex-row items-center md:items-start gap-8 relative z-10">
-                    <div className="relative shrink-0">
-                      <div className="absolute inset-0 bg-white/20 rounded-[2rem] blur-2xl animate-pulse" />
-                      <ProveedorAvatar proveedor={viewingProveedor} size="lg" />
-                      <div className={cn('absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-indigo-900 shadow', activo ? 'bg-emerald-400' : 'bg-slate-400')} />
-                    </div>
-                    <div className="flex-1 space-y-3 text-center md:text-left">
-                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-3">
-                        <h2 className="text-3xl font-black uppercase tracking-tighter">{viewingProveedor.nombre}</h2>
-                        <div className="flex items-center gap-1 bg-white/10 px-3 py-1 rounded-full">
-                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                          <span className="text-sm font-black">{viewingProveedor.calificacion || 5}</span>
-                        </div>
-                        <Badge className={cn('text-[9px] font-black border-none', activo ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-white/50')}>
-                          {activo ? 'Activo' : 'Inactivo'}
-                        </Badge>
-                        {rubro && (
-                          <Badge className="text-[9px] font-black bg-violet-500/20 text-violet-300 border-none">{rubro}</Badge>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap justify-center md:justify-start gap-5 text-xs font-semibold text-blue-200">
-                        {viewingProveedor.direccion && <span className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" />{viewingProveedor.direccion}</span>}
-                        {viewingProveedor.contacto && <span className="flex items-center gap-1.5"><UserCheck className="w-3.5 h-3.5 text-emerald-300" />{viewingProveedor.contacto}</span>}
-                      </div>
-                      {/* KPIs del proveedor */}
-                      <div className="flex flex-wrap justify-center md:justify-start gap-3 pt-2">
-                        <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
-                          <p className="text-2xl font-black">{insumos.filter(i => i.destino !== 'venta').length}</p>
-                          <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">🏭 Insumos</p>
-                        </div>
-                        {insumos.filter(i => i.destino === 'venta').length > 0 && (
-                        <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
-                          <p className="text-2xl font-black">{insumos.filter(i => i.destino === 'venta').length}</p>
-                          <p className="text-[9px] font-black uppercase tracking-widest text-emerald-300">🛒 Venta</p>
-                        </div>
-                        )}
-                        <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
-                          <p className="text-2xl font-black">
-                            {insumos.length > 0 ? formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0) / insumos.length) : '—'}
-                          </p>
-                          <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">Precio prom.</p>
-                        </div>
-                        {metricas.margenPromedio > 0 && (
-                          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
-                            <p className="text-2xl font-black">{metricas.margenPromedio}%</p>
-                            <p className="text-[9px] font-black uppercase tracking-widest text-blue-200">Margen prom.</p>
-                          </div>
-                        )}
-                      </div>
-                      {/* Botones de accion */}
-                      <div className="flex flex-wrap justify-center md:justify-start gap-3 pt-2">
-                        {viewingProveedor.telefono && (
-                          <Button size="sm" className="rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-[10px] uppercase tracking-widest h-10 px-5 border-none shadow-lg shadow-emerald-500/30 gap-2"
-                            onClick={() => window.open(`https://wa.me/${(viewingProveedor.telefono||'').replace(/\D/g,'')}`, '_blank')}>
-                            <MessageCircle className="w-4 h-4" /> WhatsApp
-                          </Button>
-                        )}
-                        {viewingProveedor.telefono && (
-                          <Button size="sm" className="rounded-xl bg-teal-500 hover:bg-teal-600 text-white font-black text-[10px] uppercase tracking-widest h-10 px-5 border-none shadow-lg shadow-teal-500/30 gap-2"
-                            onClick={() => window.location.href = `tel:${viewingProveedor.telefono}`}>
-                            <PhoneCall className="w-4 h-4" /> Llamar
-                          </Button>
-                        )}
-                        <Button size="sm" className="rounded-xl bg-white/10 hover:bg-white/20 text-white font-black text-[10px] uppercase tracking-widest h-10 px-5 border border-white/10 gap-2"
-                          onClick={() => { setViewingProveedor(null); onNavigateTo?.('prepedidos'); toast.success(`Crea un pedido para ${viewingProveedor.nombre}`); }}>
-                          <Package className="w-4 h-4" /> Realizar Pedido
-                        </Button>
-                        {viewingProveedor.email && (
-                          <Button size="sm" variant="ghost" className="rounded-xl bg-white/10 hover:bg-white/20 text-white font-black text-[10px] uppercase tracking-widest h-10 px-5 border border-white/10 gap-2"
-                            onClick={() => window.location.href = `mailto:${viewingProveedor.email}`}>
-                            <Mail className="w-4 h-4" /> Email
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" className="absolute right-6 top-6 text-white/40 hover:text-white" onClick={() => setViewingProveedor(null)}>
-                    <X className="w-6 h-6" />
-                  </Button>
-                </div>
-
-                {/* Tabs de navegacion */}
-                <div className="flex border-b border-slate-100 dark:border-gray-800 bg-white dark:bg-gray-950 px-8 shrink-0">
-                  {([
-                    { id: 'contacto' as TabDetalle, label: 'Contacto', icon: UserCheck },
-                    { id: 'catalogo' as TabDetalle, label: `Catálogo (${insumos.filter(i=>i.destino!=='venta').length}🏭 + ${insumos.filter(i=>i.destino==='venta').length}🛒)`, icon: Package },
-                    { id: 'analisis' as TabDetalle, label: 'Análisis', icon: BarChart3 },
-                  ]).map(({ id, label, icon: Icon }) => (
-                    <button
-                      key={id}
-                      onClick={() => setTabDetalle(id)}
-                      className={cn(
-                        'flex items-center gap-2 px-5 py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all',
-                        tabDetalle === id
-                          ? 'border-blue-600 text-blue-600'
-                          : 'border-transparent text-slate-400 hover:text-slate-600'
-                      )}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Contenido del tab */}
-                <div className="flex-1 overflow-y-auto bg-slate-50 dark:bg-gray-950">
-
-                  {/* Tab: Contacto */}
-                  {tabDetalle === 'contacto' && (
-                    <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-6">
-                        <h4 className="text-[9px] font-black uppercase tracking-widest text-blue-600 mb-5">Datos de Contacto</h4>
-                        <div className="space-y-5">
-                          {([
-                            { label: 'Teléfono', val: viewingProveedor.telefono, icon: Phone },
-                            { label: 'Email', val: viewingProveedor.email, icon: Mail },
-                            { label: 'Dirección', val: viewingProveedor.direccion, icon: MapPin },
-                            { label: 'Rubro', val: rubro, icon: Tag },
-                          ] as { label: string; val: string | undefined; icon: any }[]).map(({ label, val, icon: Ic }) => val ? (
-                            <div key={label} className="flex items-start gap-3">
-                              <div className="w-8 h-8 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center shrink-0 mt-0.5">
-                                <Ic className="w-4 h-4 text-blue-500" />
-                              </div>
-                              <div>
-                                <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest block">{label}</span>
-                                <p className="font-bold text-sm text-slate-800 dark:text-white mt-0.5">{val}</p>
-                              </div>
-                            </div>
-                          ) : null)}
-                        </div>
-                      </Card>
-
-                      {notas && (
-                        <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-6">
-                          <h4 className="text-[9px] font-black uppercase tracking-widest text-amber-500 mb-5 flex items-center gap-2">
-                            <FileText className="w-3.5 h-3.5" /> Notas Internas
-                          </h4>
-                          <p className="text-sm font-semibold text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">{notas}</p>
-                        </Card>
-                      )}
-
-                      <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-6 md:col-span-2">
-                        <h4 className="text-[9px] font-black uppercase tracking-widest text-emerald-600 mb-5">Acciones Rápidas</h4>
-                        <div className="flex flex-wrap gap-3">
-                          {viewingProveedor.telefono && (
-                            <>
-                              <Button size="sm" className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 hover:bg-emerald-600 hover:text-white border border-emerald-200 dark:border-emerald-800 font-black text-[10px] uppercase h-10 px-4 gap-2 transition-all"
-                                onClick={() => window.open(`https://wa.me/${(viewingProveedor.telefono||'').replace(/\D/g,'')}`, '_blank')}>
-                                <MessageCircle className="w-4 h-4" /> WhatsApp
-                              </Button>
-                              <Button size="sm" className="rounded-xl bg-teal-50 dark:bg-teal-900/20 text-teal-700 hover:bg-teal-600 hover:text-white border border-teal-200 dark:border-teal-800 font-black text-[10px] uppercase h-10 px-4 gap-2 transition-all"
-                                onClick={() => window.location.href = `tel:${viewingProveedor.telefono}`}>
-                                <PhoneCall className="w-4 h-4" /> Llamar
-                              </Button>
-                            </>
-                          )}
-                          {viewingProveedor.email && (
-                            <Button size="sm" className="rounded-xl bg-blue-50 dark:bg-blue-900/20 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-200 dark:border-blue-800 font-black text-[10px] uppercase h-10 px-4 gap-2 transition-all"
-                              onClick={() => window.location.href = `mailto:${viewingProveedor.email}`}>
-                              <Mail className="w-4 h-4" /> Enviar Email
-                            </Button>
-                          )}
-                          <Button size="sm" className="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 hover:bg-indigo-600 hover:text-white border border-indigo-200 dark:border-indigo-800 font-black text-[10px] uppercase h-10 px-4 gap-2 transition-all"
-                            onClick={() => { setViewingProveedor(null); handleEdit(viewingProveedor); }}>
-                            <Edit2 className="w-4 h-4" /> Editar Proveedor
-                          </Button>
-                        </div>
-                      </Card>
-                    </div>
-                  )}
-
-                  {/* Tab: Catalogo */}
-                  {tabDetalle === 'catalogo' && (
-                    <div className="p-8 space-y-5">
-                      <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-black uppercase tracking-tight flex items-center gap-3">
-                          <div className="p-2 bg-blue-600 rounded-xl"><Package className="w-4 h-4 text-white" /></div>
-                          Catálogo Vinculado
-                        </h3>
-                        <Badge className="bg-blue-100 dark:bg-blue-900/40 text-blue-600 font-black px-4 py-1.5 rounded-xl border-none text-[10px]">
-                          {insumos.length} items
-                        </Badge>
-                      </div>
-
-                      {/* Resumen rápido venta vs insumo */}
-                      {insumos.length > 0 && (
-                        <div className="flex gap-3 mb-2">
-                          <div className="flex-1 flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/40 rounded-xl px-4 py-2.5">
-                            <span className="text-lg">🏭</span>
-                            <div>
-                              <p className="text-xl font-black text-indigo-600">{insumos.filter(i => i.destino !== 'venta').length}</p>
-                              <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">Insumos</p>
-                            </div>
-                          </div>
-                          <div className="flex-1 flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800/40 rounded-xl px-4 py-2.5">
-                            <span className="text-lg">🛒</span>
-                            <div>
-                              <p className="text-xl font-black text-emerald-600">{insumos.filter(i => i.destino === 'venta').length}</p>
-                              <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400">Para Venta</p>
-                            </div>
-                          </div>
-                          <div className="flex-1 flex items-center gap-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40 rounded-xl px-4 py-2.5">
-                            <span className="text-lg">💰</span>
-                            <div>
-                              <p className="text-sm font-black text-blue-600">{formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0))}</p>
-                              <p className="text-[9px] font-black uppercase tracking-widest text-blue-400">Valor Total</p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {insumos.length === 0 ? (
-                        <div className="py-16 text-center opacity-30">
-                          <Package className="w-16 h-16 mx-auto mb-4 text-blue-400" />
-                          <p className="text-[10px] font-black uppercase tracking-widest">Sin productos vinculados</p>
-                          <p className="text-[9px] text-slate-400 mt-2">Edita este proveedor para agregar productos</p>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {insumos.map(precio => {
-                            const prod = getProductoById(precio.productoId);
-                            if (!prod) return null;
-                            const costoBase = Number(precio.precioCosto || 0);
-                            const precioVenta = Number(prod.precioVenta || 0);
-                            const margen = costoBase > 0 ? ((precioVenta - costoBase) / costoBase) * 100 : 0;
-                            const esVenta = precio.destino === 'venta';
-                            const embalajeInfo = precio.tipoEmbalaje
-                              ? `${EMBALAJES.find(e => e.value === precio.tipoEmbalaje)?.emoji || '📦'} ${EMBALAJES.find(e => e.value === precio.tipoEmbalaje)?.label || precio.tipoEmbalaje}${precio.cantidadEmbalaje && precio.cantidadEmbalaje > 1 ? ` x${precio.cantidadEmbalaje}` : ''}`
-                              : precio.notas || '';
-                            return (
-                              <div key={precio.id} className={cn(
-                                'p-5 rounded-2xl border shadow-sm hover:shadow-lg transition-all flex items-center justify-between group',
-                                esVenta
-                                  ? 'bg-emerald-50/50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/30'
-                                  : 'bg-white dark:bg-gray-900 border-slate-100 dark:border-gray-800'
-                              )}>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <span className="text-sm">{esVenta ? '🛒' : '🏭'}</span>
-                                    <p className={cn('font-black uppercase tracking-tight truncate group-hover:transition-colors text-sm', esVenta ? 'text-emerald-800 dark:text-emerald-200 group-hover:text-emerald-600' : 'text-slate-800 dark:text-white group-hover:text-blue-600')}>{prod.nombre}</p>
-                                  </div>
-                                  <p className="text-[9px] font-bold uppercase tracking-widest opacity-40 truncate">{prod.categoria}</p>
-                                  {embalajeInfo && <p className="text-[9px] font-semibold text-slate-400 mt-0.5 truncate">{embalajeInfo}</p>}
-                                </div>
-                                <div className="text-right ml-3 shrink-0">
-                                  <p className="text-lg font-black text-blue-600 tabular-nums">{formatCurrency(precio.precioCosto)}</p>
-                                  <Badge className={cn(
-                                    'text-[8px] font-black uppercase mt-1 border-none',
-                                    margen > 30 ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-600'
-                                  )}>
-                                    {margen.toFixed(0)}% margen
-                                  </Badge>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Tab: Analisis */}
-                  {tabDetalle === 'analisis' && (
-                    <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <Card className="rounded-2xl border-none bg-indigo-600 text-white shadow-xl p-6 relative overflow-hidden">
-                        <Zap className="w-7 h-7 mb-3 text-emerald-300" />
-                        <h4 className="text-lg font-black uppercase tracking-tight">Desempeño del Aliado</h4>
-                        <p className="text-[9px] font-bold uppercase tracking-widest text-indigo-200 mt-0.5 mb-6 opacity-70">Basado en datos registrados</p>
-                        <div className="space-y-4">
-                          {[
-                            { label: 'Calidad (rating)', pct: metricas.calidad, color: 'bg-amber-400' },
-                            { label: 'Cobertura de catálogo', pct: metricas.cobertura, color: 'bg-blue-300' },
-                          ].map(({ label, pct, color }) => (
-                            <div key={label}>
-                              <div className="flex justify-between text-[9px] font-black uppercase mb-1.5">
-                                <span>{label}</span><span>{pct}%</span>
-                              </div>
-                              <div className="h-2 w-full bg-white/10 rounded-full">
-                                <div className={cn('h-full rounded-full transition-all duration-700', color)} style={{ width: `${pct}%` }} />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                        <ShieldCheck className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10" />
-                      </Card>
-
-                      <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-6">
-                        <h4 className="text-[9px] font-black uppercase tracking-widest text-blue-600 mb-5 flex items-center gap-2">
-                          <TrendingUp className="w-3.5 h-3.5" /> Resumen Financiero
-                        </h4>
-                        <div className="space-y-4">
-                          <div>
-                            <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Insumos totales</span>
-                            <p className="text-2xl font-black text-slate-800 dark:text-white">{insumos.length}</p>
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Valor total del catálogo</span>
-                            <p className="text-2xl font-black text-blue-600">
-                              {formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0))}
-                            </p>
-                          </div>
-                          <div>
-                            <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Precio promedio</span>
-                            <p className="text-xl font-black text-slate-700 dark:text-slate-200">
-                              {insumos.length > 0 ? formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0) / insumos.length) : '—'}
-                            </p>
-                          </div>
-                          {metricas.margenPromedio > 0 && (
-                            <div>
-                              <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Margen promedio</span>
-                              <p className={cn('text-xl font-black', metricas.margenPromedio > 30 ? 'text-emerald-600' : 'text-amber-600')}>
-                                {metricas.margenPromedio}%
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </Card>
-                    </div>
-                  )}
-
-                </div>
-              </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
+      {/* ── Dialog de detalle eliminado — todo se muestra inline en el acordeón ── */}
     </div>
   );
 }

@@ -11,7 +11,8 @@ export interface DBProducto {
   tipo: 'ingrediente' | 'elaborado';
   costoBase?: number;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
+  fechaActualizacion?: string;
 }
 
 export interface DBOrdenProduccion {
@@ -49,6 +50,7 @@ export interface DBProveedor {
   email?: string;
   direccion?: string;
   createdAt: string;
+  fechaActualizacion?: string;
 }
 
 export interface DBPrecio {
@@ -324,10 +326,17 @@ export interface IDatabase {
 
   syncLocalToCloud?(): Promise<void>;
   syncCloudToLocal?(): Promise<void>;
+
+  // Protocolo Sentinel & Integrity
+  getTombstones(table: string): Promise<string[]>;
+  removeTombstone(table: string, id: string): Promise<void>;
+  addTombstone(table: 'proveedores' | 'productos' | 'precios', id: string): Promise<void>;
+  saveBackup(id: string, data: any): Promise<void>;
+  getBackup(id: string): Promise<any>;
 }
 
 const DB_NAME = 'PriceControlDB';
-const DB_VERSION = 14; // Incrementado para incluir prestamos_caja
+const DB_VERSION = 16; // Incrementado para Protocolo Sentinel (Espejo Inmortal)
 
 class IndexedDBDatabase implements IDatabase {
   private db: IDBDatabase | null = null;
@@ -469,6 +478,13 @@ class IndexedDBDatabase implements IDatabase {
           s.createIndex('fechaPrestamo', 'fechaPrestamo', { unique: false });
           s.createIndex('cajaOrigenId', 'cajaOrigenId', { unique: false });
           s.createIndex('cajaDestinoId', 'cajaDestinoId', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('tombstones')) {
+          const s = db.createObjectStore('tombstones', { keyPath: 'id' }); // id: "table:itemId"
+          s.createIndex('table', 'table', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('backups')) {
+          db.createObjectStore('backups', { keyPath: 'id' }); // id: "table_type" -> "productos_snapshot"
         }
       };
     });
@@ -1146,7 +1162,7 @@ class IndexedDBDatabase implements IDatabase {
 
   async clearAll(): Promise<void> {
     const db = await this.ensureInit();
-    const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios', 'recetas', 'ventas', 'caja', 'ahorros', 'mesas', 'pedidos_activos', 'gastos', 'produccion', 'creditos_clientes', 'trabajadores'];
+    const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios', 'recetas', 'ventas', 'caja', 'ahorros', 'mesas', 'pedidos_activos', 'gastos', 'produccion', 'creditos_clientes', 'trabajadores', 'tombstones'];
     for (const storeName of stores) {
       await new Promise<void>((resolve, reject) => {
         const transaction = db.transaction([storeName], 'readwrite');
@@ -1156,6 +1172,45 @@ class IndexedDBDatabase implements IDatabase {
         transaction.onerror = () => reject(transaction.error);
       });
     }
+  }
+  
+  // Tombstones Methods (Fase 6)
+  async addTombstone(table: string, id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['tombstones'], 'readwrite').objectStore('tombstones').put({ id: `${table}:${id}`, table, itemId: id, fecha: new Date().toISOString() });
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async getTombstones(table: string): Promise<string[]> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['tombstones'], 'readonly').objectStore('tombstones').index('table').getAll(table);
+      req.onsuccess = () => resolve(req.result.map((t: any) => t.itemId)); req.onerror = () => reject(req.error);
+    });
+  }
+  async removeTombstone(table: string, id: string): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['tombstones'], 'readwrite').objectStore('tombstones').delete(`${table}:${id}`);
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Backup Mirror Methods (Protocol Sentinel)
+  async saveBackup(id: string, data: any): Promise<void> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['backups'], 'readwrite').objectStore('backups').put({ id, data, timestamp: Date.now() });
+      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+    });
+  }
+  async getBackup(id: string): Promise<any> {
+    const db = await this.ensureInit();
+    return new Promise((resolve, reject) => {
+      const req = db.transaction(['backups'], 'readonly').objectStore('backups').get(id);
+      req.onsuccess = () => resolve(req.result ? req.result.data : null); req.onerror = () => reject(req.error);
+    });
   }
 }
 
@@ -1213,41 +1268,23 @@ class HybridDatabase implements IDatabase {
     }
   }
 
-  private getTombstones(): Record<string, Set<string>> {
-    const data = localStorage.getItem('nexus_tombstones');
-    if (!data) return { proveedores: new Set(), productos: new Set(), precios: new Set() };
-    const parsed = JSON.parse(data);
-    return {
-      proveedores: new Set(parsed.proveedores || []),
-      productos: new Set(parsed.productos || []),
-      precios: new Set(parsed.precios || []),
-    };
+  async getTombstones(table: string): Promise<string[]> {
+    return this.local.getTombstones(table);
   }
 
-  private saveTombstones(ts: Record<string, Set<string>>) {
-    const toSave = {
-      proveedores: Array.from(ts.proveedores),
-      productos: Array.from(ts.productos),
-      precios: Array.from(ts.precios),
-    };
-    localStorage.setItem('nexus_tombstones', JSON.stringify(toSave));
+  async addTombstone(table: 'proveedores' | 'productos' | 'precios', id: string) {
+    await this.local.addTombstone(table, id);
   }
 
-  private addTombstone(table: 'proveedores' | 'productos' | 'precios', id: string) {
-    const ts = this.getTombstones();
-    ts[table].add(id);
-    this.saveTombstones(ts);
-  }
-
-  private removeTombstone(table: 'proveedores' | 'productos' | 'precios', id: string) {
-    const ts = this.getTombstones();
-    ts[table].delete(id);
-    this.saveTombstones(ts);
+  async removeTombstone(table: string, id: string) {
+    await this.local.removeTombstone(table as any, id);
   }
 
   public async syncCloudToLocal() {
     try {
       console.log('🔄 [Nexus-Volt] Iniciando Reconciliación Inteligente...');
+      const lastSync = Number(localStorage.getItem('nexus_last_sync_ts') || 0);
+      const now = Date.now();
 
       const [localProds, localProvs, localPrcs] = await Promise.all([
         this.local.getAllProductos(),
@@ -1258,46 +1295,55 @@ class HybridDatabase implements IDatabase {
       const localProdsMap = new Map(localProds.map(p => [p.id, p]));
       const localProvsMap = new Map(localProvs.map(p => [p.id, p]));
       const localPrcsMap = new Map(localPrcs.map(p => [p.id, p]));
-      const tombstones = this.getTombstones();
 
       const processTable = async (name: string, cloudData: any[], localMap: Map<string, any>, tombstoneSet: Set<string>, saveFn: (d: any) => Promise<any>, deleteCloudFn?: (id: string) => Promise<any>) => {
         if (!cloudData) return;
         for (const item of cloudData) {
-          // 1. Si tiene lápida, borrar de la nube
+          // 1. Si tiene lápida local, borrar de la nube y NO agregar
           if (tombstoneSet.has(item.id)) {
             if (deleteCloudFn) {
-              await deleteCloudFn(item.id).then(() => this.removeTombstone(name as any, item.id)).catch(() => { });
+              await deleteCloudFn(item.id).catch(() => { });
             }
+            // NO eliminar tombstone — mantenerlo como protección permanente
             continue;
           }
 
           const localItem = localMap.get(item.id);
+          const cloudDate = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
+
           if (!localItem) {
-            // No existe local: agregar
+            // No existe local: agregar desde nube
             await saveFn(item).catch(() => { });
           } else {
-            // Existe local: comparar fechas
-            const cloudDate = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
+            // Existe local: comparar fechas — LOCAL GANA si fue modificado recientemente (60s margen)
             const localDate = new Date(localItem.fechaActualizacion || localItem.createdAt || 0).getTime();
-
-            if (cloudDate > localDate) {
-              console.log(`📡 [Sync] Actualizando ${name} ID: ${item.id} (Nube es más reciente)`);
+            const MARGEN_SEGURIDAD = 60_000; // 60 segundos de protección para cambios locales recientes
+            if (cloudDate > localDate + MARGEN_SEGURIDAD) {
+              console.log(`📡 [Sync] Actualizando ${name} ID: ${item.id} (Nube es más reciente por >${MARGEN_SEGURIDAD/1000}s)`);
               await saveFn(item).catch(() => { });
             }
           }
         }
       };
 
-      const cloudProds = await this.cloud.getAllProductos();
-      await processTable('productos', cloudProds, localProdsMap, tombstones.productos, (d) => this.local.updateProducto(d), (id) => this.cloud.deleteProducto(id));
+      const [cloudProds, cloudProvs, cloudPrcs, tsProvsArr, tsProdsArr, tsPrcsArr] = await Promise.all([
+        this.cloud.getAllProductos(),
+        this.cloud.getAllProveedores(),
+        this.cloud.getAllPrecios(),
+        this.getTombstones('proveedores'),
+        this.getTombstones('productos'),
+        this.getTombstones('precios')
+      ]);
 
-      const cloudProvs = await this.cloud.getAllProveedores();
-      await processTable('proveedores', cloudProvs, localProvsMap, tombstones.proveedores, (d) => this.local.updateProveedor(d), (id) => this.cloud.deleteProveedor(id));
+      const [tsProvs, tsProds, tsPrcs] = [new Set(tsProvsArr), new Set(tsProdsArr), new Set(tsPrcsArr)];
 
-      const cloudPrcs = await this.cloud.getAllPrecios();
-      await processTable('precios', cloudPrcs, localPrcsMap, tombstones.precios, (d) => this.local.updatePrecio(d), (id) => this.cloud.deletePrecio(id));
+      await Promise.all([
+        processTable('productos', cloudProds, localProdsMap, tsProds, (d) => this.local.updateProducto(d), (id) => this.cloud.deleteProducto(id)),
+        processTable('proveedores', cloudProvs, localProvsMap, tsProvs, (d) => this.local.updateProveedor(d), (id) => this.cloud.deleteProveedor(id)),
+        processTable('precios', cloudPrcs, localPrcsMap, tsPrcs, (d) => this.local.updatePrecio(d), (id) => this.cloud.deletePrecio(id))
+      ]);
 
-      // Otras tablas con lógica estandarizada
+      // Otras tablas solo si hay cambios desde el último sync (optimización Fase 6)
       const otherTables = [
         { name: 'inventario', fn: () => this.cloud.getAllInventario(), save: (d: any) => this.local.updateInventarioItem(d) },
         { name: 'alertas', fn: () => this.cloud.getAllAlertas(), save: (d: any) => this.local.updateAlerta(d) },
@@ -1312,13 +1358,17 @@ class HybridDatabase implements IDatabase {
         try {
           const data = await table.fn();
           if (Array.isArray(data)) {
-            for (const item of data) await table.save(item).catch(() => { });
+            for (const item of data) {
+               const itemDate = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
+               if (itemDate > lastSync) await table.save(item).catch(() => { });
+            }
           }
         } catch (err) {
           console.warn(`⚠️ Error en tabla ${table.name}:`, err);
         }
       }
 
+      localStorage.setItem('nexus_last_sync_ts', now.toString());
       console.log('✅ [Nexus-Volt] Reconciliación Nube -> Local completada.');
     } catch (e) {
       console.warn('⚠️ Sync cloud to local failed:', e);
@@ -1327,67 +1377,76 @@ class HybridDatabase implements IDatabase {
 
   public async syncLocalToCloud() {
     if (!this.isOnline) return;
-    console.log('🚀 [Nexus-Volt] Iniciando sincronización robusta con la nube...');
+    console.log('🚀 [Nexus-Volt] Iniciando sincronización robusta diferencial...');
+    const lastSync = Number(localStorage.getItem('nexus_last_sync_ts_out') || 0);
+    const now = Date.now();
+    let syncCount = 0;
+
     try {
       const logError = (table: string, id: string, err: any) => 
         console.warn(`⚠️ [Sync] Error en ${table} (ID: ${id}):`, err.message || err);
 
-      const productos = await this.local.getAllProductos();
-      for (const p of productos) 
-        await this.cloud.updateProducto(p).catch(err => {
-          logError('productos', p.id, err);
+      const filterRecent = (list: any[]) => list.filter(item => {
+        const itemTs = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
+        return itemTs > lastSync;
+      });
+
+      const rawProds = await this.local.getAllProductos();
+      const productos = filterRecent(rawProds);
+      for (const p of productos) {
+        syncCount++;
+        await this.cloud.updateProducto(p).catch(() => {
           return this.cloud.addProducto(p).catch(e => logError('productos-add', p.id, e));
         });
+      }
 
-      const proveedores = await this.local.getAllProveedores();
-      for (const p of proveedores) 
-        await this.cloud.updateProveedor(p).catch(err => {
-          logError('proveedores', p.id, err);
+      const rawProvs = await this.local.getAllProveedores();
+      const proveedores = filterRecent(rawProvs);
+      for (const p of proveedores) {
+        syncCount++;
+        await this.cloud.updateProveedor(p).catch(() => {
           return this.cloud.addProveedor(p).catch(e => logError('proveedores-add', p.id, e));
         });
+      }
 
-      const precios = await this.local.getAllPrecios();
-      for (const p of precios) 
-        await this.cloud.updatePrecio(p).catch(err => {
-          logError('precios', p.id, err);
+      const rawPrcs = await this.local.getAllPrecios();
+      const precios = filterRecent(rawPrcs);
+      for (const p of precios) {
+        syncCount++;
+        await this.cloud.updatePrecio(p).catch(() => {
           return this.cloud.addPrecio(p).catch(e => logError('precios-add', p.id, e));
         });
+      }
 
-      const inventario = await this.local.getAllInventario();
-      for (const i of inventario) await this.cloud.updateInventarioItem(i).catch(e => logError('inventario', i.id, e));
+      const rawInv = await this.local.getAllInventario();
+      const inventario = filterRecent(rawInv);
+      for (const i of inventario) {
+        syncCount++;
+        await this.cloud.updateInventarioItem(i).catch(e => logError('inventario', i.id, e));
+      }
 
       const config = await this.local.getConfiguracion();
       if (config) await this.cloud.saveConfiguracion(config).catch(e => logError('config', 'main', e));
 
-      const [alertas, movimientos, prepedidos, recepciones, historial, recetas, ventas, sesiones] = await Promise.all([
+      // Otras tablas batch
+      const [alertas, movimientos, prepedidos, recepciones, recetas, trabajadores] = await Promise.all([
         this.local.getAllAlertas(),
         this.local.getAllMovimientos(),
         this.local.getAllPrePedidos(),
         this.local.getAllRecepciones(),
-        this.local.getAllHistorial(),
         this.local.getAllRecetas(),
-        this.local.getAllVentas(),
-        this.local.getAllSesionesCaja()
+        this.local.getAllTrabajadores()
       ]);
 
-      // Sincronización atomizada para evitar bloqueos por fallos numéricos o de esquema
-      for (const a of alertas) await this.cloud.updateAlerta(a).catch(e => logError('alertas', a.id, e));
-      for (const m of movimientos) await this.cloud.addMovimiento(m).catch(e => logError('movimientos', m.id, e));
-      for (const p of prepedidos) await this.cloud.updatePrePedido(p).catch(e => logError('prepedidos', p.id, e));
-      for (const r of recepciones) await this.cloud.updateRecepcion(r).catch(e => logError('recepciones', r.id, e));
-      for (const h of historial) await this.cloud.addHistorial(h).catch(() => { });
-      for (const re of recetas) await this.cloud.updateReceta(re).catch(e => logError('recetas', re.id, e));
-      for (const v of ventas) await this.cloud.addVenta(v).catch(() => { });
-      for (const s of sesiones) await this.cloud.updateSesionCaja(s).catch(() => { });
+      for (const a of filterRecent(alertas)) { syncCount++; await this.cloud.updateAlerta(a).catch(() => {}); }
+      for (const m of filterRecent(movimientos)) { syncCount++; await this.cloud.addMovimiento(m).catch(() => {}); }
+      for (const p of filterRecent(prepedidos)) { syncCount++; await this.cloud.updatePrePedido(p).catch(() => {}); }
+      for (const r of filterRecent(recepciones)) { syncCount++; await this.cloud.updateRecepcion(r).catch(() => {}); }
+      for (const re of filterRecent(recetas)) { syncCount++; await this.cloud.updateReceta(re).catch(() => {}); }
+      for (const t of filterRecent(trabajadores)) { syncCount++; await this.cloud.updateTrabajador(t).catch(() => {}); }
 
-      const [trabajadores, creditosTrabajadores] = await Promise.all([
-        this.local.getAllTrabajadores(),
-        this.local.getAllCreditosTrabajadores(),
-      ]);
-      for (const t of trabajadores) await this.cloud.updateTrabajador(t).catch(e => logError('trabajadores', t.id, e));
-      for (const c of creditosTrabajadores) await this.cloud.updateCreditoTrabajador(c).catch(e => logError('creditos', c.id, e));
-
-      console.log('✅ [Nexus-Volt] Sincronización Local -> Nube Completada (con protección de errores).');
+      localStorage.setItem('nexus_last_sync_ts_out', now.toString());
+      if (syncCount > 0) console.log(`✅ [Nexus-Volt] Sincronización Local -> Nube Exitosa. Registros procesados: ${syncCount}`);
     } catch (e) {
       console.error('❌ Error crítico en orquestación de sincronización:', e);
     }
@@ -1395,37 +1454,55 @@ class HybridDatabase implements IDatabase {
 
   async getAllProductos() { return this.local.getAllProductos(); }
   async addProducto(p: DBProducto) {
-    await this.local.addProducto(p);
-    if (this.isOnline) await this.cloud.addProducto(p).catch(console.error);
+    const fresh = { ...p, fechaActualizacion: new Date().toISOString() };
+    await this.local.addProducto(fresh);
+    if (this.isOnline) {
+      await this.cloud.addProducto(fresh).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
   async updateProducto(p: DBProducto) {
     const updated = { ...p, fechaActualizacion: new Date().toISOString() };
     await this.local.updateProducto(updated);
-    if (this.isOnline) await this.cloud.updateProducto(updated).catch(console.error);
+    if (this.isOnline) {
+      await this.cloud.updateProducto(updated).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
   async deleteProducto(id: string) {
     await this.local.deleteProducto(id);
-    this.addTombstone('productos', id);
-    if (this.isOnline) await this.cloud.deleteProducto(id).catch(console.error);
+    await this.addTombstone('productos', id);
+    if (this.isOnline) {
+      await this.cloud.deleteProducto(id).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
 
   async getAllProveedores() { return this.local.getAllProveedores(); }
   async addProveedor(p: DBProveedor) {
-    await this.local.addProveedor(p);
-    if (this.isOnline) await this.cloud.addProveedor(p).catch(console.error);
+    const fresh = { ...p, fechaActualizacion: new Date().toISOString() };
+    await this.local.addProveedor(fresh);
+    if (this.isOnline) {
+      await this.cloud.addProveedor(fresh).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
   async updateProveedor(p: DBProveedor) {
     const updated = { ...p, fechaActualizacion: new Date().toISOString() };
     await this.local.updateProveedor(updated);
-    if (this.isOnline) await this.cloud.updateProveedor(updated).catch(console.error);
+    if (this.isOnline) {
+      await this.cloud.updateProveedor(updated).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
   async deleteProveedor(id: string) {
     await this.local.deleteProveedor(id);
-    this.addTombstone('proveedores', id);
+    await this.addTombstone('proveedores', id);
     if (this.isOnline) {
       try {
         await this.cloud.deleteProveedor(id);
-        this.removeTombstone('proveedores', id);
+        this.syncLocalToCloud(); // Live Sync
+        // Mantenemos la lápida local para evitar re-adición accidental
       } catch (e) {
         console.error('⚠️ Error eliminando proveedor de la nube:', e);
       }
@@ -1437,18 +1514,28 @@ class HybridDatabase implements IDatabase {
   async getPreciosByProveedor(pid: string) { return this.local.getPreciosByProveedor(pid); }
   async getPrecioByProductoProveedor(pid: string, provId: string) { return this.local.getPrecioByProductoProveedor(pid, provId); }
   async addPrecio(p: DBPrecio) {
-    await this.local.addPrecio(p);
-    if (this.isOnline) await this.cloud.addPrecio(p).catch(console.error);
+    const fresh = { ...p, fechaActualizacion: new Date().toISOString() };
+    await this.local.addPrecio(fresh);
+    if (this.isOnline) {
+      await this.cloud.addPrecio(fresh).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
   async updatePrecio(p: DBPrecio) {
     const updated = { ...p, fechaActualizacion: new Date().toISOString() };
     await this.local.updatePrecio(updated);
-    if (this.isOnline) await this.cloud.updatePrecio(updated).catch(console.error);
+    if (this.isOnline) {
+      await this.cloud.updatePrecio(updated).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
   async deletePrecio(id: string) {
     await this.local.deletePrecio(id);
-    this.addTombstone('precios', id);
-    if (this.isOnline) await this.cloud.deletePrecio(id).catch(console.error);
+    await this.addTombstone('precios', id);
+    if (this.isOnline) {
+      await this.cloud.deletePrecio(id).catch(console.error);
+      this.syncLocalToCloud(); // Live Sync
+    }
   }
 
   async getAllPrePedidos() { return this.local.getAllPrePedidos(); }
@@ -1675,6 +1762,10 @@ class HybridDatabase implements IDatabase {
   async updatePrestamoCaja(p: any) { await this.local.updatePrestamoCaja(p); }
 
   async clearAll() { await this.local.clearAll(); }
+
+  // Sentinel & Integrity Hybrid Methods
+  async saveBackup(id: string, data: any) { await this.local.saveBackup(id, data); }
+  async getBackup(id: string) { return this.local.getBackup(id); }
 }
 
 export const db = new HybridDatabase();

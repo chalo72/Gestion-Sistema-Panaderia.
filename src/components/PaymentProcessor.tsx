@@ -46,7 +46,7 @@ export function PaymentProcessor({
     },
     { 
       method: 'ewallet', 
-      label: 'E-Wallet', 
+      label: 'Billetera', 
       icon: <Wallet size={24} />,
       color: 'from-purple-500 to-pink-600'
     },
@@ -79,12 +79,12 @@ export function PaymentProcessor({
           </div>
         </div>
 
-        {/* E-Wallet Balance (si aplica) */}
+        {/* Saldo Billetera (si aplica) */}
         {customerEWalletBalance > 0 && (
           <div className="bg-purple-500/10 dark:bg-purple-500/10 border border-purple-500/30 dark:border-purple-500/20 rounded-xl p-4 mb-6">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-purple-600 dark:text-purple-400">
-                Saldo E-Wallet Disponible:
+                Saldo Billetera Disponible:
               </span>
               <span className="font-bold text-purple-700 dark:text-purple-300">
                 {customerEWalletBalance.toFixed(2)} USD
@@ -157,7 +157,7 @@ export function PaymentProcessor({
             {selectedMethod === 'ewallet' && (
               <div className="bg-white/40 dark:bg-gray-800/40 backdrop-blur rounded-xl p-4 border border-white/20 dark:border-gray-700/20">
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                  Cobrar desde E-Wallet
+                  Cobrar desde Billetera
                 </p>
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-purple-600 dark:text-purple-400">

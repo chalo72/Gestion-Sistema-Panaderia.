@@ -91,11 +91,11 @@ export function CalculadoraRendimiento({
     }
 
     const costoTotalFormulacion = formulacion.costoTotalArroba * arrobas;
-    const costoUnitario = costoTotalFormulacion / panes;
+    const costoUnitario = panes > 0 ? costoTotalFormulacion / panes : 0;
     const precioVenta = modelo?.precioVentaUnitario || costoUnitario * 1.4;
     const ventaTotal = precioVenta * panes;
     const gananciaTotal = ventaTotal - costoTotalFormulacion;
-    const margen = (gananciaTotal / ventaTotal) * 100;
+    const margen = ventaTotal > 0 ? (gananciaTotal / ventaTotal) * 100 : 0;
 
     // Desglose de ingredientes necesarios
     const ingredientesNecesarios = formulacion.ingredientes.map(ing => ({

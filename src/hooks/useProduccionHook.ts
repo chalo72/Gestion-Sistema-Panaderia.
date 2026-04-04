@@ -23,35 +23,70 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
   const [formulaciones, setFormulaciones] = useState<FormulacionBase[]>([]);
   const [modelosPan, setModelosPan] = useState<ModeloPan[]>([]);
 
-  // Cargar formulaciones y modelos desde localStorage
+  // Cargar formulaciones y modelos desde IndexedDB (principal) + localStorage (fallback)
   useEffect(() => {
-    const savedFormulaciones = localStorage.getItem('formulaciones');
-    const savedModelos = localStorage.getItem('modelosPan');
-    
-    if (savedFormulaciones && JSON.parse(savedFormulaciones).length > 0) {
-      setFormulaciones(JSON.parse(savedFormulaciones));
-    } else if (DATOS_EJEMPLO.formulaciones) {
-      setFormulaciones(DATOS_EJEMPLO.formulaciones as FormulacionBase[]);
-    }
-    
-    if (savedModelos && JSON.parse(savedModelos).length > 0) {
-      setModelosPan(JSON.parse(savedModelos));
-    } else if (DATOS_EJEMPLO.modelosPan) {
-      setModelosPan(DATOS_EJEMPLO.modelosPan as ModeloPan[]);
-    }
+    const cargarDatos = async () => {
+      try {
+        // Intentar cargar desde IndexedDB primero (fuente más confiable)
+        const [formulacionesIDB, modelosIDB] = await Promise.all([
+          db.getBackup('formulaciones_data'),
+          db.getBackup('modelosPan_data'),
+        ]);
+
+        if (formulacionesIDB && formulacionesIDB.length > 0) {
+          setFormulaciones(formulacionesIDB);
+        } else {
+          // Fallback a localStorage
+          const savedFormulaciones = localStorage.getItem('formulaciones');
+          if (savedFormulaciones && JSON.parse(savedFormulaciones).length > 0) {
+            setFormulaciones(JSON.parse(savedFormulaciones));
+          } else if (DATOS_EJEMPLO.formulaciones) {
+            setFormulaciones(DATOS_EJEMPLO.formulaciones as FormulacionBase[]);
+          }
+        }
+
+        if (modelosIDB && modelosIDB.length > 0) {
+          setModelosPan(modelosIDB);
+        } else {
+          const savedModelos = localStorage.getItem('modelosPan');
+          if (savedModelos && JSON.parse(savedModelos).length > 0) {
+            setModelosPan(JSON.parse(savedModelos));
+          } else if (DATOS_EJEMPLO.modelosPan) {
+            setModelosPan(DATOS_EJEMPLO.modelosPan as ModeloPan[]);
+          }
+        }
+      } catch {
+        // Si IndexedDB falla, usar localStorage
+        const savedFormulaciones = localStorage.getItem('formulaciones');
+        const savedModelos = localStorage.getItem('modelosPan');
+        if (savedFormulaciones && JSON.parse(savedFormulaciones).length > 0) {
+          setFormulaciones(JSON.parse(savedFormulaciones));
+        } else if (DATOS_EJEMPLO.formulaciones) {
+          setFormulaciones(DATOS_EJEMPLO.formulaciones as FormulacionBase[]);
+        }
+        if (savedModelos && JSON.parse(savedModelos).length > 0) {
+          setModelosPan(JSON.parse(savedModelos));
+        } else if (DATOS_EJEMPLO.modelosPan) {
+          setModelosPan(DATOS_EJEMPLO.modelosPan as ModeloPan[]);
+        }
+      }
+    };
+    cargarDatos();
   }, []);
 
-  // Persistir formulaciones
+  // Persistir formulaciones en localStorage + IndexedDB (doble capa)
   useEffect(() => {
     if (formulaciones.length > 0 || localStorage.getItem('formulaciones')) {
       localStorage.setItem('formulaciones', JSON.stringify(formulaciones));
+      db.saveBackup('formulaciones_data', formulaciones).catch(() => {});
     }
   }, [formulaciones]);
 
-  // Persistir modelos
+  // Persistir modelos en localStorage + IndexedDB (doble capa)
   useEffect(() => {
     if (modelosPan.length > 0 || localStorage.getItem('modelosPan')) {
       localStorage.setItem('modelosPan', JSON.stringify(modelosPan));
+      db.saveBackup('modelosPan_data', modelosPan).catch(() => {});
     }
   }, [modelosPan]);
 

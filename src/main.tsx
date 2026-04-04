@@ -22,10 +22,11 @@ import './index.css'
   };
 })();
 
-// Registro de Service Worker para PWA — auto-recarga silenciosa
+// Registro de Service Worker para PWA — recargar SOLO después de confirmar datos guardados
 const updateSW = registerSW({
   onNeedRefresh() {
-    updateSW(true) // Recarga automática sin preguntar
+    // Esperar 3 segundos para que operaciones pendientes de IndexedDB se completen
+    setTimeout(() => updateSW(true), 3000);
   },
   onOfflineReady() {
     // App lista para uso offline — sin aviso al usuario
