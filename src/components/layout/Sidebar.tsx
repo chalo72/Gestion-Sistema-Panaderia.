@@ -22,7 +22,8 @@ import {
   Upload,
   CreditCard,
   UserCircle2,
-  Store
+  Store,
+  Building2
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -140,6 +141,7 @@ export function Sidebar({
       section: 'Administración',
       emoji: '👥',
       items: [
+        { id: 'oficina',       label: 'Oficina del Equipo', icon: Building2,   permission: 'VER_USUARIOS' },
         { id: 'trabajadores',  label: 'Trabajadores',       icon: UserCircle2, permission: 'VER_USUARIOS' },
         { id: 'usuarios',      label: 'Equipo de Trabajo',  icon: Users,       permission: 'VER_USUARIOS' },
         { id: 'roles',         label: 'Seguridad y Roles',  icon: Shield,      permission: 'VER_USUARIOS' },

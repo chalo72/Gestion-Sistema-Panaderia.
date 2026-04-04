@@ -45,6 +45,7 @@ const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial
 const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
 const Trabajadores = lazy(() => import('@/pages/Trabajadores'));
 const Mayoristas = lazy(() => import('@/pages/Mayoristas'));
+const Oficina = lazy(() => import('@/pages/Oficina'));
 
 // Skeleton para durante la carga de secciones
 function SectionSkeleton() {
@@ -731,6 +732,14 @@ function AppContent() {
                 getMejorPrecio={getMejorPrecio}
                 formatCurrency={formatCurrency}
               />
+            </Suspense>
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'oficina':
+        return hasPermission('VER_USUARIOS') ? (
+          <SectionErrorBoundary sectionName="Oficina">
+            <Suspense fallback={<SectionSkeleton />}>
+              <Oficina publicAppUrl={configuracion.publicUrl} />
             </Suspense>
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
