@@ -53,6 +53,20 @@
   <script>
     console.log("🚀 Antigravity Boot Probe: index.html loaded");
     
+    // [NUCLEAR] Forzar limpieza de SW y caches en CADA carga
+    (function() {
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (var r of regs) r.unregister();
+        });
+      }
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var n of names) caches.delete(n);
+        });
+      }
+    })();
+    
     // [Nexus-Volt] Cache Slayer v2.1 - Fuerza la actualización inmediata del PWA
     (function() {
       const STORAGE_KEY = 'nexus_build_ts';
