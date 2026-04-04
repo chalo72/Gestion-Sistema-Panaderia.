@@ -23,7 +23,8 @@ import {
   CreditCard,
   UserCircle2,
   Store,
-  Building2
+  Building2,
+  BrainCircuit
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -86,7 +87,8 @@ export function Sidebar({
       section: 'Inicio',
       emoji: '🏠',
       items: [
-        { id: 'dashboard', label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+        { id: 'dashboard',   label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+        { id: 'agentes-ia',  label: 'Agentes IA',      icon: BrainCircuit,    permission: 'VER_DASHBOARD' },
       ],
     },
     {

@@ -46,6 +46,7 @@ const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
 const Trabajadores = lazy(() => import('@/pages/Trabajadores'));
 const Mayoristas = lazy(() => import('@/pages/Mayoristas'));
 const Oficina = lazy(() => import('@/pages/Oficina'));
+const AgentesIA = lazy(() => import('@/pages/AgentesIA'));
 
 // Skeleton para durante la carga de secciones
 function SectionSkeleton() {
@@ -740,6 +741,14 @@ function AppContent() {
           <SectionErrorBoundary sectionName="Oficina">
             <Suspense fallback={<SectionSkeleton />}>
               <Oficina publicAppUrl={configuracion.publicUrl} />
+            </Suspense>
+          </SectionErrorBoundary>
+        ) : <UnauthorizedState />;
+      case 'agentes-ia':
+        return hasPermission('VER_DASHBOARD') ? (
+          <SectionErrorBoundary sectionName="Agentes IA">
+            <Suspense fallback={<SectionSkeleton />}>
+              <AgentesIA />
             </Suspense>
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;

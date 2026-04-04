@@ -315,7 +315,7 @@ export interface Configuracion {
   publicUrl?: string;             // URL de producción (Vercel) para enlaces de acceso
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia';
 
 // ============================================
 // SISTEMA DE ROLES Y PERMISOS
