@@ -23,8 +23,7 @@ import {
   CreditCard,
   UserCircle2,
   Store,
-  Building2,
-  BrainCircuit
+  Building2
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -85,10 +84,10 @@ export function Sidebar({
   const allMenuGroups: MenuGroup[] = [
     {
       section: 'Inicio',
-      emoji: '🏠',
+      emoji: '🏛️', // Icono de oficina central/gobierno
       items: [
         { id: 'dashboard',   label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
-        { id: 'agentes-ia',  label: 'Agentes IA',      icon: BrainCircuit,    permission: 'VER_DASHBOARD' },
+        { id: 'agentes-ia',  label: 'Mando Superior (IA)', icon: Shield,    permission: 'VER_DASHBOARD' }, // Usamos Shield para denotar control y seguridad
       ],
     },
     {

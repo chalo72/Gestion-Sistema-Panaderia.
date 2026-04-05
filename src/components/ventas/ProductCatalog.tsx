@@ -229,11 +229,15 @@ export function ProductCatalog({
                             <Input value={editForm.descripcion} onChange={e => setEditForm(f => ({ ...f, descripcion: e.target.value }))}
                                 placeholder="Opcional" className="h-11 text-sm rounded-xl border-slate-200" />
                         </div>
-                        <div>
-                            <Label className="text-sm font-bold text-slate-500 mb-1 block">📦 Stock / Cantidad</Label>
-                            <Input type="number" value={editForm.stock}
-                                onChange={e => setEditForm(f => ({ ...f, stock: parseInt(e.target.value) || 0 }))}
-                                className="h-11 text-lg font-bold text-right rounded-xl border-slate-200" />
+                        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700">
+                            <Label className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 block">📦 Control de Existencias</Label>
+                            <div className="relative">
+                                <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+                                <Input type="number" value={editForm.stock}
+                                    onChange={e => setEditForm(f => ({ ...f, stock: parseInt(e.target.value) || 0 }))}
+                                    className="h-12 pl-10 text-xl font-black text-right rounded-xl border-emerald-200 dark:border-emerald-800/40 bg-white dark:bg-slate-900 focus:ring-2 focus:ring-emerald-500/20" />
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2 italic">Ajusta la cantidad física real para sincronizar el inventario.</p>
                         </div>
                         <div className="flex gap-2 pt-2">
                             <Button variant="ghost" onClick={() => setEditingProduct(null)}
@@ -285,10 +289,10 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                     </div>
                 </div>
 
-                {/* Botón Editar Flotante */}
+                {/* Botón Editar Flotante - VISIBILIDAD MEJORADA */}
                 {onEdit && (
                     <button onClick={onEdit}
-                        className="absolute top-2 left-2 w-8 h-8 rounded-xl bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-emerald-500 hover:text-white translate-x-[-10px] group-hover:translate-x-0">
+                        className="absolute top-2 left-2 w-8 h-8 rounded-xl bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center opacity-60 group-hover:opacity-100 transition-all hover:bg-emerald-500 hover:text-white z-20">
                         <Edit2 className="w-3.5 h-3.5" />
                     </button>
                 )}

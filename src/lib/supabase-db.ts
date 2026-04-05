@@ -12,7 +12,11 @@ import type {
     DBRecepcion,
     DBHistorialPrecio,
     DBVenta,
-    DBCajaSesion
+    DBCajaSesion,
+    AgenteId,
+    DBAgenteConfig,
+    DBMisionAgent,
+    DBHallazgoAgente
 } from './database';
 
 // BLINDAJE NEXUS-VOLT: Sanitizador de valores numéricos para evitar Error 22003 (Numeric Overflow)
@@ -139,6 +143,31 @@ export class SupabaseDatabase implements IDatabase {
     async deleteProveedor(id: string): Promise<void> {
         const { error } = await supabase.from('proveedores').delete().eq('id', id);
         if (error) throw error;
+    }
+
+    // --- Protocolo Sentinel: Lápidas (Tombstones) ---
+    async getTombstones(table: string): Promise<string[]> {
+        const { data, error } = await supabase.from('tombstones').select('item_id').eq('table', table);
+        if (error) {
+            console.warn(`⚠️ Error consultando lápidas en Supabase para ${table}:`, error);
+            return [];
+        }
+        return (data || []).map(t => t.item_id);
+    }
+
+    async addTombstone(table: string, id: string): Promise<void> {
+        const { error } = await supabase.from('tombstones').upsert({
+            id: `${table}:${id}`,
+            table: table,
+            item_id: id,
+            fecha: new Date().toISOString()
+        });
+        if (error) console.error(`❌ Error al crear lápida en Supabase (${table}:${id}):`, error);
+    }
+
+    async removeTombstone(table: string, id: string): Promise<void> {
+        const { error } = await supabase.from('tombstones').delete().eq('id', `${table}:${id}`);
+        if (error) console.error(`❌ Error al eliminar lápida en Supabase (${table}:${id}):`, error);
     }
 
     // --- Precios ---
@@ -770,6 +799,135 @@ export class SupabaseDatabase implements IDatabase {
     async getAllPrestamosCaja(): Promise<any[]> { return []; }
     async addPrestamoCaja(): Promise<void> { }
     async updatePrestamoCaja(): Promise<void> { }
+
+    // --- Sentinel Backups (Solo local por diseño de privacidad) ---
+    async saveBackup(id: string, data: any): Promise<void> { 
+        // Los backups pesados de Sentinel se mantienen locales para ahorrar ancho de banda
+        // Pero podríamos implementar un log de auditoría aquí en el futuro.
+    }
+    async getBackup(id: string): Promise<any> { return null; }
+
+    // --- Agente Sovereignty ---
+    async getAgenteConfig(id: string): Promise<any | undefined> {
+        const { data, error } = await supabase.from('agente_configs').select('*').eq('id', id).maybeSingle();
+        if (error) throw error;
+        if (!data) return undefined;
+        return {
+            id: data.id,
+            directivaPrimaria: data.directiva_primaria,
+            autonomia: data.autonomia,
+            restricciones: data.restricciones || [],
+            habilidadesHabilitadas: data.habilidades_habilitadas || [],
+            conocimientoInyectado: data.conocimiento_inyectado,
+            ultimaActualizacion: data.ultima_actualizacion
+        };
+    }
+
+    async saveAgenteConfig(config: any): Promise<void> {
+        const { error } = await supabase.from('agente_configs').upsert({
+            id: config.id,
+            directiva_primaria: config.directivaPrimaria,
+            autonomia: config.autonomia,
+            restricciones: config.restricciones,
+            habilidades_habilitadas: config.habilidadesHabilitadas,
+            conocimiento_inyectado: config.conocimientoInyectado,
+            ultima_actualizacion: config.ultimaActualizacion
+        });
+        if (error) throw error;
+    }
+
+    async getAllAgenteConfigs(): Promise<DBAgenteConfig[]> {
+        const { data, error } = await supabase.from('agente_configs').select('*');
+        if (error) throw error;
+        return (data || []).map(d => ({
+            id: d.id as AgenteId, // Cast a AgenteId
+            directivaPrimaria: d.directiva_primaria,
+            autonomia: d.autonomia,
+            restricciones: d.restricciones || [],
+            habilidadesHabilitadas: d.habilidades_habilitadas || [],
+            conocimientoInyectado: d.conocimiento_inyectado,
+            ultimaActualizacion: d.ultima_actualizacion
+        }));
+    }
+
+    // --- Agente Centinela (Implementación Supabase) ---
+    async getAgenteMisiones(agenteId?: AgenteId): Promise<DBMisionAgent[]> {
+        let query = supabase.from('agente_misiones').select('*');
+        if (agenteId) query = query.eq('agente_id', agenteId);
+        const { data, error } = await query;
+        if (error) throw error;
+        return (data || []).map(m => ({
+            id: m.id,
+            agenteId: m.agente_id,
+            creadaPor: m.creada_por,
+            misionExplicita: m.mision_explicita,
+            frecuencia: m.frecuencia,
+            estado: m.estado,
+            ultimaEjecucion: m.ultima_ejecucion,
+            proximaEjecucion: m.proxima_ejecucion,
+            metadata: m.metadata
+        }));
+    }
+
+    async saveAgenteMision(mision: DBMisionAgent): Promise<void> {
+        const { error } = await supabase.from('agente_misiones').upsert({
+            id: mision.id,
+            agente_id: mision.agenteId,
+            creada_por: mision.creadaPor,
+            mision_explicita: mision.misionExplicita,
+            frecuencia: mision.frecuencia,
+            estado: mision.estado,
+            ultima_ejecucion: mision.ultimaEjecucion,
+            proxima_ejecucion: mision.proximaEjecucion,
+            metadata: mision.metadata
+        });
+        if (error) throw error;
+    }
+
+    async deleteAgenteMision(id: string): Promise<void> {
+        const { error } = await supabase.from('agente_misiones').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    async getAgenteHallazgos(limite: number = 50): Promise<DBHallazgoAgente[]> {
+        const { data, error } = await supabase
+            .from('agente_hallazgos')
+            .select('*')
+            .order('fecha', { ascending: false })
+            .limit(limite);
+        if (error) throw error;
+        return (data || []).map(h => ({
+            id: h.id,
+            agenteId: h.agente_id as AgenteId,
+            misionId: h.mision_id,
+            tipo: h.tipo,
+            gravedad: h.gravedad,
+            titulo: h.titulo,
+            descripcion: h.descripcion,
+            fecha: h.fecha,
+            revisado: h.revisado
+        }));
+    }
+
+    async saveAgenteHallazgo(hallazgo: DBHallazgoAgente): Promise<void> {
+        const { error } = await supabase.from('agente_hallazgos').upsert({
+            id: hallazgo.id,
+            agente_id: hallazgo.agenteId,
+            mision_id: hallazgo.misionId,
+            tipo: hallazgo.tipo,
+            gravedad: hallazgo.gravedad,
+            titulo: hallazgo.titulo,
+            descripcion: hallazgo.descripcion,
+            fecha: hallazgo.fecha,
+            revisado: hallazgo.revisado
+        });
+        if (error) throw error;
+    }
+
+    async marcarHallazgoLeido(id: string): Promise<void> {
+        const { error } = await supabase.from('agente_hallazgos').update({ revisado: true }).eq('id', id);
+        if (error) throw error;
+    }
 
     // --- Créditos Clientes ---
     async getAllCreditosClientes(): Promise<any[]> {

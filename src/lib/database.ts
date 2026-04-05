@@ -99,18 +99,68 @@ export interface DBAlerta {
 
 export interface DBConfiguracion {
   id: string;
-  margenUtilidadDefault: number;
-  ajusteAutomatico: boolean;
-  notificarSubidas: boolean;
-  umbralAlerta: number;
-  categorias: { id: string; nombre: string; color: string }[];
-  moneda: string;
   nombreNegocio: string;
   direccionNegocio?: string;
   telefonoNegocio?: string;
   emailNegocio?: string;
+  moneda: string;
+  margenUtilidadDefault: number;
   impuestoPorcentaje: number;
-  mostrarUtilidadEnLista: boolean;
+  umbralAlerta: number;
+  ajusteAutomatico: boolean;
+  notificarSubidas: boolean;
+  mostrarUtilidadEnLista?: boolean;
+  categorias: Array<{ id: string; nombre: string; icono?: string; color?: string; }>;
+}
+
+export type AgenteId = 
+  | 'gerente' | 'produccion' | 'inventario' | 'marketing' | 'nomina' 
+  | 'inversion' | 'contable' | 'logistica' | 'calidad' | 'mantenimiento' 
+  | 'clientes' | 'sostenibilidad' | 'expansion' | 'creditos' | 'subvenciones' 
+  | 'pitch' | 'abogado' | 'tax' | 'ventas' | 'influencer'
+  | 'pico-claw' | 'open-claw' | 'auto-claw';
+
+export type TombstoneTable = 
+  | 'proveedores' 
+  | 'productos' 
+  | 'precios'
+  | 'agente_misiones'
+  | 'agente_hallazgos';
+
+export interface DBAgenteConfig {
+  id: AgenteId;
+  directivaPrimaria: string;
+  autonomia: number;
+  restricciones: string[];
+  habilidadesHabilitadas: string[];
+  conocimientoInyectado: string;
+  ultimaActualizacion: string;
+}
+
+export interface DBMisionAgent {
+  id: string;
+  agenteId: AgenteId;
+  creadaPor: string;
+  misionExplicita: string;
+  frecuencia: 'unica' | '5min' | '1h' | 'diaria' | 'semanal';
+  estado: 'espera' | 'ejecutando' | 'pausada';
+  ultimaEjecucion?: string;
+  proximaEjecucion: string;
+  metadata?: any;
+}
+
+export interface DBHallazgoAgente {
+  id: string;
+  agenteId: AgenteId;
+  misionId?: string;
+  tipo: 'visual' | 'financiero' | 'operativo' | 'alerta';
+  gravedad: 'info' | 'baja' | 'media' | 'alta' | 'critica';
+  titulo: string;
+  descripcion: string;
+  evidenciaUrl?: string; // Captura de cámara o fragmento de datos
+  fecha: string;
+  revisado: boolean;
+  metadata?: any; // Para validación adversaria, engramas, etc.
 }
 
 export interface DBInventarioItem {
@@ -186,7 +236,7 @@ export interface DBVenta {
   cajaId?: string;
   items: DBVentaItem[];
   total: number;
-  metodoPago: 'efectivo' | 'tarjeta' | 'transferencia' | 'otro';
+  metodoPago: 'efectivo' | 'tarjeta' | 'transferencia' | 'nequi' | 'daviplata' | 'descuento_nomina' | 'credito' | 'otro';
   usuarioId: string;
   cliente?: string;
   notas?: string;
@@ -201,6 +251,8 @@ export interface DBCajaSesion {
   montoApertura: number;
   montoCierre?: number;
   totalVentas: number;
+  totalVentasEfectivo?: number;
+  totalCreditos?: number;
   ventasIds: string[];
   estado: 'abierta' | 'cerrada';
 }
@@ -211,6 +263,7 @@ export interface DBGasto {
   monto: number;
   categoria: string;
   fecha: string;
+  estado: 'pendiente' | 'pagado' | 'anulado';
   proveedorId?: string;
   comprobanteUrl?: string;
   metodoPago: string;
@@ -229,10 +282,12 @@ export interface IDatabase {
   addProducto(producto: DBProducto): Promise<void>;
   updateProducto(producto: DBProducto): Promise<void>;
   deleteProducto(id: string): Promise<void>;
+  
   getAllProveedores(): Promise<DBProveedor[]>;
   addProveedor(proveedor: DBProveedor): Promise<void>;
   updateProveedor(proveedor: DBProveedor): Promise<void>;
   deleteProveedor(id: string): Promise<void>;
+  
   getAllPrecios(): Promise<DBPrecio[]>;
   getPreciosByProducto(productoId: string): Promise<DBPrecio[]>;
   getPreciosByProveedor(proveedorId: string): Promise<DBPrecio[]>;
@@ -240,982 +295,291 @@ export interface IDatabase {
   addPrecio(precio: DBPrecio): Promise<void>;
   updatePrecio(precio: DBPrecio): Promise<void>;
   deletePrecio(id: string): Promise<void>;
+  
   getAllPrePedidos(): Promise<DBPrePedido[]>;
   addPrePedido(prepedido: DBPrePedido): Promise<void>;
   updatePrePedido(prepedido: DBPrePedido): Promise<void>;
   deletePrePedido(id: string): Promise<void>;
+  
   getAllAlertas(): Promise<DBAlerta[]>;
   addAlerta(alerta: DBAlerta): Promise<void>;
   updateAlerta(alerta: DBAlerta): Promise<void>;
   deleteAlerta(id: string): Promise<void>;
   clearAllAlertas(): Promise<void>;
+  
   getConfiguracion(): Promise<DBConfiguracion | undefined>;
   saveConfiguracion(config: DBConfiguracion): Promise<void>;
+  
   getAllInventario(): Promise<DBInventarioItem[]>;
   getInventarioItemByProducto(productoId: string): Promise<DBInventarioItem | undefined>;
   updateInventarioItem(item: DBInventarioItem): Promise<void>;
+  
   getAllMovimientos(): Promise<DBMovimientoInventario[]>;
   addMovimiento(movimiento: DBMovimientoInventario): Promise<void>;
+  
   getAllRecepciones(): Promise<DBRecepcion[]>;
   addRecepcion(recepcion: DBRecepcion): Promise<void>;
   updateRecepcion(recepcion: DBRecepcion): Promise<void>;
+  
   getAllHistorial(): Promise<DBHistorialPrecio[]>;
   addHistorial(entry: DBHistorialPrecio): Promise<void>;
   getHistorialByProducto(productoId: string): Promise<DBHistorialPrecio[]>;
 
-  // Recetas
   getAllRecetas(): Promise<DBReceta[]>;
   getRecetaByProducto(productoId: string): Promise<DBReceta | undefined>;
   addReceta(receta: DBReceta): Promise<void>;
   updateReceta(receta: DBReceta): Promise<void>;
   deleteReceta(id: string): Promise<void>;
 
-  // Ventas
   getAllVentas(): Promise<DBVenta[]>;
   addVenta(venta: DBVenta): Promise<void>;
   getVentasByCaja(cajaId: string): Promise<DBVenta[]>;
 
-  // Caja
   getAllSesionesCaja(): Promise<DBCajaSesion[]>;
   getSesionCajaActiva(): Promise<DBCajaSesion | undefined>;
   addSesionCaja(sesion: DBCajaSesion): Promise<void>;
   updateSesionCaja(sesion: DBCajaSesion): Promise<void>;
 
-  // Ahorros
   getAllAhorros(): Promise<any[]>;
   addAhorro(ahorro: any): Promise<void>;
   updateAhorro(ahorro: any): Promise<void>;
   deleteAhorro(id: string): Promise<void>;
 
-  // Mesas
   getAllMesas(): Promise<any[]>;
   updateMesa(mesa: any): Promise<void>;
   deleteMesa(id: string): Promise<void>;
 
-  // Pedidos Activos
   getAllPedidosActivos(): Promise<any[]>;
   addPedidoActivo(pedido: any): Promise<void>;
   updatePedidoActivo(pedido: any): Promise<void>;
   deletePedidoActivo(id: string): Promise<void>;
 
-  // Gastos
   getAllGastos(): Promise<DBGasto[]>;
   addGasto(gasto: DBGasto): Promise<void>;
   updateGasto(gasto: DBGasto): Promise<void>;
   deleteGasto(id: string): Promise<void>;
 
-  // Producción
   getAllOrdenesProduccion(): Promise<DBOrdenProduccion[]>;
   addOrdenProduccion(orden: DBOrdenProduccion): Promise<void>;
   updateOrdenProduccion(orden: DBOrdenProduccion): Promise<void>;
   deleteOrdenProduccion(id: string): Promise<void>;
 
-  // Facturas Escaneadas (Archivo de Imágenes)
   getAllFacturasEscaneadas(): Promise<any[]>;
   addFacturaEscaneada(factura: any): Promise<void>;
   deleteFacturaEscaneada(id: string): Promise<void>;
   getFacturasEscaneadasByProveedor(proveedorId: string): Promise<any[]>;
   getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string): Promise<any[]>;
 
-  // Préstamos entre Cajas
   getAllPrestamosCaja(): Promise<any[]>;
   addPrestamoCaja(prestamo: any): Promise<void>;
   updatePrestamoCaja(prestamo: any): Promise<void>;
 
   clearAll(): Promise<void>;
 
-  syncLocalToCloud?(): Promise<void>;
-  syncCloudToLocal?(): Promise<void>;
-
-  // Protocolo Sentinel & Integrity
   getTombstones(table: string): Promise<string[]>;
   removeTombstone(table: string, id: string): Promise<void>;
-  addTombstone(table: 'proveedores' | 'productos' | 'precios', id: string): Promise<void>;
+  addTombstone(table: TombstoneTable, id: string): Promise<void>;
   saveBackup(id: string, data: any): Promise<void>;
   getBackup(id: string): Promise<any>;
+
+  getAgenteConfig(id: string): Promise<DBAgenteConfig | undefined>;
+  saveAgenteConfig(config: DBAgenteConfig): Promise<void>;
+  getAllAgenteConfigs(): Promise<DBAgenteConfig[]>;
+
+  // NUEVOS MÉTODOS CENTINELA
+  getAgenteMisiones(agenteId?: AgenteId): Promise<DBMisionAgent[]>;
+  saveAgenteMision(mision: DBMisionAgent): Promise<void>;
+  deleteAgenteMision(id: string): Promise<void>;
+  getAgenteHallazgos(limite?: number): Promise<DBHallazgoAgente[]>;
+  saveAgenteHallazgo(hallazgo: DBHallazgoAgente): Promise<void>;
+  marcarHallazgoLeido(id: string): Promise<void>;
 }
 
 const DB_NAME = 'PriceControlDB';
-const DB_VERSION = 16; // Incrementado para Protocolo Sentinel (Espejo Inmortal)
+const DB_VERSION = 18;
 
 class IndexedDBDatabase implements IDatabase {
   private db: IDBDatabase | null = null;
 
   async init(): Promise<void> {
-    console.log(`💽 IndexedDB: Starting init (v${DB_VERSION})...`);
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
-      request.onblocked = () => {
-        console.warn("⚠️ IndexedDB: Connection blocked! Please close other tabs of this app.");
-        alert("⚠️ Por favor, cierra otras pestañas de la aplicación para actualizar la base de datos.");
-      };
-      request.onerror = () => {
-        console.error("❌ IndexedDB: Error opening DB", request.error);
-        reject(request.error);
-      };
+      request.onblocked = () => console.warn("⚠️ IndexedDB: Connection blocked!");
+      request.onerror = () => reject(request.error);
       request.onsuccess = () => {
-        console.log("✅ IndexedDB: DB opened successfully");
         this.db = request.result;
         resolve();
       };
       request.onupgradeneeded = (event) => {
-        console.log("🔄 IndexedDB: Upgrade needed...");
         const db = (event.target as IDBOpenDBRequest).result;
-        if (!db.objectStoreNames.contains('productos')) {
-          const s = db.createObjectStore('productos', { keyPath: 'id' });
-          s.createIndex('categoria', 'categoria', { unique: false });
-          s.createIndex('nombre', 'nombre', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('proveedores')) {
-          const s = db.createObjectStore('proveedores', { keyPath: 'id' });
-          s.createIndex('nombre', 'nombre', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('precios')) {
-          const s = db.createObjectStore('precios', { keyPath: 'id' });
-          s.createIndex('productoId', 'productoId', { unique: false });
-          s.createIndex('proveedorId', 'proveedorId', { unique: false });
-          s.createIndex('productoProveedor', ['productoId', 'proveedorId'], { unique: true });
-        }
-        if (!db.objectStoreNames.contains('prepedidos')) {
-          const s = db.createObjectStore('prepedidos', { keyPath: 'id' });
-          s.createIndex('proveedorId', 'proveedorId', { unique: false });
-          s.createIndex('estado', 'estado', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('alertas')) {
-          const alertasStore = db.createObjectStore('alertas', { keyPath: 'id' });
-          alertasStore.createIndex('leida', 'leida', { unique: false });
-          alertasStore.createIndex('fecha', 'fecha', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('configuracion')) {
-          db.createObjectStore('configuracion', { keyPath: 'id' });
-        }
-        if (!db.objectStoreNames.contains('inventario')) {
-          const inventarioStore = db.createObjectStore('inventario', { keyPath: 'id' });
-          inventarioStore.createIndex('productoId', 'productoId', { unique: true });
-        }
-        if (!db.objectStoreNames.contains('movimientos')) {
-          const s = db.createObjectStore('movimientos', { keyPath: 'id' });
-          s.createIndex('productoId', 'productoId', { unique: false });
-          s.createIndex('fecha', 'fecha', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('recepciones')) {
-          const s = db.createObjectStore('recepciones', { keyPath: 'id' });
-          s.createIndex('proveedorId', 'proveedorId', { unique: false });
-          s.createIndex('fechaRecepcion', 'fechaRecepcion', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('historialPrecios')) {
-          const s = db.createObjectStore('historialPrecios', { keyPath: 'id' });
-          s.createIndex('productoId', 'productoId', { unique: false });
-          s.createIndex('proveedorId', 'proveedorId', { unique: false });
-          s.createIndex('fechaCambio', 'fechaCambio', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('recetas')) {
-          const s = db.createObjectStore('recetas', { keyPath: 'id' });
-          s.createIndex('productoId', 'productoId', { unique: true });
-        }
-        if (!db.objectStoreNames.contains('ventas')) {
-          const s = db.createObjectStore('ventas', { keyPath: 'id' });
-          s.createIndex('cajaId', 'cajaId', { unique: false });
-          s.createIndex('fecha', 'fecha', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('caja')) {
-          const s = db.createObjectStore('caja', { keyPath: 'id' });
-          s.createIndex('estado', 'estado', { unique: false });
-          s.createIndex('fechaApertura', 'fechaApertura', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('ahorros')) {
-          const s = db.createObjectStore('ahorros', { keyPath: 'id' });
-          s.createIndex('estado', 'estado', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('mesas')) {
-          const s = db.createObjectStore('mesas', { keyPath: 'id' });
-          s.createIndex('estado', 'estado', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('pedidos_activos')) {
-          const s = db.createObjectStore('pedidos_activos', { keyPath: 'id' });
-          s.createIndex('mesaId', 'mesaId', { unique: false });
-          s.createIndex('estado', 'estado', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('gastos')) {
-          const s = db.createObjectStore('gastos', { keyPath: 'id' });
-          s.createIndex('categoria', 'categoria', { unique: false });
-          s.createIndex('fecha', 'fecha', { unique: false });
-          s.createIndex('cajaId', 'cajaId', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('produccion')) {
-          const s = db.createObjectStore('produccion', { keyPath: 'id' });
-          s.createIndex('estado', 'estado', { unique: false });
-          s.createIndex('productoId', 'productoId', { unique: false });
-          s.createIndex('fechaInicio', 'fechaInicio', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('facturas_escaneadas')) {
-          const s = db.createObjectStore('facturas_escaneadas', { keyPath: 'id' });
-          s.createIndex('proveedorId', 'proveedorId', { unique: false });
-          s.createIndex('fechaEscaneo', 'fechaEscaneo', { unique: false });
-          s.createIndex('fechaFactura', 'fechaFactura', { unique: false });
-          s.createIndex('recepcionId', 'recepcionId', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('creditos_clientes')) {
-          const s = db.createObjectStore('creditos_clientes', { keyPath: 'id' });
-          s.createIndex('estado', 'estado', { unique: false });
-          s.createIndex('fecha', 'fecha', { unique: false });
-          s.createIndex('clienteNombre', 'clienteNombre', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('trabajadores')) {
-          const s = db.createObjectStore('trabajadores', { keyPath: 'id' });
-          s.createIndex('estado', 'estado', { unique: false });
-          s.createIndex('rol', 'rol', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('creditos_trabajadores')) {
-          const s = db.createObjectStore('creditos_trabajadores', { keyPath: 'id' });
-          s.createIndex('trabajadorId', 'trabajadorId', { unique: false });
-          s.createIndex('estado', 'estado', { unique: false });
-          s.createIndex('fecha', 'fecha', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('prestamos_caja')) {
-          const s = db.createObjectStore('prestamos_caja', { keyPath: 'id' });
-          s.createIndex('estado', 'estado', { unique: false });
-          s.createIndex('fechaPrestamo', 'fechaPrestamo', { unique: false });
-          s.createIndex('cajaOrigenId', 'cajaOrigenId', { unique: false });
-          s.createIndex('cajaDestinoId', 'cajaDestinoId', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('tombstones')) {
-          const s = db.createObjectStore('tombstones', { keyPath: 'id' }); // id: "table:itemId"
-          s.createIndex('table', 'table', { unique: false });
-        }
-        if (!db.objectStoreNames.contains('backups')) {
-          db.createObjectStore('backups', { keyPath: 'id' }); // id: "table_type" -> "productos_snapshot"
-        }
+        const stores = [
+          { name: 'productos', key: 'id', indexes: ['categoria', 'nombre'] },
+          { name: 'proveedores', key: 'id', indexes: ['nombre'] },
+          { name: 'precios', key: 'id', indexes: ['productoId', 'proveedorId', 'productoProveedor'] },
+          { name: 'prepedidos', key: 'id', indexes: ['proveedorId', 'estado'] },
+          { name: 'alertas', key: 'id', indexes: ['leida', 'fecha'] },
+          { name: 'configuracion', key: 'id', indexes: [] },
+          { name: 'inventario', key: 'id', indexes: ['productoId'] },
+          { name: 'movimientos', key: 'id', indexes: ['productoId', 'fecha'] },
+          { name: 'recepciones', key: 'id', indexes: ['proveedorId', 'fechaRecepcion'] },
+          { name: 'historialPrecios', key: 'id', indexes: ['productoId', 'proveedorId', 'fechaCambio'] },
+          { name: 'recetas', key: 'id', indexes: ['productoId'] },
+          { name: 'ventas', key: 'id', indexes: ['cajaId', 'fecha'] },
+          { name: 'caja', key: 'id', indexes: ['estado', 'fechaApertura'] },
+          { name: 'ahorros', key: 'id', indexes: ['estado'] },
+          { name: 'mesas', key: 'id', indexes: ['estado'] },
+          { name: 'pedidos_activos', key: 'id', indexes: ['mesaId', 'estado'] },
+          { name: 'gastos', key: 'id', indexes: ['categoria', 'fecha', 'cajaId'] },
+          { name: 'produccion', key: 'id', indexes: ['estado', 'productoId', 'fechaInicio'] },
+          { name: 'facturas_escaneadas', key: 'id', indexes: ['proveedorId', 'fechaEscaneo', 'fechaFactura', 'recepcionId'] },
+          { name: 'creditos_clientes', key: 'id', indexes: ['estado', 'fecha', 'clienteNombre'] },
+          { name: 'trabajadores', key: 'id', indexes: ['estado', 'rol'] },
+          { name: 'creditos_trabajadores', key: 'id', indexes: ['trabajadorId', 'estado', 'fecha'] },
+          { name: 'prestamos_caja', key: 'id', indexes: ['estado', 'fechaPrestamo', 'cajaOrigenId', 'cajaDestinoId'] },
+          { name: 'tombstones', key: 'id', indexes: ['table'] },
+          { name: 'backups', key: 'id', indexes: [] },
+          { name: 'agente_configs', key: 'id', indexes: [] },
+          { name: 'agente_misiones', key: 'id', indexes: ['agenteId', 'proximaEjecucion'] },
+          { name: 'agente_hallazgos', key: 'id', indexes: ['agenteId', 'tipo', 'gravedad', 'fecha'] }
+        ];
+
+        stores.forEach(s => {
+          if (!db.objectStoreNames.contains(s.name)) {
+            const store = db.createObjectStore(s.name, { keyPath: s.key });
+            s.indexes.forEach(idx => {
+              if (idx === 'productoProveedor') {
+                store.createIndex(idx, ['productoId', 'proveedorId'], { unique: true });
+              } else {
+                store.createIndex(idx, idx, { unique: false });
+              }
+            });
+          }
+        });
       };
     });
   }
 
   private async ensureInit() {
     if (!this.db) await this.init();
-    if (!this.db) throw new Error('Database failed to initialize');
-    return this.db;
+    return this.db!;
   }
 
-  async getAllProductos(): Promise<DBProducto[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['productos'], 'readonly').objectStore('productos').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addProducto(p: DBProducto): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['productos'], 'readwrite').objectStore('productos').add(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateProducto(p: DBProducto): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['productos'], 'readwrite').objectStore('productos').put(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteProducto(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['productos'], 'readwrite').objectStore('productos').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllProductos() { const db = await this.ensureInit(); return new Promise<DBProducto[]>((res, rej) => { const req = db.transaction('productos').objectStore('productos').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addProducto(p: DBProducto) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('productos', 'readwrite').objectStore('productos').add(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateProducto(p: DBProducto) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('productos', 'readwrite').objectStore('productos').put(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteProducto(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('productos', 'readwrite').objectStore('productos').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllProveedores(): Promise<DBProveedor[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['proveedores'], 'readonly').objectStore('proveedores').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addProveedor(p: DBProveedor): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['proveedores'], 'readwrite').objectStore('proveedores').add(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateProveedor(p: DBProveedor): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['proveedores'], 'readwrite').objectStore('proveedores').put(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteProveedor(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['proveedores'], 'readwrite').objectStore('proveedores').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllProveedores() { const db = await this.ensureInit(); return new Promise<DBProveedor[]>((res, rej) => { const req = db.transaction('proveedores').objectStore('proveedores').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addProveedor(p: DBProveedor) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('proveedores', 'readwrite').objectStore('proveedores').add(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateProveedor(p: DBProveedor) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('proveedores', 'readwrite').objectStore('proveedores').put(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteProveedor(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('proveedores', 'readwrite').objectStore('proveedores').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllPrecios(): Promise<DBPrecio[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['precios'], 'readonly').objectStore('precios').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async getPreciosByProducto(pid: string): Promise<DBPrecio[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['precios'], 'readonly').objectStore('precios').index('productoId').getAll(pid);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async getPreciosByProveedor(pid: string): Promise<DBPrecio[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['precios'], 'readonly').objectStore('precios').index('proveedorId').getAll(pid);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async getPrecioByProductoProveedor(pid: string, provId: string): Promise<DBPrecio | undefined> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['precios'], 'readonly').objectStore('precios').index('productoProveedor').get([pid, provId]);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addPrecio(p: DBPrecio): Promise<void> {
-    if (!p.precioCosto || p.precioCosto <= 0) {
-      throw new Error(`addPrecio: precioCosto debe ser mayor a 0 (recibido: ${p.precioCosto})`);
-    }
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['precios'], 'readwrite').objectStore('precios').add(p);
-      req.onsuccess = () => resolve();
-      req.onerror = () => {
-        // Si el precio ya existe (ConstraintError por índice único), actualizar en vez de fallar
-        if (req.error?.name === 'ConstraintError') {
-          this.updatePrecio(p).then(resolve).catch(reject);
-        } else {
-          reject(req.error);
-        }
-      };
-    });
-  }
-  async updatePrecio(p: DBPrecio): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['precios'], 'readwrite').objectStore('precios').put(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deletePrecio(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['precios'], 'readwrite').objectStore('precios').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllPrecios() { const db = await this.ensureInit(); return new Promise<DBPrecio[]>((res, rej) => { const req = db.transaction('precios').objectStore('precios').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async getPreciosByProducto(pid: string) { const db = await this.ensureInit(); return new Promise<DBPrecio[]>((res, rej) => { const req = db.transaction('precios').objectStore('precios').index('productoId').getAll(pid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async getPreciosByProveedor(pid: string) { const db = await this.ensureInit(); return new Promise<DBPrecio[]>((res, rej) => { const req = db.transaction('precios').objectStore('precios').index('proveedorId').getAll(pid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async getPrecioByProductoProveedor(pid: string, provId: string) { const db = await this.ensureInit(); return new Promise<DBPrecio | undefined>((res, rej) => { const req = db.transaction('precios').objectStore('precios').index('productoProveedor').get([pid, provId]); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addPrecio(p: DBPrecio) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('precios', 'readwrite').objectStore('precios').add(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updatePrecio(p: DBPrecio) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('precios', 'readwrite').objectStore('precios').put(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deletePrecio(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('precios', 'readwrite').objectStore('precios').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllPrePedidos(): Promise<DBPrePedido[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['prepedidos'], 'readonly').objectStore('prepedidos').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addPrePedido(p: DBPrePedido): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['prepedidos'], 'readwrite').objectStore('prepedidos').add(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updatePrePedido(p: DBPrePedido): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['prepedidos'], 'readwrite').objectStore('prepedidos').put(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deletePrePedido(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['prepedidos'], 'readwrite').objectStore('prepedidos').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllPrePedidos() { const db = await this.ensureInit(); return new Promise<DBPrePedido[]>((res, rej) => { const req = db.transaction('prepedidos').objectStore('prepedidos').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addPrePedido(p: DBPrePedido) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('prepedidos', 'readwrite').objectStore('prepedidos').add(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updatePrePedido(p: DBPrePedido) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('prepedidos', 'readwrite').objectStore('prepedidos').put(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deletePrePedido(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('prepedidos', 'readwrite').objectStore('prepedidos').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllAlertas(): Promise<DBAlerta[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['alertas'], 'readonly').objectStore('alertas').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addAlerta(a: DBAlerta): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').add(a);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateAlerta(a: DBAlerta): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').put(a);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteAlerta(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async clearAllAlertas(): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['alertas'], 'readwrite').objectStore('alertas').clear();
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllAlertas() { const db = await this.ensureInit(); return new Promise<DBAlerta[]>((res, rej) => { const req = db.transaction('alertas').objectStore('alertas').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addAlerta(a: DBAlerta) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('alertas', 'readwrite').objectStore('alertas').add(a); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateAlerta(a: DBAlerta) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('alertas', 'readwrite').objectStore('alertas').put(a); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteAlerta(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('alertas', 'readwrite').objectStore('alertas').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async clearAllAlertas() { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('alertas', 'readwrite').objectStore('alertas').clear(); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getConfiguracion(): Promise<DBConfiguracion | undefined> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['configuracion'], 'readonly').objectStore('configuracion').get('main');
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async saveConfiguracion(c: DBConfiguracion): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['configuracion'], 'readwrite').objectStore('configuracion').put({ ...c, id: 'main' });
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getConfiguracion() { const db = await this.ensureInit(); return new Promise<DBConfiguracion | undefined>((res, rej) => { const req = db.transaction('configuracion').objectStore('configuracion').get('main'); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async saveConfiguracion(c: DBConfiguracion) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('configuracion', 'readwrite').objectStore('configuracion').put({ ...c, id: 'main' }); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllInventario(): Promise<DBInventarioItem[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['inventario'], 'readonly').objectStore('inventario').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async getInventarioItemByProducto(pid: string): Promise<DBInventarioItem | undefined> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['inventario'], 'readonly').objectStore('inventario').index('productoId').get(pid);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateInventarioItem(i: DBInventarioItem): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['inventario'], 'readwrite').objectStore('inventario').put(i);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllInventario() { const db = await this.ensureInit(); return new Promise<DBInventarioItem[]>((res, rej) => { const req = db.transaction('inventario').objectStore('inventario').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async getInventarioItemByProducto(pid: string) { const db = await this.ensureInit(); return new Promise<DBInventarioItem | undefined>((res, rej) => { const req = db.transaction('inventario').objectStore('inventario').index('productoId').get(pid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async updateInventarioItem(i: DBInventarioItem) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('inventario', 'readwrite').objectStore('inventario').put(i); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllMovimientos(): Promise<DBMovimientoInventario[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['movimientos'], 'readonly').objectStore('movimientos').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addMovimiento(m: DBMovimientoInventario): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['movimientos'], 'readwrite').objectStore('movimientos').add(m);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllMovimientos() { const db = await this.ensureInit(); return new Promise<DBMovimientoInventario[]>((res, rej) => { const req = db.transaction('movimientos').objectStore('movimientos').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addMovimiento(m: DBMovimientoInventario) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('movimientos', 'readwrite').objectStore('movimientos').add(m); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllRecepciones(): Promise<DBRecepcion[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recepciones'], 'readonly').objectStore('recepciones').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addRecepcion(r: DBRecepcion): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recepciones'], 'readwrite').objectStore('recepciones').add(r);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateRecepcion(r: DBRecepcion): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recepciones'], 'readwrite').objectStore('recepciones').put(r);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllRecepciones() { const db = await this.ensureInit(); return new Promise<DBRecepcion[]>((res, rej) => { const req = db.transaction('recepciones').objectStore('recepciones').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addRecepcion(r: DBRecepcion) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('recepciones', 'readwrite').objectStore('recepciones').add(r); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateRecepcion(r: DBRecepcion) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('recepciones', 'readwrite').objectStore('recepciones').put(r); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async getAllHistorial(): Promise<DBHistorialPrecio[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['historialPrecios'], 'readonly').objectStore('historialPrecios').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addHistorial(h: DBHistorialPrecio): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['historialPrecios'], 'readwrite').objectStore('historialPrecios').add(h);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async getHistorialByProducto(pid: string): Promise<DBHistorialPrecio[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['historialPrecios'], 'readonly').objectStore('historialPrecios').index('productoId').getAll(pid);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllHistorial() { const db = await this.ensureInit(); return new Promise<DBHistorialPrecio[]>((res, rej) => { const req = db.transaction('historialPrecios').objectStore('historialPrecios').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addHistorial(h: DBHistorialPrecio) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('historialPrecios', 'readwrite').objectStore('historialPrecios').add(h); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async getHistorialByProducto(pid: string) { const db = await this.ensureInit(); return new Promise<DBHistorialPrecio[]>((res, rej) => { const req = db.transaction('historialPrecios').objectStore('historialPrecios').index('productoId').getAll(pid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
 
-  // Recetas Implementation
-  async getAllRecetas(): Promise<DBReceta[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recetas'], 'readonly').objectStore('recetas').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async getRecetaByProducto(productoId: string): Promise<DBReceta | undefined> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recetas'], 'readonly').objectStore('recetas').index('productoId').get(productoId);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addReceta(r: DBReceta): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recetas'], 'readwrite').objectStore('recetas').add(r);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateReceta(r: DBReceta): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recetas'], 'readwrite').objectStore('recetas').put(r);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteReceta(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['recetas'], 'readwrite').objectStore('recetas').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllRecetas() { const db = await this.ensureInit(); return new Promise<DBReceta[]>((res, rej) => { const req = db.transaction('recetas').objectStore('recetas').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async getRecetaByProducto(pid: string) { const db = await this.ensureInit(); return new Promise<DBReceta | undefined>((res, rej) => { const req = db.transaction('recetas').objectStore('recetas').index('productoId').get(pid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addReceta(r: DBReceta) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('recetas', 'readwrite').objectStore('recetas').add(r); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateReceta(r: DBReceta) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('recetas', 'readwrite').objectStore('recetas').put(r); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteReceta(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('recetas', 'readwrite').objectStore('recetas').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  // Ventas Implementation
-  async getAllVentas(): Promise<DBVenta[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['ventas'], 'readonly').objectStore('ventas').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addVenta(v: DBVenta): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['ventas'], 'readwrite').objectStore('ventas').add(v);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async getVentasByCaja(cajaId: string): Promise<DBVenta[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['ventas'], 'readonly').objectStore('ventas').index('cajaId').getAll(cajaId);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllVentas() { const db = await this.ensureInit(); return new Promise<DBVenta[]>((res, rej) => { const req = db.transaction('ventas').objectStore('ventas').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addVenta(v: DBVenta) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('ventas', 'readwrite').objectStore('ventas').add(v); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async getVentasByCaja(cid: string) { const db = await this.ensureInit(); return new Promise<DBVenta[]>((res, rej) => { const req = db.transaction('ventas').objectStore('ventas').index('cajaId').getAll(cid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
 
-  // Caja Implementation
-  async getAllSesionesCaja(): Promise<DBCajaSesion[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['caja'], 'readonly').objectStore('caja').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async getSesionCajaActiva(): Promise<DBCajaSesion | undefined> {
-    const sesiones = await this.getAllSesionesCaja();
-    return sesiones.find(s => s.estado === 'abierta');
-  }
-  async addSesionCaja(s: DBCajaSesion): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['caja'], 'readwrite').objectStore('caja').add(s);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateSesionCaja(s: DBCajaSesion): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['caja'], 'readwrite').objectStore('caja').put(s);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllSesionesCaja() { const db = await this.ensureInit(); return new Promise<DBCajaSesion[]>((res, rej) => { const req = db.transaction('caja').objectStore('caja').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async getSesionCajaActiva() { const all = await this.getAllSesionesCaja(); return all.find(s => s.estado === 'abierta'); }
+  async addSesionCaja(s: DBCajaSesion) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('caja', 'readwrite').objectStore('caja').add(s); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateSesionCaja(s: DBCajaSesion) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('caja', 'readwrite').objectStore('caja').put(s); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  // Ahorros Implementation
-  async getAllAhorros(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['ahorros'], 'readonly').objectStore('ahorros').getAll();
-      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
-    });
-  }
-  async addAhorro(ahorro: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['ahorros'], 'readwrite').objectStore('ahorros').add(ahorro);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateAhorro(ahorro: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['ahorros'], 'readwrite').objectStore('ahorros').put(ahorro);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteAhorro(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['ahorros'], 'readwrite').objectStore('ahorros').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllAhorros() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('ahorros').objectStore('ahorros').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addAhorro(a: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('ahorros', 'readwrite').objectStore('ahorros').add(a); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateAhorro(a: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('ahorros', 'readwrite').objectStore('ahorros').put(a); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteAhorro(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('ahorros', 'readwrite').objectStore('ahorros').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  // Mesas Implementation
-  async getAllMesas(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['mesas'], 'readonly').objectStore('mesas').getAll();
-      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateMesa(mesa: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['mesas'], 'readwrite').objectStore('mesas').put(mesa);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteMesa(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['mesas'], 'readwrite').objectStore('mesas').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllMesas() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('mesas').objectStore('mesas').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async updateMesa(m: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('mesas', 'readwrite').objectStore('mesas').put(m); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteMesa(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('mesas', 'readwrite').objectStore('mesas').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  // Pedidos Activos Implementation
-  async getAllPedidosActivos(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['pedidos_activos'], 'readonly').objectStore('pedidos_activos').getAll();
-      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
-    });
-  }
-  async addPedidoActivo(pedido: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['pedidos_activos'], 'readwrite').objectStore('pedidos_activos').add(pedido);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updatePedidoActivo(pedido: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['pedidos_activos'], 'readwrite').objectStore('pedidos_activos').put(pedido);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deletePedidoActivo(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['pedidos_activos'], 'readwrite').objectStore('pedidos_activos').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllPedidosActivos() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('pedidos_activos').objectStore('pedidos_activos').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addPedidoActivo(p: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('pedidos_activos', 'readwrite').objectStore('pedidos_activos').add(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updatePedidoActivo(p: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('pedidos_activos', 'readwrite').objectStore('pedidos_activos').put(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deletePedidoActivo(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('pedidos_activos', 'readwrite').objectStore('pedidos_activos').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  // Gastos Implementation
-  async getAllGastos(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['gastos'], 'readonly').objectStore('gastos').getAll();
-      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
-    });
-  }
-  async addGasto(g: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['gastos'], 'readwrite').objectStore('gastos').add(g);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateGasto(g: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['gastos'], 'readwrite').objectStore('gastos').put(g);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteGasto(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['gastos'], 'readwrite').objectStore('gastos').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllGastos() { const db = await this.ensureInit(); return new Promise<DBGasto[]>((res, rej) => { const req = db.transaction('gastos').objectStore('gastos').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addGasto(g: DBGasto) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('gastos', 'readwrite').objectStore('gastos').add(g); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateGasto(g: DBGasto) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('gastos', 'readwrite').objectStore('gastos').put(g); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteGasto(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('gastos', 'readwrite').objectStore('gastos').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  // Producción Implementation
-  async getAllOrdenesProduccion(): Promise<DBOrdenProduccion[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['produccion'], 'readonly').objectStore('produccion').getAll();
-      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
-    });
-  }
-  async addOrdenProduccion(orden: DBOrdenProduccion): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['produccion'], 'readwrite').objectStore('produccion').add(orden);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateOrdenProduccion(orden: DBOrdenProduccion): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['produccion'], 'readwrite').objectStore('produccion').put(orden);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteOrdenProduccion(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['produccion'], 'readwrite').objectStore('produccion').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllOrdenesProduccion() { const db = await this.ensureInit(); return new Promise<DBOrdenProduccion[]>((res, rej) => { const req = db.transaction('produccion').objectStore('produccion').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addOrdenProduccion(o: DBOrdenProduccion) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('produccion', 'readwrite').objectStore('produccion').add(o); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateOrdenProduccion(o: DBOrdenProduccion) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('produccion', 'readwrite').objectStore('produccion').put(o); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteOrdenProduccion(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('produccion', 'readwrite').objectStore('produccion').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  // === FACTURAS ESCANEADAS ===
-  async getAllFacturasEscaneadas(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['facturas_escaneadas'], 'readonly').objectStore('facturas_escaneadas').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllFacturasEscaneadas() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('facturas_escaneadas').objectStore('facturas_escaneadas').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addFacturaEscaneada(f: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('facturas_escaneadas', 'readwrite').objectStore('facturas_escaneadas').add(f); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteFacturaEscaneada(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('facturas_escaneadas', 'readwrite').objectStore('facturas_escaneadas').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async getFacturasEscaneadasByProveedor(pid: string) { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('facturas_escaneadas').objectStore('facturas_escaneadas').index('proveedorId').getAll(pid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async getFacturasEscaneadasByFecha(f1: string, f2: string) { const all = await this.getAllFacturasEscaneadas(); return all.filter(f => f.fechaEscaneo >= f1 && f.fechaEscaneo <= f2); }
 
-  async addFacturaEscaneada(factura: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['facturas_escaneadas'], 'readwrite').objectStore('facturas_escaneadas').add(factura);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAllPrestamosCaja() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('prestamos_caja').objectStore('prestamos_caja').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addPrestamoCaja(p: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('prestamos_caja', 'readwrite').objectStore('prestamos_caja').add(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updatePrestamoCaja(p: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('prestamos_caja', 'readwrite').objectStore('prestamos_caja').put(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 
-  async deleteFacturaEscaneada(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['facturas_escaneadas'], 'readwrite').objectStore('facturas_escaneadas').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
+  async clearAll() { const db = await this.ensureInit(); const stores = db.objectStoreNames; const tx = db.transaction([...stores], 'readwrite'); Array.from(stores).forEach(s => tx.objectStore(s).clear()); return new Promise<void>((res) => { tx.oncomplete = () => res(); }); }
 
-  async getFacturasEscaneadasByProveedor(proveedorId: string): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(['facturas_escaneadas'], 'readonly');
-      const store = tx.objectStore('facturas_escaneadas');
-      const index = store.index('proveedorId');
-      const req = index.getAll(proveedorId);
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
+  async getTombstones(tab: string) { const db = await this.ensureInit(); return new Promise<string[]>((res, rej) => { const req = db.transaction('tombstones').objectStore('tombstones').index('table').getAll(tab); req.onsuccess = () => res(req.result.map((r: any) => r.itemId)); req.onerror = () => rej(req.error); }); }
+  async removeTombstone(tab: string, id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').delete(`${tab}:${id}`); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async addTombstone(tab: TombstoneTable, id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').put({ id: `${tab}:${id}`, table: tab, itemId: id, fecha: new Date().toISOString() }); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async saveBackup(id: string, data: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('backups', 'readwrite').objectStore('backups').put({ id, data, fecha: new Date().toISOString() }); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async getBackup(id: string) { const db = await this.ensureInit(); return new Promise<any>((res, rej) => { const req = db.transaction('backups').objectStore('backups').get(id); req.onsuccess = () => res(req.result?.data); req.onerror = () => rej(req.error); }); }
 
-  async getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string): Promise<any[]> {
-    const all = await this.getAllFacturasEscaneadas();
-    return all.filter(f => f.fechaEscaneo >= fechaInicio && f.fechaEscaneo <= fechaFin);
-  }
+  async getAgenteConfig(id: string) { const db = await this.ensureInit(); return new Promise<DBAgenteConfig | undefined>((res, rej) => { const req = db.transaction('agente_configs').objectStore('agente_configs').get(id); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async saveAgenteConfig(c: DBAgenteConfig) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('agente_configs', 'readwrite').objectStore('agente_configs').put(c); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async getAllAgenteConfigs() { const db = await this.ensureInit(); return new Promise<DBAgenteConfig[]>((res, rej) => { const req = db.transaction('agente_configs').objectStore('agente_configs').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
 
-  // Créditos a Clientes
-  async getAllCreditosClientes(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_clientes'], 'readonly').objectStore('creditos_clientes').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addCreditoCliente(c: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_clientes'], 'readwrite').objectStore('creditos_clientes').add(c);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateCreditoCliente(c: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_clientes'], 'readwrite').objectStore('creditos_clientes').put(c);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteCreditoCliente(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_clientes'], 'readwrite').objectStore('creditos_clientes').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-
-  // Créditos Trabajadores
-  async getAllCreditosTrabajadores(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_trabajadores'], 'readonly').objectStore('creditos_trabajadores').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addCreditoTrabajador(c: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_trabajadores'], 'readwrite').objectStore('creditos_trabajadores').add(c);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateCreditoTrabajador(c: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_trabajadores'], 'readwrite').objectStore('creditos_trabajadores').put(c);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteCreditoTrabajador(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['creditos_trabajadores'], 'readwrite').objectStore('creditos_trabajadores').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-
-  // Trabajadores
-  async getAllTrabajadores(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['trabajadores'], 'readonly').objectStore('trabajadores').getAll();
-      req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error);
-    });
-  }
-  async addTrabajador(t: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['trabajadores'], 'readwrite').objectStore('trabajadores').add(t);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updateTrabajador(t: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['trabajadores'], 'readwrite').objectStore('trabajadores').put(t);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async deleteTrabajador(id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['trabajadores'], 'readwrite').objectStore('trabajadores').delete(id);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-
-  // Préstamos entre Cajas
-  async getAllPrestamosCaja(): Promise<any[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['prestamos_caja'], 'readonly').objectStore('prestamos_caja').getAll();
-      req.onsuccess = () => resolve(req.result || []); req.onerror = () => reject(req.error);
-    });
-  }
-  async addPrestamoCaja(p: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['prestamos_caja'], 'readwrite').objectStore('prestamos_caja').add(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async updatePrestamoCaja(p: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['prestamos_caja'], 'readwrite').objectStore('prestamos_caja').put(p);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-
-  async clearAll(): Promise<void> {
-    const db = await this.ensureInit();
-    const stores = ['productos', 'proveedores', 'precios', 'prepedidos', 'alertas', 'configuracion', 'inventario', 'movimientos', 'recepciones', 'historialPrecios', 'recetas', 'ventas', 'caja', 'ahorros', 'mesas', 'pedidos_activos', 'gastos', 'produccion', 'creditos_clientes', 'trabajadores', 'tombstones'];
-    for (const storeName of stores) {
-      await new Promise<void>((resolve, reject) => {
-        const transaction = db.transaction([storeName], 'readwrite');
-        const store = transaction.objectStore(storeName);
-        store.clear();
-        transaction.oncomplete = () => resolve();
-        transaction.onerror = () => reject(transaction.error);
-      });
-    }
-  }
-  
-  // Tombstones Methods (Fase 6)
-  async addTombstone(table: string, id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['tombstones'], 'readwrite').objectStore('tombstones').put({ id: `${table}:${id}`, table, itemId: id, fecha: new Date().toISOString() });
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async getTombstones(table: string): Promise<string[]> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['tombstones'], 'readonly').objectStore('tombstones').index('table').getAll(table);
-      req.onsuccess = () => resolve(req.result.map((t: any) => t.itemId)); req.onerror = () => reject(req.error);
-    });
-  }
-  async removeTombstone(table: string, id: string): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['tombstones'], 'readwrite').objectStore('tombstones').delete(`${table}:${id}`);
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-
-  // Backup Mirror Methods (Protocol Sentinel)
-  async saveBackup(id: string, data: any): Promise<void> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['backups'], 'readwrite').objectStore('backups').put({ id, data, timestamp: Date.now() });
-      req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
-    });
-  }
-  async getBackup(id: string): Promise<any> {
-    const db = await this.ensureInit();
-    return new Promise((resolve, reject) => {
-      const req = db.transaction(['backups'], 'readonly').objectStore('backups').get(id);
-      req.onsuccess = () => resolve(req.result ? req.result.data : null); req.onerror = () => reject(req.error);
-    });
-  }
+  async getAgenteMisiones(aid?: AgenteId) { const db = await this.ensureInit(); return new Promise<DBMisionAgent[]>((res, rej) => { const store = db.transaction('agente_misiones').objectStore('agente_misiones'); const req = aid ? store.index('agenteId').getAll(aid) : store.getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async saveAgenteMision(m: DBMisionAgent) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('agente_misiones', 'readwrite').objectStore('agente_misiones').put(m); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteAgenteMision(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('agente_misiones', 'readwrite').objectStore('agente_misiones').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async getAgenteHallazgos(lim: number = 50) { const db = await this.ensureInit(); return new Promise<DBHallazgoAgente[]>((res, rej) => { const req = db.transaction('agente_hallazgos').objectStore('agente_hallazgos').getAll(); req.onsuccess = () => { const sorted = (req.result as DBHallazgoAgente[]).sort((a,b) => b.fecha.localeCompare(a.fecha)); res(sorted.slice(0, lim)); }; req.onerror = () => rej(req.error); }); }
+  async saveAgenteHallazgo(h: DBHallazgoAgente) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('agente_hallazgos', 'readwrite').objectStore('agente_hallazgos').put(h); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async marcarHallazgoLeido(id: string) { const db = await this.ensureInit(); const store = db.transaction('agente_hallazgos', 'readwrite').objectStore('agente_hallazgos'); const h = await new Promise<DBHallazgoAgente>((res, rej) => { const r = store.get(id); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); if (h) await new Promise<void>((res, rej) => { const r = store.put({ ...h, revisado: true }); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
 }
 
-// True Hybrid Database Adapter
-// Priority: Local (speed) + Async Background Sync to Cloud
 class HybridDatabase implements IDatabase {
   private local: IndexedDBDatabase;
   private cloud: SupabaseDatabase;
@@ -1224,548 +588,131 @@ class HybridDatabase implements IDatabase {
   constructor() {
     this.local = new IndexedDBDatabase();
     this.cloud = new SupabaseDatabase();
-
-    // Detección proactiva de conexión
-    window.addEventListener('online', () => {
-      this.isOnline = true;
-      this.handleOnlineStatusChange(true);
-    });
-    window.addEventListener('offline', () => {
-      this.isOnline = false;
-      this.handleOnlineStatusChange(false);
-    });
-
-    // Verificación inicial de internet real
-    this.checkInternetConnection();
+    window.addEventListener('online', () => { this.isOnline = true; this.syncLocalToCloud(); });
+    window.addEventListener('offline', () => { this.isOnline = false; });
   }
 
-  private async checkInternetConnection() {
-    try {
-      await fetch('https://www.google.com/favicon.ico', { mode: 'no-cors', cache: 'no-store' });
-      this.isOnline = true;
-      this.handleOnlineStatusChange(true);
-    } catch (e) {
-      this.isOnline = false;
-      this.handleOnlineStatusChange(false);
-    }
-  }
+  async init() { await this.local.init(); if (this.isOnline) await this.syncCloudToLocal(); }
 
-  private handleOnlineStatusChange(online: boolean) {
-    if (online) {
-      console.log('🌐 Internet detectado - Iniciando sincronización diferida...');
-      setTimeout(() => this.syncLocalToCloud(), 2000);
-    } else {
-      console.log('🔌 Trabajando en modo Offline...');
-    }
-  }
+  // Sync Logic
+  async syncCloudToLocal() { try { const cloudProds = await this.cloud.getAllProductos(); for (const p of cloudProds) await this.local.updateProducto(p); } catch(e) { console.warn("Sync failed", e); } }
+  async syncLocalToCloud() { if (!this.isOnline) return; try { const localProds = await this.local.getAllProductos(); for (const p of localProds) await this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p)); } catch(e) { console.warn("Sync failed", e); } }
 
-
-  async init(): Promise<void> {
-    await this.local.init();
-    this.cloud.init();
-    if (this.isOnline) {
-      this.syncCloudToLocal().catch(console.warn);
-    }
-  }
-
-  async getTombstones(table: string): Promise<string[]> {
-    return this.local.getTombstones(table);
-  }
-
-  async addTombstone(table: 'proveedores' | 'productos' | 'precios', id: string) {
-    await this.local.addTombstone(table, id);
-  }
-
-  async removeTombstone(table: string, id: string) {
-    await this.local.removeTombstone(table as any, id);
-  }
-
-  public async syncCloudToLocal() {
-    try {
-      console.log('🔄 [Nexus-Volt] Iniciando Reconciliación Inteligente...');
-      const lastSync = Number(localStorage.getItem('nexus_last_sync_ts') || 0);
-      const now = Date.now();
-
-      const [localProds, localProvs, localPrcs] = await Promise.all([
-        this.local.getAllProductos(),
-        this.local.getAllProveedores(),
-        this.local.getAllPrecios(),
-      ]);
-
-      const localProdsMap = new Map(localProds.map(p => [p.id, p]));
-      const localProvsMap = new Map(localProvs.map(p => [p.id, p]));
-      const localPrcsMap = new Map(localPrcs.map(p => [p.id, p]));
-
-      const processTable = async (name: string, cloudData: any[], localMap: Map<string, any>, tombstoneSet: Set<string>, saveFn: (d: any) => Promise<any>, deleteCloudFn?: (id: string) => Promise<any>) => {
-        if (!cloudData) return;
-        for (const item of cloudData) {
-          // 1. Si tiene lápida local, borrar de la nube y NO agregar
-          if (tombstoneSet.has(item.id)) {
-            if (deleteCloudFn) {
-              await deleteCloudFn(item.id).catch(() => { });
-            }
-            // NO eliminar tombstone — mantenerlo como protección permanente
-            continue;
-          }
-
-          const localItem = localMap.get(item.id);
-          const cloudDate = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
-
-          if (!localItem) {
-            // No existe local: agregar desde nube
-            await saveFn(item).catch(() => { });
-          } else {
-            // Existe local: comparar fechas — LOCAL GANA si fue modificado recientemente (60s margen)
-            const localDate = new Date(localItem.fechaActualizacion || localItem.createdAt || 0).getTime();
-            const MARGEN_SEGURIDAD = 60_000; // 60 segundos de protección para cambios locales recientes
-            if (cloudDate > localDate + MARGEN_SEGURIDAD) {
-              console.log(`📡 [Sync] Actualizando ${name} ID: ${item.id} (Nube es más reciente por >${MARGEN_SEGURIDAD/1000}s)`);
-              await saveFn(item).catch(() => { });
-            }
-          }
-        }
-      };
-
-      const [cloudProds, cloudProvs, cloudPrcs, tsProvsArr, tsProdsArr, tsPrcsArr] = await Promise.all([
-        this.cloud.getAllProductos(),
-        this.cloud.getAllProveedores(),
-        this.cloud.getAllPrecios(),
-        this.getTombstones('proveedores'),
-        this.getTombstones('productos'),
-        this.getTombstones('precios')
-      ]);
-
-      const [tsProvs, tsProds, tsPrcs] = [new Set(tsProvsArr), new Set(tsProdsArr), new Set(tsPrcsArr)];
-
-      await Promise.all([
-        processTable('productos', cloudProds, localProdsMap, tsProds, (d) => this.local.updateProducto(d), (id) => this.cloud.deleteProducto(id)),
-        processTable('proveedores', cloudProvs, localProvsMap, tsProvs, (d) => this.local.updateProveedor(d), (id) => this.cloud.deleteProveedor(id)),
-        processTable('precios', cloudPrcs, localPrcsMap, tsPrcs, (d) => this.local.updatePrecio(d), (id) => this.cloud.deletePrecio(id))
-      ]);
-
-      // Otras tablas solo si hay cambios desde el último sync (optimización Fase 6)
-      const otherTables = [
-        { name: 'inventario', fn: () => this.cloud.getAllInventario(), save: (d: any) => this.local.updateInventarioItem(d) },
-        { name: 'alertas', fn: () => this.cloud.getAllAlertas(), save: (d: any) => this.local.updateAlerta(d) },
-        { name: 'prepedidos', fn: () => this.cloud.getAllPrePedidos(), save: (d: any) => this.local.updatePrePedido(d) },
-        { name: 'recepciones', fn: () => this.cloud.getAllRecepciones(), save: (d: any) => this.local.updateRecepcion(d) },
-        { name: 'recetas', fn: () => this.cloud.getAllRecetas(), save: (d: any) => this.local.updateReceta(d) },
-        { name: 'trabajadores', fn: () => this.cloud.getAllTrabajadores(), save: (d: any) => this.local.updateTrabajador(d) },
-        { name: 'creditos_trabajadores', fn: () => this.cloud.getAllCreditosTrabajadores(), save: (d: any) => this.local.updateCreditoTrabajador(d) },
-      ];
-
-      for (const table of otherTables) {
-        try {
-          const data = await table.fn();
-          if (Array.isArray(data)) {
-            for (const item of data) {
-               const itemDate = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
-               if (itemDate > lastSync) await table.save(item).catch(() => { });
-            }
-          }
-        } catch (err) {
-          console.warn(`⚠️ Error en tabla ${table.name}:`, err);
-        }
-      }
-
-      localStorage.setItem('nexus_last_sync_ts', now.toString());
-      console.log('✅ [Nexus-Volt] Reconciliación Nube -> Local completada.');
-    } catch (e) {
-      console.warn('⚠️ Sync cloud to local failed:', e);
-    }
-  }
-
-  public async syncLocalToCloud() {
-    if (!this.isOnline) return;
-    console.log('🚀 [Nexus-Volt] Iniciando sincronización robusta diferencial...');
-    const lastSync = Number(localStorage.getItem('nexus_last_sync_ts_out') || 0);
-    const now = Date.now();
-    let syncCount = 0;
-
-    try {
-      const logError = (table: string, id: string, err: any) => 
-        console.warn(`⚠️ [Sync] Error en ${table} (ID: ${id}):`, err.message || err);
-
-      const filterRecent = (list: any[]) => list.filter(item => {
-        const itemTs = new Date(item.fechaActualizacion || item.createdAt || 0).getTime();
-        return itemTs > lastSync;
-      });
-
-      const rawProds = await this.local.getAllProductos();
-      const productos = filterRecent(rawProds);
-      for (const p of productos) {
-        syncCount++;
-        await this.cloud.updateProducto(p).catch(() => {
-          return this.cloud.addProducto(p).catch(e => logError('productos-add', p.id, e));
-        });
-      }
-
-      const rawProvs = await this.local.getAllProveedores();
-      const proveedores = filterRecent(rawProvs);
-      for (const p of proveedores) {
-        syncCount++;
-        await this.cloud.updateProveedor(p).catch(() => {
-          return this.cloud.addProveedor(p).catch(e => logError('proveedores-add', p.id, e));
-        });
-      }
-
-      const rawPrcs = await this.local.getAllPrecios();
-      const precios = filterRecent(rawPrcs);
-      for (const p of precios) {
-        syncCount++;
-        await this.cloud.updatePrecio(p).catch(() => {
-          return this.cloud.addPrecio(p).catch(e => logError('precios-add', p.id, e));
-        });
-      }
-
-      const rawInv = await this.local.getAllInventario();
-      const inventario = filterRecent(rawInv);
-      for (const i of inventario) {
-        syncCount++;
-        await this.cloud.updateInventarioItem(i).catch(e => logError('inventario', i.id, e));
-      }
-
-      const config = await this.local.getConfiguracion();
-      if (config) await this.cloud.saveConfiguracion(config).catch(e => logError('config', 'main', e));
-
-      // Otras tablas batch
-      const [alertas, movimientos, prepedidos, recepciones, recetas, trabajadores] = await Promise.all([
-        this.local.getAllAlertas(),
-        this.local.getAllMovimientos(),
-        this.local.getAllPrePedidos(),
-        this.local.getAllRecepciones(),
-        this.local.getAllRecetas(),
-        this.local.getAllTrabajadores()
-      ]);
-
-      for (const a of filterRecent(alertas)) { syncCount++; await this.cloud.updateAlerta(a).catch(() => {}); }
-      for (const m of filterRecent(movimientos)) { syncCount++; await this.cloud.addMovimiento(m).catch(() => {}); }
-      for (const p of filterRecent(prepedidos)) { syncCount++; await this.cloud.updatePrePedido(p).catch(() => {}); }
-      for (const r of filterRecent(recepciones)) { syncCount++; await this.cloud.updateRecepcion(r).catch(() => {}); }
-      for (const re of filterRecent(recetas)) { syncCount++; await this.cloud.updateReceta(re).catch(() => {}); }
-      for (const t of filterRecent(trabajadores)) { syncCount++; await this.cloud.updateTrabajador(t).catch(() => {}); }
-
-      localStorage.setItem('nexus_last_sync_ts_out', now.toString());
-      if (syncCount > 0) console.log(`✅ [Nexus-Volt] Sincronización Local -> Nube Exitosa. Registros procesados: ${syncCount}`);
-    } catch (e) {
-      console.error('❌ Error crítico en orquestación de sincronización:', e);
-    }
-  }
-
+  // Delegates
   async getAllProductos() { return this.local.getAllProductos(); }
-  async addProducto(p: DBProducto) {
-    const fresh = { ...p, fechaActualizacion: new Date().toISOString() };
-    await this.local.addProducto(fresh);
-    if (this.isOnline) {
-      await this.cloud.addProducto(fresh).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
-  async updateProducto(p: DBProducto) {
-    const updated = { ...p, fechaActualizacion: new Date().toISOString() };
-    await this.local.updateProducto(updated);
-    if (this.isOnline) {
-      await this.cloud.updateProducto(updated).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
-  async deleteProducto(id: string) {
-    await this.local.deleteProducto(id);
-    await this.addTombstone('productos', id);
-    if (this.isOnline) {
-      await this.cloud.deleteProducto(id).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
+  async addProducto(p: DBProducto) { await this.local.addProducto(p); if (this.isOnline) this.cloud.addProducto(p); }
+  async updateProducto(p: DBProducto) { await this.local.updateProducto(p); if (this.isOnline) this.cloud.updateProducto(p); }
+  async deleteProducto(id: string) { await this.local.deleteProducto(id); await this.addTombstone('productos', id); if (this.isOnline) this.cloud.deleteProducto(id); }
 
   async getAllProveedores() { return this.local.getAllProveedores(); }
-  async addProveedor(p: DBProveedor) {
-    const fresh = { ...p, fechaActualizacion: new Date().toISOString() };
-    await this.local.addProveedor(fresh);
-    if (this.isOnline) {
-      await this.cloud.addProveedor(fresh).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
-  async updateProveedor(p: DBProveedor) {
-    const updated = { ...p, fechaActualizacion: new Date().toISOString() };
-    await this.local.updateProveedor(updated);
-    if (this.isOnline) {
-      await this.cloud.updateProveedor(updated).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
-  async deleteProveedor(id: string) {
-    await this.local.deleteProveedor(id);
-    await this.addTombstone('proveedores', id);
-    if (this.isOnline) {
-      try {
-        await this.cloud.deleteProveedor(id);
-        this.syncLocalToCloud(); // Live Sync
-        // Mantenemos la lápida local para evitar re-adición accidental
-      } catch (e) {
-        console.error('⚠️ Error eliminando proveedor de la nube:', e);
-      }
-    }
-  }
+  async addProveedor(p: DBProveedor) { await this.local.addProveedor(p); if (this.isOnline) this.cloud.addProveedor(p); }
+  async updateProveedor(p: DBProveedor) { await this.local.updateProveedor(p); if (this.isOnline) this.cloud.updateProveedor(p); }
+  async deleteProveedor(id: string) { await this.local.deleteProveedor(id); await this.addTombstone('proveedores', id); if (this.isOnline) this.cloud.deleteProveedor(id); }
 
   async getAllPrecios() { return this.local.getAllPrecios(); }
   async getPreciosByProducto(pid: string) { return this.local.getPreciosByProducto(pid); }
   async getPreciosByProveedor(pid: string) { return this.local.getPreciosByProveedor(pid); }
   async getPrecioByProductoProveedor(pid: string, provId: string) { return this.local.getPrecioByProductoProveedor(pid, provId); }
-  async addPrecio(p: DBPrecio) {
-    const fresh = { ...p, fechaActualizacion: new Date().toISOString() };
-    await this.local.addPrecio(fresh);
-    if (this.isOnline) {
-      await this.cloud.addPrecio(fresh).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
-  async updatePrecio(p: DBPrecio) {
-    const updated = { ...p, fechaActualizacion: new Date().toISOString() };
-    await this.local.updatePrecio(updated);
-    if (this.isOnline) {
-      await this.cloud.updatePrecio(updated).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
-  async deletePrecio(id: string) {
-    await this.local.deletePrecio(id);
-    await this.addTombstone('precios', id);
-    if (this.isOnline) {
-      await this.cloud.deletePrecio(id).catch(console.error);
-      this.syncLocalToCloud(); // Live Sync
-    }
-  }
+  async addPrecio(p: DBPrecio) { await this.local.addPrecio(p); if (this.isOnline) this.cloud.addPrecio(p); }
+  async updatePrecio(p: DBPrecio) { await this.local.updatePrecio(p); if (this.isOnline) this.cloud.updatePrecio(p); }
+  async deletePrecio(id: string) { await this.local.deletePrecio(id); await this.addTombstone('precios', id); if (this.isOnline) this.cloud.deletePrecio(id); }
 
   async getAllPrePedidos() { return this.local.getAllPrePedidos(); }
-  async addPrePedido(p: DBPrePedido) {
-    await this.local.addPrePedido(p);
-    if (this.isOnline) await this.cloud.addPrePedido(p).catch(console.error);
-  }
-  async updatePrePedido(p: DBPrePedido) {
-    await this.local.updatePrePedido(p);
-    if (this.isOnline) await this.cloud.updatePrePedido(p).catch(console.error);
-  }
-  async deletePrePedido(id: string) {
-    await this.local.deletePrePedido(id);
-    if (this.isOnline) await this.cloud.deletePrePedido(id).catch(console.error);
-  }
+  async addPrePedido(p: DBPrePedido) { await this.local.addPrePedido(p); if (this.isOnline) this.cloud.addPrePedido(p); }
+  async updatePrePedido(p: DBPrePedido) { await this.local.updatePrePedido(p); if (this.isOnline) this.cloud.updatePrePedido(p); }
+  async deletePrePedido(id: string) { await this.local.deletePrePedido(id); if (this.isOnline) this.cloud.deletePrePedido(id); }
 
   async getAllAlertas() { return this.local.getAllAlertas(); }
-  async addAlerta(a: DBAlerta) {
-    await this.local.addAlerta(a);
-    if (this.isOnline) await this.cloud.addAlerta(a).catch(console.error);
-  }
-  async updateAlerta(a: DBAlerta) {
-    await this.local.updateAlerta(a);
-    if (this.isOnline) await this.cloud.updateAlerta(a).catch(console.error);
-  }
-  async deleteAlerta(id: string) {
-    await this.local.deleteAlerta(id);
-    if (this.isOnline) await this.cloud.deleteAlerta(id).catch(console.error);
-  }
-  async clearAllAlertas() {
-    await this.local.clearAllAlertas();
-    if (this.isOnline) await this.cloud.clearAllAlertas().catch(console.error);
-  }
+  async addAlerta(a: DBAlerta) { await this.local.addAlerta(a); if (this.isOnline) this.cloud.addAlerta(a); }
+  async updateAlerta(a: DBAlerta) { await this.local.updateAlerta(a); if (this.isOnline) this.cloud.updateAlerta(a); }
+  async deleteAlerta(id: string) { await this.local.deleteAlerta(id); if (this.isOnline) this.cloud.deleteAlerta(id); }
+  async clearAllAlertas() { await this.local.clearAllAlertas(); if (this.isOnline) this.cloud.clearAllAlertas(); }
 
   async getConfiguracion() { return this.local.getConfiguracion(); }
-  async saveConfiguracion(c: DBConfiguracion) {
-    await this.local.saveConfiguracion(c);
-    if (this.isOnline) await this.cloud.saveConfiguracion(c).catch(console.error);
-  }
+  async saveConfiguracion(c: DBConfiguracion) { await this.local.saveConfiguracion(c); if (this.isOnline) this.cloud.saveConfiguracion(c); }
 
   async getAllInventario() { return this.local.getAllInventario(); }
   async getInventarioItemByProducto(pid: string) { return this.local.getInventarioItemByProducto(pid); }
-  async updateInventarioItem(i: DBInventarioItem) {
-    await this.local.updateInventarioItem(i);
-    if (this.isOnline) await this.cloud.updateInventarioItem(i).catch(console.error);
-  }
+  async updateInventarioItem(i: DBInventarioItem) { await this.local.updateInventarioItem(i); if (this.isOnline) this.cloud.updateInventarioItem(i); }
 
   async getAllMovimientos() { return this.local.getAllMovimientos(); }
-  async addMovimiento(m: DBMovimientoInventario) {
-    await this.local.addMovimiento(m);
-    if (this.isOnline) await this.cloud.addMovimiento(m).catch(console.error);
-  }
+  async addMovimiento(m: DBMovimientoInventario) { await this.local.addMovimiento(m); if (this.isOnline) this.cloud.addMovimiento(m); }
 
   async getAllRecepciones() { return this.local.getAllRecepciones(); }
-  async addRecepcion(r: DBRecepcion) {
-    await this.local.addRecepcion(r);
-    if (this.isOnline) await this.cloud.addRecepcion(r).catch(console.error);
-  }
-  async updateRecepcion(r: DBRecepcion) {
-    await this.local.updateRecepcion(r);
-    if (this.isOnline) await this.cloud.updateRecepcion(r).catch(console.error);
-  }
+  async addRecepcion(r: DBRecepcion) { await this.local.addRecepcion(r); if (this.isOnline) this.cloud.addRecepcion(r); }
+  async updateRecepcion(r: DBRecepcion) { await this.local.updateRecepcion(r); if (this.isOnline) this.cloud.updateRecepcion(r); }
 
   async getAllHistorial() { return this.local.getAllHistorial(); }
-  async addHistorial(h: DBHistorialPrecio) {
-    await this.local.addHistorial(h);
-    if (this.isOnline) await this.cloud.addHistorial(h).catch(() => { });
-  }
+  async addHistorial(h: DBHistorialPrecio) { await this.local.addHistorial(h); if (this.isOnline) this.cloud.addHistorial(h); }
   async getHistorialByProducto(pid: string) { return this.local.getHistorialByProducto(pid); }
 
-  // Recetas Hybrid
   async getAllRecetas() { return this.local.getAllRecetas(); }
-  async getRecetaByProducto(productoId: string) { return this.local.getRecetaByProducto(productoId); }
-  async addReceta(r: DBReceta) {
-    await this.local.addReceta(r);
-    if (this.isOnline) await this.cloud.addReceta(r).catch(console.error);
-  }
-  async updateReceta(r: DBReceta) {
-    await this.local.updateReceta(r);
-    if (this.isOnline) await this.cloud.updateReceta(r).catch(console.error);
-  }
-  async deleteReceta(id: string) {
-    await this.local.deleteReceta(id);
-    if (this.isOnline) await this.cloud.deleteReceta(id).catch(console.error);
-  }
+  async getRecetaByProducto(pid: string) { return this.local.getRecetaByProducto(pid); }
+  async addReceta(r: DBReceta) { await this.local.addReceta(r); if (this.isOnline) this.cloud.addReceta(r); }
+  async updateReceta(r: DBReceta) { await this.local.updateReceta(r); if (this.isOnline) this.cloud.updateReceta(r); }
+  async deleteReceta(id: string) { await this.local.deleteReceta(id); if (this.isOnline) this.cloud.deleteReceta(id); }
 
-  // Ventas Hybrid
   async getAllVentas() { return this.local.getAllVentas(); }
-  async addVenta(v: DBVenta) {
-    await this.local.addVenta(v);
-    if (this.isOnline) await this.cloud.addVenta(v).catch(console.error);
-  }
-  async getVentasByCaja(cajaId: string) { return this.local.getVentasByCaja(cajaId); }
+  async addVenta(v: DBVenta) { await this.local.addVenta(v); if (this.isOnline) this.cloud.addVenta(v); }
+  async getVentasByCaja(cid: string) { return this.local.getVentasByCaja(cid); }
 
-  // Caja Hybrid
   async getAllSesionesCaja() { return this.local.getAllSesionesCaja(); }
   async getSesionCajaActiva() { return this.local.getSesionCajaActiva(); }
-  async addSesionCaja(s: DBCajaSesion) {
-    await this.local.addSesionCaja(s);
-    if (this.isOnline) await this.cloud.addSesionCaja(s).catch(console.error);
-  }
-  async updateSesionCaja(s: DBCajaSesion) {
-    await this.local.updateSesionCaja(s);
-    if (this.isOnline) await this.cloud.updateSesionCaja(s).catch(console.error);
-  }
+  async addSesionCaja(s: DBCajaSesion) { await this.local.addSesionCaja(s); if (this.isOnline) this.cloud.addSesionCaja(s); }
+  async updateSesionCaja(s: DBCajaSesion) { await this.local.updateSesionCaja(s); if (this.isOnline) this.cloud.updateSesionCaja(s); }
 
-  // Ahorros Hybrid
   async getAllAhorros() { return this.local.getAllAhorros(); }
-  async addAhorro(a: any) {
-    await this.local.addAhorro(a);
-    if (this.isOnline) await this.cloud.addAhorro(a).catch(console.error);
-  }
-  async updateAhorro(a: any) {
-    await this.local.updateAhorro(a);
-    if (this.isOnline) await this.cloud.updateAhorro(a).catch(console.error);
-  }
-  async deleteAhorro(id: string) {
-    await this.local.deleteAhorro(id);
-    if (this.isOnline) await this.cloud.deleteAhorro(id).catch(console.error);
-  }
+  async addAhorro(a: any) { await this.local.addAhorro(a); }
+  async updateAhorro(a: any) { await this.local.updateAhorro(a); }
+  async deleteAhorro(id: string) { await this.local.deleteAhorro(id); }
 
-  // Mesas Hybrid
   async getAllMesas() { return this.local.getAllMesas(); }
-  async updateMesa(m: any) {
-    await this.local.updateMesa(m);
-    if (this.isOnline) await (this.cloud as any).updateMesa?.(m).catch(() => { });
-  }
-  async deleteMesa(id: string) {
-    await this.local.deleteMesa(id);
-    if (this.isOnline) await (this.cloud as any).deleteMesa?.(id).catch(console.error);
-  }
+  async updateMesa(m: any) { await this.local.updateMesa(m); }
+  async deleteMesa(id: string) { await this.local.deleteMesa(id); }
 
-  // Pedidos Activos Hybrid
   async getAllPedidosActivos() { return this.local.getAllPedidosActivos(); }
-  async addPedidoActivo(p: any) {
-    await this.local.addPedidoActivo(p);
-    if (this.isOnline) await (this.cloud as any).addPedidoActivo?.(p).catch(() => { });
-  }
-  async updatePedidoActivo(p: any) {
-    await this.local.updatePedidoActivo(p);
-    if (this.isOnline) await (this.cloud as any).updatePedidoActivo?.(p).catch(() => { });
-  }
-  async deletePedidoActivo(id: string) {
-    await this.local.deletePedidoActivo(id);
-    if (this.isOnline) await this.cloud.deletePedidoActivo(id).catch(console.error);
-  }
+  async addPedidoActivo(p: any) { await this.local.addPedidoActivo(p); }
+  async updatePedidoActivo(p: any) { await this.local.updatePedidoActivo(p); }
+  async deletePedidoActivo(id: string) { await this.local.deletePedidoActivo(id); }
 
-  // Gastos Hybrid
   async getAllGastos() { return this.local.getAllGastos(); }
-  async addGasto(g: DBGasto) {
-    await this.local.addGasto(g);
-    if (this.isOnline) await this.cloud.addGasto(g).catch(console.error);
-  }
-  async updateGasto(g: DBGasto) {
-    await this.local.updateGasto(g);
-    if (this.isOnline) await this.cloud.updateGasto(g).catch(console.error);
-  }
-  async deleteGasto(id: string) {
-    await this.local.deleteGasto(id);
-    if (this.isOnline) await this.cloud.deleteGasto(id).catch(console.error);
-  }
+  async addGasto(g: DBGasto) { await this.local.addGasto(g); if (this.isOnline) this.cloud.addGasto(g); }
+  async updateGasto(g: DBGasto) { await this.local.updateGasto(g); if (this.isOnline) this.cloud.updateGasto(g); }
+  async deleteGasto(id: string) { await this.local.deleteGasto(id); if (this.isOnline) this.cloud.deleteGasto(id); }
 
-  // Producción Hybrid
   async getAllOrdenesProduccion() { return this.local.getAllOrdenesProduccion(); }
-  async addOrdenProduccion(o: DBOrdenProduccion) {
-    await this.local.addOrdenProduccion(o);
-    if (this.isOnline) await (this.cloud as any).addOrdenProduccion?.(o).catch(() => { });
-  }
-  async updateOrdenProduccion(o: DBOrdenProduccion) {
-    await this.local.updateOrdenProduccion(o);
-    if (this.isOnline) await (this.cloud as any).updateOrdenProduccion?.(o).catch(() => { });
-  }
-  async deleteOrdenProduccion(id: string) {
-    await this.local.deleteOrdenProduccion(id);
-    if (this.isOnline) await (this.cloud as any).deleteOrdenProduccion?.(id).catch(() => { });
-  }
+  async addOrdenProduccion(o: DBOrdenProduccion) { await this.local.addOrdenProduccion(o); }
+  async updateOrdenProduccion(o: DBOrdenProduccion) { await this.local.updateOrdenProduccion(o); }
+  async deleteOrdenProduccion(id: string) { await this.local.deleteOrdenProduccion(id); }
 
-  // Facturas Escaneadas Hybrid (Solo local - las imágenes son pesadas para sync)
   async getAllFacturasEscaneadas() { return this.local.getAllFacturasEscaneadas(); }
   async addFacturaEscaneada(f: any) { await this.local.addFacturaEscaneada(f); }
   async deleteFacturaEscaneada(id: string) { await this.local.deleteFacturaEscaneada(id); }
-  async getFacturasEscaneadasByProveedor(proveedorId: string) { return this.local.getFacturasEscaneadasByProveedor(proveedorId); }
-  async getFacturasEscaneadasByFecha(fechaInicio: string, fechaFin: string) { return this.local.getFacturasEscaneadasByFecha(fechaInicio, fechaFin); }
+  async getFacturasEscaneadasByProveedor(pid: string) { return this.local.getFacturasEscaneadasByProveedor(pid); }
+  async getFacturasEscaneadasByFecha(f1: string, f2: string) { return this.local.getFacturasEscaneadasByFecha(f1, f2); }
 
-  // Créditos a Clientes Hybrid
-  async getAllCreditosClientes() { return this.local.getAllCreditosClientes(); }
-  async addCreditoCliente(c: any) { await this.local.addCreditoCliente(c); }
-  async updateCreditoCliente(c: any) { await this.local.updateCreditoCliente(c); }
-  async deleteCreditoCliente(id: string) { await this.local.deleteCreditoCliente(id); }
-
-  // Créditos Trabajadores Hybrid
-  async getAllCreditosTrabajadores() { return this.local.getAllCreditosTrabajadores(); }
-  async addCreditoTrabajador(c: any) {
-    await this.local.addCreditoTrabajador(c);
-    if (this.isOnline) await this.cloud.addCreditoTrabajador(c).catch(console.error);
-  }
-  async updateCreditoTrabajador(c: any) {
-    await this.local.updateCreditoTrabajador(c);
-    if (this.isOnline) await this.cloud.updateCreditoTrabajador(c).catch(console.error);
-  }
-  async deleteCreditoTrabajador(id: string) {
-    await this.local.deleteCreditoTrabajador(id);
-    if (this.isOnline) await this.cloud.deleteCreditoTrabajador(id).catch(console.error);
-  }
-
-  // Trabajadores Hybrid
-  async getAllTrabajadores() { return this.local.getAllTrabajadores(); }
-  async addTrabajador(t: any) {
-    await this.local.addTrabajador(t);
-    if (this.isOnline) await this.cloud.addTrabajador(t).catch(console.error);
-  }
-  async updateTrabajador(t: any) {
-    await this.local.updateTrabajador(t);
-    if (this.isOnline) await this.cloud.updateTrabajador(t).catch(console.error);
-  }
-  async deleteTrabajador(id: string) {
-    await this.local.deleteTrabajador(id);
-    if (this.isOnline) await this.cloud.deleteTrabajador(id).catch(console.error);
-  }
-
-  // Préstamos entre Cajas Hybrid (solo local — datos sensibles del admin)
   async getAllPrestamosCaja() { return this.local.getAllPrestamosCaja(); }
   async addPrestamoCaja(p: any) { await this.local.addPrestamoCaja(p); }
   async updatePrestamoCaja(p: any) { await this.local.updatePrestamoCaja(p); }
 
   async clearAll() { await this.local.clearAll(); }
 
-  // Sentinel & Integrity Hybrid Methods
+  async getTombstones(tab: string) { return this.local.getTombstones(tab); }
+  async removeTombstone(tab: string, id: string) { await this.local.removeTombstone(tab, id); }
+  async addTombstone(tab: TombstoneTable, id: string) { await this.local.addTombstone(tab, id); }
   async saveBackup(id: string, data: any) { await this.local.saveBackup(id, data); }
   async getBackup(id: string) { return this.local.getBackup(id); }
+
+  async getAgenteConfig(id: string) { return this.local.getAgenteConfig(id); }
+  async saveAgenteConfig(c: DBAgenteConfig) { await this.local.saveAgenteConfig(c); if (this.isOnline) this.cloud.saveAgenteConfig(c); }
+  async getAllAgenteConfigs() { return this.local.getAllAgenteConfigs(); }
+
+  async getAgenteMisiones(aid?: AgenteId) { return this.local.getAgenteMisiones(aid); }
+  async saveAgenteMision(m: DBMisionAgent) { await this.local.saveAgenteMision(m); }
+  async deleteAgenteMision(id: string) { await this.local.deleteAgenteMision(id); }
+  async getAgenteHallazgos(lim?: number) { return this.local.getAgenteHallazgos(lim); }
+  async saveAgenteHallazgo(h: DBHallazgoAgente) { await this.local.saveAgenteHallazgo(h); }
+  async marcarHallazgoLeido(id: string) { await this.local.marcarHallazgoLeido(id); }
 }
 
 export const db = new HybridDatabase();

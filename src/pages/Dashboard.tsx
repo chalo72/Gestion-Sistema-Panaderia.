@@ -15,6 +15,8 @@ import {
   Star,
   BarChart3,
   Settings,
+  Sparkles,
+  ShieldCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,6 +24,7 @@ import { GlassCard } from '@/components/dashboard/GlassCard';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { cn } from '@/lib/utils';
 import type { Producto, AlertaPrecio, PrePedido } from '@/types';
+import { FindingsFeed } from '@/components/agentes/FindingsFeed';
 
 interface DashboardProps {
   estadisticas: {
@@ -165,7 +168,7 @@ export default function Dashboard(props: DashboardProps) {
         onViewRecepciones={onViewRecepciones}
       />
 
-      {/* ═══ KPI Cards Grid (Estilo Stitch: fondo blanco, ícono con color pastel, texto legible) ═══ */}
+      {/* ═══ KPI Cards Grid ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {kpiCards.map((kpi, index) => {
           const Icon = kpi.icon;
@@ -179,7 +182,7 @@ export default function Dashboard(props: DashboardProps) {
                 (kpi as any).hasPing && "border-red-200 dark:border-red-900/30"
               )}
             >
-              {/* Indicador ping para alertas críticas (ej: stock bajo) */}
+              {/* Indicador ping para alertas críticas */}
               {(kpi as any).hasPing && (
                 <div className="absolute top-3 right-3">
                   <span className="flex h-3 w-3">
@@ -206,32 +209,42 @@ export default function Dashboard(props: DashboardProps) {
         })}
       </div>
 
-      {/* ═══ Sección: Alertas & Pre-Pedidos (Estilo Stitch: tarjetas blancas, tabla limpia) ═══ */}
+      {/* ═══ Sección Mixta: Inteligencia CLAW & Alertas ═══ */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
 
-        {/* Panel principal: Alertas */}
+        {/* Panel Izquierdo: Inteligencia Artificial (3 cols) */}
         <div className="xl:col-span-3 space-y-6">
-          {/* Sección Performance rápida */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Panel: Performance */}
-            <GlassCard>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 shadow-lg shadow-indigo-500/5">
+                <Sparkles className="w-6 h-6 text-indigo-600 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Inteligencia de Agentes</h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter">Patrullaje autónomo de PICO-CLAW en tiempo real</p>
+              </div>
+            </div>
+            <Badge variant="outline" className="border-indigo-500/30 text-indigo-600 bg-indigo-50/50 hidden sm:flex font-black">NEXUS SOVEREIGN ACTIVE</Badge>
+          </div>
+
+          <FindingsFeed />
+
+          {/* Otros Paneles debajo del Feed si es necesario */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
+             {/* Panel: Ahorro */}
+            <GlassCard onClick={onViewAhorros} className="border-l-4 border-l-purple-500">
               <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-                  <Activity className={cn("w-5 h-5 text-emerald-600 dark:text-emerald-400")} />
+                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/30">
+                  <PiggyBank className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 </div>
-                <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Utilidad Neta</p>
+                <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Proyección Ahorro</p>
               </div>
-              <h3 className="text-2xl font-bold mb-3">{Number(estadisticas.utilidadPromedio || 0).toFixed(1)}%</h3>
-              <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2">
-                <div
-                  className="bg-emerald-500 h-2 rounded-full transition-all duration-1000"
-                  style={{ width: `${Math.min(Number(estadisticas.utilidadPromedio || 0), 100)}%` }}
-                />
-              </div>
+              <h3 className="text-2xl font-bold">{formatCurrency(Number(estadisticas.ingresosHoy || 0) * 0.15)}</h3>
+              <p className="text-xs text-slate-400 mt-1">15% sugerido del día</p>
             </GlassCard>
 
             {/* Panel: Recepciones */}
-            <GlassCard onClick={onViewRecepciones}>
+            <GlassCard onClick={onViewRecepciones} className="border-l-4 border-l-blue-500">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 rounded-xl bg-blue-100 dark:bg-blue-900/30">
                   <ClipboardCheck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
@@ -245,83 +258,10 @@ export default function Dashboard(props: DashboardProps) {
                   : 'Todo al día'}
               </p>
             </GlassCard>
-
-            {/* Panel: Ahorro */}
-            <GlassCard onClick={onViewAhorros}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/30">
-                  <PiggyBank className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Proyección Ahorro</p>
-              </div>
-              <h3 className="text-2xl font-bold">{formatCurrency(Number(estadisticas.ingresosHoy || 0) * 0.15)}</h3>
-              <p className="text-xs text-slate-400 mt-1">15% sugerido del día</p>
-            </GlassCard>
           </div>
-
-          {/* Panel: Pre-Pedidos en borrador */}
-          <GlassCard className="overflow-hidden p-0">
-            <div className="p-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-bold">Pre-Pedidos Pendientes</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">{prepedidosBorrador.length} órdenes en borrador</p>
-              </div>
-              <Button
-                onClick={onViewPrePedidos}
-                variant="ghost"
-                className="text-primary text-sm font-semibold hover:underline"
-              >
-                Ver Todo
-              </Button>
-            </div>
-            {prepedidosBorrador.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-                <CheckCircle className="w-10 h-10 mb-3 text-emerald-400" />
-                <p className="text-sm font-semibold">Sin pedidos pendientes</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 text-xs font-bold uppercase tracking-wider">
-                      <th className="px-6 py-3">Orden</th>
-                      <th className="px-6 py-3">Artículos</th>
-                      <th className="px-6 py-3">Estado</th>
-                      <th className="px-6 py-3 text-center">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
-                    {prepedidosBorrador.map((pedido) => (
-                      <tr key={pedido.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <span className="text-sm font-bold">#{pedido.id?.slice(-6)}</span>
-                        </td>
-                        <td className="px-6 py-4 text-sm">{pedido.items?.length || 0} artículos</td>
-                        <td className="px-6 py-4">
-                          <span className="text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2.5 py-1 rounded-full font-bold">
-                            Borrador
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-center">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={onViewPrePedidos}
-                            className="text-slate-400 hover:text-primary transition-colors"
-                          >
-                            <ArrowRight className="w-4 h-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </GlassCard>
         </div>
 
-        {/* Panel lateral: Alertas de Stock (Estilo Stitch sidebar) */}
+        {/* Panel Derecho: Alertas Tradicionales & Accesos (1 col) */}
         <div className="space-y-6">
           <GlassCard className={cn(
             "border-l-4 overflow-hidden",
@@ -345,63 +285,46 @@ export default function Dashboard(props: DashboardProps) {
               <div className="space-y-4">
                 {alertasNoLeidas.slice(0, 3).map((alerta, idx) => {
                   const producto = getProductoById(alerta.productoId);
-                  // Porcentaje visual escalonado por severidad: primera alerta = mas critica
                   const barWidth = Math.max(stockRiesgoPct, 8) - idx * 4;
                   return (
                     <div key={alerta.id} className="p-4 bg-red-50 dark:bg-red-900/10 rounded-xl">
                       <div className="flex justify-between items-start mb-2">
                         <p className="text-sm font-bold truncate max-w-[70%]">
-                          {producto?.nombre || 'Producto sin nombre'}
+                          {producto?.nombre || 'Producto'}
                         </p>
-                        <span className="text-xs text-red-600 font-bold shrink-0 ml-2">
-                          {alerta.tipo || 'Alerta'}
+                        <span className="text-xs text-red-600 font-bold shrink-0 ml-2 uppercase">
+                           Bajo
                         </span>
-                      </div>
-                      <div className="w-full bg-red-200 dark:bg-red-900/40 rounded-full h-1.5 mb-3">
-                        <div
-                          className="bg-red-500 h-1.5 rounded-full transition-all duration-700"
-                          style={{ width: `${Math.max(barWidth, 8)}%` }}
-                          title={`${estadisticas.itemsBajoStock} item(s) con stock bajo`}
-                        />
                       </div>
                       <button
                         onClick={() => onMarcarAlertaLeida(alerta.id)}
-                        className="w-full py-2 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 text-xs font-bold rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all uppercase tracking-wide"
+                        className="w-full mt-2 py-2 bg-white dark:bg-slate-800 border border-red-200 dark:border-red-900/40 text-red-600 dark:text-red-400 text-[10px] font-black rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all uppercase tracking-wide"
                       >
                         Marcar leída
                       </button>
                     </div>
                   );
                 })}
-                {alertasNoLeidas.length > 3 && (
-                  <Button
-                    onClick={onViewAlertas}
-                    variant="ghost"
-                    className="w-full text-primary text-xs font-bold hover:underline"
-                  >
-                    Ver todas ({alertasNoLeidas.length}) <ArrowRight className="w-3 h-3 ml-1" />
-                  </Button>
-                )}
               </div>
             )}
           </GlassCard>
 
-          {/* Consejo / Accesos rápidos */}
-          <div className="bg-primary/5 p-5 rounded-2xl border border-primary/20">
-            <h4 className="text-sm font-bold text-primary mb-2 flex items-center gap-2">
-              <Star className="w-4 h-4" />
-              Accesos Rápidos
+          {/* Accesos rápidos */}
+          <div className="bg-slate-900 dark:bg-slate-800 p-6 rounded-[2.5rem] border border-white/10 shadow-2xl">
+            <h4 className="text-xs font-black text-white mb-4 flex items-center gap-2 uppercase tracking-widest">
+              <ShieldCheck className="w-4 h-4 text-emerald-500" />
+              Accesos Tácticos
             </h4>
-            <div className="space-y-2 mt-3">
+            <div className="space-y-2">
               {[
                 { label: 'Inventario', icon: Warehouse, onClick: onViewInventario },
                 { label: 'Proveedores', icon: Truck, onClick: onViewProveedores },
-                { label: 'Mesas / POS', icon: Utensils, onClick: onViewVentas },
+                { label: 'Carga Masiva', icon: LayoutList, onClick: () => {} },
               ].map((item, idx) => (
                 <button
                   key={idx}
                   onClick={item.onClick}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-primary transition-colors text-sm font-medium"
+                  className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-slate-300 hover:bg-white/10 hover:text-white transition-all text-xs font-bold uppercase tracking-tighter"
                 >
                   <item.icon className="w-4 h-4" />
                   {item.label}
@@ -414,3 +337,6 @@ export default function Dashboard(props: DashboardProps) {
     </div>
   );
 }
+
+// Helper icons missing or renamed
+const LayoutList = Package; // Fallback

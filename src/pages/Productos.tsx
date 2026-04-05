@@ -24,8 +24,9 @@ interface ProductosProps {
     proveedores: Proveedor[];
     precios: PrecioProveedor[];
     categorias: Categoria[];
-    onAddProducto: (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
-    onUpdateProducto: (id: string, updates: Partial<Producto>) => void;
+    inventario: InventarioItem[];
+    onAddProducto: (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'> & { stockActual?: number, stockMinimo?: number }) => Promise<Producto>;
+    onUpdateProducto: (id: string, updates: Partial<Producto> & { stockActual?: number, stockMinimo?: number }) => void;
     onDeleteProducto: (id: string) => void;
     onAddCategoria: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
     onDeleteCategoria: (id: string) => void;
@@ -44,7 +45,7 @@ const COLORES_PRESET = [
 ];
 
 export default function Productos({
-    productos, proveedores, precios: _precios, categorias,
+    productos, proveedores, precios: _precios, categorias, inventario,
     onAddProducto, onUpdateProducto, onDeleteProducto,
     onAddCategoria, onDeleteCategoria, onUpdateCategoria, onAddOrUpdatePrecio, onDeletePrecio,
     getMejorPrecio, getPreciosByProducto, getProveedorById, formatCurrency,
@@ -66,9 +67,11 @@ export default function Productos({
     const [notasPrecio, setNotasPrecio] = useState('');
     const [formData, setFormData] = useState({
         nombre: '', categoria: '', descripcion: '', precioVenta: '',
-        margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
+        margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado' as 'elaborado' | 'ingrediente', unidadMedida: '',
         // [Nexus-Volt] Heladería Smart Fields
         useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
+        // [Nexus-Volt] Stock Fields
+        stockActual: '', stockMinimo: '5',
     });
     const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0], tipo: 'venta' as 'venta' | 'insumo' });
 
@@ -93,7 +96,24 @@ export default function Productos({
         const margen = parseFloat(formData.margenUtilidad) || 30;
         const costo = parseFloat(formData.precioCosto) || 0;
         if (costo > 0 && precioVenta === 0) precioVenta = costo * (1 + margen / 100);
-        const data: any = { nombre: formData.nombre, categoria: formData.categoria, descripcion: formData.descripcion, precioVenta, margenUtilidad: margen, imagen: formData.imagen, tipo: formData.tipo || 'elaborado', unidadMedida: formData.unidadMedida || 'unidad', ...(costo > 0 && { costoBase: costo }) };
+        
+        const stockActualNum = formData.stockActual === '' ? undefined : parseInt(formData.stockActual) || 0;
+        const stockMinimoNum = parseInt(formData.stockMinimo) || 5;
+
+        const data: any = { 
+            nombre: formData.nombre, 
+            categoria: formData.categoria, 
+            descripcion: formData.descripcion, 
+            precioVenta, 
+            margenUtilidad: margen, 
+            imagen: formData.imagen, 
+            tipo: formData.tipo || 'elaborado', 
+            unidadMedida: formData.unidadMedida || 'unidad', 
+            ...(costo > 0 && { costoBase: costo }),
+            stockActual: stockActualNum,
+            stockMinimo: stockMinimoNum
+        };
+
         try {
             if (editingProducto) {
                 onUpdateProducto(editingProducto.id, data);
@@ -122,6 +142,7 @@ export default function Productos({
             nombre: '', categoria: '', descripcion: '', precioVenta: '', margenUtilidad: '30',
             proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
             useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
+            stockActual: '', stockMinimo: '5',
         });
         setEditingProducto(null);
     };
@@ -129,11 +150,14 @@ export default function Productos({
     const handleEdit = (producto: Producto) => {
         setEditingProducto(producto);
         const mp = getMejorPrecio(producto.id);
+        const itemInv = inventario.find(i => i.productoId === producto.id);
+
         // Normalizar categoría: buscar coincidencia exacta primero, luego insensible a mayúsculas
         const catGuardada = producto.categoria || '';
         const catMatch = categorias.find(c => c.nombre === catGuardada)
             || categorias.find(c => c.nombre.toLowerCase().trim() === catGuardada.toLowerCase().trim());
         const categoriaFinal = catMatch ? catMatch.nombre : catGuardada;
+        
         setFormData({
             nombre: producto.nombre,
             categoria: categoriaFinal,
@@ -147,6 +171,8 @@ export default function Productos({
             tipo: producto.tipo || 'elaborado',
             unidadMedida: (producto as any).unidadMedida || '',
             useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
+            stockActual: itemInv?.stockActual.toString() || '0',
+            stockMinimo: itemInv?.stockMinimo.toString() || '5',
         });
         setIsDialogOpen(true);
     };

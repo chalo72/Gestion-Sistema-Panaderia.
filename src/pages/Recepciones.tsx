@@ -19,31 +19,28 @@ import { toast } from 'sonner';
 import { db } from '@/lib/database';
 import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada } from '@/types';
 import { procesarImagenFactura, matchProductoEnCatalogo, matchProveedorEnCatalogo } from '@/lib/ocr-service';
+import { ProductFormModal } from '@/components/productos/ProductFormModal';
+import type { Categoria as CategoriaTipo } from '@/types';
 
 interface RecepcionesProps {
     recepciones: Recepcion[];
     proveedores: Proveedor[];
     productos: Producto[];
     prepedidos: PrePedido[];
+    categorias: CategoriaTipo[];
     onAddRecepcion: (data: Omit<Recepcion, 'id'>) => Promise<Recepcion>;
     onConfirmarRecepcion: (recepcion: Recepcion) => Promise<void>;
+    onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<void>;
+    onUpdateProducto: (id: string, updates: Partial<Producto>) => Promise<void>;
     getProveedorById: (id: string) => Proveedor | undefined;
     getProductoById: (id: string) => Producto | undefined;
     formatCurrency: (value: number) => string;
-    onUpdateProductoBase?: (id: string, updates: Partial<Producto>) => Promise<void>;
 }
 
 export default function Recepciones({
-    recepciones,
-    proveedores,
-    productos,
-    prepedidos,
-    onAddRecepcion,
-    onConfirmarRecepcion,
-    getProveedorById,
-    getProductoById,
-    formatCurrency,
-    onUpdateProductoBase
+    recepciones, proveedores, productos, prepedidos, categorias,
+    onAddRecepcion, onConfirmarRecepcion, onAddProducto, onUpdateProducto,
+    getProveedorById, getProductoById, formatCurrency
 }: RecepcionesProps) {
     const { check } = useCan();
     const { usuario } = useAuth();
@@ -52,6 +49,11 @@ export default function Recepciones({
     const [busqueda, setBusqueda] = useState('');
     const [proveedorFiltro, setProveedorFiltro] = useState<string>('todos');
     const [prePedidoSeleccionado, setPrePedidoSeleccionado] = useState<string>('');
+    
+    // === ESTADO PRODUCT FORM MODAL ===
+    const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const [productToEdit, setProductToEdit] = useState<Producto | null>(null);
+    const [isCreatingNewFromAction, setIsCreatingNewFromAction] = useState(false);
 
     // === ESTADO GALERÍA DE FACTURAS ===
     const [facturasGuardadas, setFacturasGuardadas] = useState<FacturaEscaneada[]>([]);
@@ -158,6 +160,43 @@ export default function Recepciones({
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
     const [scanStep, setScanStep] = useState('');
+
+    const handleProductSaved = async (productoData: any) => {
+        try {
+            if (productToEdit) {
+                await onUpdateProducto(productToEdit.id, productoData);
+                toast.success('Producto maestro actualizado');
+            } else {
+                // Si es nuevo, necesitamos obtener el ID generado por la DB o similar
+                // Como onAddProducto es async y los efectos de React refrescarán el array de productos,
+                // vamos a buscar el producto por nombre o esperar que el padre lo actualice.
+                await onAddProducto(productoData);
+                
+                // Si estamos en medio de una recepción, intentamos agregarlo automáticamente
+                // Nota: Esto requiere que el array 'productos' ya tenga el nuevo ítem.
+                // En un sistema real, onAddProducto devolvería el producto creado.
+                setIsCreatingNewFromAction(true); // Flag para el useEffect de abajo
+            }
+            setIsProductModalOpen(false);
+            setProductToEdit(null);
+        } catch (error) {
+            toast.error('Error al guardar el producto maestro');
+        }
+    };
+
+    // Auto-agregar productos recién creados al listado de recepción
+    useEffect(() => {
+        if (isCreatingNewFromAction && productos.length > 0) {
+            // Buscamos el producto más reciente o el que coincida (simplificado por ahora)
+            // En una app real usaríamos el ID devuelto.
+            const ultimo = productos[productos.length - 1];
+            if (ultimo) {
+                handleAddItem(ultimo.id);
+                setIsCreatingNewFromAction(false);
+                toast.success(`"${ultimo.nombre}" registrado y añadido a la recepción`);
+            }
+        }
+    }, [productos.length, isCreatingNewFromAction]);
 
     // === FUNCIÓN DE ESCANEO OCR REAL (Tesseract.js) ===
     const handleScanFactura = async () => {
@@ -272,7 +311,7 @@ export default function Recepciones({
             }
 
             // Notificar diferencias de precio y ofrecer actualizar
-            if (difPrecios.length > 0 && onUpdateProductoBase) {
+            if (difPrecios.length > 0) {
                 difPrecios.forEach(d => {
                     const subida = d.precioNuevo > d.precioAnterior;
                     toast(
@@ -285,8 +324,14 @@ export default function Recepciones({
                         {
                             duration: 12000,
                             action: {
-                                label: 'Actualizar catálogo',
-                                onClick: () => onUpdateProductoBase(d.productoId, { costoBase: d.precioNuevo }),
+                                label: 'Editar Maestro',
+                                onClick: () => {
+                                    const p = productos.find(prod => prod.id === d.productoId);
+                                    if (p) {
+                                        setProductToEdit(p);
+                                        setIsProductModalOpen(true);
+                                    }
+                                },
                             },
                         }
                     );
@@ -917,9 +962,9 @@ export default function Recepciones({
                                 </CardTitle>
                                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Validación de Integridad Física y Costos</p>
                             </div>
-                            <div className="flex gap-2">
+                            <div className="flex items-center gap-2">
                                 <select
-                                    className="text-[11px] font-black uppercase p-2 rounded-xl border-2 border-indigo-50 bg-white min-w-[200px] h-10 outline-none focus:border-indigo-500 transition-all"
+                                    className="text-[11px] font-black uppercase p-2 rounded-xl border-2 border-indigo-50 bg-white min-w-[200px] h-10 outline-none focus:border-indigo-500 transition-all cursor-pointer"
                                     onChange={(e) => {
                                         if (e.target.value) {
                                             handleAddItem(e.target.value);
@@ -927,11 +972,22 @@ export default function Recepciones({
                                         }
                                     }}
                                 >
-                                    <option value="">+ Insumo / Producto</option>
-                                    {productos.map(p => (
+                                    <option value="">+ Seleccionar Producto</option>
+                                    {productos.sort((a, b) => a.nombre.localeCompare(b.nombre)).map(p => (
                                         <option key={p.id} value={p.id}>{p.nombre}</option>
                                     ))}
                                 </select>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                        setProductToEdit(null);
+                                        setIsProductModalOpen(true);
+                                    }}
+                                    className="h-10 px-3 rounded-xl border-2 border-indigo-50 text-indigo-600 hover:bg-indigo-50"
+                                >
+                                    <Plus className="w-4 h-4 mr-1.5" /> Registrar Nuevo
+                                </Button>
                             </div>
                         </CardHeader>
                         <CardContent className="p-6 overflow-y-auto flex-1 scrollbar-hide">
@@ -987,9 +1043,21 @@ export default function Recepciones({
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                        <Button variant="ghost" size="icon" className="rounded-xl hover:bg-rose-50 hover:text-rose-500" onClick={() => setNewRecepcion(prev => ({ ...prev, items: prev.items.filter(i => i.id !== item.id) }))}>
-                                                            <X className="w-4 h-4" />
-                                                        </Button>
+                                                        <div className="flex items-center gap-2">
+                                                            <Button
+                                                                variant="ghost" size="icon"
+                                                                className="rounded-xl hover:bg-indigo-50 hover:text-indigo-600"
+                                                                onClick={() => {
+                                                                    setProductToEdit(prod || null);
+                                                                    setIsProductModalOpen(true);
+                                                                }}
+                                                            >
+                                                                <Edit2 className="w-4 h-4" />
+                                                            </Button>
+                                                            <Button variant="ghost" size="icon" className="rounded-xl hover:bg-rose-50 hover:text-rose-500" onClick={() => setNewRecepcion(prev => ({ ...prev, items: prev.items.filter(i => i.id !== item.id) }))}>
+                                                                <X className="w-4 h-4" />
+                                                            </Button>
+                                                        </div>
                                                     </div>
 
                                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
@@ -1489,6 +1557,20 @@ export default function Recepciones({
                     )}
                 </div>
             </div>
+
+            {/* MODAL MAESTRO DE PRODUCTOS */}
+            {isProductModalOpen && (
+                <ProductFormModal
+                    isOpen={isProductModalOpen}
+                    onClose={() => {
+                        setIsProductModalOpen(false);
+                        setProductToEdit(null);
+                    }}
+                    onSave={handleProductSaved}
+                    categorias={categorias}
+                    initialData={productToEdit || undefined}
+                />
+            )}
         </div>
     );
 }

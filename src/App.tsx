@@ -5,15 +5,17 @@ import { PageTransition } from '@/components/layout/PageTransition';
 import { Login } from '@/pages/Login';
 import type { ViewType } from '@/types';
 import { Toaster } from '@/components/ui/sonner';
+import { AgentMissionDispatcher } from '@/components/agentes/AgentMissionDispatcher';
+import { VisualSentinel } from '@/components/agentes/VisualSentinel';
 import { Button } from '@/components/ui/button';
-import { LogOut, User, AlertTriangle, ShoppingCart, Settings, Unlock, Lock, Plus, Minus } from 'lucide-react';
+import { LogOut, User, AlertTriangle, ShoppingCart, Unlock, Lock, Plus, Minus } from 'lucide-react';
 import { usePriceControl } from '@/hooks/usePriceControl';
 import { useAutoUpdate } from '@/hooks/useAutoUpdate';
 import { SectionErrorBoundary } from '@/components/common/SectionErrorBoundary';
-import { GlobalActionSystem } from '@/components/GlobalActionSystem';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { SentinelWatcher } from '@/components/SentinelWatcher';
+import { CentinelaProvider } from '@/components/providers/CentinelaProvider';
 
 // Modales de Caja (Movidos al global)
 import { AperturaCajaModal } from '@/components/ventas/AperturaCajaModal';
@@ -41,7 +43,6 @@ const Ahorros = lazy(() => import('@/pages/Ahorros'));
 const Gastos = lazy(() => import('@/pages/Gastos'));
 const HistorialVentas = lazy(() => import('@/pages/HistorialVentas'));
 const CargaMasiva = lazy(() => import('@/pages/CargaMasiva'));
-const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial'));
 const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
 const Trabajadores = lazy(() => import('@/pages/Trabajadores'));
 const Mayoristas = lazy(() => import('@/pages/Mayoristas'));
@@ -357,6 +358,7 @@ function AppContent() {
               productos={productos}
               proveedores={proveedores}
               precios={precios}
+              inventario={inventario}
               categorias={configuracion.categorias}
               onAddProducto={addProducto}
               onUpdateProducto={updateProducto}
@@ -481,12 +483,14 @@ function AppContent() {
               proveedores={proveedores}
               productos={productos}
               prepedidos={prepedidos}
+              categorias={configuracion.categorias}
               onAddRecepcion={addRecepcion}
               onConfirmarRecepcion={confirmarRecepcion}
+              onAddProducto={addProducto}
+              onUpdateProducto={updateProducto}
               getProveedorById={getProveedorById}
               getProductoById={getProductoById}
               formatCurrency={formatCurrency}
-              onUpdateProductoBase={updateProducto}
             />
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -740,7 +744,10 @@ function AppContent() {
         return hasPermission('VER_USUARIOS') ? (
           <SectionErrorBoundary sectionName="Oficina">
             <Suspense fallback={<SectionSkeleton />}>
-              <Oficina publicAppUrl={configuracion.publicUrl} />
+              <Oficina 
+                publicAppUrl={configuracion.publicUrl} 
+                onViewChange={setCurrentView}
+              />
             </Suspense>
           </SectionErrorBoundary>
         ) : <UnauthorizedState />;
@@ -781,6 +788,8 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-background flex">
       <SentinelWatcher />
+      <AgentMissionDispatcher />
+      <VisualSentinel />
       <Sidebar
         currentView={currentView}
         onViewChange={setCurrentView}
@@ -994,7 +1003,9 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <CentinelaProvider>
+        <AppContent />
+      </CentinelaProvider>
     </AuthProvider>
   );
 }

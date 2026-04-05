@@ -550,23 +550,47 @@ export function ProductFormModal({
                         </div>
                     )}
 
-                    {/* ── STOCK MÍNIMO (solo Insumos) ── */}
-                    {tipoActual === 'ingrediente' && (
-                        <div className="space-y-1.5">
-                            <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Mínimo de Alerta</Label>
-                            <div className="relative">
-                                <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <Input
-                                    type="number" min="0" step="0.01"
-                                    value={formData.stockMinimo || ''}
-                                    onChange={e => setFormData({ ...formData, stockMinimo: e.target.value })}
-                                    className="h-11 pl-9 text-base font-bold rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
-                                    placeholder="Ej: 5"
-                                />
-                            </div>
-                            <p className="text-xs text-slate-400 pl-1">Se activará una alerta cuando el stock baje de este valor.</p>
+                    {/* ── GESTIÓN DE INVENTARIO ── */}
+                    <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Package className="w-4 h-4 text-slate-400" />
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Gestión de Inventario</span>
                         </div>
-                    )}
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Stock Actual */}
+                            <div className="space-y-1.5">
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Actual</Label>
+                                <div className="relative">
+                                    <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <Input
+                                        type="number" min="0" step="0.01"
+                                        value={formData.stockActual || ''}
+                                        onChange={e => setFormData({ ...formData, stockActual: e.target.value })}
+                                        className="h-11 pl-9 text-base font-bold rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:border-primary"
+                                        placeholder="Ej: 100"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-400 pl-1 italic">Cantidad física disponible en este momento.</p>
+                            </div>
+
+                            {/* Stock Mínimo */}
+                            <div className="space-y-1.5">
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Mínimo (Alerta)</Label>
+                                <div className="relative">
+                                    <AlertCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
+                                    <Input
+                                        type="number" min="0" step="0.01"
+                                        value={formData.stockMinimo || '5'}
+                                        onChange={e => setFormData({ ...formData, stockMinimo: e.target.value })}
+                                        className="h-11 pl-9 text-base font-bold rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:border-amber-400"
+                                        placeholder="Ej: 5"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-400 pl-1 italic">Nivel para disparar alertas de reabastecimiento.</p>
+                            </div>
+                        </div>
+                    </div>
 
                     {/* ── IMAGEN CON PREVIEW ── */}
                     <div className="space-y-3">

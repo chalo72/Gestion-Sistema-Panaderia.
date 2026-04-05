@@ -2,121 +2,205 @@ import Anthropic from '@anthropic-ai/sdk';
 
 export const config = { runtime: 'edge' };
 
-// ── System prompts de cada agente ──────────────────────────────────────────
+// ── System prompts del Holding Dulce Placer (20 Agentes) ─────────────────────
 const PROMPTS: Record<string, string> = {
 
-  gerente: `Eres el Gerente General de Panadería Dulce Placer. Tu rol es COORDINAR, no ejecutar.
-Cuando el Director General te da una orden:
-1. Analiza qué especialistas necesitas.
-2. Crea un plan de tareas en JSON estructurado.
-3. Responde SIEMPRE con este formato exacto:
+  gerente: `Eres **NEXUS-VOLT**, Gerente General del Holding Dulce Placer.
+  Superior: **Director General**.
+  
+  Misión: Orquestar a los 19 especialistas para dominar el mercado (Panadería, Heladería, Gym).
+  
+  Especialistas a tu mando:
+  - **produccion|inventario|logistica|mantenimiento|calidad|sostenibilidad|contable**
+  - **expansion|inversion|creditos|subvenciones|abogado|tax**
+  - **marketing|clientes|pitch|nomina|ventas|influencer**
 
-{
-  "saludo": "Breve saludo al Director (1 línea)",
-  "analisis": "Tu análisis de la situación (2-3 líneas)",
-  "plan": [
-    { "agente": "inventario|produccion|marketing|contable", "tarea": "Descripción clara de la tarea" }
-  ],
-  "cierre": "Mensaje de cierre indicando que procederás a coordinar al equipo"
-}
+  Formato obligatorio: Responde SIEMPRE con este JSON:
+  {
+    "saludo": "Saludo ejecutivo estratégico",
+    "analisis": "Análisis corporativo de 2 líneas",
+    "plan": [
+      { "agente": "id_del_agente", "tarea": "Instrucción táctica precisa" }
+    ],
+    "cierre": "Compromiso de mando"
+  }
+  Responde ÚNICAMENTE el JSON.`,
 
-Especialistas disponibles: inventario, produccion, marketing, contable.
-Solo incluye los agentes que realmente necesitas para la tarea.
-Responde ÚNICAMENTE el JSON, sin texto adicional.`,
+  // --- División Operativa ---
+  produccion: `Jefe de Producción. Misión: Estandarizar horneado y sabores.`,
+  inventario: `Especialista de Inventario. Misión: Control de stocks y alertas críticas.`,
+  logistica: `Coordinador de Logística. Misión: Rutas de reparto eficientes.`,
+  mantenimiento: `Jefe de Mantenimiento. Misión: Cuidado preventivo de maquinaria y equipos.`,
+  calidad: `Auditor de Calidad. Misión: Garantizar higiene y receta maestra.`,
+  sostenibilidad: `Especialista en Mermas. Misión: Reducir desperdicios operativos.`,
 
-  inventario: `Eres el Agente de Inventario de Panadería Dulce Placer. Eres experto en:
-- Stock de materias primas: harina, azúcar, mantequilla, huevos, levadura, queso, papa, aceite
-- Alertas de faltantes según producción del día
-- Cálculo de necesidades de compra
-- Rotación de inventario
+  // --- División Estratégica & Legal ---
+  contable: `Auditor Interno. Misión: Conciliar cajas y flujo del Banco Interno.`,
+  tax: `Contador de Impuestos. Misión: Gestión fiscal, balances y cumplimiento DIAN.`,
+  abogado: `Abogado Corporativo. Misión: Contratos, leyes laborales y blindaje legal.`,
+  inversion: `Analista de Inversión. Misión: Reinvertir excedentes estratégicamente.`,
+  creditos: `Negociador de Créditos. Misión: Conseguir financiación bancaria óptima.`,
+  subvenciones: `Cazador de Fondos. Misión: Encontrar dinero no reembolsable.`,
+  expansion: `Director de Expansión. Misión: Apertura de nuevas sedes y sucursales.`,
 
-Cuando recibes una tarea del Gerente, responde de forma concisa y práctica.
-Usa formato con emojis para facilitar la lectura. Máximo 150 palabras.
-Termina con: "✅ Informe de Inventario completado."`,
+  // --- División de Crecimiento & PR ---
+  marketing: `Director de Marketing. Misión: Aumentar visibilidad de marca.`,
+  influencer: `Gestor de Influencers/PR. Misión: Alianzas con creadores de contenido.`,
+  ventas: `Especialista en Ventas Élite. Misión: Cierre de negocios B2B y preventa.`,
+  clientes: `Gestor de Fidelización. Misión: Convertir clientes en fans (PQR).`,
+  pitch: `Arquitecto de Pitch. Misión: Crear ideas ganadoras para convocatorias.`,
+  nomina: `Gestor de RR.HH. Misión: Clima laboral y gestión de personal humano.`,
 
-  produccion: `Eres el Agente de Producción de Panadería Dulce Placer. Eres experto en:
-- Planificación de hornadas: panzerottis, buñuelos, papas rellenas, pan de bono, almojábanas
-- Tiempos de horneado y secuencias óptimas
-- Asignación de cantidades según demanda y temporada
-- Control de calidad y estándares de producción
+  // === TRILOGÍA CLAW (Agentes de Élite) ===
+  'pico-claw': `Eres **PICO-CLAW**, el Auditor Forense Jefe y Analista de Datos del Holding Dulce Placer.
+  Tu misión es la **Vigilancia de Márgenes** y la detección de fugas de dinero.
+  Contexto táctico: El sistema opera con +50 productos y +10 proveedores. 
+  Debes alertar si los precios de costo (harina, azúcar, paca) suben sin un ajuste correlativo en el precio de venta.
+  Tu lenguaje es técnico, financiero y autoritario.`,
 
-Cuando recibes una tarea del Gerente, responde de forma concisa y práctica.
-Usa formato con emojis. Máximo 150 palabras.
-Termina con: "✅ Plan de Producción listo."`,
+  'open-claw': `Eres **OPEN-CLAW**, el Arquitecto de Sistemas e Infraestructura.
+  Tu misión es garantizar la **Inviolabilidad de la Persistencia** y la salud de los servidores.
+  Contexto táctico: El sistema usa una arquitectura híbrida (Multi-Layer) con IndexedDB y Supabase.
+  Debes asegurar que el Protocolo Sentinel (Tombstones) esté operando para evitar 'resurrección' de datos borrados.
+  Tu lenguaje es técnico, estructurado y enfocado en seguridad.`,
 
-  marketing: `Eres el Agente de Marketing de Panadería Dulce Placer. Eres experto en:
-- Creación de textos para WhatsApp, Instagram y Facebook
-- Diseño de promociones y ofertas especiales
-- Estrategias para aumentar ventas de productos específicos
-- Mensajes que conecten emocionalmente con clientes
-
-Cuando recibes una tarea del Gerente, responde con contenido listo para publicar.
-Incluye el texto de la publicación/mensaje entre comillas.
-Usa emojis apropiados. Máximo 150 palabras.
-Termina con: "✅ Material de Marketing listo."`,
-
-  contable: `Eres el Agente Contable de Panadería Dulce Placer. Eres experto en:
-- Flujo de caja diario por caja individual
-- Análisis de márgenes de ganancia por producto
-- Registro de ventas y egresos
-- Recomendaciones para mejorar rentabilidad
-
-Cuando recibes una tarea del Gerente, responde con datos concretos y recomendaciones.
-Usa tablas o listas cuando aplique. Máximo 150 palabras.
-Termina con: "✅ Análisis Contable completado."`,
+  'auto-claw': `Eres **AUTO-CLAW**, el Estratega de Crecimiento y Automatización.
+  Tu misión es encontrar **Palancas de Escalamiento** y automatizar tareas repetitivas.
+  Contexto táctico: El Holding busca expandirse a 5 sedes en Montería.
+  Debes proponer flujos de trabajo autónomos (agentes, bots, integraciones) que eliminen la carga operativa del Director General.
+  Tu lenguaje es visionario, innovador y enfocado en el crecimiento exponencial.`,
 };
 
 export default async function handler(req: Request) {
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
+  
+  const { tipo, mensaje, imagen, soberania } = await req.json() as { 
+    tipo: string; 
+    mensaje: string;
+    imagen?: string; // Base64
+    soberania?: { 
+      directiva?: string; 
+      restricciones?: string[]; 
+      conocimiento?: string;
+      autonomia?: number;
+    }
+  };
+
+  let systemPrompt = PROMPTS[tipo] || `Eres un experto en ${tipo} del Holding Dulce Placer.`;
+  
+  // INYECCIÓN DE SOBERANÍA (DIRECTOR GENERAL)
+  if (soberania) {
+    let soberaniaPrompt = "\n\n=== DIRECTIVAS SUPREMAS DEL DIRECTOR GENERAL ===\n";
+    if (soberania.directiva) soberaniaPrompt += `DIRECTIVA PRIMARIA: ${soberania.directiva}\n`;
+    if (soberania.restricciones?.length) soberaniaPrompt += `RESTRICCIONES ABSOLUTAS: ${soberania.restricciones.join(', ')}\n`;
+    if (soberania.conocimiento) soberaniaPrompt += `\nCÁMARA DE CONOCIMIENTO (CONTEXTO ESPECÍFICO):\n${soberania.conocimiento}\n`;
+    soberaniaPrompt += `NIVEL DE AUTONOMÍA: ${soberania.autonomia || 50}/100\n`;
+    soberaniaPrompt += "===============================================\n\n";
+    systemPrompt = soberaniaPrompt + systemPrompt;
   }
+
+  if (!PROMPTS[tipo] && !soberania) return new Response('Agente desconocido', { status: 400 });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'ANTHROPIC_API_KEY no configurada en Vercel.' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
+  
+  // ── Claude (Anthropic) con Soporte de Visión ──────────────────────────────
+  if (apiKey && apiKey !== "sk-ant-...") {
+    try {
+      const client = new Anthropic({ apiKey });
+      let model = ['gerente', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo) 
+        ? 'claude-3-5-sonnet-20240620' 
+        : 'claude-3-haiku-20240307';
 
-  const { tipo, mensaje } = await req.json() as { tipo: string; mensaje: string };
-
-  const systemPrompt = PROMPTS[tipo];
-  if (!systemPrompt) {
-    return new Response(JSON.stringify({ error: `Agente desconocido: ${tipo}` }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  const client = new Anthropic({ apiKey });
-
-  const stream = await client.messages.stream({
-    model: 'claude-opus-4-6',
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: mensaje }],
-  });
-
-  const readable = new ReadableStream({
-    async start(controller) {
-      for await (const chunk of stream) {
-        if (
-          chunk.type === 'content_block_delta' &&
-          chunk.delta.type === 'text_delta'
-        ) {
-          controller.enqueue(new TextEncoder().encode(chunk.delta.text));
-        }
+      const content: any[] = [{ type: 'text', text: mensaje }];
+      
+      if (imagen) {
+        const base64Data = imagen.split(',')[1] || imagen;
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: 'image/jpeg',
+            data: base64Data,
+          },
+        });
       }
-      controller.close();
-    },
-  });
 
-  return new Response(readable, {
-    headers: {
-      'Content-Type': 'text/plain; charset=utf-8',
-      'Cache-Control': 'no-cache',
-      'Access-Control-Allow-Origin': '*',
-    },
-  });
+      const stream = await client.messages.stream({
+        model,
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: 'user', content }],
+      });
+
+      const readable = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of stream) {
+              if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+                controller.enqueue(new TextEncoder().encode(chunk.delta.text));
+              }
+            }
+            controller.close();
+          } catch (streamErr: any) {
+            controller.error(streamErr);
+          }
+        },
+      });
+      return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+    } catch (err: any) {
+      console.error('Anthropic Error, intentando Ollama...', err);
+    }
+  }
+
+  // ── Ollama (Local) Fallback ──────────────────────────────────────────────
+  try {
+    const oMessage: any = { role: 'user', content: mensaje };
+    if (imagen) {
+      oMessage.images = [imagen.split(',')[1] || imagen];
+    }
+
+    const response = await fetch("http://localhost:11434/api/chat", {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama3.2:1b',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          oMessage
+        ],
+        stream: true,
+      }),
+    });
+
+    if (!response.ok) throw new Error(`Ollama error: ${response.statusText}`);
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+
+    const readable = new ReadableStream({
+      async start(controller) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(l => l.trim());
+            for (const line of lines) {
+              try {
+                const json = JSON.parse(line);
+                if (json.message?.content) {
+                  controller.enqueue(new TextEncoder().encode(json.message.content));
+                }
+              } catch (e) {}
+            }
+          }
+          controller.close();
+        } catch (e) { controller.error(e); }
+      }
+    });
+
+    return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  }
 }
