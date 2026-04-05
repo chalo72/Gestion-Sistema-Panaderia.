@@ -67,18 +67,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(true);
       try {
         const savedLocalUser = localStorage.getItem('pricecontrol_local_user');
+        let currentUser: Usuario | null = null;
+
         if (savedLocalUser) {
           const userData = JSON.parse(savedLocalUser) as Usuario;
           // Validar que la sesion no tenga mas de 12 horas de antiguedad
           const SESSION_MAX_MS = 12 * 60 * 60 * 1000;
           const ultimoAcceso = userData.ultimoAcceso ? new Date(userData.ultimoAcceso).getTime() : 0;
           const sesionExpirada = ultimoAcceso > 0 && (Date.now() - ultimoAcceso) > SESSION_MAX_MS;
+          
           if (sesionExpirada) {
-            console.info('⏰ [Auth] Sesion expirada (>12h). Requiere nuevo inicio de sesion.');
+            console.info('⏰ [Auth] Sesion expirada (>12h). Limpiando...');
             localStorage.removeItem('pricecontrol_local_user');
           } else {
-            setUsuario(userData);
+            currentUser = userData;
           }
+        }
+
+        // Si no hay usuario (o expiró) y estamos en DEV, forzar ADMIN
+        if (!currentUser && import.meta.env.DEV) {
+          // --- PROTOCOLO: ACCESO DIRECTO DESARROLLADOR ---
+          const devAdmin = USUARIOS_PRUEBA.find(u => u.rol === 'ADMIN' && u.email === 'Chalo8321@gmail.com');
+          if (devAdmin) {
+            console.log('⚡ [Nexus-Auth] Modo Desarrollo Detectado: Bypass de Seguridad Activo.');
+            console.log('🗝️ Iniciando sesión automática como Administrador (Chalo).');
+            currentUser = { ...devAdmin, ultimoAcceso: new Date().toISOString() };
+            localStorage.setItem('pricecontrol_local_user', JSON.stringify(currentUser));
+          }
+        }
+
+        if (currentUser) {
+          setUsuario(currentUser);
         }
       } catch (err) {
         console.error('❌ Error cargando sesión local:', err);
@@ -124,14 +143,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     const isAdmin = localUser?.rol === 'ADMIN' && safeCompare(password, passMaestra);
     const isGuest = localUser?.rol !== 'ADMIN' && (safeCompare(password, passInvitado || '') || safeCompare(password, passMaestra));
-    const isMasterPass = isAdmin || isGuest;
+    
+    // --- PROTOCOLO: BYPASS TOTAL DE DESARROLLO ---
+    const isDevAdmin = import.meta.env.DEV && localUser?.rol === 'ADMIN' && localUser?.email === 'Chalo8321@gmail.com';
+    const isMasterPass = isAdmin || isGuest || isDevAdmin;
 
     if (localUser && isMasterPass) {
       const userData = { ...localUser, ultimoAcceso: new Date().toISOString() };
       setUsuario(userData);
       localStorage.setItem('pricecontrol_local_user', JSON.stringify(userData));
       setIsLoading(false);
-      toast.success('¡Bienvenido! Iniciando en modo local seguro.');
+      toast.success(isDevAdmin ? 'Bypass de Desarrollo Activado' : '¡Bienvenido! Iniciando en modo local seguro.');
       return { success: true };
     }
 

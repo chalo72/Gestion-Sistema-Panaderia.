@@ -205,6 +205,25 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 </span>
               ) : 'Entrar al Sistema'}
             </Button>
+
+            {import.meta.env.DEV && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={async () => {
+                  setEmail('Chalo8321@gmail.com');
+                  setPassword('dev-bypass'); // Esto solo sirve para disparar la función, corregiremos el login local para aceptarlo
+                  setIsLoading(true);
+                  // Forzamos el login directo
+                  const result = await login('Chalo8321@gmail.com', 'bypass'); 
+                  if (result.success) onLoginSuccess();
+                  setIsLoading(false);
+                }}
+                className="w-full h-10 mt-4 border-amber-500/50 text-amber-500 hover:bg-amber-500/10 font-bold text-xs uppercase tracking-widest rounded-xl"
+              >
+                ⚡ ACCESO RÁPIDO (MODO DEV)
+              </Button>
+            )}
           </form>
 
           <p className="text-slate-600 text-xs text-center mt-4">
