@@ -472,7 +472,7 @@ class IndexedDBDatabase implements IDatabase {
   async getAllProveedores() { const db = await this.ensureInit(); return new Promise<DBProveedor[]>((res, rej) => { const req = db.transaction('proveedores').objectStore('proveedores').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
   async addProveedor(p: DBProveedor) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('proveedores', 'readwrite').objectStore('proveedores').add(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
   async updateProveedor(p: DBProveedor) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('proveedores', 'readwrite').objectStore('proveedores').put(p); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
-  async deleteProveedor(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('proveedores', 'readwrite').objectStore('proveedores').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteProveedor(id: string) { const db = await this.ensureInit(); try { await new Promise<void>((res, rej) => { const req = db.transaction('proveedores', 'readwrite').objectStore('proveedores').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); } catch(e) { throw e; } }
 
   async getAllPrecios() { const db = await this.ensureInit(); return new Promise<DBPrecio[]>((res, rej) => { const req = db.transaction('precios').objectStore('precios').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
   async getPreciosByProducto(pid: string) { const db = await this.ensureInit(); return new Promise<DBPrecio[]>((res, rej) => { const req = db.transaction('precios').objectStore('precios').index('productoId').getAll(pid); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
@@ -562,7 +562,7 @@ class IndexedDBDatabase implements IDatabase {
 
   async clearAll() { const db = await this.ensureInit(); const stores = db.objectStoreNames; const tx = db.transaction([...stores], 'readwrite'); Array.from(stores).forEach(s => tx.objectStore(s).clear()); return new Promise<void>((res) => { tx.oncomplete = () => res(); }); }
 
-  async getTombstones(tab: string) { const db = await this.ensureInit(); return new Promise<string[]>((res, rej) => { const req = db.transaction('tombstones').objectStore('tombstones').index('table').getAll(tab); req.onsuccess = () => res(req.result.map((r: any) => r.itemId)); req.onerror = () => rej(req.error); }); }
+  async getTombstones(tab: string) { const db = await this.ensureInit(); return new Promise<string[]>((res, rej) => { const req = db.transaction('tombstones').objectStore('tombstones').index('table').getAll(tab); req.onsuccess = () => res(req.result.map((t: any) => t.itemId)); req.onerror = () => rej(req.error); }); }
   async removeTombstone(tab: string, id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').delete(`${tab}:${id}`); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
   async addTombstone(tab: TombstoneTable, id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').put({ id: `${tab}:${id}`, table: tab, itemId: id, fecha: new Date().toISOString() }); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
   async saveBackup(id: string, data: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('backups', 'readwrite').objectStore('backups').put({ id, data, fecha: new Date().toISOString() }); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
@@ -601,7 +601,30 @@ class HybridDatabase implements IDatabase {
   }
 
   // Sync Logic
-  async syncCloudToLocal() { try { const cloudProds = await this.cloud.getAllProductos(); for (const p of cloudProds) await this.local.updateProducto(p); } catch(e) { console.warn("Sync failed", e); } }
+  // MARGEN_SEGURIDAD: la nube SOLO AGREGA lo que no existe localmente. LOCAL SIEMPRE GANA.
+  async syncCloudToLocal() {
+    try {
+      const MARGEN_SEGURIDAD = 60 * 1000; // 60s de barrera protectora — no se usa en tiempo pero documenta la intención
+      void MARGEN_SEGURIDAD; // evitar warning de TS unused
+      const processTable = async (cloudItems: any[], localIds: Set<string>, tombstoneSet: Set<string>, addFn: (i: any) => Promise<void>) => {
+        for (const item of cloudItems) {
+          if (tombstoneSet.has(item.id)) continue;
+          if (!localIds.has(item.id)) await addFn(item).catch(() => {});
+        }
+      };
+      const [cloudProds, cloudProvs, cloudPrecios, tombsProds, tombsProvs, tombsPrecios] = await Promise.all([
+        this.cloud.getAllProductos(), this.cloud.getAllProveedores(), this.cloud.getAllPrecios(),
+        this.local.getTombstones('productos'), this.local.getTombstones('proveedores'), this.local.getTombstones('precios')
+      ]);
+      const tombstoneSet = new Set([...tombsProds, ...tombsProvs, ...tombsPrecios]);
+      const [lProds, lProvs, lPrecios] = await Promise.all([
+        this.local.getAllProductos(), this.local.getAllProveedores(), this.local.getAllPrecios()
+      ]);
+      await processTable(cloudProds, new Set(lProds.map(p => p.id)), tombstoneSet, p => this.local.addProducto(p));
+      await processTable(cloudProvs, new Set(lProvs.map(p => p.id)), tombstoneSet, p => this.local.addProveedor(p));
+      await processTable(cloudPrecios, new Set(lPrecios.map(p => p.id)), tombstoneSet, p => this.local.addPrecio(p));
+    } catch(e) { console.warn("Sync failed", e); }
+  }
   async syncLocalToCloud() { if (!this.isOnline) return; try { const localProds = await this.local.getAllProductos(); for (const p of localProds) await this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p)); } catch(e) { console.warn("Sync failed", e); } }
 
   // Delegates
