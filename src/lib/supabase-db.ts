@@ -1017,7 +1017,7 @@ export class SupabaseDatabase implements IDatabase {
             id: v.id,
             caja_id: v.cajaId,
             items: v.items,
-            total: v.total,
+            total: safeN(v.total),
             metodo_pago: v.metodoPago,
             usuario_id: v.usuarioId,
             cliente: v.cliente,
@@ -1046,9 +1046,9 @@ export class SupabaseDatabase implements IDatabase {
             usuario_id: c.usuarioId,
             fecha_apertura: c.fechaApertura,
             fecha_cierre: c.fechaCierre,
-            monto_apertura: c.montoApertura,
-            monto_cierre: c.montoCierre,
-            total_ventas: c.totalVentas,
+            monto_apertura: safeN(c.montoApertura),
+            monto_cierre: safeN(c.montoCierre),
+            total_ventas: safeN(c.totalVentas),
             ventas_ids: c.ventasIds,
             estado: c.estado
         };

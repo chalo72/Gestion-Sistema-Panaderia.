@@ -1,9 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
-import html2canvas from 'html2canvas';
 import { Eye } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Badge } from '@/components/ui/badge';
 
 /**
  * VisualSentinel (v1.0.1 - EAGLE EYES 🦅👁️)
@@ -35,7 +33,17 @@ export function VisualSentinel() {
         console.log("🦅 [Eagle Eyes] PICO-CLAW está observando...");
 
         try {
-            const canvas = await html2canvas(document.body, {
+            // Carga dinámica para no romper la app si falta la librería
+            let html2canvasLib;
+            try {
+                // @ts-ignore
+                html2canvasLib = (await import('html2canvas')).default;
+            } catch (e) {
+                console.warn("🚫 [Eagle Eyes] html2canvas no está instalada. Funcionalidad de visión desactivada temporalmente.");
+                return;
+            }
+
+            const canvas = await html2canvasLib(document.body, {
                 allowTaint: true,
                 useCORS: true,
                 scale: 0.5, // Reducir escala para ahorrar memoria/espacio

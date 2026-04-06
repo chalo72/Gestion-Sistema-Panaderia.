@@ -592,7 +592,13 @@ class HybridDatabase implements IDatabase {
     window.addEventListener('offline', () => { this.isOnline = false; });
   }
 
-  async init() { await this.local.init(); if (this.isOnline) await this.syncCloudToLocal(); }
+  async init() { 
+    await this.local.init(); 
+    // Sincronización en segundo plano para no bloquear el inicio de la app
+    if (this.isOnline) {
+      this.syncCloudToLocal().catch(err => console.warn("Background sync failed", err));
+    }
+  }
 
   // Sync Logic
   async syncCloudToLocal() { try { const cloudProds = await this.cloud.getAllProductos(); for (const p of cloudProds) await this.local.updateProducto(p); } catch(e) { console.warn("Sync failed", e); } }
