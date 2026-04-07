@@ -423,11 +423,10 @@ export function usePriceControl() {
   }, [configuracion]);
 
   // Funciones de Productos
-  const addProducto = useCallback(async (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'> & { stockActual?: number, stockMinimo?: number }) => {
-    const { stockActual, stockMinimo, ...productoData } = producto;
+  const addProducto = useCallback(async (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => {
     const now = new Date().toISOString();
     const nuevoProducto: Producto = {
-      ...productoData,
+      ...producto,
       id: crypto.randomUUID(),
       createdAt: now,
       updatedAt: now,
@@ -435,14 +434,15 @@ export function usePriceControl() {
     await db.addProducto(nuevoProducto);
     setProductos(prev => [...prev, nuevoProducto]);
 
-    // ── Sincronización automática: crear InventarioItem con stock inicial ──
+    // ── Sincronización automática: crear InventarioItem con stock 0 ──
+    // Así el producto aparece de inmediato en el módulo de Inventario
     const existeEnInventario = await db.getInventarioItemByProducto(nuevoProducto.id).catch(() => null);
     if (!existeEnInventario) {
       const itemInventario: InventarioItem = {
         id: crypto.randomUUID(),
         productoId: nuevoProducto.id,
-        stockActual: stockActual ?? 0,
-        stockMinimo: stockMinimo ?? 5,
+        stockActual: 0,
+        stockMinimo: 5,
         ubicacion: 'Almacén General',
         ultimoMovimiento: now,
       };
@@ -453,62 +453,12 @@ export function usePriceControl() {
     return nuevoProducto;
   }, []);
 
-  const updateProducto = useCallback(async (id: string, updates: Partial<Producto> & { stockActual?: number, stockMinimo?: number }) => {
-    const { stockActual, stockMinimo, ...productUpdates } = updates;
+  const updateProducto = useCallback(async (id: string, updates: Partial<Producto>) => {
     const producto = productos.find(p => p.id === id);
     if (!producto) return;
-
-    // 1. Actualizar producto base
-    const updatedProducto = { ...producto, ...productUpdates, updatedAt: new Date().toISOString() };
+    const updatedProducto = { ...producto, ...updates, updatedAt: new Date().toISOString() };
     await db.updateProducto(updatedProducto);
     setProductos(prev => prev.map(p => p.id === id ? updatedProducto : p));
-
-    // 2. Actualizar stock/mínimos si se proporcionan
-    if (stockActual !== undefined || stockMinimo !== undefined) {
-      try {
-        const itemInv = await db.getInventarioItemByProducto(id);
-        const now = new Date().toISOString();
-        const updatedItem: InventarioItem = {
-          id: itemInv?.id || crypto.randomUUID(),
-          productoId: id,
-          stockActual: stockActual !== undefined ? stockActual : (itemInv?.stockActual || 0),
-          stockMinimo: stockMinimo !== undefined ? stockMinimo : (itemInv?.stockMinimo || 5),
-          ubicacion: itemInv?.ubicacion || 'Almacén General',
-          ultimoMovimiento: now
-        };
-        await db.updateInventarioItem(updatedItem);
-        inventarioHook.setInventario(prev => {
-          const existe = prev.find(i => i.productoId === id);
-          if (existe) return prev.map(i => i.productoId === id ? updatedItem : i);
-          return [...prev, updatedItem];
-        });
-
-        // Registrar movimiento si el stock cambió
-        if (stockActual !== undefined && stockActual !== itemInv?.stockActual) {
-          const delta = stockActual - (itemInv?.stockActual || 0);
-          const usuarioActual = (() => {
-            try {
-              const u = localStorage.getItem('pricecontrol_local_user');
-              return u ? (JSON.parse(u)?.nombre || 'sistema') : 'sistema';
-            } catch { return 'sistema'; }
-          })();
-
-          const movimiento: MovimientoInventario = {
-            id: crypto.randomUUID(),
-            productoId: id,
-            tipo: delta > 0 ? 'entrada' : 'salida',
-            cantidad: Math.abs(delta),
-            motivo: 'Ajuste desde Catálogo/POS',
-            fecha: now,
-            usuario: usuarioActual
-          };
-          await db.addMovimiento(movimiento);
-          inventarioHook.setMovimientos(prev => [movimiento, ...prev]);
-        }
-      } catch (err) {
-        console.error('Error sincronizando inventario en updateProducto:', err);
-      }
-    }
   }, [productos]);
 
   // PROTEGIDO: Capa 2 — Guard defensivo: tombstone se crea SIEMPRE, sin importar errores parciales

@@ -110,6 +110,7 @@ export interface DBConfiguracion {
   ajusteAutomatico: boolean;
   notificarSubidas: boolean;
   mostrarUtilidadEnLista?: boolean;
+  aiMode?: 'local' | 'hybrid' | 'off'; // LOCAL (Ollama), HYBRID (Llama + Claude), OFF (Kill Switch)
   categorias: Array<{ id: string; nombre: string; icono?: string; color?: string; }>;
 }
 

@@ -74,10 +74,11 @@ const PROMPTS: Record<string, string> = {
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   
-  const { tipo, mensaje, imagen, soberania } = await req.json() as { 
+  const { tipo, mensaje, imagen, soberania, aiMode } = await req.json() as { 
     tipo: string; 
     mensaje: string;
     imagen?: string; // Base64
+    aiMode?: 'local' | 'hybrid' | 'off';
     soberania?: { 
       directiva?: string; 
       restricciones?: string[]; 
@@ -86,9 +87,13 @@ export default async function handler(req: Request) {
     }
   };
 
+  // 1. INTERRUPTOR DE EMERGENCIA (KILL SWITCH)
+  if (aiMode === 'off') {
+    return new Response('AI_DISABLED: El Interruptor de Emergencia está activado. Todas las funciones de IA están suspendidas.', { status: 503 });
+  }
+
   let systemPrompt = PROMPTS[tipo] || `Eres un experto en ${tipo} del Holding Dulce Placer.`;
   
-  // INYECCIÓN DE SOBERANÍA (DIRECTOR GENERAL)
   if (soberania) {
     let soberaniaPrompt = "\n\n=== DIRECTIVAS SUPREMAS DEL DIRECTOR GENERAL ===\n";
     if (soberania.directiva) soberaniaPrompt += `DIRECTIVA PRIMARIA: ${soberania.directiva}\n`;
@@ -101,106 +106,124 @@ export default async function handler(req: Request) {
 
   if (!PROMPTS[tipo] && !soberania) return new Response('Agente desconocido', { status: 400 });
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  
-  // ── Claude (Anthropic) con Soporte de Visión ──────────────────────────────
-  if (apiKey && apiKey !== "sk-ant-...") {
+  // 2. CONFIGURACIÓN DE PROVEEDORES (TRIPLE-HÍBRIDO)
+  const PRIMARY_PROVIDER = process.env.AI_PRIMARY_PROVIDER || 'ollama';
+  const OLLAMA_TEXT = process.env.OLLAMA_MODEL_TEXT || 'llama3.2';
+  const OLLAMA_VISION = process.env.OLLAMA_MODEL_VISION || 'llama3.2-vision';
+  const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+
+  const providers = [];
+  if (aiMode === 'local') {
+    providers.push('ollama');
+  } else {
+    if (PRIMARY_PROVIDER === 'ollama') {
+      providers.push('ollama', 'anthropic');
+    } else {
+      providers.push('anthropic', 'ollama');
+    }
+  }
+
+  // Intentar con los proveedores en orden
+  for (const provider of providers) {
     try {
-      const client = new Anthropic({ apiKey });
-      let model = ['gerente', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo) 
-        ? 'claude-3-5-sonnet-20240620' 
-        : 'claude-3-haiku-20240307';
-
-      const content: any[] = [{ type: 'text', text: mensaje }];
-      
-      if (imagen) {
-        const base64Data = imagen.split(',')[1] || imagen;
-        content.push({
-          type: 'image',
-          source: {
-            type: 'base64',
-            media_type: 'image/jpeg',
-            data: base64Data,
-          },
-        });
+      if (provider === 'anthropic' && ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") {
+        return await handleAnthropic(ANTHROPIC_KEY, tipo, mensaje, imagen, systemPrompt);
       }
+      if (provider === 'ollama') {
+        const model = imagen ? OLLAMA_VISION : OLLAMA_TEXT;
+        return await handleOllama(model, mensaje, imagen, systemPrompt);
+      }
+    } catch (err) {
+      console.error(`Error con proveedor ${provider}, intentando siguiente...`, err);
+      continue;
+    }
+  }
 
-      const stream = await client.messages.stream({
-        model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{ role: 'user', content }],
-      });
+  return new Response(JSON.stringify({ error: 'No hay proveedores de IA disponibles o todos fallaron.' }), { status: 500 });
+}
 
-      const readable = new ReadableStream({
-        async start(controller) {
-          try {
-            for await (const chunk of stream) {
-              if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
-                controller.enqueue(new TextEncoder().encode(chunk.delta.text));
+async function handleAnthropic(apiKey: string, tipo: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
+  const client = new Anthropic({ apiKey });
+  const model = ['gerente', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo) 
+    ? 'claude-3-5-sonnet-20240620' 
+    : 'claude-3-haiku-20240307';
+
+  const content: any[] = [{ type: 'text', text: mensaje }];
+  if (imagen) {
+    const base64Data = (imagen.includes(',') ? imagen.split(',')[1] : imagen);
+    content.push({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data: base64Data },
+    });
+  }
+
+  const stream = await client.messages.stream({
+    model,
+    max_tokens: 1024,
+    system: systemPrompt,
+    messages: [{ role: 'user', content }],
+  });
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of stream) {
+          if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+            controller.enqueue(new TextEncoder().encode(chunk.delta.text));
+          }
+        }
+        controller.close();
+      } catch (e) { controller.error(e); }
+    },
+  });
+  return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+}
+
+async function handleOllama(model: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
+  const oMessage: any = { role: 'user', content: mensaje };
+  if (imagen) {
+    oMessage.images = [(imagen.includes(',') ? imagen.split(',')[1] : imagen)];
+  }
+
+  const response = await fetch("http://localhost:11434/api/chat", {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        oMessage
+      ],
+      stream: true,
+    }),
+  });
+
+  if (!response.ok) throw new Error(`Ollama error: ${response.statusText}`);
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n').filter(l => l.trim());
+          for (const line of lines) {
+            try {
+              const json = JSON.parse(line);
+              if (json.message?.content) {
+                controller.enqueue(new TextEncoder().encode(json.message.content));
               }
-            }
-            controller.close();
-          } catch (streamErr: any) {
-            controller.error(streamErr);
+            } catch (e) {}
           }
-        },
-      });
-      return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-    } catch (err: any) {
-      console.error('Anthropic Error, intentando Ollama...', err);
+        }
+        controller.close();
+      } catch (e) { controller.error(e); }
     }
-  }
+  });
 
-  // ── Ollama (Local) Fallback ──────────────────────────────────────────────
-  try {
-    const oMessage: any = { role: 'user', content: mensaje };
-    if (imagen) {
-      oMessage.images = [imagen.split(',')[1] || imagen];
-    }
-
-    const response = await fetch("http://localhost:11434/api/chat", {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'llama3.2:1b',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          oMessage
-        ],
-        stream: true,
-      }),
-    });
-
-    if (!response.ok) throw new Error(`Ollama error: ${response.statusText}`);
-
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value);
-            const lines = chunk.split('\n').filter(l => l.trim());
-            for (const line of lines) {
-              try {
-                const json = JSON.parse(line);
-                if (json.message?.content) {
-                  controller.enqueue(new TextEncoder().encode(json.message.content));
-                }
-              } catch (e) {}
-            }
-          }
-          controller.close();
-        } catch (e) { controller.error(e); }
-      }
-    });
-
-    return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
-  } catch (err: any) {
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
-  }
+  return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }

@@ -98,7 +98,7 @@
             } else if (localTs === 0) {
               localStorage.setItem(STORAGE_KEY, data.timestamp);
             }
-          }).catch(e => console.debug("Version check skipped:", e.message));
+          }).catch(() => {});
       };
       
       // Ejecutar inmediatamente y cada 10 minutos

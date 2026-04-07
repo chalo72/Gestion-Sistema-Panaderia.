@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
 import type { Configuracion, MonedaCode } from '@/types';
 
 interface ConfiguracionProps {
@@ -37,6 +38,7 @@ function Configuracion(props: ConfiguracionProps) {
   const [passPanadero, setPassPanadero] = useState('');
   const [passAuxiliar, setPassAuxiliar] = useState('');
   const [publicUrl, setPublicUrl] = useState('');
+  const [aiMode, setAiMode] = useState<'local' | 'hybrid' | 'off'>('hybrid');
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
@@ -73,6 +75,7 @@ function Configuracion(props: ConfiguracionProps) {
       setNotificaciones(configuracion.notificarSubidas !== false);
       setPresupuesto((configuracion.presupuestoMensual || 0).toString());
       setPublicUrl(configuracion.publicUrl || '');
+      setAiMode(configuracion.aiMode || 'hybrid');
     }
   }, [configuracion]);
 
@@ -98,6 +101,7 @@ function Configuracion(props: ConfiguracionProps) {
         notificarSubidas: notificaciones,
         presupuestoMensual: parseFloat(presupuesto) || 0,
         publicUrl: publicUrl.trim(),
+        aiMode: aiMode,
       });
       toast.success('✨ Configuración actualizada y protegida');
     } catch (error) {
@@ -371,6 +375,91 @@ function Configuracion(props: ConfiguracionProps) {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* INTERRUPTOR DE EMERGENCIA IA */}
+          <Card className={cn(
+            "border-2 transition-all duration-500 overflow-hidden shadow-2xl",
+            aiMode === 'off' ? "border-red-600 bg-red-950/20" : 
+            aiMode === 'local' ? "border-emerald-500 bg-emerald-950/10" : "border-primary/20"
+          )}>
+            <CardHeader className={cn(
+              "border-b transition-colors",
+              aiMode === 'off' ? "bg-red-600/20" : "bg-primary/5"
+            )}>
+              <CardTitle className={cn(
+                "flex items-center gap-2",
+                aiMode === 'off' ? "text-red-500" : "text-primary"
+              )}>
+                <Activity className={cn("w-5 h-5", aiMode === 'off' && "animate-pulse")} />
+                Estado de Inteligencia
+              </CardTitle>
+              <CardDescription className={aiMode === 'off' ? "text-red-400" : ""}>
+                Control maestro de soberanía y emergencia
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-4 space-y-3">
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAiMode('hybrid')}
+                  className={cn(
+                    "flex items-center justify-between p-3 rounded-xl border transition-all",
+                    aiMode === 'hybrid' 
+                      ? "bg-primary/10 border-primary shadow-[0_0_15px_rgba(var(--primary),0.3)]" 
+                      : "bg-background/40 border-border/50 hover:border-primary/40"
+                  )}
+                >
+                  <div className="text-left">
+                    <span className="text-sm font-black block">MODO HÍBRIDO</span>
+                    <span className="text-[10px] opacity-70">Llama (Local) + Claude (Nube)</span>
+                  </div>
+                  <div className={cn("w-3 h-3 rounded-full", aiMode === 'hybrid' ? "bg-primary animate-pulse" : "bg-slate-500")} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAiMode('local')}
+                  className={cn(
+                    "flex items-center justify-between p-3 rounded-xl border transition-all",
+                    aiMode === 'local' 
+                      ? "bg-emerald-500/10 border-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]" 
+                      : "bg-background/40 border-border/50 hover:border-emerald-500/40"
+                  )}
+                >
+                  <div className="text-left">
+                    <span className="text-sm font-black block text-emerald-500">SOBERANÍA TOTAL</span>
+                    <span className="text-[10px] opacity-70">100% Local (Sólo Ollama)</span>
+                  </div>
+                  <div className={cn("w-3 h-3 rounded-full", aiMode === 'local' ? "bg-emerald-500 shadow-[0_0_8px_#10b981]" : "bg-slate-500")} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAiMode('off')}
+                  className={cn(
+                    "flex items-center justify-between p-3 rounded-xl border transition-all",
+                    aiMode === 'off' 
+                      ? "bg-red-600/20 border-red-600 shadow-[0_0_15px_rgba(220,38,38,0.4)]" 
+                      : "bg-background/40 border-border/50 hover:border-red-600/40"
+                  )}
+                >
+                  <div className="text-left">
+                    <span className="text-sm font-black block text-red-500">KILL SWITCH</span>
+                    <span className="text-[10px] opacity-70 font-bold uppercase">Apagado de Emergencia</span>
+                  </div>
+                  <div className={cn("w-3 h-3 rounded-full", aiMode === 'off' ? "bg-red-600 animate-ping" : "bg-slate-500")} />
+                </button>
+              </div>
+              
+              {aiMode === 'off' && (
+                <div className="p-2 bg-red-600/10 border border-red-600/30 rounded-lg animate-ag-shake">
+                  <p className="text-[10px] text-red-500 font-bold text-center uppercase tracking-tighter">
+                    ⚠️ TODA LA INTELIGENCIA ESTÁ DESACTIVADA
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

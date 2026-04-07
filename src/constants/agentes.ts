@@ -41,7 +41,10 @@ export async function consultarAgente(
   onChunk: (text: string) => void,
   imagen?: string // Base64 de la imagen
 ): Promise<string> {
-  const config = await db.getAgenteConfig(tipo);
+  const [config, sysConfig] = await Promise.all([
+    db.getAgenteConfig(tipo),
+    db.getConfiguracion()
+  ]);
 
   const res = await fetch('/api/agente', {
     method: 'POST',
@@ -50,6 +53,7 @@ export async function consultarAgente(
       tipo, 
       mensaje,
       imagen,
+      aiMode: sysConfig?.aiMode || 'hybrid',
       soberania: config ? {
         directiva: config.directivaPrimaria,
         restricciones: config.restricciones,
