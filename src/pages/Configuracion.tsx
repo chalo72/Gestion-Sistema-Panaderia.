@@ -475,8 +475,37 @@ function Configuracion(props: ConfiguracionProps) {
             Aplicar Cambios
           </Button>
 
+          {/* Recuperar datos desde la nube */}
+          <div className="pt-4 border-t border-border/40">
+            <Button
+              variant="outline"
+              disabled={isRecovering}
+              onClick={async () => {
+                setIsRecovering(true);
+                try {
+                  const r = await (db as any).recoverFromCloud();
+                  toast.success(`Recuperados: ${r.productos} productos, ${r.proveedores} proveedores, ${r.precios} precios`);
+                  window.location.reload();
+                } catch (e: any) {
+                  toast.error('Error al recuperar: ' + (e?.message || e));
+                } finally {
+                  setIsRecovering(false);
+                }
+              }}
+              className="w-full border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
+            >
+              {isRecovering
+                ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Recuperando desde la nube...</>
+                : <><CloudDownload className="w-4 h-4 mr-2" />Recuperar datos desde la nube</>
+              }
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              Restaura productos, proveedores y precios perdidos desde Supabase
+            </p>
+          </div>
+
           {/* Zona de Peligro */}
-          <div className="pt-8 border-t border-border/40">
+          <div className="pt-4 border-t border-border/40">
             {!showConfirmClear ? (
               <Button
                 variant="ghost"
