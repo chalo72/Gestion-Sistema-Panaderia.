@@ -176,30 +176,60 @@ export function BusquedaRapida({
               <div className="divide-y">
                 {resultados.map((producto) => {
                   const stats = getProductoStats(producto);
+                  const todosPrecios = getPreciosByProducto(producto.id);
 
                   return (
                     <div
                       key={producto.id}
-                      className="px-4 py-3 hover:bg-gray-50 transition-colors flex items-center gap-3"
+                      className="px-4 py-3 hover:bg-gray-50 transition-colors"
                     >
-                      {/* Foto del producto */}
-                      {producto.imagen ? (
-                        <img
-                          src={producto.imagen}
-                          alt={producto.nombre}
-                          className="w-10 h-10 rounded-lg object-cover shrink-0"
-                        />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                          <Package className="w-5 h-5 text-gray-400" />
+                      {/* Fila principal: foto + nombre + precio venta */}
+                      <div className="flex items-center gap-3">
+                        {producto.imagen ? (
+                          <img
+                            src={producto.imagen}
+                            alt={producto.nombre}
+                            className="w-10 h-10 rounded-lg object-cover shrink-0"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
+                            <Package className="w-5 h-5 text-gray-400" />
+                          </div>
+                        )}
+                        <h3 className="font-semibold text-sm flex-1 min-w-0 text-gray-800">{producto.nombre}</h3>
+                        <span className="font-bold text-emerald-600 text-base whitespace-nowrap shrink-0">
+                          {formatCurrency(producto.precioVenta)}
+                        </span>
+                      </div>
+
+                      {/* Costos por proveedor (solo si tiene permisos y hay precios) */}
+                      {canVerPrecioCosto && canVerProveedores && todosPrecios.length > 0 && (
+                        <div className="mt-1.5 ml-13 flex flex-wrap gap-2">
+                          {todosPrecios.map(precio => {
+                            const cantEmbalaje = safeNumber((precio as any).cantidadEmbalaje) || 1;
+                            const costoUnit = safeNumber(precio.precioCosto) / cantEmbalaje;
+                            const esMejor = costoUnit === stats.mejorCosto;
+                            const prov = getProveedorById(precio.proveedorId);
+                            return (
+                              <button
+                                key={precio.id}
+                                onClick={() => handleCopyPrice(costoUnit, prov?.nombre || 'proveedor')}
+                                className={`flex items-center gap-1 text-xs px-2 py-0.5 rounded-full transition-colors ${
+                                  esMejor
+                                    ? 'bg-emerald-100 text-emerald-700 font-semibold'
+                                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                }`}
+                              >
+                                <Store className="w-3 h-3" />
+                                <span>{prov?.nombre || 'Proveedor'}</span>
+                                <ArrowRight className="w-3 h-3 opacity-50" />
+                                <span>{formatCurrency(costoUnit)}</span>
+                                {esMejor && <TrendingUp className="w-3 h-3" />}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
-                      {/* Nombre completo */}
-                      <h3 className="font-semibold text-sm flex-1 min-w-0 text-gray-800">{producto.nombre}</h3>
-                      {/* Precio de venta */}
-                      <span className="font-bold text-emerald-600 text-base whitespace-nowrap shrink-0">
-                        {formatCurrency(producto.precioVenta)}
-                      </span>
                     </div>
                   );
                 })}
