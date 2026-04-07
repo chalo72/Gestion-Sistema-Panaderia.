@@ -144,9 +144,9 @@ export default async function handler(req: Request) {
 
 async function handleAnthropic(apiKey: string, tipo: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
   const client = new Anthropic({ apiKey });
-  const model = ['gerente', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo) 
-    ? 'claude-3-5-sonnet-20240620' 
-    : 'claude-3-haiku-20240307';
+  const model = ['gerente', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo)
+    ? 'claude-sonnet-4-6'
+    : 'claude-haiku-4-5-20251001';
 
   const content: any[] = [{ type: 'text', text: mensaje }];
   if (imagen) {
