@@ -837,19 +837,27 @@ function AppContent() {
         {/* Header (Restaurado) */}
         <header className="flex-none bg-white dark:bg-slate-900 border-b border-border pl-16 pr-4 md:px-8 py-4 flex items-center justify-between z-40">
           <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="w-10 h-10 bg-slate-100 dark:bg-slate-800 rounded-xl flex items-center justify-center border border-border shrink-0">
-              <User className="w-5 h-5 text-slate-500" />
+            <div onClick={() => setCurrentView('usuarios')} className="w-10 h-10 rounded-xl flex items-center justify-center border-2 border-primary/20 hover:border-primary transition-all cursor-pointer overflow-hidden shadow-lg shadow-primary/5 bg-slate-50 dark:bg-slate-800">
+              {usuario?.avatar ? (
+                <img src={usuario.avatar} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                <img 
+                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(usuario?.nombre || 'Admin')}&background=db2777&color=fff&bold=true`} 
+                  alt="Avatar" 
+                  className="w-full h-full object-cover"
+                />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <p className="text-base font-bold text-foreground truncate max-w-[140px] sm:max-w-none">{usuario?.nombre} {usuario?.apellido}</p>
+                <p className="text-base font-black text-foreground truncate max-w-[140px] sm:max-w-none tracking-tight">{usuario?.nombre} {usuario?.apellido}</p>
                 <div className="flex gap-2">
                   {isOnline ? (
-                    <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-600 bg-emerald-50/50">Online</Badge>
+                    <Badge variant="outline" className="text-[10px] font-bold border-emerald-500/30 text-emerald-600 bg-emerald-50/50">ONLINE</Badge>
                   ) : (
-                    <Badge variant="outline" className="text-[10px] border-amber-500/30 text-amber-600 bg-amber-50/50 grayscale">Offline</Badge>
+                    <Badge variant="outline" className="text-[10px] font-bold border-amber-500/30 text-amber-600 bg-amber-50/50 grayscale">OFFLINE</Badge>
                   )}
-                  <Badge variant="outline" className="hidden sm:inline-flex text-[10px] border-blue-500/30 text-blue-600 bg-blue-50/50 animate-pulse">Nexus v3.1-FIX</Badge>
+                  <Badge variant="outline" className="hidden sm:inline-flex text-[10px] font-bold border-primary/30 text-primary bg-primary/5 animate-pulse">PANADERÍA v5.5-HQ</Badge>
                 </div>
               </div>
               <p className="text-xs text-muted-foreground font-medium">{usuario?.rol}</p>
