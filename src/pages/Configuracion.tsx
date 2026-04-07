@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, CloudDownload } from 'lucide-react';
+import { db } from '@/lib/database';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,6 +32,7 @@ function Configuracion(props: ConfiguracionProps) {
   const [notificaciones, setNotificaciones] = useState(true);
   const [presupuesto, setPresupuesto] = useState('0');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
+  const [isRecovering, setIsRecovering] = useState(false);
   const [showRolePass, setShowRolePass] = useState(false);
   const [passGerente, setPassGerente] = useState('');
   const [passComprador, setPassComprador] = useState('');

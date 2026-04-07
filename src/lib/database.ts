@@ -651,11 +651,20 @@ class HybridDatabase implements IDatabase {
           if (!localIds.has(item.id)) await addFn(item).catch(() => {});
         }
       };
-      const [cloudProds, cloudProvs, cloudPrecios, tombsProds, tombsProvs, tombsPrecios] = await Promise.all([
+      // CRÍTICO: usar tombstones de NUBE + local (protege aunque IndexedDB se limpie)
+      const [cloudProds, cloudProvs, cloudPrecios,
+             localTombsProds, localTombsProvs, localTombsPrecios,
+             cloudTombsProds, cloudTombsProvs, cloudTombsPrecios] = await Promise.all([
         this.cloud.getAllProductos(), this.cloud.getAllProveedores(), this.cloud.getAllPrecios(),
-        this.local.getTombstones('productos'), this.local.getTombstones('proveedores'), this.local.getTombstones('precios')
+        this.local.getTombstones('productos'), this.local.getTombstones('proveedores'), this.local.getTombstones('precios'),
+        this.cloud.getTombstones('productos').catch(() => [] as string[]),
+        this.cloud.getTombstones('proveedores').catch(() => [] as string[]),
+        this.cloud.getTombstones('precios').catch(() => [] as string[]),
       ]);
-      const tombstoneSet = new Set([...tombsProds, ...tombsProvs, ...tombsPrecios]);
+      const tombstoneSet = new Set([
+        ...localTombsProds, ...localTombsProvs, ...localTombsPrecios,
+        ...cloudTombsProds, ...cloudTombsProvs, ...cloudTombsPrecios,
+      ]);
       const [lProds, lProvs, lPrecios] = await Promise.all([
         this.local.getAllProductos(), this.local.getAllProveedores(), this.local.getAllPrecios()
       ]);
@@ -664,7 +673,55 @@ class HybridDatabase implements IDatabase {
       await processTable(cloudPrecios, new Set(lPrecios.map(p => p.id)), tombstoneSet, p => this.local.addPrecio(p));
     } catch(e) { console.warn("Sync failed", e); }
   }
-  async syncLocalToCloud() { if (!this.isOnline) return; try { const localProds = await this.local.getAllProductos(); for (const p of localProds) await this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p)); } catch(e) { console.warn("Sync failed", e); } }
+
+  // syncLocalToCloud: sube productos, proveedores y precios a la nube
+  async syncLocalToCloud() {
+    if (!this.isOnline) return;
+    try {
+      const [localProds, localProvs, localPrecios] = await Promise.all([
+        this.local.getAllProductos(), this.local.getAllProveedores(), this.local.getAllPrecios()
+      ]);
+      for (const p of localProds) await this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p).catch(() => {}));
+      for (const p of localProvs) await this.cloud.updateProveedor(p).catch(() => this.cloud.addProveedor(p).catch(() => {}));
+      for (const p of localPrecios) await this.cloud.updatePrecio(p).catch(() => this.cloud.addPrecio(p).catch(() => {}));
+    } catch(e) { console.warn("Sync failed", e); }
+  }
+
+  // recoverFromCloud: restaura TODO desde Supabase usando tombstones de la nube como filtro
+  async recoverFromCloud(): Promise<{ productos: number; proveedores: number; precios: number }> {
+    const [cloudProds, cloudProvs, cloudPrecios,
+           cloudTombsProds, cloudTombsProvs, cloudTombsPrecios] = await Promise.all([
+      this.cloud.getAllProductos(), this.cloud.getAllProveedores(), this.cloud.getAllPrecios(),
+      this.cloud.getTombstones('productos').catch(() => [] as string[]),
+      this.cloud.getTombstones('proveedores').catch(() => [] as string[]),
+      this.cloud.getTombstones('precios').catch(() => [] as string[]),
+    ]);
+    const cloudTombstones = new Set([...cloudTombsProds, ...cloudTombsProvs, ...cloudTombsPrecios]);
+
+    let recovered = { productos: 0, proveedores: 0, precios: 0 };
+
+    for (const p of cloudProds) {
+      if (cloudTombstones.has(p.id)) continue;
+      await this.local.updateProducto(p).catch(() => this.local.addProducto(p).catch(() => {}));
+      recovered.productos++;
+    }
+    for (const p of cloudProvs) {
+      if (cloudTombstones.has(p.id)) continue;
+      await this.local.updateProveedor(p).catch(() => this.local.addProveedor(p).catch(() => {}));
+      recovered.proveedores++;
+    }
+    for (const p of cloudPrecios) {
+      if (cloudTombstones.has(p.id)) continue;
+      await this.local.updatePrecio(p).catch(() => this.local.addPrecio(p).catch(() => {}));
+      recovered.precios++;
+    }
+    // Restaurar tombstones de nube en local
+    for (const id of cloudTombsProds) await this.local.addTombstone('productos', id).catch(() => {});
+    for (const id of cloudTombsProvs) await this.local.addTombstone('proveedores', id).catch(() => {});
+    for (const id of cloudTombsPrecios) await this.local.addTombstone('precios', id).catch(() => {});
+
+    return recovered;
+  }
 
   // Delegates
   async getAllProductos() { return this.local.getAllProductos(); }
@@ -766,8 +823,8 @@ class HybridDatabase implements IDatabase {
   async clearAll() { await this.local.clearAll(); }
 
   async getTombstones(tab: string) { return this.local.getTombstones(tab); }
-  async removeTombstone(tab: string, id: string) { await this.local.removeTombstone(tab, id); }
-  async addTombstone(tab: TombstoneTable, id: string) { await this.local.addTombstone(tab, id); }
+  async removeTombstone(tab: string, id: string) { await this.local.removeTombstone(tab, id); if (this.isOnline) this.cloud.removeTombstone(tab, id).catch(() => {}); }
+  async addTombstone(tab: TombstoneTable, id: string) { await this.local.addTombstone(tab, id); if (this.isOnline) this.cloud.addTombstone(tab, id).catch(() => {}); }
   async saveBackup(id: string, data: any) { await this.local.saveBackup(id, data); }
   async getBackup(id: string) { return this.local.getBackup(id); }
 
