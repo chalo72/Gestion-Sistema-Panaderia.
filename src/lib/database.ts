@@ -382,6 +382,26 @@ export interface IDatabase {
   addTombstone(table: TombstoneTable, id: string): Promise<void>;
   saveBackup(id: string, data: any): Promise<void>;
   getBackup(id: string): Promise<any>;
+  syncLocalToCloud?(): Promise<void>;
+  syncCloudToLocal?(): Promise<void>;
+
+  // MÉTODOS CRÉDITOS CLIENTES
+  getAllCreditosClientes(): Promise<any[]>;
+  addCreditoCliente(c: any): Promise<void>;
+  updateCreditoCliente(c: any): Promise<void>;
+  deleteCreditoCliente(id: string): Promise<void>;
+
+  // MÉTODOS CRÉDITOS TRABAJADORES
+  getAllCreditosTrabajadores(): Promise<any[]>;
+  addCreditoTrabajador(c: any): Promise<void>;
+  updateCreditoTrabajador(c: any): Promise<void>;
+  deleteCreditoTrabajador(id: string): Promise<void>;
+
+  // MÉTODOS TRABAJADORES
+  getAllTrabajadores(): Promise<any[]>;
+  addTrabajador(t: any): Promise<void>;
+  updateTrabajador(t: any): Promise<void>;
+  deleteTrabajador(id: string): Promise<void>;
 
   getAgenteConfig(id: string): Promise<DBAgenteConfig | undefined>;
   saveAgenteConfig(config: DBAgenteConfig): Promise<void>;
@@ -579,6 +599,24 @@ class IndexedDBDatabase implements IDatabase {
   async getAgenteHallazgos(lim: number = 50) { const db = await this.ensureInit(); return new Promise<DBHallazgoAgente[]>((res, rej) => { const req = db.transaction('agente_hallazgos').objectStore('agente_hallazgos').getAll(); req.onsuccess = () => { const sorted = (req.result as DBHallazgoAgente[]).sort((a,b) => b.fecha.localeCompare(a.fecha)); res(sorted.slice(0, lim)); }; req.onerror = () => rej(req.error); }); }
   async saveAgenteHallazgo(h: DBHallazgoAgente) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('agente_hallazgos', 'readwrite').objectStore('agente_hallazgos').put(h); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
   async marcarHallazgoLeido(id: string) { const db = await this.ensureInit(); const store = db.transaction('agente_hallazgos', 'readwrite').objectStore('agente_hallazgos'); const h = await new Promise<DBHallazgoAgente>((res, rej) => { const r = store.get(id); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); if (h) await new Promise<void>((res, rej) => { const r = store.put({ ...h, revisado: true }); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
+
+  // Créditos Clientes
+  async getAllCreditosClientes() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('creditos_clientes').objectStore('creditos_clientes').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addCreditoCliente(c: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('creditos_clientes', 'readwrite').objectStore('creditos_clientes').add(c); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateCreditoCliente(c: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('creditos_clientes', 'readwrite').objectStore('creditos_clientes').put(c); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteCreditoCliente(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('creditos_clientes', 'readwrite').objectStore('creditos_clientes').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+
+  // Créditos Trabajadores
+  async getAllCreditosTrabajadores() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('creditos_trabajadores').objectStore('creditos_trabajadores').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addCreditoTrabajador(c: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('creditos_trabajadores', 'readwrite').objectStore('creditos_trabajadores').add(c); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateCreditoTrabajador(c: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('creditos_trabajadores', 'readwrite').objectStore('creditos_trabajadores').put(c); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteCreditoTrabajador(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('creditos_trabajadores', 'readwrite').objectStore('creditos_trabajadores').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+
+  // Trabajadores
+  async getAllTrabajadores() { const db = await this.ensureInit(); return new Promise<any[]>((res, rej) => { const req = db.transaction('trabajadores').objectStore('trabajadores').getAll(); req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); }); }
+  async addTrabajador(t: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('trabajadores', 'readwrite').objectStore('trabajadores').add(t); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async updateTrabajador(t: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('trabajadores', 'readwrite').objectStore('trabajadores').put(t); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async deleteTrabajador(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('trabajadores', 'readwrite').objectStore('trabajadores').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
 }
 
 class HybridDatabase implements IDatabase {
@@ -743,6 +781,50 @@ class HybridDatabase implements IDatabase {
   async getAgenteHallazgos(lim?: number) { return this.local.getAgenteHallazgos(lim); }
   async saveAgenteHallazgo(h: DBHallazgoAgente) { await this.local.saveAgenteHallazgo(h); }
   async marcarHallazgoLeido(id: string) { await this.local.marcarHallazgoLeido(id); }
+
+  // Créditos Clientes
+  async getAllCreditosClientes() { return this.local.getAllCreditosClientes(); }
+  async addCreditoCliente(c: any) { await this.local.addCreditoCliente(c); }
+  async updateCreditoCliente(c: any) { await this.local.updateCreditoCliente(c); }
+  async deleteCreditoCliente(id: string) { await this.local.deleteCreditoCliente(id); }
+
+  // Créditos Trabajadores
+  async getAllCreditosTrabajadores() { return this.local.getAllCreditosTrabajadores(); }
+  async addCreditoTrabajador(c: any) { await this.local.addCreditoTrabajador(c); }
+  async updateCreditoTrabajador(c: any) { await this.local.updateCreditoTrabajador(c); }
+  async deleteCreditoTrabajador(id: string) { await this.local.deleteCreditoTrabajador(id); }
+
+  // Trabajadores
+  async getAllTrabajadores() { return this.local.getAllTrabajadores(); }
+  async addTrabajador(t: any) { await this.local.addTrabajador(t); }
+  async updateTrabajador(t: any) { await this.local.updateTrabajador(t); }
+  async deleteTrabajador(id: string) { await this.local.deleteTrabajador(id); }
+
+  // 🔄 SISTEMA DE RESCATE (CLOUD -> LOCAL)
+  async downloadFromCloud() {
+    if (!navigator.onLine) return;
+    try {
+      console.log('📥 [Nexus-Rescue] Iniciando recuperación de datos desde Supabase...');
+      const [p, pr, c] = await Promise.all([
+        this.cloud.getAllProductos(),
+        this.cloud.getAllProveedores(),
+        this.cloud.getConfiguracion()
+      ]);
+
+      if (p.length > 0) {
+        for (const item of p) await this.local.addProducto(item).catch(() => {});
+      }
+      if (pr.length > 0) {
+        for (const prov of pr) await this.local.addProveedor(prov).catch(() => {});
+      }
+      if (c) {
+        await this.local.saveConfiguracion(c).catch(() => {});
+      }
+      console.log('✅ [Nexus-Rescue] Rescate completado con éxito.');
+    } catch (err) {
+      console.error('❌ [Nexus-Rescue] Error durante el rescate:', err);
+    }
+  }
 }
 
 export const db = new HybridDatabase();

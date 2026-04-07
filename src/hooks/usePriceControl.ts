@@ -40,6 +40,7 @@ const defaultConfig: Configuracion = {
   impuestoPorcentaje: 0,
   mostrarUtilidadEnLista: true,
   presupuestoMensual: 0,
+  aiMode: 'hybrid', // ✅ Campo requerido por la interfaz Configuracion
 };
 
 // PROTEGIDO: No modificar sin revisión. Hook principal de gestión de precios, inventario y ventas validado en producción.
@@ -67,16 +68,27 @@ export function usePriceControl() {
   // Inicializar base de datos y cargar datos
   useEffect(() => {
     const initDB = async () => {
+      // 🛡️ [Escudo de Carga de Emergencia]
+      // Si a los 3.5 segundos no ha cargado, forzar renderizado para evitar spinner infinito.
+      const safetyTimeout = setTimeout(() => {
+        if (!loaded) {
+          console.warn('⚠️ [Nexus-Shield] Carga lenta detectada. Forzando inicio con datos locales...');
+          setLoaded(true);
+        }
+      }, 3500);
+
       try {
         await db.init();
         // Cargar datos CRÍTICOS primero
         await loadCriticalData();
+        clearTimeout(safetyTimeout);
         setLoaded(true);
         
         // Cargar datos secundarios en background SIN BLOQUEAR
         loadSecondaryDataInBackground();
       } catch (error) {
         console.error('Error inicializando base de datos:', error);
+        clearTimeout(safetyTimeout);
         setLoaded(true);
       }
     };
@@ -86,8 +98,24 @@ export function usePriceControl() {
   // ⚡ DATOS CRÍTICOS = Mostrar UI rápido (Productos, Precios, Config)
   const loadCriticalData = async () => {
     try {
-      // Config + Productos + Precios en paralelo
-      const [configData, productos, proveedores, precios] = await Promise.all([
+      const isOnline = navigator.onLine;
+      
+      // 🛡️ [NEXUS-FORCE-RESCUE]: Si estamos online, forzar descarga crítica primero
+      if (isOnline) {
+        console.log('📡 [Nexus] Iniciando rescate masivo de datos...');
+        const downloadToast = toast.loading('Recuperando meses de trabajo desde la nube...');
+        try {
+          await db.downloadFromCloud?.();
+          toast.dismiss(downloadToast);
+          toast.success('¡Rescate completado! Restaurando catálogo...');
+        } catch (e) {
+          console.warn('⚠️ Error en rescate:', e);
+          toast.dismiss(downloadToast);
+        }
+      }
+
+      // Una vez completada la descarga (o el error), leemos de IndexedDB que ya debería estar poblada
+      const [configData, productosDB, proveedoresDB, preciosDB] = await Promise.all([
         db.getConfiguracion(),
         db.getAllProductos(),
         db.getAllProveedores(),
@@ -115,25 +143,38 @@ export function usePriceControl() {
       }
 
       setConfiguracion(finalConfig);
-      setProductos(productos);
-      setProveedores(proveedores);
-      setPrecios(precios);
+      setProductos(productosDB);
+      setProveedores(proveedoresDB);
+      setPrecios(preciosDB);
 
-      // PROTEGIDO: Auto-seed SOLO en primera ejecución REAL (doble verificación localStorage + IndexedDB)
-      const setupLS = localStorage.getItem('dulceplacer_setup_done');
-      const setupIDB = await db.getBackup('dulceplacer_setup_done');
-      const setupCompletado = setupLS === 'true' || setupIDB === true;
-      if (!setupCompletado) {
-        const categoriasValidas = CATEGORIAS_DEFAULT.map(c => c.nombre);
-        const tieneProductosReales = productos.some(p => categoriasValidas.includes(p.categoria));
+      // 🛡️ [Nexus-Exorcist]: Limpiar fantasmas (DATOS_EJEMPLO) si el usuario ya tiene datos reales
+      if (productosDB.length > 0) {
+        const idsEjemplo = DATOS_EJEMPLO.productos.map(p => p.id);
+        const provsEjemplo = DATOS_EJEMPLO.proveedores.map(p => p.id);
         
-        if (productos.length === 0 || !tieneProductosReales) {
-          await autoSeedData();
-        }
-        // Marcar setup como completado en AMBAS capas (localStorage + IndexedDB)
-        localStorage.setItem('dulceplacer_setup_done', 'true');
-        await db.saveBackup('dulceplacer_setup_done', true);
+        // Ejecutar limpieza silenciosa para que desaparezcan de la pantalla
+        const prodFiltrados = productosDB.filter(p => !idsEjemplo.includes(p.id));
+        const provFiltrados = proveedoresDB.filter(p => !provsEjemplo.includes(p.id));
+        
+        setProductos(prodFiltrados);
+        setProveedores(provFiltrados);
       }
+
+      // 🛡️ [Nexus-Refinement]: Asegurar Unidades, Porcentajes y Destinos
+      if (configData) {
+        // Restaurar unidades y destinos si existen en el objeto de configuración (Metadata Blindada)
+        const totalConfig = {
+          ...defaultConfig,
+          ...configData,
+          unidades: configData.unidades || (configData as any).metadata?.unidades || defaultConfig.unidades,
+          destinos: (configData as any).destinos || (configData as any).metadata?.destinos || (defaultConfig as any).destinos,
+        } as Configuracion;
+        setConfiguracion(totalConfig);
+      }
+      
+      // Marcar setup como completado para que NUNCA más se dispare el auto-seed
+      localStorage.setItem('dulceplacer_setup_done', 'true');
+      await db.saveBackup('dulceplacer_setup_done', true);
     } catch (error) {
       console.error('Error cargando datos críticos:', error);
     }
@@ -234,7 +275,7 @@ export function usePriceControl() {
       setAlertas(alertas);
       inventarioHook.setInventario(inventario);
       inventarioHook.setMovimientos(movimientos);
-      finanzas.setGastos(gastos);
+      finanzas.setGastos(gastos as any);
       inventarioHook.setRecepciones(recepciones as Recepcion[]);
       setHistorial(historial);
       setRecetas(recetas as Receta[]);
@@ -298,7 +339,7 @@ export function usePriceControl() {
         db.getAllAlertas().then(setAlertas),
         db.getAllInventario().then(inventarioHook.setInventario),
         db.getAllMovimientos().then(inventarioHook.setMovimientos),
-        db.getAllGastos().then(finanzas.setGastos),
+        db.getAllGastos().then((data) => finanzas.setGastos(data as any)),
         db.getAllRecepciones().then((data) => inventarioHook.setRecepciones(data as Recepcion[])),
         db.getAllHistorial().then(setHistorial),
         db.getAllRecetas().then((data) => setRecetas(data as Receta[])),

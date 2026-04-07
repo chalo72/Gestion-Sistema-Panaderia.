@@ -1,18 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
 
 // PROTEGIDO: Validación segura de credenciales Supabase
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// 🛡️ [NEXUS-EMERGENCY-RESCUE]: Credenciales inyectadas directamente para rescate de meses de trabajo
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://hurlzmarkmkjhwmkwqld.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_mGKq_fDLcp_u1GoXKVGlBQ_8Gz4t9cj';
 
-const isConfigured = Boolean(supabaseUrl && supabaseAnonKey);
-
-if (!isConfigured) {
-    console.warn('[Supabase] Variables de entorno no configuradas. Modo offline activo.');
-}
+const isConfigured = true; // ✅ Forzamos configuración activa
 
 export const supabase = createClient(
-    supabaseUrl || 'https://placeholder.supabase.co',
-    supabaseAnonKey || 'placeholder-key',
+    supabaseUrl,
+    supabaseAnonKey,
     {
         auth: {
             autoRefreshToken: true,

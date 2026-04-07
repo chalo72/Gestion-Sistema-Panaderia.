@@ -382,7 +382,9 @@ export class SupabaseDatabase implements IDatabase {
             ajusteAutomatico: data.ajuste_automatico,
             notificarSubidas: data.notificar_subidas,
             mostrarUtilidadEnLista: data.mostrar_utilidad_en_lista ?? true,
-            categorias: data.categorias || []
+            categorias: data.categorias || [],
+            unidades: data.unidades || data.metadata?.unidades || [],
+            destinos: data.destinos || data.metadata?.destinos || []
         };
     }
 
@@ -400,7 +402,14 @@ export class SupabaseDatabase implements IDatabase {
             ajuste_automatico: config.ajusteAutomatico,
             notificar_subidas: config.notificarSubidas,
             mostrar_utilidad_en_lista: config.mostrarUtilidadEnLista,
-            categorias: config.categorias
+            categorias: config.categorias,
+            unidades: (config as any).unidades || [],
+            destinos: (config as any).destinos || [],
+            metadata: {
+              ...(config as any).metadata,
+              unidades: (config as any).unidades,
+              destinos: (config as any).destinos
+            }
         };
         const { error } = await supabase.from('configuracion').upsert(dbConfig);
         if (error) throw error;
