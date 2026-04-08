@@ -1,6 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, CloudDownload } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, CloudDownload, Shield, Download, Upload, Clock } from 'lucide-react';
 import { db } from '@/lib/database';
+import {
+  guardarSnapshot, leerTodos, eliminarSnapshot,
+  exportarSnapshotJSON, importarSnapshotJSON,
+  formatearFechaSnapshot, type ConfigSnapshot,
+} from '@/lib/config-backup';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +38,12 @@ function Configuracion(props: ConfiguracionProps) {
   const [presupuesto, setPresupuesto] = useState('0');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
+  const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
+  const [showSnapshots, setShowSnapshots] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Cargar snapshots al abrir
+  useEffect(() => { setSnapshots(leerTodos()); }, [showSnapshots]);
   const [showRolePass, setShowRolePass] = useState(false);
   const [passGerente, setPassGerente] = useState('');
   const [passComprador, setPassComprador] = useState('');
@@ -94,8 +105,8 @@ function Configuracion(props: ConfiguracionProps) {
     }
 
     try {
-      await onUpdateConfiguracion({
-        nombreNegocio: nombreNegocio,
+      const nuevaConfig = {
+        nombreNegocio,
         moneda: monedaSeleccionada,
         margenUtilidadDefault: margenNum,
         impuestoPorcentaje: parseFloat(impuesto) || 0,
@@ -104,8 +115,19 @@ function Configuracion(props: ConfiguracionProps) {
         presupuestoMensual: parseFloat(presupuesto) || 0,
         publicUrl: publicUrl.trim(),
         aiMode: aiMode,
-      });
-      toast.success('✨ Configuración actualizada y protegida');
+      };
+      await onUpdateConfiguracion(nuevaConfig);
+
+      // NIVEL 2: Snapshot automático al guardar config
+      const proveedores = await db.getAllProveedores().catch(() => []);
+      const precios = await db.getAllPrecios().catch(() => []);
+      guardarSnapshot(`Config guardada — ${nombreNegocio}`, {
+        configuracion: nuevaConfig,
+        proveedores,
+        precios,
+      }, 'auto');
+
+      toast.success('✨ Configuración guardada y respaldo automático creado');
     } catch (error) {
       toast.error('Error de seguridad al guardar: ' + (error as Error).message);
     }
@@ -474,6 +496,135 @@ function Configuracion(props: ConfiguracionProps) {
             <Save className="w-5 h-5 mr-2" />
             Aplicar Cambios
           </Button>
+
+          {/* ── NIVEL 2 & 3: Snapshots de Respaldo ─────────────────────── */}
+          <div className="pt-4 border-t border-border/40 space-y-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-slate-700 dark:text-slate-300">
+              <Shield className="w-4 h-4 text-indigo-500" />
+              <span>Respaldos de Configuración</span>
+              <span className="ml-auto text-xs font-normal text-muted-foreground">{snapshots.length} guardados</span>
+            </div>
+
+            {/* Botones de acción de snapshots */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs"
+                onClick={async () => {
+                  const proveedores = await db.getAllProveedores().catch(() => []);
+                  const precios = await db.getAllPrecios().catch(() => []);
+                  guardarSnapshot(`Respaldo manual — ${new Date().toLocaleDateString('es-CO')}`, {
+                    configuracion: configuracion as any,
+                    proveedores,
+                    precios,
+                  }, 'manual');
+                  setSnapshots(leerTodos());
+                  toast.success('Respaldo manual creado');
+                }}
+              >
+                <Save className="w-3 h-3 mr-1" /> Guardar respaldo
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 text-xs"
+                onClick={() => setShowSnapshots(s => !s)}
+              >
+                <Clock className="w-3 h-3 mr-1" />
+                {showSnapshots ? 'Ocultar' : 'Ver historial'}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs px-2"
+                title="Importar respaldo desde archivo JSON"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="w-3 h-3" />
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={async e => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  try {
+                    const data = await importarSnapshotJSON(file);
+                    if (data.configuracion) {
+                      await onUpdateConfiguracion(data.configuracion as any);
+                    }
+                    if (data.proveedores?.length) {
+                      for (const p of data.proveedores) await db.addProveedor(p).catch(() => {});
+                    }
+                    if (data.precios?.length) {
+                      for (const p of data.precios) await db.addPrecio(p).catch(() => {});
+                    }
+                    toast.success(`Respaldo importado: ${data.proveedores?.length ?? 0} proveedores, ${data.precios?.length ?? 0} precios`);
+                    setTimeout(() => window.location.reload(), 1500);
+                  } catch (err: any) {
+                    toast.error(err.message);
+                  }
+                  e.target.value = '';
+                }}
+              />
+            </div>
+
+            {/* Lista de snapshots */}
+            {showSnapshots && snapshots.length > 0 && (
+              <div className="max-h-48 overflow-y-auto space-y-1 rounded-lg border p-2 bg-slate-50 dark:bg-slate-900">
+                {snapshots.map(snap => (
+                  <div key={snap.id} className="flex items-center gap-2 text-xs p-1.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800">
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${snap.tipo === 'manual' ? 'bg-indigo-500' : 'bg-emerald-500'}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{snap.label}</p>
+                      <p className="text-muted-foreground">{formatearFechaSnapshot(snap.fecha)}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-2 text-xs text-blue-600 hover:text-blue-800"
+                      title="Restaurar este respaldo"
+                      onClick={async () => {
+                        if (!confirm(`¿Restaurar respaldo "${snap.label}"?`)) return;
+                        if (snap.data.configuracion) await onUpdateConfiguracion(snap.data.configuracion as any);
+                        if (snap.data.proveedores?.length) for (const p of snap.data.proveedores) await db.addProveedor(p).catch(() => {});
+                        if (snap.data.precios?.length) for (const p of snap.data.precios) await db.addPrecio(p).catch(() => {});
+                        toast.success('Respaldo restaurado');
+                        setTimeout(() => window.location.reload(), 1200);
+                      }}
+                    >
+                      Restaurar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1 text-slate-400 hover:text-slate-600"
+                      title="Exportar como archivo JSON"
+                      onClick={() => exportarSnapshotJSON(snap)}
+                    >
+                      <Download className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 px-1 text-red-400 hover:text-red-600"
+                      onClick={() => { eliminarSnapshot(snap.id); setSnapshots(leerTodos()); }}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {showSnapshots && snapshots.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-2">
+                No hay respaldos todavía. Guarda la configuración para crear el primero.
+              </p>
+            )}
+          </div>
 
           {/* Recuperar datos desde la nube */}
           <div className="pt-4 border-t border-border/40">

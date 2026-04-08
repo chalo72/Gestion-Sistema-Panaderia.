@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { validarCatalogo } from '@/lib/price-guard';
 import { useCan } from '@/contexts/AuthContext';
 import {
   Truck,
@@ -266,6 +267,36 @@ export function Proveedores({
               await onDeleteProducto(precio.productoId);
             }
           }
+        }
+      }
+
+      // ── NIVEL 1: Validar márgenes y precios antes de guardar ──────────────
+      if (items.length > 0) {
+        // Construir mapa de precios anteriores para detectar cambios extremos
+        const preciosAnteriores: Record<string, number> = {};
+        if (editingProveedor) {
+          getPreciosByProveedor(editingProveedor.id).forEach(p => {
+            const prod = getProductoById(p.productoId);
+            if (prod) preciosAnteriores[prod.nombre] = p.precioCosto;
+          });
+        }
+
+        const { bloquear, advertencias } = validarCatalogo(items, preciosAnteriores);
+
+        if (bloquear) {
+          toast.error(
+            `⛔ No se puede guardar — corrige estos problemas:\n${advertencias.slice(0, 3).join('\n')}`,
+            { duration: 8000 }
+          );
+          return;
+        }
+
+        if (advertencias.length > 0) {
+          // Advertencia suave: muestra pero permite continuar
+          toast.warning(
+            `⚠️ Precio inusual detectado:\n${advertencias.slice(0, 2).join('\n')}`,
+            { duration: 6000 }
+          );
         }
       }
 
