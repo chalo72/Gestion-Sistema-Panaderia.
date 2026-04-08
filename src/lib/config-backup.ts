@@ -15,8 +15,9 @@ export interface ConfigSnapshot {
   version: string; // versión de la app al momento del snapshot
   data: {
     configuracion?: Record<string, any>;
+    productos?: any[];    // todos los productos con sus características
     proveedores?: any[];
-    precios?: any[];      // vínculos producto-proveedor con márgenes
+    precios?: any[];      // vínculos producto-proveedor (cantidad, destino, costos)
   };
 }
 

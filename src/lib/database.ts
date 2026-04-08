@@ -1,4 +1,5 @@
 import { SupabaseDatabase } from './supabase-db';
+import { guardarSnapshot } from './config-backup';
 
 // Interfaces Definition
 export interface DBProducto {
@@ -631,8 +632,24 @@ class HybridDatabase implements IDatabase {
     window.addEventListener('offline', () => { this.isOnline = false; });
   }
 
-  async init() { 
-    await this.local.init(); 
+  async init() {
+    await this.local.init();
+    // AUTO-BACKUP: guardar copia ANTES de cualquier sync con la nube
+    // Protege contra pérdida de datos si la sincronización sobreescribe algo
+    Promise.all([
+      this.local.getAllProductos(),
+      this.local.getAllProveedores(),
+      this.local.getAllPrecios(),
+    ]).then(([prods, provs, precios]) => {
+      if (prods.length + provs.length > 0) {
+        const fecha = new Date().toLocaleDateString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+        guardarSnapshot(
+          `Auto-inicio ${fecha} — ${prods.length} prod / ${provs.length} prov`,
+          { productos: prods, proveedores: provs, precios },
+          'auto'
+        );
+      }
+    }).catch(() => {});
     // Sincronización en segundo plano para no bloquear el inicio de la app
     if (this.isOnline) {
       this.syncCloudToLocal().catch(err => console.warn("Background sync failed", err));

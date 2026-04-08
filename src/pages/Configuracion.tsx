@@ -118,11 +118,15 @@ function Configuracion(props: ConfiguracionProps) {
       };
       await onUpdateConfiguracion(nuevaConfig);
 
-      // NIVEL 2: Snapshot automático al guardar config
-      const proveedores = await db.getAllProveedores().catch(() => []);
-      const precios = await db.getAllPrecios().catch(() => []);
+      // NIVEL 2: Snapshot automático completo al guardar config
+      const [productos, proveedores, precios] = await Promise.all([
+        db.getAllProductos().catch(() => []),
+        db.getAllProveedores().catch(() => []),
+        db.getAllPrecios().catch(() => []),
+      ]);
       guardarSnapshot(`Config guardada — ${nombreNegocio}`, {
         configuracion: nuevaConfig,
+        productos,
         proveedores,
         precios,
       }, 'auto');
@@ -512,15 +516,19 @@ function Configuracion(props: ConfiguracionProps) {
                 size="sm"
                 className="flex-1 text-xs"
                 onClick={async () => {
-                  const proveedores = await db.getAllProveedores().catch(() => []);
-                  const precios = await db.getAllPrecios().catch(() => []);
+                  const [productos, proveedores, precios] = await Promise.all([
+                    db.getAllProductos().catch(() => []),
+                    db.getAllProveedores().catch(() => []),
+                    db.getAllPrecios().catch(() => []),
+                  ]);
                   guardarSnapshot(`Respaldo manual — ${new Date().toLocaleDateString('es-CO')}`, {
                     configuracion: configuracion as any,
+                    productos,
                     proveedores,
                     precios,
                   }, 'manual');
                   setSnapshots(leerTodos());
-                  toast.success('Respaldo manual creado');
+                  toast.success(`Respaldo creado: ${productos.length} productos, ${proveedores.length} proveedores`);
                 }}
               >
                 <Save className="w-3 h-3 mr-1" /> Guardar respaldo
@@ -553,16 +561,11 @@ function Configuracion(props: ConfiguracionProps) {
                   if (!file) return;
                   try {
                     const data = await importarSnapshotJSON(file);
-                    if (data.configuracion) {
-                      await onUpdateConfiguracion(data.configuracion as any);
-                    }
-                    if (data.proveedores?.length) {
-                      for (const p of data.proveedores) await db.addProveedor(p).catch(() => {});
-                    }
-                    if (data.precios?.length) {
-                      for (const p of data.precios) await db.addPrecio(p).catch(() => {});
-                    }
-                    toast.success(`Respaldo importado: ${data.proveedores?.length ?? 0} proveedores, ${data.precios?.length ?? 0} precios`);
+                    if (data.configuracion) await onUpdateConfiguracion(data.configuracion as any);
+                    if (data.productos?.length) for (const p of data.productos) await (db as any).local.updateProducto(p).catch(() => (db as any).local.addProducto(p).catch(() => {}));
+                    if (data.proveedores?.length) for (const p of data.proveedores) await db.addProveedor(p).catch(() => {});
+                    if (data.precios?.length) for (const p of data.precios) await db.addPrecio(p).catch(() => {});
+                    toast.success(`Importado: ${data.productos?.length ?? 0} productos, ${data.proveedores?.length ?? 0} proveedores, ${data.precios?.length ?? 0} precios`);
                     setTimeout(() => window.location.reload(), 1500);
                   } catch (err: any) {
                     toast.error(err.message);
@@ -588,11 +591,12 @@ function Configuracion(props: ConfiguracionProps) {
                       className="h-6 px-2 text-xs text-blue-600 hover:text-blue-800"
                       title="Restaurar este respaldo"
                       onClick={async () => {
-                        if (!confirm(`¿Restaurar respaldo "${snap.label}"?`)) return;
+                        if (!confirm(`¿Restaurar respaldo "${snap.label}"?\n\nEsto restaurará: ${snap.data.productos?.length ?? 0} productos, ${snap.data.proveedores?.length ?? 0} proveedores, ${snap.data.precios?.length ?? 0} precios.`)) return;
                         if (snap.data.configuracion) await onUpdateConfiguracion(snap.data.configuracion as any);
+                        if (snap.data.productos?.length) for (const p of snap.data.productos) await (db as any).local.updateProducto(p).catch(() => (db as any).local.addProducto(p).catch(() => {}));
                         if (snap.data.proveedores?.length) for (const p of snap.data.proveedores) await db.addProveedor(p).catch(() => {});
                         if (snap.data.precios?.length) for (const p of snap.data.precios) await db.addPrecio(p).catch(() => {});
-                        toast.success('Respaldo restaurado');
+                        toast.success(`Restaurado: ${snap.data.productos?.length ?? 0} productos, ${snap.data.proveedores?.length ?? 0} proveedores`);
                         setTimeout(() => window.location.reload(), 1200);
                       }}
                     >
