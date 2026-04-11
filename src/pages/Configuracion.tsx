@@ -40,6 +40,8 @@ function Configuracion(props: ConfiguracionProps) {
   const [presupuesto, setPresupuesto] = useState('0');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
+  const [migrando, setMigrando] = useState(false);
+  const migracionInputRef = useRef<HTMLInputElement>(null);
   const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -143,6 +145,81 @@ function Configuracion(props: ConfiguracionProps) {
     onClearAllData();
     setShowConfirmClear(false);
     toast.success('♻️ Sistema restablecido correctamente');
+  };
+
+  // ── MIGRACIÓN COMPLETA DE BASE DE DATOS ──
+  const STORES_MIGRACION = [
+    'productos','proveedores','precios','recepciones','prepedidos',
+    'inventario','movimientos','ventas','caja','gastos','recetas',
+    'produccion','alertas','ahorros','facturas_escaneadas','configuracion',
+  ];
+
+  const handleExportarDB = async () => {
+    setMigrando(true);
+    try {
+      const idb: IDBDatabase = await new Promise((res, rej) => {
+        const r = indexedDB.open('PriceControlDB');
+        r.onsuccess = () => res(r.result);
+        r.onerror   = () => rej(r.error);
+      });
+      const disponibles = [...idb.objectStoreNames];
+      const data: Record<string, any[]> = {};
+      for (const store of STORES_MIGRACION) {
+        if (!disponibles.includes(store)) continue;
+        data[store] = await new Promise((res, rej) => {
+          const tx = idb.transaction(store, 'readonly');
+          const r  = tx.objectStore(store).getAll();
+          r.onsuccess = () => res(r.result);
+          r.onerror   = () => rej(r.error);
+        });
+      }
+      const total = Object.values(data).reduce((s, a) => s + a.length, 0);
+      const blob  = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url   = URL.createObjectURL(blob);
+      const a     = document.createElement('a');
+      a.href      = url;
+      a.download  = `dulce-placer-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Base de datos exportada — ${total} registros`);
+    } catch (e) {
+      toast.error('Error al exportar la base de datos');
+      console.error(e);
+    } finally {
+      setMigrando(false);
+    }
+  };
+
+  const handleImportarDB = async (file: File) => {
+    setMigrando(true);
+    try {
+      const data: Record<string, any[]> = JSON.parse(await file.text());
+      const idb: IDBDatabase = await new Promise((res, rej) => {
+        const r = indexedDB.open('PriceControlDB');
+        r.onsuccess = () => res(r.result);
+        r.onerror   = () => rej(r.error);
+      });
+      const disponibles = [...idb.objectStoreNames];
+      let total = 0;
+      for (const [store, registros] of Object.entries(data)) {
+        if (!disponibles.includes(store) || !Array.isArray(registros) || registros.length === 0) continue;
+        await new Promise<void>((res, rej) => {
+          const tx = idb.transaction(store, 'readwrite');
+          const os = tx.objectStore(store);
+          registros.forEach(r => os.put(r));
+          tx.oncomplete = () => res();
+          tx.onerror    = () => rej(tx.error);
+        });
+        total += registros.length;
+      }
+      toast.success(`Datos importados — ${total} registros. Recargando...`);
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (e) {
+      toast.error('Error al importar. Verifica que el archivo sea válido.');
+      console.error(e);
+    } finally {
+      setMigrando(false);
+    }
   };
 
   const handleManualPurge = async () => {
@@ -715,6 +792,46 @@ function Configuracion(props: ConfiguracionProps) {
           </div>
 
         </div>
+
+        {/* ── MIGRACIÓN DE BASE DE DATOS ── */}
+        <Card className="border-blue-200 dark:border-blue-800">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <Download className="w-5 h-5" />
+              Migración de Base de Datos
+            </CardTitle>
+            <CardDescription>
+              Exporta todos los datos e impórtalos en otra instancia (ej: pasar de :4173 a :5173)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col sm:flex-row gap-3">
+            <Button
+              onClick={handleExportarDB}
+              disabled={migrando}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white gap-2"
+            >
+              <Download className="w-4 h-4" />
+              {migrando ? 'Exportando...' : 'Exportar todos los datos (.json)'}
+            </Button>
+            <Button
+              onClick={() => migracionInputRef.current?.click()}
+              disabled={migrando}
+              variant="outline"
+              className="flex-1 border-blue-400 text-blue-700 hover:bg-blue-50 gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              {migrando ? 'Importando...' : 'Importar datos (.json)'}
+            </Button>
+            <input
+              ref={migracionInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleImportarDB(f); e.target.value = ''; }}
+            />
+          </CardContent>
+        </Card>
+
       </div>
     </div>
   );
