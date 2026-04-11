@@ -105,14 +105,14 @@ interface ProveedoresProps {
   onAddProveedor: (proveedor: Omit<Proveedor, 'id' | 'createdAt'>) => Promise<Proveedor>;
   onUpdateProveedor: (id: string, updates: Partial<Proveedor>) => void;
   onDeleteProveedor: (id: string) => void;
-  onAddProducto?: (p: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
-  onAddOrUpdatePrecio?: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string; destino?: 'venta' | 'insumo'; tipoEmbalaje?: string; cantidadEmbalaje?: number }) => Promise<void>;
-  onDeletePrecio?: (id: string) => void;
-  onDeleteProducto?: (id: string) => Promise<void>;
+  onAddProducto: (p: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
+  onAddOrUpdatePrecio: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string; destino?: 'venta' | 'insumo'; tipoEmbalaje?: string; cantidadEmbalaje?: number }) => Promise<void>;
+  onDeletePrecio: (id: string) => void;
+  onDeleteProducto: (id: string) => Promise<void>;
   getPreciosByProveedor: (proveedorId: string) => PrecioProveedor[];
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
-  onUpdateProducto?: (id: string, updates: Partial<Producto>) => void;
+  onUpdateProducto: (id: string, updates: Partial<Producto>) => void;
   onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida', motivo: string) => Promise<void>;
   onNavigateTo?: (view: string) => void;
   categorias?: Categoria[];
@@ -234,6 +234,16 @@ export function Proveedores({
 
   /* ─── Formulario ─── */
   const handleSubmit = async (data: any, items: ProductoCatalogo[]) => {
+    // 🛡️ GUARD: verificar que las funciones críticas están conectadas antes de intentar guardar
+    if (!onAddProducto || !onAddOrUpdatePrecio || !onUpdateProducto) {
+      console.error('[Proveedores] GUARD ACTIVADO — props de guardado no conectadas:', {
+        onAddProducto: !!onAddProducto,
+        onAddOrUpdatePrecio: !!onAddOrUpdatePrecio,
+        onUpdateProducto: !!onUpdateProducto,
+      });
+      toast.error('⛔ Error interno: el módulo no está correctamente inicializado. Recarga la página.');
+      return;
+    }
     if (!data.nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
     try {
       let provId: string;
@@ -300,21 +310,20 @@ export function Proveedores({
       }
 
       // Guardar productos del catálogo
-      if (onAddOrUpdatePrecio && items.length > 0) {
+      if (items.length > 0) {
         console.log(`📦 [Nexus-Volt] Iniciando guardado de ${items.length} productos...`);
         for (const item of items) {
           try {
             let productoId = item.productoId;
-            
+
             // Buscar etiquetas de embalaje con seguridad (Nexus-Shield-Guard)
             const infoEmbalaje = EMBALAJES.find(e => e.value === item.tipoEmbalaje) || { label: 'Unidad', emoji: '🔹' };
             const descripcionGenerada = `${infoEmbalaje.label} x${item.cantidadEmbalaje || 1}`;
 
             // Crear producto si no existe o si el ID apunta a un producto eliminado (huérfano)
-            // 🛡️ REGLA: NEXUS-AUTO-CHECK - Si no tiene ID o el ID no existe localmente, asumimos que es nuevo
             const yaExiste = productoId ? !!getProductoById(productoId) : false;
-            
-            if ((!productoId || !yaExiste) && onAddProducto) {
+
+            if (!productoId || !yaExiste) {
               console.log(`🆕 [Nexus] Creando nuevo producto: ${item.nombre}`);
               const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
               const np = await onAddProducto({
@@ -341,20 +350,18 @@ export function Proveedores({
                 cantidadEmbalaje: Number(item.cantidadEmbalaje) || 1,
               });
 
-              // Sincronización Completa con Módulo de Productos
-              if (onUpdateProducto) {
-                const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
-                await onUpdateProducto(productoId, {
-                  nombre: item.nombre,
-                  categoria: item.categoria || 'Otro',
-                  descripcion: descripcionGenerada,
-                  tipo,
-                  costoBase: Number(item.costoUnitario) || 0,
-                  margenUtilidad: Number(item.margenVenta) || 30,
-                  precioVenta: Number(item.precioVenta) || 0,
-                  updatedAt: new Date().toISOString()
-                });
-              }
+              // Sincronización con Módulo de Productos
+              const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
+              await onUpdateProducto(productoId, {
+                nombre: item.nombre,
+                categoria: item.categoria || 'Otro',
+                descripcion: descripcionGenerada,
+                tipo,
+                costoBase: Number(item.costoUnitario) || 0,
+                margenUtilidad: Number(item.margenVenta) || 30,
+                precioVenta: Number(item.precioVenta) || 0,
+                updatedAt: new Date().toISOString()
+              });
 
               // AJUSTE DE STOCK AUTOMÁTICO
               if (onAjustarStock && item.stockRecibido > 0) {
