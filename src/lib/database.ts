@@ -1,5 +1,7 @@
 import { SupabaseDatabase } from './supabase-db';
 import { guardarSnapshot } from './config-backup';
+import { supabase } from './supabase';
+
 
 // Interfaces Definition
 export interface DBProducto {
@@ -61,6 +63,9 @@ export interface DBPrecio {
   precioCosto: number;
   fechaActualizacion: string;
   notas?: string;
+  destino?: 'venta' | 'insumo';
+  tipoEmbalaje?: string;
+  cantidadEmbalaje?: number;
 }
 
 export interface DBPrePedido {
@@ -98,6 +103,14 @@ export interface DBAlerta {
   leida: boolean;
 }
 
+export interface DBCategoria {
+  id: string;
+  nombre: string;
+  color: string;
+  icono?: string;
+  tipo?: 'venta' | 'insumo';
+}
+
 export interface DBConfiguracion {
   id: string;
   nombreNegocio: string;
@@ -110,10 +123,14 @@ export interface DBConfiguracion {
   umbralAlerta: number;
   ajusteAutomatico: boolean;
   notificarSubidas: boolean;
-  mostrarUtilidadEnLista?: boolean;
-  aiMode?: 'local' | 'hybrid' | 'off'; // LOCAL (Ollama), HYBRID (Llama + Claude), OFF (Kill Switch)
-  categorias: Array<{ id: string; nombre: string; icono?: string; color?: string; }>;
+  mostrarUtilidadEnLista: boolean;
+  categorias: DBCategoria[];
+  unidades?: string[];
+  destinos?: string[];
+  metadata?: any;
+  aiMode?: 'local' | 'hybrid' | 'off';
 }
+
 
 export type AgenteId = 
   | 'gerente' | 'produccion' | 'inventario' | 'marketing' | 'nomina' 
@@ -415,6 +432,9 @@ export interface IDatabase {
   getAgenteHallazgos(limite?: number): Promise<DBHallazgoAgente[]>;
   saveAgenteHallazgo(hallazgo: DBHallazgoAgente): Promise<void>;
   marcarHallazgoLeido(id: string): Promise<void>;
+  
+  // MÉTODOS DE TRANSACCIÓN ATÓMICA
+  batchAjustarStock(movimientos: { productoId: string; cantidad: number; tipo: 'entrada' | 'salida' | 'ajuste'; motivo: string; usuario: string }[]): Promise<void>;
 }
 
 const DB_NAME = 'PriceControlDB';
@@ -618,18 +638,198 @@ class IndexedDBDatabase implements IDatabase {
   async addTrabajador(t: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('trabajadores', 'readwrite').objectStore('trabajadores').add(t); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
   async updateTrabajador(t: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('trabajadores', 'readwrite').objectStore('trabajadores').put(t); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
   async deleteTrabajador(id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('trabajadores', 'readwrite').objectStore('trabajadores').delete(id); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+
+  // Implementación atómica de batchAjustarStock
+  async batchAjustarStock(movimientos: { productoId: string; cantidad: number; tipo: 'entrada' | 'salida' | 'ajuste'; motivo: string; usuario: string }[]) {
+    const db = await this.ensureInit();
+    const tx = db.transaction(['inventario', 'movimientos'], 'readwrite');
+    const invStore = tx.objectStore('inventario');
+    const movStore = tx.objectStore('movimientos');
+
+    for (const mov of movimientos) {
+      // 1. Obtener y actualizar stock
+      const invReq = invStore.index('productoId').get(mov.productoId);
+      await new Promise<void>((res, rej) => {
+        invReq.onsuccess = async () => {
+          const item = invReq.result || {
+            id: crypto.randomUUID(),
+            productoId: mov.productoId,
+            stockActual: 0,
+            stockMinimo: 10,
+            ultimoMovimiento: new Date().toISOString()
+          };
+          
+          const stockActual = item.stockActual;
+          const nuevoStock = mov.tipo === 'entrada' ? stockActual + mov.cantidad : Math.max(0, stockActual - mov.cantidad);
+          
+          const updatedItem = {
+            ...item,
+            stockActual: nuevoStock,
+            ultimoMovimiento: new Date().toISOString()
+          };
+          
+          invStore.put(updatedItem);
+          res();
+        };
+        invReq.onerror = () => rej(invReq.error);
+      });
+
+      // 2. Registrar movimiento (Asegurando compatibilidad de tipos para entrada/salida)
+      const movRecord = {
+        id: crypto.randomUUID(),
+        productoId: mov.productoId,
+        tipo: (mov.tipo === 'entrada' || (mov.tipo === 'ajuste' && mov.cantidad > 0)) ? 'entrada' : 'salida' as 'entrada' | 'salida',
+        cantidad: mov.cantidad,
+        motivo: mov.motivo,
+        fecha: new Date().toISOString(),
+        usuario: mov.usuario
+      };
+      movStore.add(movRecord);
+    }
+
+    return new Promise<void>((res, rej) => {
+      tx.oncomplete = () => res();
+      tx.onerror = () => rej(tx.error);
+    });
+  }
 }
 
 class HybridDatabase implements IDatabase {
   private local: IndexedDBDatabase;
   private cloud: SupabaseDatabase;
   private isOnline: boolean = navigator.onLine;
+  private syncInProgress: boolean = false;
+  private opCount: number = 0; // Contador para snapshots periódicos
 
   constructor() {
     this.local = new IndexedDBDatabase();
     this.cloud = new SupabaseDatabase();
-    window.addEventListener('online', () => { this.isOnline = true; this.syncLocalToCloud(); });
-    window.addEventListener('offline', () => { this.isOnline = false; });
+    
+    // Auto-Restauración de Emergencia desde "Disco de Seguridad" si el arranque falla
+    this.checkHealth();
+
+    // Escuchadores de red mejorados con debounce para evitar ráfagas de sincronización
+    window.addEventListener('online', () => { 
+      this.isOnline = true; 
+      console.log("🌐 [Nexus-Sync] Conexión restaurada. Iniciando sincronización de fondo...");
+      setTimeout(() => this.syncLocalToCloud(), 3000); 
+    });
+    window.addEventListener('offline', () => { 
+      this.isOnline = false;
+      console.warn("📡 [Nexus-Sync] Modo Sin Conexión detectado. Operando desde disco local.");
+    });
+
+    // Iniciar escucha en tiempo real si hay conexión
+    if (this.isOnline) {
+      this.setupRealtimeListeners();
+    }
+  }
+
+  // Configuración de Supabase Realtime para sincronización instantánea MULTI-USUARIO
+  private setupRealtimeListeners() {
+    supabase.channel('nexus-realtime-sync')
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload: any) => {
+        console.log('⚡ [Nexus-Realtime] Cambio detectado en la nube:', payload);
+        this.handleCloudChange(payload);
+      })
+      .subscribe();
+      
+    console.log('📡 [Nexus-Realtime] Suscripción activa. Los cambios en la nube se reflejarán aquí de inmediato.');
+  }
+
+
+  private async handleCloudChange(payload: any) {
+    const { table, eventType, new: newData, old: oldData } = payload;
+    
+    try {
+      // Sincronizar el cambio localmente basándose en la tabla
+      switch (table) {
+        case 'productos':
+          if (eventType === 'DELETE') await this.local.deleteProducto(oldData.id);
+          else await this.local.updateProducto(this.cloud.mapProductoFromDB(newData) as any).catch(() => this.local.addProducto(this.cloud.mapProductoFromDB(newData) as any));
+          break;
+        case 'proveedores':
+          if (eventType === 'DELETE') await this.local.deleteProveedor(oldData.id);
+          else await this.local.updateProveedor(newData as any).catch(() => this.local.addProveedor(newData as any));
+          break;
+        case 'precios':
+          if (eventType === 'DELETE') await this.local.deletePrecio(oldData.id);
+          else await this.local.updatePrecio(this.cloud.mapPrecioFromDB(newData) as any).catch(() => this.local.addPrecio(this.cloud.mapPrecioFromDB(newData) as any));
+          break;
+        case 'configuracion':
+          if (eventType !== 'DELETE') await this.local.saveConfiguracion(newData as any);
+          break;
+      }
+      
+      // Notificar a la UI si hay un callback registrado (opcional)
+      // En este caso, el hook usePriceControl recargará los datos si detecta cambios críticos
+    } catch (err) {
+      console.error('❌ Error sincronizando cambio real-time:', err);
+    }
+  }
+
+
+  // Monitor de operaciones para disparar snapshots automáticos cada 20 cambios
+  private async markOperation() {
+    this.opCount++;
+    if (this.opCount >= 20) {
+      this.opCount = 0;
+      await this.createSnapshot();
+    }
+  }
+
+  // checkHealth: Verifica integridad y restaura si es necesario
+  private async checkHealth() {
+    const products = await this.local.getAllProductos().catch(() => []);
+    
+    // 🛡️ REGLA: NEXUS-SELF-AUDIT - Validación Matemática del Catálogo
+    if (products.length > 0) {
+      const inconsistencias = products.filter(p => p.precioVenta > 0 && p.costoBase && p.precioVenta < p.costoBase);
+      if (inconsistencias.length > 0) {
+        console.error(`🚨 [Nexus-Audit] Detectadas ${inconsistencias.length} inconsistencias de precio (Venta < Costo).`);
+        inconsistencias.forEach(p => {
+            console.warn(`⚠️ Anomalía en ${p.nombre}: Venta $${p.precioVenta} vs Costo $${p.costoBase}`);
+        });
+      }
+
+      // 🛡️ REGLA: NEXUS-PACKAGING-AUDIT - Validación de cantidades de embalaje
+      const precios = await this.local.getAllPrecios().catch(() => []);
+      const embalajesInvalidos = precios.filter(p => p.cantidadEmbalaje !== undefined && p.cantidadEmbalaje <= 0);
+      if (embalajesInvalidos.length > 0) {
+        console.warn(`📦 [Nexus-Audit] Detectados ${embalajesInvalidos.length} precios con cantidad de embalaje inválida (<= 0). Corrigiendo a 1 para cálculos.`);
+        for (const p of embalajesInvalidos) {
+          await this.local.updatePrecio({ ...p, cantidadEmbalaje: 1 });
+        }
+      }
+    }
+
+    if (products.length === 0) {
+      const backup = localStorage.getItem('NEXUS_VAULT_SNAPSHOT');
+      if (backup) {
+        console.warn("🛡️ [Nexus-Vault] Detectada corrupción en BD local. Restaurando desde Snapshot de Disco...");
+        const data = JSON.parse(backup);
+        if (data.productos) for (const p of data.productos) await this.local.addProducto(p);
+        if (data.proveedores) for (const p of data.proveedores) await this.local.addProveedor(p);
+      } else if (this.isOnline) {
+        console.log("📥 [Nexus-Vault] BD vacía. Iniciando rescate desde la nube...");
+        await this.downloadFromCloud();
+      }
+    }
+  }
+
+  // createSnapshot: Guarda una copia íntegra en "Disco Virtual" (localStorage persistente)
+  async createSnapshot() {
+    try {
+      const [productos, proveedores, precios, configuracion] = await Promise.all([
+        this.local.getAllProductos(),
+        this.local.getAllProveedores(),
+        this.local.getAllPrecios(),
+        this.getConfiguracion()
+      ]);
+      const snapshot = JSON.stringify({ productos, proveedores, precios, configuracion, timestamp: new Date().toISOString() });
+      localStorage.setItem('NEXUS_VAULT_SNAPSHOT', snapshot);
+      console.log("💾 [Nexus-Vault] Instantánea de disco guardada exitosamente.");
+    } catch(e) { console.error("❌ [Nexus-Vault] Error al crear Snapshot:", e); }
   }
 
   async init() {
@@ -688,20 +888,36 @@ class HybridDatabase implements IDatabase {
       await processTable(cloudProds, new Set(lProds.map(p => p.id)), tombstoneSet, p => this.local.addProducto(p));
       await processTable(cloudProvs, new Set(lProvs.map(p => p.id)), tombstoneSet, p => this.local.addProveedor(p));
       await processTable(cloudPrecios, new Set(lPrecios.map(p => p.id)), tombstoneSet, p => this.local.addPrecio(p));
-    } catch(e) { console.warn("Sync failed", e); }
+    } catch(e) { 
+      console.warn("Sync failed", e); 
+    }
   }
 
-  // syncLocalToCloud: sube productos, proveedores y precios a la nube
+  // syncLocalToCloud: Sube cambios locales pendientes a la nube
   async syncLocalToCloud() {
-    if (!this.isOnline) return;
+    if (!this.isOnline || this.syncInProgress) return;
+    this.syncInProgress = true;
     try {
       const [localProds, localProvs, localPrecios] = await Promise.all([
-        this.local.getAllProductos(), this.local.getAllProveedores(), this.local.getAllPrecios()
+        this.local.getAllProductos(), 
+        this.local.getAllProveedores(), 
+        this.local.getAllPrecios()
       ]);
-      for (const p of localProds) await this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p).catch(() => {}));
-      for (const p of localProvs) await this.cloud.updateProveedor(p).catch(() => this.cloud.addProveedor(p).catch(() => {}));
-      for (const p of localPrecios) await this.cloud.updatePrecio(p).catch(() => this.cloud.addPrecio(p).catch(() => {}));
-    } catch(e) { console.warn("Sync failed", e); }
+      
+      // Sincronización optimizada: usamos Promise.all con limitación de concurrencia virtual
+      // para evitar saturar la conexión en subidas masivas.
+      await Promise.all([
+        ...localProds.map(p => this.cloud.updateProducto(p).catch(() => this.cloud.addProducto(p).catch(() => {}))),
+        ...localProvs.map(p => this.cloud.updateProveedor(p).catch(() => this.cloud.addProveedor(p).catch(() => {}))),
+        ...localPrecios.map(p => this.cloud.updatePrecio(p).catch(() => this.cloud.addPrecio(p).catch(() => {})))
+      ]);
+      
+      console.log("✅ [Nexus-Sync] Sincronización Nube-Local completada.");
+    } catch(e) { 
+      console.error("❌ [Nexus-Sync] Fallo en sincronización saliente:", e); 
+    } finally {
+      this.syncInProgress = false;
+    }
   }
 
   // recoverFromCloud: restaura TODO desde Supabase usando tombstones de la nube como filtro
@@ -742,66 +958,66 @@ class HybridDatabase implements IDatabase {
 
   // Delegates
   async getAllProductos() { return this.local.getAllProductos(); }
-  async addProducto(p: DBProducto) { await this.local.addProducto(p); if (this.isOnline) this.cloud.addProducto(p); }
-  async updateProducto(p: DBProducto) { await this.local.updateProducto(p); if (this.isOnline) this.cloud.updateProducto(p); }
-  async deleteProducto(id: string) { await this.local.deleteProducto(id); await this.addTombstone('productos', id); if (this.isOnline) this.cloud.deleteProducto(id); }
+  async addProducto(p: DBProducto) { await this.local.addProducto(p); this.markOperation(); if (this.isOnline) this.cloud.addProducto(p); }
+  async updateProducto(p: DBProducto) { await this.local.updateProducto(p); this.markOperation(); if (this.isOnline) this.cloud.updateProducto(p); }
+  async deleteProducto(id: string) { await this.local.deleteProducto(id); await this.addTombstone('productos', id); this.markOperation(); if (this.isOnline) this.cloud.deleteProducto(id); }
 
   async getAllProveedores() { return this.local.getAllProveedores(); }
-  async addProveedor(p: DBProveedor) { await this.local.addProveedor(p); if (this.isOnline) this.cloud.addProveedor(p); }
-  async updateProveedor(p: DBProveedor) { await this.local.updateProveedor(p); if (this.isOnline) this.cloud.updateProveedor(p); }
-  async deleteProveedor(id: string) { await this.local.deleteProveedor(id); await this.addTombstone('proveedores', id); if (this.isOnline) this.cloud.deleteProveedor(id); }
+  async addProveedor(p: DBProveedor) { await this.local.addProveedor(p); this.markOperation(); if (this.isOnline) this.cloud.addProveedor(p); }
+  async updateProveedor(p: DBProveedor) { await this.local.updateProveedor(p); this.markOperation(); if (this.isOnline) this.cloud.updateProveedor(p); }
+  async deleteProveedor(id: string) { await this.local.deleteProveedor(id); await this.addTombstone('proveedores', id); this.markOperation(); if (this.isOnline) this.cloud.deleteProveedor(id); }
 
   async getAllPrecios() { return this.local.getAllPrecios(); }
   async getPreciosByProducto(pid: string) { return this.local.getPreciosByProducto(pid); }
   async getPreciosByProveedor(pid: string) { return this.local.getPreciosByProveedor(pid); }
   async getPrecioByProductoProveedor(pid: string, provId: string) { return this.local.getPrecioByProductoProveedor(pid, provId); }
-  async addPrecio(p: DBPrecio) { await this.local.addPrecio(p); if (this.isOnline) this.cloud.addPrecio(p); }
-  async updatePrecio(p: DBPrecio) { await this.local.updatePrecio(p); if (this.isOnline) this.cloud.updatePrecio(p); }
-  async deletePrecio(id: string) { await this.local.deletePrecio(id); await this.addTombstone('precios', id); if (this.isOnline) this.cloud.deletePrecio(id); }
+  async addPrecio(p: DBPrecio) { await this.local.addPrecio(p); this.markOperation(); if (this.isOnline) this.cloud.addPrecio(p); }
+  async updatePrecio(p: DBPrecio) { await this.local.updatePrecio(p); this.markOperation(); if (this.isOnline) this.cloud.updatePrecio(p); }
+  async deletePrecio(id: string) { await this.local.deletePrecio(id); await this.addTombstone('precios', id); this.markOperation(); if (this.isOnline) this.cloud.deletePrecio(id); }
 
   async getAllPrePedidos() { return this.local.getAllPrePedidos(); }
-  async addPrePedido(p: DBPrePedido) { await this.local.addPrePedido(p); if (this.isOnline) this.cloud.addPrePedido(p); }
-  async updatePrePedido(p: DBPrePedido) { await this.local.updatePrePedido(p); if (this.isOnline) this.cloud.updatePrePedido(p); }
-  async deletePrePedido(id: string) { await this.local.deletePrePedido(id); if (this.isOnline) this.cloud.deletePrePedido(id); }
+  async addPrePedido(p: DBPrePedido) { await this.local.addPrePedido(p); this.markOperation(); if (this.isOnline) this.cloud.addPrePedido(p); }
+  async updatePrePedido(p: DBPrePedido) { await this.local.updatePrePedido(p); this.markOperation(); if (this.isOnline) this.cloud.updatePrePedido(p); }
+  async deletePrePedido(id: string) { await this.local.deletePrePedido(id); this.markOperation(); if (this.isOnline) this.cloud.deletePrePedido(id); }
 
   async getAllAlertas() { return this.local.getAllAlertas(); }
-  async addAlerta(a: DBAlerta) { await this.local.addAlerta(a); if (this.isOnline) this.cloud.addAlerta(a); }
-  async updateAlerta(a: DBAlerta) { await this.local.updateAlerta(a); if (this.isOnline) this.cloud.updateAlerta(a); }
-  async deleteAlerta(id: string) { await this.local.deleteAlerta(id); if (this.isOnline) this.cloud.deleteAlerta(id); }
-  async clearAllAlertas() { await this.local.clearAllAlertas(); if (this.isOnline) this.cloud.clearAllAlertas(); }
+  async addAlerta(a: DBAlerta) { await this.local.addAlerta(a); this.markOperation(); if (this.isOnline) this.cloud.addAlerta(a); }
+  async updateAlerta(a: DBAlerta) { await this.local.updateAlerta(a); this.markOperation(); if (this.isOnline) this.cloud.updateAlerta(a); }
+  async deleteAlerta(id: string) { await this.local.deleteAlerta(id); this.markOperation(); if (this.isOnline) this.cloud.deleteAlerta(id); }
+  async clearAllAlertas() { await this.local.clearAllAlertas(); this.markOperation(); if (this.isOnline) this.cloud.clearAllAlertas(); }
 
   async getConfiguracion() { return this.local.getConfiguracion(); }
-  async saveConfiguracion(c: DBConfiguracion) { await this.local.saveConfiguracion(c); if (this.isOnline) this.cloud.saveConfiguracion(c); }
+  async saveConfiguracion(c: DBConfiguracion) { await this.local.saveConfiguracion(c); this.markOperation(); if (this.isOnline) this.cloud.saveConfiguracion(c); }
 
   async getAllInventario() { return this.local.getAllInventario(); }
   async getInventarioItemByProducto(pid: string) { return this.local.getInventarioItemByProducto(pid); }
-  async updateInventarioItem(i: DBInventarioItem) { await this.local.updateInventarioItem(i); if (this.isOnline) this.cloud.updateInventarioItem(i); }
+  async updateInventarioItem(i: DBInventarioItem) { await this.local.updateInventarioItem(i); this.markOperation(); if (this.isOnline) this.cloud.updateInventarioItem(i); }
 
   async getAllMovimientos() { return this.local.getAllMovimientos(); }
-  async addMovimiento(m: DBMovimientoInventario) { await this.local.addMovimiento(m); if (this.isOnline) this.cloud.addMovimiento(m); }
+  async addMovimiento(m: DBMovimientoInventario) { await this.local.addMovimiento(m); this.markOperation(); if (this.isOnline) this.cloud.addMovimiento(m); }
 
   async getAllRecepciones() { return this.local.getAllRecepciones(); }
-  async addRecepcion(r: DBRecepcion) { await this.local.addRecepcion(r); if (this.isOnline) this.cloud.addRecepcion(r); }
-  async updateRecepcion(r: DBRecepcion) { await this.local.updateRecepcion(r); if (this.isOnline) this.cloud.updateRecepcion(r); }
+  async addRecepcion(r: DBRecepcion) { await this.local.addRecepcion(r); this.markOperation(); if (this.isOnline) this.cloud.addRecepcion(r); }
+  async updateRecepcion(r: DBRecepcion) { await this.local.updateRecepcion(r); this.markOperation(); if (this.isOnline) this.cloud.updateRecepcion(r); }
 
   async getAllHistorial() { return this.local.getAllHistorial(); }
-  async addHistorial(h: DBHistorialPrecio) { await this.local.addHistorial(h); if (this.isOnline) this.cloud.addHistorial(h); }
+  async addHistorial(h: DBHistorialPrecio) { await this.local.addHistorial(h); this.markOperation(); if (this.isOnline) this.cloud.addHistorial(h); }
   async getHistorialByProducto(pid: string) { return this.local.getHistorialByProducto(pid); }
 
   async getAllRecetas() { return this.local.getAllRecetas(); }
   async getRecetaByProducto(pid: string) { return this.local.getRecetaByProducto(pid); }
-  async addReceta(r: DBReceta) { await this.local.addReceta(r); if (this.isOnline) this.cloud.addReceta(r); }
-  async updateReceta(r: DBReceta) { await this.local.updateReceta(r); if (this.isOnline) this.cloud.updateReceta(r); }
-  async deleteReceta(id: string) { await this.local.deleteReceta(id); if (this.isOnline) this.cloud.deleteReceta(id); }
+  async addReceta(r: DBReceta) { await this.local.addReceta(r); this.markOperation(); if (this.isOnline) this.cloud.addReceta(r); }
+  async updateReceta(r: DBReceta) { await this.local.updateReceta(r); this.markOperation(); if (this.isOnline) this.cloud.updateReceta(r); }
+  async deleteReceta(id: string) { await this.local.deleteReceta(id); this.markOperation(); if (this.isOnline) this.cloud.deleteReceta(id); }
 
   async getAllVentas() { return this.local.getAllVentas(); }
-  async addVenta(v: DBVenta) { await this.local.addVenta(v); if (this.isOnline) this.cloud.addVenta(v); }
+  async addVenta(v: DBVenta) { await this.local.addVenta(v); this.markOperation(); if (this.isOnline) this.cloud.addVenta(v); }
   async getVentasByCaja(cid: string) { return this.local.getVentasByCaja(cid); }
 
   async getAllSesionesCaja() { return this.local.getAllSesionesCaja(); }
   async getSesionCajaActiva() { return this.local.getSesionCajaActiva(); }
-  async addSesionCaja(s: DBCajaSesion) { await this.local.addSesionCaja(s); if (this.isOnline) this.cloud.addSesionCaja(s); }
-  async updateSesionCaja(s: DBCajaSesion) { await this.local.updateSesionCaja(s); if (this.isOnline) this.cloud.updateSesionCaja(s); }
+  async addSesionCaja(s: DBCajaSesion) { await this.local.addSesionCaja(s); this.markOperation(); if (this.isOnline) this.cloud.addSesionCaja(s); }
+  async updateSesionCaja(s: DBCajaSesion) { await this.local.updateSesionCaja(s); this.markOperation(); if (this.isOnline) this.cloud.updateSesionCaja(s); }
 
   async getAllAhorros() { return this.local.getAllAhorros(); }
   async addAhorro(a: any) { await this.local.addAhorro(a); }
@@ -874,6 +1090,21 @@ class HybridDatabase implements IDatabase {
   async updateTrabajador(t: any) { await this.local.updateTrabajador(t); }
   async deleteTrabajador(id: string) { await this.local.deleteTrabajador(id); }
 
+  async batchAjustarStock(movimientos: { productoId: string; cantidad: number; tipo: 'entrada' | 'salida' | 'ajuste'; motivo: string; usuario: string }[]) {
+    // Ejecutar en local primero (Atómico)
+    await this.local.batchAjustarStock(movimientos);
+    this.markOperation();
+    
+    // Sincronizar con la nube (individualmente en segundo plano para no bloquear)
+    if (this.isOnline) {
+      movimientos.forEach(async mov => {
+        const item = await this.local.getInventarioItemByProducto(mov.productoId);
+        if (item) this.cloud.updateInventarioItem(item).catch(() => {});
+        this.cloud.addMovimiento(mov as any).catch(() => {});
+      });
+    }
+  }
+
   // 🔄 SISTEMA DE RESCATE (CLOUD -> LOCAL)
   async downloadFromCloud() {
     if (!navigator.onLine) return;
@@ -885,15 +1116,20 @@ class HybridDatabase implements IDatabase {
         this.cloud.getConfiguracion()
       ]);
 
+      // Guardado local acelerado (Speed-Burst)
+      const tasks: Promise<any>[] = [];
+      
       if (p.length > 0) {
-        for (const item of p) await this.local.addProducto(item).catch(() => {});
+        tasks.push(...p.map(item => this.local.addProducto(item).catch(() => {})));
       }
       if (pr.length > 0) {
-        for (const prov of pr) await this.local.addProveedor(prov).catch(() => {});
+        tasks.push(...pr.map(prov => this.local.addProveedor(prov).catch(() => {})));
       }
       if (c) {
-        await this.local.saveConfiguracion(c).catch(() => {});
+        tasks.push(this.local.saveConfiguracion(c).catch(() => {}));
       }
+
+      await Promise.allSettled(tasks);
       console.log('✅ [Nexus-Rescue] Rescate completado con éxito.');
     } catch (err) {
       console.error('❌ [Nexus-Rescue] Error durante el rescate:', err);

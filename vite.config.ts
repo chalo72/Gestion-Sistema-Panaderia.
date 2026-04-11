@@ -144,29 +144,13 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkOnly',
             },
             {
-              // Assets con hash (JS/CSS de build): el precache se encarga,
-              // NO cachear con runtimeCaching para evitar versiones fantasma
-              urlPattern: /\/assets\/.*\.[a-f0-9]+\.(js|css)$/i,
-              handler: 'CacheFirst',
-              options: {
-                cacheName: 'v4-assets-hashed',
-                expiration: {
-                  maxEntries: 60,
-                  maxAgeSeconds: 60 * 60 * 24 * 365 // 1 año (hash cambia = nuevo archivo)
-                },
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
-            },
-            {
               // Imágenes y fuentes: cache largo con revalidación
               urlPattern: /\.(png|jpg|jpeg|webp|gif|svg|woff2|ico)$/i,
               handler: 'StaleWhileRevalidate',
               options: {
-                cacheName: 'v4-media-cache',
+                cacheName: 'static-media-v5',
                 expiration: {
-                  maxEntries: 80,
+                  maxEntries: 100,
                   maxAgeSeconds: 60 * 60 * 24 * 30 // 30 días
                 },
                 cacheableResponse: {
@@ -175,16 +159,12 @@ export default defineConfig(({ mode }) => {
               }
             },
             {
-              // Todo lo demás: red primero, fallback a cache
-              urlPattern: /.*/i,
+              // Navegación principal: Red primero, fallback a cache
+              urlPattern: ({ request }) => request.mode === 'navigate',
               handler: 'NetworkFirst',
               options: {
-                cacheName: 'v4-app-cache',
-                networkTimeoutSeconds: 5, // Si no responde en 5s, usa cache
-                expiration: {
-                  maxEntries: 50,
-                  maxAgeSeconds: 60 * 60 * 24 * 7 // 7 días
-                },
+                cacheName: 'app-shell-v5',
+                networkTimeoutSeconds: 5,
                 cacheableResponse: {
                   statuses: [0, 200]
                 }

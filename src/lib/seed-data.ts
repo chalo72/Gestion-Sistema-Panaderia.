@@ -35,8 +35,8 @@ export const CATEGORIAS_DEFAULT: Categoria[] = [
   // === CATEGORÍAS DE INSUMOS (Uso Interno - Ocultas en POS) ===
   { id: 'ins-pan', nombre: 'INS: Panadería', color: '#f59e0b', icono: '🥖', tipo: 'insumo' },
   { id: 'ins-tort', nombre: 'INS: Tortas', color: '#ec4899', icono: '🎂', tipo: 'insumo' },
-  { id: 'ins-mich', nombre: 'INS: Micheladas', color: '#22c55e', icono: '🍺', tipo: 'insumo' },
-  { id: 'ins-hela', nombre: 'INS: Helados', color: '#3b82f6', icono: '🍦', tipo: 'insumo' },
+  { id: 'ins-beb-prep', nombre: 'INS: Bebidas Preparadas', color: '#22c55e', icono: '🥤', tipo: 'insumo' },
+  { id: 'ins-repo-fria', nombre: 'INS: Repostería Fría', color: '#3b82f6', icono: '🧁', tipo: 'insumo' },
   { id: 'ins-cafe', nombre: 'INS: Cafetería', color: '#8b5cf6', icono: '☕', tipo: 'insumo' },
 
   // === MATERIA PRIMA (para inventario/compras) ===

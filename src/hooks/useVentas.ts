@@ -14,7 +14,7 @@ import type {
 import { toast } from 'sonner';
 
 interface UseVentasParams {
-  onAjustarStock: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida', motivo: string) => Promise<void>;
+  onAjustarStock: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
 }
 
 export function useVentas({ onAjustarStock }: UseVentasParams) {
@@ -25,16 +25,10 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   const [pedidosActivos, setPedidosActivos] = useState<PedidoActivo[]>([]);
 
   // --- Gestión de Caja ---
-  const abrirCaja = useCallback(async (montoApertura: number) => {
-    const usuarioApertura = (() => {
-      try {
-        const u = localStorage.getItem('pricecontrol_local_user');
-        return u ? (JSON.parse(u)?.id || 'admin') : 'admin';
-      } catch { return 'admin'; }
-    })();
+  const abrirCaja = useCallback(async (usuarioId: string, montoApertura: number) => {
     const sesion: CajaSesion = {
       id: crypto.randomUUID(),
-      usuarioId: usuarioApertura,
+      usuarioId,
       fechaApertura: new Date().toISOString(),
       montoApertura,
       totalVentas: 0,
@@ -49,10 +43,11 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     setSesionesCaja(prev => [...prev, sesion]);
     setCajaActiva(sesion);
     toast.success('Caja abierta correctamente');
+    return sesion;
   }, []);
 
   const cerrarCaja = useCallback(async (montoCierre: number) => {
-    if (!cajaActiva) return;
+    if (!cajaActiva) return undefined;
     const sesion: CajaSesion = {
       ...cajaActiva,
       fechaCierre: new Date().toISOString(),
@@ -63,6 +58,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
     setCajaActiva(undefined);
     toast.success('Caja cerrada correctamente');
+    return sesion;
   }, [cajaActiva]);
 
   const registrarMovimientoCaja = useCallback(async (movimiento: Omit<MovimientoCaja, 'id' | 'fecha' | 'cajaId' | 'usuarioId'> | number, tipo?: 'entrada' | 'salida', motivo?: string, _usuarioId?: string, cajaId?: string) => {
@@ -112,10 +108,10 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   }, [cajaActiva, sesionesCaja]);
 
   // --- Gestión de Ventas ---
-  const registrarVenta = useCallback(async (data: Omit<Venta, 'id' | 'fecha'>) => {
+  const registrarVenta = useCallback(async (data: Omit<Venta, 'id' | 'fecha'>): Promise<Venta> => {
     if (!cajaActiva) {
       toast.error('Debe abrir caja antes de registrar ventas');
-      return null;
+      throw new Error('Caja cerrada');
     }
 
     const venta: Venta = {
@@ -138,14 +134,13 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       );
     }
 
-    // 3. Actualizar caja activa — separar efectivo de crédito para cuadre correcto
+    // 3. Actualizar caja activa
     const esCredito = venta.metodoPago === 'credito';
     setCajaActiva(current => {
       if (!current) return undefined;
       const updated = {
         ...current,
         totalVentas: (current.totalVentas || 0) + venta.total,
-        // Solo suma al efectivo si NO es crédito — evita descuadres ficticios
         totalVentasEfectivo: (current.totalVentasEfectivo ?? current.totalVentas ?? 0) + (esCredito ? 0 : venta.total),
         totalCreditos: (current.totalCreditos || 0) + (esCredito ? venta.total : 0),
         ventasIds: [...(current.ventasIds || []), venta.id]
@@ -173,7 +168,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   }, []);
 
   const addMesa = useCallback(async (mesa: Mesa) => {
-    await db.updateMesa(mesa); // put = upsert
+    await db.updateMesa(mesa); 
     setMesas(prev => [...prev, mesa]);
   }, []);
 
@@ -199,14 +194,11 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   }, []);
 
   return {
-    // State
     ventas, setVentas,
     sesionesCaja, setSesionesCaja,
     cajaActiva, setCajaActiva,
     mesas, setMesas,
     pedidosActivos, setPedidosActivos,
-
-    // Actions
     abrirCaja, cerrarCaja, registrarMovimientoCaja, registrarVenta,
     updateMesa, addMesa, deleteMesa,
     addPedidoActivo, updatePedidoActivo, deletePedidoActivo

@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { 
   type AgenteId, AGENTES_CONFIG, consultarAgente 
 } from '@/constants/agentes';
+import { AccesoGlobalCard } from '@/components/layout/AccesoGlobalCard';
 
 interface OficinaProps {
   publicAppUrl?: string;
@@ -313,6 +314,12 @@ export default function Oficina({ publicAppUrl, onViewChange }: OficinaProps) {
                 ))}
               </div>
             </div>
+
+            <AccesoGlobalCard 
+              publicUrl={publicAppUrl}
+              localIp="192.168.1.5" 
+              nombreNegocio="Dulce Placer"
+            />
           </div>
         </div>
       </div>

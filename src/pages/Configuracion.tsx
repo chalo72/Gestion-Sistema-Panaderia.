@@ -6,6 +6,8 @@ import {
   exportarSnapshotJSON, importarSnapshotJSON,
   formatearFechaSnapshot, type ConfigSnapshot,
 } from '@/lib/config-backup';
+import { exportToExcel } from '@/lib/export-utils';
+
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -225,20 +227,33 @@ function Configuracion(props: ConfiguracionProps) {
                   </p>
                 </div>
 
-                <div className="group">
-                  <Label htmlFor="publicUrl" className="text-secondary font-bold flex items-center gap-2">
-                    <Globe className="w-3.5 h-3.5" /> URL Pública del Sistema (Vercel)
-                  </Label>
-                  <Input
-                    id="publicUrl"
-                    value={publicUrl}
-                    onChange={(e) => setPublicUrl(e.target.value)}
-                    placeholder="https://tu-app.vercel.app"
-                    className="mt-2 h-12 border-primary/20 focus:border-primary focus:ring-primary/20 bg-background/50 transition-all font-mono text-xs"
-                  />
-                  <p className="text-[10px] text-muted-foreground mt-2 italic px-1">
-                    Esta es la dirección que se enviará por WhatsApp a los trabajadores para que entren desde su celular.
-                  </p>
+                <div className="group space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="publicUrl" className="text-secondary font-bold flex items-center gap-2">
+                      <Globe className="w-3.5 h-3.5" /> URL Pública (Acceso Global)
+                    </Label>
+                    <Badge variant="outline" className="text-[8px] bg-indigo-500/10 border-indigo-500/20 text-indigo-500">GRATIS EN VERCEL</Badge>
+                  </div>
+                  <div className="relative group/input">
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within/input:text-primary transition-colors" />
+                    <Input
+                      id="publicUrl"
+                      value={publicUrl}
+                      onChange={(e) => setPublicUrl(e.target.value)}
+                      placeholder="https://tu-panaderia.vercel.app"
+                      className="pl-10 h-12 border-primary/20 focus:border-primary focus:ring-primary/20 bg-background/50 transition-all font-mono text-sm rounded-xl shadow-inner"
+                    />
+                  </div>
+                  <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 space-y-2">
+                    <p className="text-[10px] text-muted-foreground italic leading-relaxed">
+                      💡 <strong>¿Cómo obtenerla?</strong> Si ya desplegaste en Vercel, pega aquí el link (ej: <code>app-six.vercel.app</code>). 
+                      Este es el enlace que se les enviará por WhatsApp a tus trabajadores para que entren desde su casa o el bus.
+                    </p>
+                    <div className="flex items-center gap-2 pt-2">
+                      <span className="text-[9px] font-black uppercase text-slate-400">Acceso WiFi Local:</span>
+                      <code className="text-[9px] font-mono bg-indigo-500/10 text-indigo-500 px-2 py-0.5 rounded">npm run host</code>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -248,21 +263,28 @@ function Configuracion(props: ConfiguracionProps) {
           <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm relative overflow-hidden">
             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <RefreshCw className="w-5 h-5 text-indigo-500" />
-                Sincronización Cloud
-              </CardTitle>
-              <CardDescription>Respalda tus datos locales en la base de datos central de Supabase</CardDescription>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-indigo-500" />
+                  Sincronización Cloud
+                </CardTitle>
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                  <Shield className="w-3 h-3 text-emerald-500" />
+                  <span className="text-[10px] font-black text-emerald-600 uppercase tracking-tighter">Nexus-Vault Activo</span>
+                </div>
+              </div>
+              <CardDescription>Respalda tus datos locales en la base de datos central de Supabase e IndexedDB</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="p-4 rounded-xl bg-indigo-500/5 border border-indigo-500/20 flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="space-y-1 text-center md:text-left">
                   <span className="text-sm font-semibold text-indigo-400 block">Base de Datos Híbrida</span>
                   <p className="text-xs text-muted-foreground max-w-sm">
-                    Sincroniza productos, proveedores, precios, inventario y configuración.
-                    Útil después de crear las tablas o al cambiar de dispositivo.
+                    Sincronización bidireccional local-nube con redundancia en disco JSON.
+                    Status: <span className="text-emerald-500 font-bold">Protegido (Automático)</span>
                   </p>
                 </div>
+
                 <Button
                   onClick={async () => {
                     const id = toast.loading('Sincronizando con Supabase...');
@@ -629,35 +651,32 @@ function Configuracion(props: ConfiguracionProps) {
               </p>
             )}
           </div>
-
-          {/* Recuperar datos desde la nube */}
+          {/* Exportación Maestra */}
           <div className="pt-4 border-t border-border/40">
             <Button
               variant="outline"
-              disabled={isRecovering}
+              size="lg"
+              className="w-full border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400 font-bold"
               onClick={async () => {
-                setIsRecovering(true);
-                try {
-                  const r = await (db as any).recoverFromCloud();
-                  toast.success(`Recuperados: ${r.productos} productos, ${r.proveedores} proveedores, ${r.precios} precios`);
-                  window.location.reload();
-                } catch (e: any) {
-                  toast.error('Error al recuperar: ' + (e?.message || e));
-                } finally {
-                  setIsRecovering(false);
-                }
+                const results = await Promise.all([
+                   db.getAllProductos(),
+                   db.getAllProveedores(),
+                   db.getAllPrecios()
+                ]);
+                exportToExcel(results[0], 'Productos_DulcePlacer');
+                exportToExcel(results[1], 'Proveedores_DulcePlacer');
+                toast.success('📊 Exportación maestra completada. Revisa tus descargas.');
               }}
-              className="w-full border-blue-300 text-blue-700 hover:bg-blue-50 dark:border-blue-700 dark:text-blue-400"
             >
-              {isRecovering
-                ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Recuperando desde la nube...</>
-                : <><CloudDownload className="w-4 h-4 mr-2" />Recuperar datos desde la nube</>
-              }
+              <Download className="w-5 h-5 mr-2" />
+              Exportar Inventario a Excel
             </Button>
             <p className="text-xs text-muted-foreground text-center mt-1">
-              Restaura productos, proveedores y precios perdidos desde Supabase
+              Descarga tus productos y proveedores en formato CSV compatible con Excel
             </p>
           </div>
+
+
 
           {/* Zona de Peligro */}
           <div className="pt-4 border-t border-border/40">

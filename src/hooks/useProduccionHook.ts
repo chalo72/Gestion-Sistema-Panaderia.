@@ -122,32 +122,46 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
       return; // No continuar: sin receta no se pueden descontar insumos ni cargar producto terminado
     }
 
-    // 2. Obtener merma del modelo de pan asociado (default 0% si no hay modelo)
+    // 2. Preparar ajustes de stock (Batch)
     const modelo = orden.modeloPanId ? modelosPan.find(m => m.id === orden.modeloPanId) : null;
     const mermaFactor = modelo?.mermaEstimada ? 1 + (modelo.mermaEstimada / 100) : 1;
     const mermaKgEstimado = modelo?.mermaEstimada
       ? Math.round(((mermaFactor - 1) * cantidadCompletada) * 100) / 100
       : 0;
 
-    // 3. Descontar ingredientes con merma incluida
+    const usuarioActual = (() => {
+      try {
+        const u = localStorage.getItem('pricecontrol_local_user');
+        return u ? (JSON.parse(u)?.nombre || 'sistema') : 'sistema';
+      } catch { return 'sistema'; }
+    })();
+
+    const ajustes: any[] = [];
+
+    // A. Descontar ingredientes
     for (const ingrediente of receta.ingredientes) {
       const cantidadBase = (ingrediente.cantidad / receta.porcionesResultantes) * cantidadCompletada;
-      const cantidadConMerma = Math.round(cantidadBase * mermaFactor * 1000) / 1000; // 3 decimales para precisión
-      await onAjustarStock(
-        ingrediente.productoId,
-        cantidadConMerma,
-        'salida',
-        `Producción Lote: ${orden.lote || 'N/A'} (merma ${modelo?.mermaEstimada ?? 0}%)`
-      );
+      const cantidadConMerma = Math.round(cantidadBase * mermaFactor * 1000) / 1000;
+      ajustes.push({
+        productoId: ingrediente.productoId,
+        cantidad: cantidadConMerma,
+        tipo: 'salida',
+        motivo: `Producción Lote: ${orden.lote || 'N/A'} (merma ${modelo?.mermaEstimada ?? 0}%)`,
+        usuario: usuarioActual
+      });
     }
 
-    // 4. Cargar producto terminado al inventario
-    await onAjustarStock(
-      orden.productoId,
-      cantidadCompletada,
-      'entrada',
-      `Producción Finalizada Lote: ${orden.lote || 'N/A'}`
-    );
+    // B. Cargar producto terminado
+    ajustes.push({
+      productoId: orden.productoId,
+      cantidad: cantidadCompletada,
+      tipo: 'entrada',
+      motivo: `Producción Finalizada Lote: ${orden.lote || 'N/A'}`,
+      usuario: usuarioActual
+    });
+
+    // 3. Ejecutar ajustes atómicos
+    await db.batchAjustarStock(ajustes);
 
     // 5. Actualizar orden con datos reales de merma
     const updatedOrden: OrdenProduccion = {
@@ -215,5 +229,10 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     addOrdenProduccion, updateOrdenProduccion, finalizarProduccion,
     addFormulacion, updateFormulacion, deleteFormulacion,
     addModeloPan, updateModeloPan, deleteModeloPan,
+    // Acción de merma
+    addRegistroMerma: async (productoId: string, cantidad: number, motivo: string) => {
+      await onAjustarStock(productoId, cantidad, 'salida', `Merma: ${motivo}`);
+      toast.warning(`Merma de ${cantidad} unidades registrada`);
+    }
   };
 }

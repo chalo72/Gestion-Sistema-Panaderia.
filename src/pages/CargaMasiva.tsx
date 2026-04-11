@@ -25,6 +25,15 @@ interface CargaMasivaProps {
   onAddProducto: (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
   onAddProveedor: (proveedor: Omit<Proveedor, 'id' | 'createdAt'>) => Promise<Proveedor>;
   onAddCategoria: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
+  onAddOrUpdatePrecio: (data: {
+    productoId: string;
+    proveedorId: string;
+    precioCosto: number;
+    notas?: string;
+    destino?: 'venta' | 'insumo';
+    tipoEmbalaje?: string;
+    cantidadEmbalaje?: number;
+  }) => Promise<void>;
   formatCurrency: (value: number) => string;
 }
 
@@ -41,6 +50,7 @@ export default function CargaMasiva({
   onAddProducto,
   onAddProveedor,
   onAddCategoria,
+  onAddOrUpdatePrecio,
   formatCurrency,
 }: CargaMasivaProps) {
   const [activeTab, setActiveTab] = useState<TabType>('factura');
@@ -287,7 +297,8 @@ export default function CargaMasiva({
           if (!prod.nombre.trim()) continue;
           
           try {
-            await onAddProducto({
+            // Guardar o identificar producto
+            const productoCreado = await onAddProducto({
               nombre: prod.nombre,
               categoria: prod.categoria || 'General',
               descripcion: prod.descripcion,
@@ -297,6 +308,20 @@ export default function CargaMasiva({
               costoBase: prod.precioUnitario,
               imagen: '',
             });
+
+            // Si hay un proveedor detectado, vincular el precio
+            if (newProveedorId) {
+              await onAddOrUpdatePrecio({
+                productoId: productoCreado.id,
+                proveedorId: newProveedorId,
+                precioCosto: prod.precioUnitario,
+                notas: 'Cargado vía OCR',
+                destino: 'insumo',
+                tipoEmbalaje: prod.unidad, // Podría ser el tipo de empaque
+                cantidadEmbalaje: 1
+              });
+            }
+            
             guardados++;
           } catch (err) {
             console.error('Error guardando producto:', err);

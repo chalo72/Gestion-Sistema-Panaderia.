@@ -55,12 +55,12 @@ interface EntregaModalProps {
 
 const CAJA_EMOJIS: Record<string, string> = {
     'Caja Principal':    '🏪',
-    'Helados':           '🍦',
-    'Fritos':            '🍟',
-    'Micheladas':        '🍺',
+    'Vitrina':           '🥨',
+    'Pan Caliente':      '🥐',
+    'Cafetería':         '☕',
     'Tortas':            '🎂',
-    'Tinto/Capuchinos':  '☕',
-    'Tortas Especiales': '🎁',
+    'Repostería':        '🧁',
+    'Desechables':       '📦',
 };
 
 function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency }: EntregaModalProps) {

@@ -3,28 +3,25 @@ import {
   Truck,
   Bell,
   TrendingUp,
-  ArrowRight,
-  ShoppingCart,
   CheckCircle,
   Warehouse,
   ClipboardCheck,
-  AlertTriangle,
   PiggyBank,
-  Utensils,
-  Activity,
   Star,
   BarChart3,
-  Settings,
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  LayoutList as LayoutListIcon
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { GlassCard } from '@/components/dashboard/GlassCard';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { cn } from '@/lib/utils';
-import type { Producto, AlertaPrecio, PrePedido } from '@/types';
+import type { Producto, AlertaPrecio } from '@/types';
 import { FindingsFeed } from '@/components/agentes/FindingsFeed';
+
+// Fallback preventivo (Hoisted safe)
+const LayoutList = LayoutListIcon || Package;
 
 interface DashboardProps {
   estadisticas: {
@@ -48,7 +45,6 @@ interface DashboardProps {
     ticketPromedio: number;
   };
   alertas: AlertaPrecio[];
-  prepedidos: PrePedido[];
   onMarcarAlertaLeida: (id: string) => void;
   onViewAlertas: () => void;
   onViewProductos: () => void;
@@ -69,28 +65,18 @@ export default function Dashboard(props: DashboardProps) {
   const {
     estadisticas,
     alertas,
-    prepedidos,
     onMarcarAlertaLeida,
-    onViewAlertas,
     onViewProductos,
-    onViewPrePedidos,
     onViewProveedores,
     onViewRecepciones,
     onViewInventario,
     onViewVentas,
     onViewAhorros,
-    getProveedorById,
     getProductoById,
     formatCurrency
   } = props;
 
-  // Calcula el porcentaje de riesgo de stock dinamicamente
-  const stockRiesgoPct = estadisticas.totalItemsInventario > 0
-    ? Math.min(Math.round((estadisticas.itemsBajoStock / estadisticas.totalItemsInventario) * 100), 90)
-    : 0;
-
   const alertasNoLeidas = alertas.filter(a => !a.leida);
-  const prepedidosBorrador = prepedidos.filter(p => p.estado === 'borrador');
 
   // KPI Cards config al estilo Stitch
   const kpiCards = [
@@ -283,9 +269,8 @@ export default function Dashboard(props: DashboardProps) {
               </div>
             ) : (
               <div className="space-y-4">
-                {alertasNoLeidas.slice(0, 3).map((alerta, idx) => {
+                {alertasNoLeidas.slice(0, 3).map((alerta) => {
                   const producto = getProductoById(alerta.productoId);
-                  const barWidth = Math.max(stockRiesgoPct, 8) - idx * 4;
                   return (
                     <div key={alerta.id} className="p-4 bg-red-50 dark:bg-red-900/10 rounded-xl">
                       <div className="flex justify-between items-start mb-2">
@@ -337,6 +322,3 @@ export default function Dashboard(props: DashboardProps) {
     </div>
   );
 }
-
-// Helper icons missing or renamed
-const LayoutList = Package; // Fallback

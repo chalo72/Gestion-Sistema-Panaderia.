@@ -955,7 +955,7 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     // --- Helpers (Mappers) ---
-    private mapProductoFromDB(p: any): DBProducto {
+    public mapProductoFromDB(p: any): DBProducto {
         return {
             id: p.id,
             nombre: p.nombre,
@@ -985,14 +985,17 @@ export class SupabaseDatabase implements IDatabase {
         };
     }
 
-    private mapPrecioFromDB(p: any): DBPrecio {
+    public mapPrecioFromDB(p: any): DBPrecio {
         return {
             id: p.id,
             productoId: p.producto_id,
             proveedorId: p.proveedor_id,
             precioCosto: p.precio_costo,
             fechaActualizacion: p.fecha_actualizacion,
-            notas: p.notas
+            notas: p.notas,
+            destino: p.destino,
+            tipoEmbalaje: p.tipo_embalaje,
+            cantidadEmbalaje: p.cantidad_embalaje
         };
     }
 
@@ -1003,7 +1006,10 @@ export class SupabaseDatabase implements IDatabase {
             proveedor_id: p.proveedorId,
             precio_costo: safeN(p.precioCosto),
             fecha_actualizacion: p.fechaActualizacion,
-            notas: p.notas
+            notas: p.notas,
+            destino: p.destino,
+            tipo_embalaje: p.tipoEmbalaje,
+            cantidad_embalaje: p.cantidadEmbalaje
         };
     }
 

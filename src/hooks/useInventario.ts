@@ -23,7 +23,7 @@ export function useInventario({ productos }: UseInventarioParams) {
   const [recepciones, setRecepciones] = useState<Recepcion[]>([]);
 
   // --- Lógica de Inventario (onAjustarStock) ---
-  const onAjustarStock = useCallback(async (productoId: string, cantidad: number, tipo: 'entrada' | 'salida', motivo: string) => {
+  const onAjustarStock = useCallback(async (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => {
     try {
       const dbItem = await db.getInventarioItemByProducto(productoId);
       const stockActual = dbItem ? dbItem.stockActual : 0;

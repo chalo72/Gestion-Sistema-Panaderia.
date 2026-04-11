@@ -1,10 +1,5 @@
 {
-  "version": "1.0.248",
-  "timestamp": 1775625547755,
-  "buildDate": "2026-04-08",
-  "changes": [
-    "Sistema de gestión de precios optimizado",
-    "Auto-sincronización offline",
-    "Interfaz mejorada para ventas"
-  ]
+  "version": "1.1.0",
+  "buildTime": "2026-04-09T12:05:00Z",
+  "description": "Nexus-Sync Realtime Update"
 }

@@ -59,7 +59,7 @@ export function usePriceControl() {
 
   // Sub-hooks delegados (Fase 4 de refactoring)
   // onAjustarStock se define más abajo, así que usamos un ref para romper la dependencia circular
-  const onAjustarStockRef = { current: async (_pid: string, _q: number, _t: 'entrada' | 'salida', _m: string) => { return; } };
+  const onAjustarStockRef = { current: async (_pid: string, _q: number, _t: 'entrada' | 'salida' | 'ajuste', _m: string) => { return; } };
   const inventarioHook = useInventario({ productos });
   const finanzas = useFinanzas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
   const produccionHook = useProduccionHook({ onAjustarStock: (...args) => onAjustarStockRef.current(...args), recetas });
@@ -68,27 +68,22 @@ export function usePriceControl() {
   // Inicializar base de datos y cargar datos
   useEffect(() => {
     const initDB = async () => {
-      // 🛡️ [Escudo de Carga de Emergencia]
-      // Si a los 3.5 segundos no ha cargado, forzar renderizado para evitar spinner infinito.
       const safetyTimeout = setTimeout(() => {
         if (!loaded) {
-          console.warn('⚠️ [Nexus-Shield] Carga lenta detectada. Forzando inicio con datos locales...');
+          console.warn('⚠️ [Nexus-Shield] Carga lenta detectada. Forzando inicio...');
           setLoaded(true);
         }
-      }, 3500);
+      }, 5000);
 
       try {
         await db.init();
-        // Cargar datos CRÍTICOS primero
         await loadCriticalData();
         clearTimeout(safetyTimeout);
-        setLoaded(true);
         
-        // Cargar datos secundarios en background SIN BLOQUEAR
+        // Cargar secundarios inmediatamente después de desbloquear la UI
         loadSecondaryDataInBackground();
       } catch (error) {
-        console.error('Error inicializando base de datos:', error);
-        clearTimeout(safetyTimeout);
+        console.error('Error inicializando sistema:', error);
         setLoaded(true);
       }
     };
@@ -100,21 +95,7 @@ export function usePriceControl() {
     try {
       const isOnline = navigator.onLine;
       
-      // 🛡️ [NEXUS-FORCE-RESCUE]: Si estamos online, forzar descarga crítica primero
-      if (isOnline) {
-        console.log('📡 [Nexus] Iniciando rescate masivo de datos...');
-        const downloadToast = toast.loading('Recuperando meses de trabajo desde la nube...');
-        try {
-          await db.downloadFromCloud?.();
-          toast.dismiss(downloadToast);
-          toast.success('¡Rescate completado! Restaurando catálogo...');
-        } catch (e) {
-          console.warn('⚠️ Error en rescate:', e);
-          toast.dismiss(downloadToast);
-        }
-      }
-
-      // Una vez completada la descarga (o el error), leemos de IndexedDB que ya debería estar poblada
+      // 1. Carga inmediata desde IndexedDB
       const [configData, productosDB, proveedoresDB, preciosDB] = await Promise.all([
         db.getConfiguracion(),
         db.getAllProductos(),
@@ -122,61 +103,99 @@ export function usePriceControl() {
         db.getAllPrecios(),
       ]);
 
-      let finalConfig = configData ? {
-        ...defaultConfig,
-        ...configData,
-        categorias: configData.categorias || defaultConfig.categorias,
-      } as Configuracion : defaultConfig;
-
-      // Validar categorías
-      const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
-        cDef => !finalConfig.categorias.map(c => c.nombre).includes(cDef.nombre)
-      );
-
-      if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
-        const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
-          const catDefault = CATEGORIAS_DEFAULT.find(cd => cd.nombre === catExistente.nombre);
-          return catDefault && !catExistente.icono ? { ...catExistente, icono: catDefault.icono } : catExistente;
-        });
-        finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
-        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
-      }
-
-      setConfiguracion(finalConfig);
-      setProductos(productosDB);
-      setProveedores(proveedoresDB);
-      setPrecios(preciosDB);
-
-      // 🛡️ [Nexus-Exorcist]: Limpiar fantasmas (DATOS_EJEMPLO) si el usuario ya tiene datos reales
-      if (productosDB.length > 0) {
-        const idsEjemplo = DATOS_EJEMPLO.productos.map(p => p.id);
-        const provsEjemplo = DATOS_EJEMPLO.proveedores.map(p => p.id);
-        
-        // Ejecutar limpieza silenciosa para que desaparezcan de la pantalla
-        const prodFiltrados = productosDB.filter(p => !idsEjemplo.includes(p.id));
-        const provFiltrados = proveedoresDB.filter(p => !provsEjemplo.includes(p.id));
-        
-        setProductos(prodFiltrados);
-        setProveedores(provFiltrados);
-      }
-
-      // 🛡️ [Nexus-Refinement]: Asegurar Unidades, Porcentajes y Destinos
-      if (configData) {
-        // Restaurar unidades y destinos si existen en el objeto de configuración (Metadata Blindada)
-        const totalConfig = {
-          ...defaultConfig,
-          ...configData,
-          unidades: configData.unidades || (configData as any).metadata?.unidades || defaultConfig.unidades,
-          destinos: (configData as any).destinos || (configData as any).metadata?.destinos || (defaultConfig as any).destinos,
-        } as Configuracion;
-        setConfiguracion(totalConfig);
-      }
+      const hasLocalData = productosDB.length > 0;
       
-      // Marcar setup como completado para que NUNCA más se dispare el auto-seed
+      // Función auxiliar para procesar y aplicar datos al estado
+      const applyData = async (config: any, prods: Producto[], provs: Proveedor[], prcs: PrecioProveedor[]) => {
+        let finalConfig = config ? {
+          ...defaultConfig,
+          ...config,
+          categorias: config.categorias || defaultConfig.categorias,
+          unidades: config.unidades || config.metadata?.unidades || defaultConfig.unidades,
+          destinos: config.destinos || config.metadata?.destinos || (defaultConfig as any).destinos,
+        } as Configuracion : defaultConfig;
+
+        // Validar y actualizar categorías si es necesario
+        const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
+          cDef => !finalConfig.categorias.map(c => c.nombre).includes(cDef.nombre)
+        );
+        if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
+          const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
+            const catDefault = CATEGORIAS_DEFAULT.find(cd => cd.nombre === catExistente.nombre);
+            return catDefault && !catExistente.icono ? { ...catExistente, icono: catDefault.icono } : catExistente;
+          });
+          finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
+          await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+        }
+
+        // Limpieza de datos de ejemplo (fantasmas)
+        let prodsFinal = prods;
+        let provsFinal = provs;
+        if (prods.length > 0) {
+          const idsEjemplo = DATOS_EJEMPLO.productos.map(p => p.id);
+          const provsEjemplo = DATOS_EJEMPLO.proveedores.map(p => p.id);
+          prodsFinal = prods.filter(p => !idsEjemplo.includes(p.id));
+          provsFinal = provs.filter(p => !provsEjemplo.includes(p.id));
+        }
+
+        setConfiguracion(finalConfig);
+        setProductos(prodsFinal);
+        setProveedores(provsFinal);
+        setPrecios(prcs);
+      };
+
+      // 2. Renderizado instantáneo si hay datos locales
+      if (hasLocalData) {
+        console.log('🚀 [Nexus-Speed] Renderizado instantáneo activado.');
+        await applyData(configData, productosDB, proveedoresDB, preciosDB);
+        setLoaded(true);
+      }
+
+      // 3. Gestión de Sincronización Remota
+      if (isOnline) {
+        const performSync = async () => {
+          console.log('📡 [Nexus] Sincronizando catálogo con la nube...');
+          if (!hasLocalData) toast.info('Sincronizando con Dulce Placer...');
+          
+          try {
+            await db.downloadFromCloud?.();
+            
+            // Recargar datos tras sync (solo si es necesario actualizar la UI)
+            const [c, p, pr, prc] = await Promise.all([
+              db.getConfiguracion(),
+              db.getAllProductos(),
+              db.getAllProveedores(),
+              db.getAllPrecios(),
+            ]);
+            
+            await applyData(c, p, pr, prc);
+            
+            if (!hasLocalData) {
+              setLoaded(true);
+              toast.success('¡Catálogo recuperado!');
+            }
+          } catch (e) {
+            console.warn('⚠️ Error en sync inicial:', e);
+            if (!hasLocalData) setLoaded(true);
+          }
+        };
+
+        if (hasLocalData) {
+          performSync(); // background
+        } else {
+          await performSync(); // foreground (bloquea solo si está vacío)
+        }
+      } else if (!hasLocalData) {
+        setLoaded(true); // Offline y vacío
+      }
+
+      // Finalización de setup
       localStorage.setItem('dulceplacer_setup_done', 'true');
       await db.saveBackup('dulceplacer_setup_done', true);
+      
     } catch (error) {
-      console.error('Error cargando datos críticos:', error);
+      console.error('Error crítivo en carga:', error);
+      setLoaded(true);
     }
   };
 
@@ -249,10 +268,14 @@ export function usePriceControl() {
     }
   };
 
-  // 📦 DATOS SECUNDARIOS = Cargar en background
+  // 📦 DATOS SECUNDARIOS = Cargar en background para no bloquear el inicio
   const loadSecondaryDataInBackground = async () => {
     try {
-      const [alertas, inventario, movimientos, gastos, recepciones, historial, recetas, ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, produccion, creditosClientes, creditosTrabajadoresData, trabajadores] = await Promise.all([
+      const [
+        alertas, inventario, movimientos, gastos, recepciones, historial, recetas, 
+        ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, 
+        produccion, creditosClientes, creditosTrabajadoresData, trabajadores, prepedidos
+      ] = await Promise.all([
         db.getAllAlertas(),
         db.getAllInventario(),
         db.getAllMovimientos(),
@@ -270,9 +293,11 @@ export function usePriceControl() {
         db.getAllCreditosClientes(),
         db.getAllCreditosTrabajadores(),
         db.getAllTrabajadores(),
+        db.getAllPrePedidos(),
       ]);
 
       setAlertas(alertas);
+      setPrepedidos(prepedidos);
       inventarioHook.setInventario(inventario);
       inventarioHook.setMovimientos(movimientos);
       finanzas.setGastos(gastos as any);
@@ -286,106 +311,28 @@ export function usePriceControl() {
       ventasHook.setMesas(mesas);
       ventasHook.setPedidosActivos(pedidosActivos);
       produccionHook.setProduccion(produccion);
-      finanzas.setCreditosClientes(creditosClientes as import('@/types').CreditoCliente[]);
-      finanzas.setCreditosTrabajadores(creditosTrabajadoresData as import('@/types').CreditoTrabajador[]);
-      finanzas.setTrabajadores(trabajadores as import('@/types').Trabajador[]);
+      finanzas.setCreditosClientes(creditosClientes as any);
+      finanzas.setCreditosTrabajadores(creditosTrabajadoresData as any);
+      finanzas.setTrabajadores(trabajadores as any);
+
+      // Auto-inicializar InventarioItem para productos sin registro
+      const idsConInventario = new Set(inventario.map((i: any) => i.productoId));
+      const productosSinInventario = productos.filter((p: any) => !idsConInventario.has(p.id));
+      if (productosSinInventario.length > 0) {
+        const now = new Date().toISOString();
+        const nuevosItems: InventarioItem[] = productosSinInventario.map((p: any) => ({
+          id: crypto.randomUUID(),
+          productoId: p.id,
+          stockActual: 0,
+          stockMinimo: 5,
+          ubicacion: 'Almacén General',
+          ultimoMovimiento: now,
+        }));
+        await Promise.all(nuevosItems.map(item => db.updateInventarioItem(item)));
+        inventarioHook.setInventario(prev => [...prev, ...nuevosItems]);
+      }
     } catch (error) {
       console.error('Error cargando datos secundarios:', error);
-    }
-  };
-
-  const loadAllData = async () => {
-    try {
-      // Cargamos la configuración primero para tener el tema y moneda listos
-      const configData = await db.getConfiguracion();
-      let finalConfig = defaultConfig;
-
-      if (configData) {
-        finalConfig = {
-          ...defaultConfig,
-          ...configData,
-          categorias: configData.categorias || defaultConfig.categorias,
-        } as Configuracion;
-      }
-
-      // [Nexus-Volt] Category Sanitizer v2: Asegurar TODAS las categorías de negocio
-      const categoriasExistentes = finalConfig.categorias.map(c => c.nombre);
-      const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
-        cDef => !categoriasExistentes.includes(cDef.nombre)
-      );
-
-      if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
-        console.log(`🧹 [Nexus-Volt] Detectadas ${categoriasNuevas.length} categorías nuevas. Sincronizando catálogo Dulce Placer...`);
-        // Actualizar categorías existentes con icono si lo perdieron, y agregar nuevas
-        const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
-          const catDefault = CATEGORIAS_DEFAULT.find(cd => cd.nombre === catExistente.nombre);
-          if (catDefault && !catExistente.icono) {
-            return { ...catExistente, icono: catDefault.icono };
-          }
-          return catExistente;
-        });
-        finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
-        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
-      }
-
-      setConfiguracion(finalConfig);
-
-      // Cargamos el resto en paralelo pero actualizamos según van llegando
-      const dataPromises = [
-        db.getAllProductos().then(setProductos),
-        db.getAllProveedores().then(setProveedores),
-        db.getAllPrecios().then(setPrecios),
-        db.getAllPrePedidos().then(setPrepedidos),
-        db.getAllAlertas().then(setAlertas),
-        db.getAllInventario().then(inventarioHook.setInventario),
-        db.getAllMovimientos().then(inventarioHook.setMovimientos),
-        db.getAllGastos().then((data) => finanzas.setGastos(data as any)),
-        db.getAllRecepciones().then((data) => inventarioHook.setRecepciones(data as Recepcion[])),
-        db.getAllHistorial().then(setHistorial),
-        db.getAllRecetas().then((data) => setRecetas(data as Receta[])),
-        db.getAllVentas().then(ventasHook.setVentas),
-        db.getAllSesionesCaja().then((data) => ventasHook.setSesionesCaja(data as any)),
-        db.getSesionCajaActiva().then((data) => ventasHook.setCajaActiva(data as any)),
-        db.getAllAhorros().then(finanzas.setAhorros),
-        db.getAllMesas().then(ventasHook.setMesas),
-        db.getAllPedidosActivos().then(ventasHook.setPedidosActivos),
-        db.getAllOrdenesProduccion().then(produccionHook.setProduccion),
-      ];
-
-      await Promise.allSettled(dataPromises);
-      console.log('⚡ Todas las constantes de datos han sido cargadas y sincronizadas.');
-
-      // ── Auto-inicializar InventarioItem para productos sin registro ──
-      // Garantiza que TODOS los productos existentes aparezcan en el módulo de Inventario
-      try {
-        const [todosProductos, todosInventarios] = await Promise.all([
-          db.getAllProductos(),
-          db.getAllInventario(),
-        ]);
-        const idsConInventario = new Set(todosInventarios.map((i: InventarioItem) => i.productoId));
-        const productosSinInventario = todosProductos.filter((p: Producto) => !idsConInventario.has(p.id));
-        if (productosSinInventario.length > 0) {
-          const now = new Date().toISOString();
-          const nuevosItems: InventarioItem[] = productosSinInventario.map((p: Producto) => ({
-            id: crypto.randomUUID(),
-            productoId: p.id,
-            stockActual: 0,
-            stockMinimo: 5,
-            ubicacion: 'Almacén General',
-            ultimoMovimiento: now,
-          }));
-          await Promise.all(nuevosItems.map(item => db.updateInventarioItem(item)));
-          inventarioHook.setInventario([...todosInventarios, ...nuevosItems]);
-          console.log(`✅ Auto-inicializados ${nuevosItems.length} ítems de inventario para productos existentes`);
-        }
-      } catch (err) {
-        console.warn('⚠️ Error en auto-inicialización de inventario:', err);
-      }
-
-    } catch (error) {
-      console.error('❌ Error crítico en la carga asíncrona de datos:', error);
-    } finally {
-      setLoaded(true);
     }
   };
 
@@ -457,6 +404,15 @@ export function usePriceControl() {
     setConfiguracion(newConfig);
   }, [configuracion]);
 
+  const updateCategoria = useCallback(async (id: string, nuevoNombre: string) => {
+    const newCategorias = configuracion.categorias.map(c => 
+      c.id === id ? { ...c, nombre: nuevoNombre } : c
+    );
+    const newConfig = { ...configuracion, categorias: newCategorias };
+    await db.saveConfiguracion({ ...newConfig, id: 'main' });
+    setConfiguracion(newConfig);
+  }, [configuracion]);
+
   const updateConfiguracion = useCallback(async (updates: Partial<Configuracion>) => {
     const newConfig = { ...configuracion, ...updates };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
@@ -495,8 +451,16 @@ export function usePriceControl() {
   }, []);
 
   const updateProducto = useCallback(async (id: string, updates: Partial<Producto>) => {
-    const producto = productos.find(p => p.id === id);
-    if (!producto) return;
+    let producto = productos.find(p => p.id === id);
+    if (!producto) {
+      // 🛡️ REGLA: NEXUS-SYNC-GUARD - Si no está en el estado, buscar en DB (caso de productos recién creados)
+      const productosDB = await db.getAllProductos();
+      producto = productosDB.find(p => p.id === id);
+      if (!producto) {
+        console.warn(`⚠️ [Nexus] No se pudo actualizar: Producto ${id} no encontrado en estado ni en DB.`);
+        return;
+      }
+    }
     const updatedProducto = { ...producto, ...updates, updatedAt: new Date().toISOString() };
     await db.updateProducto(updatedProducto);
     setProductos(prev => prev.map(p => p.id === id ? updatedProducto : p));
@@ -618,17 +582,30 @@ export function usePriceControl() {
 
         // SINCRONIZACIÓN: Ajustar precio de venta automáticamente (subidas Y bajadas)
         if (configuracion.ajusteAutomatico) {
-          const producto = productos.find(p => p.id === productoId);
+          let producto = productos.find(p => p.id === productoId);
+          if (!producto) {
+            const allP = await db.getAllProductos();
+            producto = allP.find(px => px.id === productoId);
+          }
           if (producto) {
-            const costoUnitario = precioCosto / (cantidadEmbalaje || 1);
-            const nuevoPrecioVenta = Math.round(costoUnitario * (1 + producto.margenUtilidad / 100) / 100) * 100;
+            const costoUnitario = safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1);
+            const nuevoPrecioVenta = Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100;
             await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
           }
         }
       }
 
       // Actualizar precio existente
-      const updatedPrecio = { ...existingPrecio, precioCosto, fechaActualizacion: now, notas, ...(destino && { destino }), ...(tipoEmbalaje && { tipoEmbalaje }), ...(cantidadEmbalaje && { cantidadEmbalaje }) };
+      // Actualizar precio existente asegurando persistencia de campos opcionales
+      const updatedPrecio: PrecioProveedor = { 
+        ...existingPrecio, 
+        precioCosto, 
+        fechaActualizacion: now, 
+        notas: notas !== undefined ? notas : existingPrecio.notas,
+        destino: destino !== undefined ? destino : existingPrecio.destino,
+        tipoEmbalaje: tipoEmbalaje !== undefined ? tipoEmbalaje : existingPrecio.tipoEmbalaje,
+        cantidadEmbalaje: cantidadEmbalaje !== undefined ? cantidadEmbalaje : existingPrecio.cantidadEmbalaje
+      };
       await db.updatePrecio(updatedPrecio);
       setPrecios(prev => prev.map(p => p.id === existingPrecio.id ? updatedPrecio : p));
     } else {
@@ -649,10 +626,14 @@ export function usePriceControl() {
 
       // SINCRONIZACIÓN: Calcular precio de venta para nuevos precios (siempre si ajuste automático)
       if (configuracion.ajusteAutomatico) {
-        const producto = productos.find(p => p.id === productoId);
+        let producto = productos.find(p => p.id === productoId);
+        if (!producto) {
+          const allP = await db.getAllProductos();
+          producto = allP.find(px => px.id === productoId);
+        }
         if (producto) {
-          const costoUnitario = precioCosto / (cantidadEmbalaje || 1);
-          const nuevoPrecioVenta = Math.round(costoUnitario * (1 + producto.margenUtilidad / 100) / 100) * 100;
+          const costoUnitario = safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1);
+          const nuevoPrecioVenta = Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100;
           await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
         }
       }
@@ -1104,21 +1085,28 @@ export function usePriceControl() {
     if (db.syncLocalToCloud) {
       toast.promise(db.syncLocalToCloud(), {
         loading: 'Subiendo datos a la nube...',
-        success: () => { loadAllData(); return 'Sincronizado correctamente'; },
+        success: () => { 
+          loadSecondaryDataInBackground(); 
+          return 'Sincronizado correctamente'; 
+        },
         error: 'Error al sincronizar. Revisa tu conexión.'
       });
     }
-  }, [loadAllData]);
+  }, [loadSecondaryDataInBackground]);
 
   const downloadFromCloud = useCallback(async () => {
     if (db.syncCloudToLocal) {
       toast.promise(db.syncCloudToLocal(), {
         loading: 'Descargando datos desde la nube...',
-        success: () => { loadAllData(); return 'Datos actualizados'; },
+        success: () => { 
+          loadCriticalData();
+          loadSecondaryDataInBackground(); 
+          return 'Datos actualizados'; 
+        },
         error: 'Error al descargar. ¿Está el proyecto activo?'
       });
     }
-  }, [loadAllData]);
+  }, [loadCriticalData, loadSecondaryDataInBackground]);
 
 
   // Wire onAjustarStock ref for sub-hooks
@@ -1128,7 +1116,7 @@ export function usePriceControl() {
   return {
     // Datos Base
     productos, proveedores, precios, historial, alertas, configuracion, prepedidos, estadisticas, loaded,
-    downloadFromCloud, syncWithCloud, cargarDatosEjemplo, clearAllData, loadAllData, MONEDAS,
+    downloadFromCloud, syncWithCloud, cargarDatosEjemplo, clearAllData, MONEDAS,
 
     // Recetas, Categorías, Productos, Proveedores, Precios, Pre-Pedidos
     addReceta: async (r: Receta) => {
@@ -1145,7 +1133,8 @@ export function usePriceControl() {
     },
     getRecetaByProducto: (pid: string) => recetas.find(r => r.productoId === pid),
     recetas,
-    addCategoria, deleteCategoria,
+    addCategoria, updateCategoria, deleteCategoria,
+
     addProducto, updateProducto, deleteProducto,
     addProveedor, updateProveedor, deleteProveedor,
     addOrUpdatePrecio, deletePrecio,

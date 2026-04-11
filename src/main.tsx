@@ -2,6 +2,8 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App.tsx'
+import { AuthProvider } from '@/contexts/AuthContext'
+import { CentinelaProvider } from '@/components/providers/CentinelaProvider'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import './index.css'
 
@@ -43,7 +45,11 @@ if (!rootElement) {
     createRoot(rootElement).render(
       <StrictMode>
         <ErrorBoundary>
-          <App />
+          <AuthProvider>
+            <CentinelaProvider>
+              <App />
+            </CentinelaProvider>
+          </AuthProvider>
         </ErrorBoundary>
       </StrictMode>,
     );

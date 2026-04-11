@@ -14,7 +14,6 @@ import {
   MessageCircle,
   Star,
   Building2,
-  X,
   UserCheck,
   SortAsc,
   Download,
@@ -302,63 +301,75 @@ export function Proveedores({
 
       // Guardar productos del catálogo
       if (onAddOrUpdatePrecio && items.length > 0) {
+        console.log(`📦 [Nexus-Volt] Iniciando guardado de ${items.length} productos...`);
         for (const item of items) {
-          let productoId = item.productoId;
-          
-          // Buscar etiquetas de embalaje con seguridad (Nexus-Shield-Guard)
-          const infoEmbalaje = EMBALAJES.find(e => e.value === item.tipoEmbalaje) || { label: 'Unidad', emoji: '🔹' };
-          const descripcionGenerada = `${infoEmbalaje.label} x${item.cantidadEmbalaje || 1}`;
+          try {
+            let productoId = item.productoId;
+            
+            // Buscar etiquetas de embalaje con seguridad (Nexus-Shield-Guard)
+            const infoEmbalaje = EMBALAJES.find(e => e.value === item.tipoEmbalaje) || { label: 'Unidad', emoji: '🔹' };
+            const descripcionGenerada = `${infoEmbalaje.label} x${item.cantidadEmbalaje || 1}`;
 
-          // Crear producto si no existe o si el ID apunta a un producto eliminado (huérfano)
-          const productoExiste = productoId ? !!getProductoById(productoId) : false;
-          if ((!productoId || !productoExiste) && onAddProducto) {
-            const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
-            const np = await onAddProducto({
-              nombre: item.nombre,
-              categoria: item.categoria || 'Otro',
-              descripcion: descripcionGenerada,
-              precioVenta: item.precioVenta,
-              margenUtilidad: item.margenVenta,
-              tipo,
-              costoBase: item.costoUnitario,
-            });
-            productoId = np.id;
-          }
-          if (productoId) {
-            await onAddOrUpdatePrecio({
-              productoId,
-              proveedorId: provId,
-              precioCosto: item.precioCosto,
-              notas: item.notas || descripcionGenerada,
-              destino: item.destino,
-              tipoEmbalaje: item.tipoEmbalaje,
-              cantidadEmbalaje: item.cantidadEmbalaje,
-            });
-
-            // Sincronización Completa con Módulo de Productos
-            if (onUpdateProducto) {
+            // Crear producto si no existe o si el ID apunta a un producto eliminado (huérfano)
+            // 🛡️ REGLA: NEXUS-AUTO-CHECK - Si no tiene ID o el ID no existe localmente, asumimos que es nuevo
+            const yaExiste = productoId ? !!getProductoById(productoId) : false;
+            
+            if ((!productoId || !yaExiste) && onAddProducto) {
+              console.log(`🆕 [Nexus] Creando nuevo producto: ${item.nombre}`);
               const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
-              await onUpdateProducto(productoId, {
+              const np = await onAddProducto({
                 nombre: item.nombre,
                 categoria: item.categoria || 'Otro',
                 descripcion: descripcionGenerada,
+                precioVenta: Number(item.precioVenta) || 0,
+                margenUtilidad: Number(item.margenVenta) || 30,
                 tipo,
-                costoBase: item.costoUnitario,
-                margenUtilidad: item.margenVenta,
-                precioVenta: item.precioVenta,
-                updatedAt: new Date().toISOString()
+                costoBase: Number(item.costoUnitario) || 0,
               });
+              productoId = np.id;
             }
 
-            // AJUSTE DE STOCK AUTOMÁTICO
-            if (onAjustarStock && item.stockRecibido > 0) {
-              await onAjustarStock(
+            if (productoId) {
+              console.log(`🔗 [Nexus] Vinculando precio para: ${item.nombre} (ID: ${productoId})`);
+              await onAddOrUpdatePrecio({
                 productoId,
-                item.stockRecibido,
-                'entrada',
-                `Proveedor: ${data.nombre} (Sincronización)`
-              );
+                proveedorId: provId,
+                precioCosto: Number(item.precioCosto) || 0,
+                notas: item.notas || descripcionGenerada,
+                destino: item.destino,
+                tipoEmbalaje: item.tipoEmbalaje,
+                cantidadEmbalaje: Number(item.cantidadEmbalaje) || 1,
+              });
+
+              // Sincronización Completa con Módulo de Productos
+              if (onUpdateProducto) {
+                const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
+                await onUpdateProducto(productoId, {
+                  nombre: item.nombre,
+                  categoria: item.categoria || 'Otro',
+                  descripcion: descripcionGenerada,
+                  tipo,
+                  costoBase: Number(item.costoUnitario) || 0,
+                  margenUtilidad: Number(item.margenVenta) || 30,
+                  precioVenta: Number(item.precioVenta) || 0,
+                  updatedAt: new Date().toISOString()
+                });
+              }
+
+              // AJUSTE DE STOCK AUTOMÁTICO
+              if (onAjustarStock && item.stockRecibido > 0) {
+                await onAjustarStock(
+                  productoId,
+                  Number(item.stockRecibido),
+                  'entrada',
+                  `Proveedor: ${data.nombre} (Sincronización)`
+                );
+              }
             }
+          } catch (itemErr) {
+            console.error(`❌ [Nexus] Error procesando item ${item.nombre}:`, itemErr);
+            toast.error(`Error con el producto: ${item.nombre}`);
+            // Continuamos con el siguiente item si uno falla (estrategia Best-Effort)
           }
         }
         toast.success(`${items.length} producto(s) gestionados correctamente`);
@@ -366,7 +377,7 @@ export function Proveedores({
       setIsDialogOpen(false);
       setEditingProveedor(null);
     } catch (err) {
-      console.error("❌ [Nexus-Volt] Error al guardar datos:", err);
+      console.error("❌ [Nexus-Volt] Error crítico en el flujo de guardado:", err);
       toast.error('Error al guardar. Verifica los datos e intenta de nuevo.');
     }
   };
@@ -391,6 +402,7 @@ export function Proveedores({
         costoUnitario: precio.cantidadEmbalaje ? Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100 : precio.precioCosto,
         precioVenta: Math.round((prod?.precioVenta || 0) / 100) * 100,
         precioVentaPack: prod?.precioVenta ? Math.round(prod.precioVenta * (precio.cantidadEmbalaje || 1) / 100) * 100 : 0,
+        stockRecibido: 0, // Campo requerido por la interfaz ProductoCatalogo
       };
     });
     setCatalogoParaForm(itemsPreCargados);
