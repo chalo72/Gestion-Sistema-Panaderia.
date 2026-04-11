@@ -75,6 +75,8 @@ const App = () => {
     syncWithCloud,
     clearAllData,
     addProveedor,
+    updateProveedor,
+    deleteProveedor,
     addCategoria,
     deleteCategoria,
     updateCategoria,
@@ -200,14 +202,20 @@ const App = () => {
         );
       case 'proveedores':
         return (
-          <Proveedores 
+          <Proveedores
             proveedores={proveedores}
             productos={productos}
             precios={precios}
             categorias={configuracion.categorias}
             onAddProveedor={addProveedor}
-            onUpdateProveedor={updateConfiguracion as any} 
-            onDeleteProveedor={(id) => {}} 
+            onUpdateProveedor={updateProveedor}
+            onDeleteProveedor={deleteProveedor}
+            onAddProducto={addProducto}
+            onUpdateProducto={updateProducto}
+            onDeleteProducto={deleteProducto}
+            onAddOrUpdatePrecio={addOrUpdatePrecio}
+            onDeletePrecio={deletePrecio}
+            onAjustarStock={onAjustarStock}
             getPreciosByProveedor={(id) => precios.filter(p => p.proveedorId === id)}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
