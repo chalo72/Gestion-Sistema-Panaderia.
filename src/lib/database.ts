@@ -435,6 +435,9 @@ export interface IDatabase {
   
   // MÉTODOS DE TRANSACCIÓN ATÓMICA
   batchAjustarStock(movimientos: { productoId: string; cantidad: number; tipo: 'entrada' | 'salida' | 'ajuste'; motivo: string; usuario: string }[]): Promise<void>;
+  
+  // MÉTODOS DE EXPORTACIÓN MAESTRA
+  exportarTodo(): Promise<any>;
 }
 
 const DB_NAME = 'PriceControlDB';
@@ -604,9 +607,56 @@ class IndexedDBDatabase implements IDatabase {
 
   async clearAll() { const db = await this.ensureInit(); const stores = db.objectStoreNames; const tx = db.transaction([...stores], 'readwrite'); Array.from(stores).forEach(s => tx.objectStore(s).clear()); return new Promise<void>((res) => { tx.oncomplete = () => res(); }); }
 
-  async getTombstones(tab: string) { const db = await this.ensureInit(); return new Promise<string[]>((res, rej) => { const req = db.transaction('tombstones').objectStore('tombstones').index('table').getAll(tab); req.onsuccess = () => res(req.result.map((t: any) => t.itemId)); req.onerror = () => rej(req.error); }); }
-  async removeTombstone(tab: string, id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').delete(`${tab}:${id}`); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
-  async addTombstone(tab: TombstoneTable, id: string) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').put({ id: `${tab}:${id}`, table: tab, itemId: id, fecha: new Date().toISOString() }); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
+  async getTombstones(tab: string) { 
+    const db = await this.ensureInit(); 
+    // 1. Leer de IndexedDB
+    const local = await new Promise<string[]>((res) => { 
+      const req = db.transaction('tombstones').objectStore('tombstones').index('table').getAll(tab); 
+      req.onsuccess = () => res(req.result.map((t: any) => t.itemId)); 
+      req.onerror = () => res([]); 
+    }); 
+
+    // 2. Leer de localStorage y Unificar (Redundancia Crítica)
+    try {
+      const disk = JSON.parse(localStorage.getItem(`NEXUS_TOMBSTONES_${tab}`) || '[]');
+      return Array.from(new Set([...local, ...disk]));
+    } catch { return local; }
+  }
+
+  async removeTombstone(tab: string, id: string) { 
+    const db = await this.ensureInit(); 
+    await new Promise<void>((res, rej) => { 
+      const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').delete(`${tab}:${id}`); 
+      req.onsuccess = () => res(); 
+      req.onerror = () => rej(req.error); 
+    }); 
+
+    // Limpiar también de localStorage
+    try {
+      const key = `NEXUS_TOMBSTONES_${tab}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      localStorage.setItem(key, JSON.stringify(existing.filter((i: string) => i !== id)));
+    } catch {}
+  }
+
+  async addTombstone(tab: TombstoneTable, id: string) { 
+    const db = await this.ensureInit(); 
+    // 1. IndexedDB
+    await new Promise<void>((res, rej) => { 
+      const req = db.transaction('tombstones', 'readwrite').objectStore('tombstones').put({ id: `${tab}:${id}`, table: tab, itemId: id, fecha: new Date().toISOString() }); 
+      req.onsuccess = () => res(); 
+      req.onerror = () => rej(req.error); 
+    }); 
+
+    // 2. Redundancia en localStorage (Blindaje contra reseteos)
+    try {
+      const key = `NEXUS_TOMBSTONES_${tab}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      if (!existing.includes(id)) {
+        localStorage.setItem(key, JSON.stringify([...existing, id]));
+      }
+    } catch(e) { console.error("Error en persistencia de lápida:", e); }
+  }
   async saveBackup(id: string, data: any) { const db = await this.ensureInit(); return new Promise<void>((res, rej) => { const req = db.transaction('backups', 'readwrite').objectStore('backups').put({ id, data, fecha: new Date().toISOString() }); req.onsuccess = () => res(); req.onerror = () => rej(req.error); }); }
   async getBackup(id: string) { const db = await this.ensureInit(); return new Promise<any>((res, rej) => { const req = db.transaction('backups').objectStore('backups').get(id); req.onsuccess = () => res(req.result?.data); req.onerror = () => rej(req.error); }); }
 
@@ -691,6 +741,21 @@ class IndexedDBDatabase implements IDatabase {
       tx.oncomplete = () => res();
       tx.onerror = () => rej(tx.error);
     });
+  }
+
+  async exportarTodo() {
+    const db = await this.ensureInit();
+    const data: any = {};
+    const stores = ['productos', 'proveedores', 'precios', 'configuracion', 'inventario', 'recepciones', 'recetas'];
+    
+    for (const store of stores) {
+      data[store] = await new Promise((res, rej) => {
+        const req = db.transaction(store).objectStore(store).getAll();
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => rej(req.error);
+      });
+    }
+    return data;
   }
 }
 
@@ -882,9 +947,25 @@ class HybridDatabase implements IDatabase {
         ...localTombsProds, ...localTombsProvs, ...localTombsPrecios,
         ...cloudTombsProds, ...cloudTombsProvs, ...cloudTombsPrecios,
       ]);
+
+      // 🛡️ REGLA ANTIGRAVITY: Si está en el set de borrados, ELIMINAR de local si volvieran por error
+      const cleanupTable = async (items: any[], table: string, delFn: (id: string) => Promise<void>) => {
+        for (const item of items) {
+          if (tombstoneSet.has(item.id)) {
+            console.warn(`🛡️ [Nexus-Shield] Detectada reaparición de ${table} (${item.id}). Ejecutando borrado atómico.`);
+            await delFn(item.id).catch(() => {});
+          }
+        }
+      };
+
       const [lProds, lProvs, lPrecios] = await Promise.all([
         this.local.getAllProductos(), this.local.getAllProveedores(), this.local.getAllPrecios()
       ]);
+
+      // Limpieza preventiva de fantasmas locales
+      await cleanupTable(lProds, 'producto', id => this.local.deleteProducto(id));
+      await cleanupTable(lProvs, 'proveedor', id => this.local.deleteProveedor(id));
+      await cleanupTable(lPrecios, 'precio', id => this.local.deletePrecio(id));
       await processTable(cloudProds, new Set(lProds.map(p => p.id)), tombstoneSet, p => this.local.addProducto(p));
       await processTable(cloudProvs, new Set(lProvs.map(p => p.id)), tombstoneSet, p => this.local.addProveedor(p));
       await processTable(cloudPrecios, new Set(lPrecios.map(p => p.id)), tombstoneSet, p => this.local.addPrecio(p));
@@ -965,7 +1046,22 @@ class HybridDatabase implements IDatabase {
   async getAllProveedores() { return this.local.getAllProveedores(); }
   async addProveedor(p: DBProveedor) { await this.local.addProveedor(p); this.markOperation(); if (this.isOnline) this.cloud.addProveedor(p); }
   async updateProveedor(p: DBProveedor) { await this.local.updateProveedor(p); this.markOperation(); if (this.isOnline) this.cloud.updateProveedor(p); }
-  async deleteProveedor(id: string) { await this.local.deleteProveedor(id); await this.addTombstone('proveedores', id); this.markOperation(); if (this.isOnline) this.cloud.deleteProveedor(id); }
+  async deleteProveedor(id: string) { 
+    // 1. Matar relaciones primero (precios vinculados)
+    const precios = await this.local.getPreciosByProveedor(id);
+    for (const p of precios) await this.deletePrecio(p.id);
+
+    // 2. Borrar localmente
+    await this.local.deleteProveedor(id); 
+    
+    // 3. Enterrar definitivamente (Tombstone Dual)
+    await this.addTombstone('proveedores', id); 
+    
+    this.markOperation(); 
+    
+    // 4. Notificar a la nube
+    if (this.isOnline) this.cloud.deleteProveedor(id).catch(() => {}); 
+  }
 
   async getAllPrecios() { return this.local.getAllPrecios(); }
   async getPreciosByProducto(pid: string) { return this.local.getPreciosByProducto(pid); }
@@ -973,7 +1069,12 @@ class HybridDatabase implements IDatabase {
   async getPrecioByProductoProveedor(pid: string, provId: string) { return this.local.getPrecioByProductoProveedor(pid, provId); }
   async addPrecio(p: DBPrecio) { await this.local.addPrecio(p); this.markOperation(); if (this.isOnline) this.cloud.addPrecio(p); }
   async updatePrecio(p: DBPrecio) { await this.local.updatePrecio(p); this.markOperation(); if (this.isOnline) this.cloud.updatePrecio(p); }
-  async deletePrecio(id: string) { await this.local.deletePrecio(id); await this.addTombstone('precios', id); this.markOperation(); if (this.isOnline) this.cloud.deletePrecio(id); }
+  async deletePrecio(id: string) { 
+    await this.local.deletePrecio(id); 
+    await this.addTombstone('precios', id); 
+    this.markOperation(); 
+    if (this.isOnline) this.cloud.deletePrecio(id).catch(() => {}); 
+  }
 
   async getAllPrePedidos() { return this.local.getAllPrePedidos(); }
   async addPrePedido(p: DBPrePedido) { await this.local.addPrePedido(p); this.markOperation(); if (this.isOnline) this.cloud.addPrePedido(p); }
@@ -1134,6 +1235,10 @@ class HybridDatabase implements IDatabase {
     } catch (err) {
       console.error('❌ [Nexus-Rescue] Error durante el rescate:', err);
     }
+  }
+
+  async exportarTodo() {
+    return this.local.exportarTodo();
   }
 }
 

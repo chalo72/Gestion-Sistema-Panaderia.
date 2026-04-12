@@ -14,7 +14,6 @@ import { useTheme } from '@/hooks/useTheme';
 import { Toaster, toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Sidebar } from '@/components/layout/Sidebar';
-import { EnvironmentBanner } from '@/components/EnvironmentBanner';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/layout/PageTransition';
 import type { ViewType } from '@/types';
@@ -554,7 +553,6 @@ const App = () => {
 
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-slate-950' : 'bg-slate-50'}`}>
-      <EnvironmentBanner />
       {user && (
         <Sidebar 
           currentView={currentView}

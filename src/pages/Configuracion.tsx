@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, CloudDownload, Shield, Download, Upload, Clock } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap } from 'lucide-react';
 import { db } from '@/lib/database';
 import {
   guardarSnapshot, leerTodos, eliminarSnapshot,
@@ -729,7 +729,7 @@ function Configuracion(props: ConfiguracionProps) {
               </p>
             )}
           </div>
-          {/* Exportación Maestra */}
+          {/* Exportación Maestra Excel */}
           <div className="pt-4 border-t border-border/40">
             <Button
               variant="outline"
