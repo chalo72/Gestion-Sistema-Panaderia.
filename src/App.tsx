@@ -48,6 +48,7 @@ import CargaMasiva from '@/pages/CargaMasiva';
 import ListaPreciosProvincial from '@/pages/ListaPreciosProvincial';
 
 const App = () => {
+  const [isSyncing, setIsSyncing] = useState(false);
   const { theme, setTheme } = useTheme();
   const { usuario: user, logout, isLoading: isAuthLoading } = useAuth();
   const { 
@@ -151,6 +152,22 @@ const App = () => {
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // 🔒 Iron-Clad: wrapper de sync con estado + alerta si cierran mientras sincroniza
+  const syncWithCloudTracked = async () => {
+    setIsSyncing(true);
+    try { await syncWithCloud(); } finally { setIsSyncing(false); }
+  };
+
+  useEffect(() => {
+    if (!isSyncing) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = 'Hay una sincronización en curso. ¿Seguro que quieres cerrar?';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isSyncing]);
 
   // Efecto para redirigir si no hay usuario
   useEffect(() => {
@@ -513,7 +530,7 @@ const App = () => {
           <Configuracion 
             configuracion={configuracion}
             onUpdateConfiguracion={updateConfiguracion}
-            onSyncWithCloud={syncWithCloud}
+            onSyncWithCloud={syncWithCloudTracked}
             onClearAllData={async () => {
               if (confirm('¿Estás seguro de que deseas borrar TODOS los datos? Esta acción es irreversible.')) {
                 await clearAllData();
@@ -637,10 +654,17 @@ const App = () => {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-                <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-                <span className="text-emerald-600 font-black">SYNC ACTIVE</span>
-              </div>
+              {isSyncing ? (
+                <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/10 border border-amber-500/20 rounded-full">
+                  <div className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse" />
+                  <span className="text-amber-600 font-black">SINCRONIZANDO...</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                  <span className="text-emerald-600 font-black">SYNC ACTIVE</span>
+                </div>
+              )}
               <span className="opacity-50">© 2026 Antigravity Systems</span>
             </div>
           </footer>

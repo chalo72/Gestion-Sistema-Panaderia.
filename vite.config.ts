@@ -95,8 +95,8 @@ export default defineConfig(({ mode }) => {
       VitePWA({
         registerType: 'autoUpdate',
         injectRegister: 'inline',
-        // TEMPORAL: selfDestroying limpia el SW viejo de los navegadores
-        selfDestroying: true,
+        // Iron-Clad: desactivado para que el SW no se suicide y limpie caches/IndexedDB
+        selfDestroying: false,
         includeAssets: ['favicon.ico', 'logo.png', 'logo2.png', 'logo_panaderia.png'],
         manifest: {
           name: 'Dulce Placer - GESTIÓN',

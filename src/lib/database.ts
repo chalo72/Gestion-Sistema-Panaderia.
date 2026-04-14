@@ -453,6 +453,15 @@ class IndexedDBDatabase implements IDatabase {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         this.db = request.result;
+        // 🔒 Iron-Clad: solicitar almacenamiento persistente al navegador
+        // Evita que Chrome/Brave borre IndexedDB por presión de memoria o inactividad
+        if (navigator.storage?.persist) {
+          navigator.storage.persist().then(granted => {
+            console.log(granted
+              ? '🔒 [Nexus-Persist] Almacenamiento persistente garantizado'
+              : '⚠️ [Nexus-Persist] Almacenamiento NO persistente — acepta el permiso del navegador');
+          }).catch(() => {});
+        }
         resolve();
       };
       request.onupgradeneeded = (event) => {
@@ -918,6 +927,18 @@ class HybridDatabase implements IDatabase {
     // Sincronización en segundo plano para no bloquear el inicio de la app
     if (this.isOnline) {
       this.syncCloudToLocal().catch(err => console.warn("Background sync failed", err));
+      // 🚨 Auto-rescate: si la DB local está vacía, recuperar todo desde la nube inmediatamente
+      Promise.all([this.local.getAllProductos(), this.local.getAllProveedores()])
+        .then(([prods, provs]) => {
+          if (prods.length === 0 && provs.length === 0) {
+            console.warn('🚨 [Nexus-Rescue] DB local vacía — iniciando recuperación de emergencia desde nube...');
+            this.recoverFromCloud().then(r => {
+              if (r.productos + r.proveedores > 0) {
+                console.log(`✅ [Nexus-Rescue] Rescate: ${r.productos} prod / ${r.proveedores} prov recuperados`);
+              }
+            }).catch(() => {});
+          }
+        }).catch(() => {});
     }
   }
 
@@ -975,6 +996,9 @@ class HybridDatabase implements IDatabase {
   }
 
   // syncLocalToCloud: Sube cambios locales pendientes a la nube
+  private _syncRetryCount = 0;
+  private readonly _syncMaxRetries = 3;
+
   async syncLocalToCloud() {
     if (!this.isOnline || this.syncInProgress) return;
     this.syncInProgress = true;
@@ -994,8 +1018,17 @@ class HybridDatabase implements IDatabase {
       ]);
       
       console.log("✅ [Nexus-Sync] Sincronización Nube-Local completada.");
-    } catch(e) { 
-      console.error("❌ [Nexus-Sync] Fallo en sincronización saliente:", e); 
+      this._syncRetryCount = 0;
+    } catch(e) {
+      this._syncRetryCount++;
+      if (this._syncRetryCount <= this._syncMaxRetries) {
+        const waitMs = 1000 * Math.pow(2, this._syncRetryCount); // 2s, 4s, 8s
+        console.warn(`⚠️ [Nexus-Sync] Fallo #${this._syncRetryCount}. Reintentando en ${waitMs/1000}s...`);
+        setTimeout(() => { this.syncInProgress = false; this.syncLocalToCloud(); }, waitMs);
+      } else {
+        console.error("❌ [Nexus-Sync] Fallo definitivo tras 3 intentos:", e);
+        this._syncRetryCount = 0;
+      }
     } finally {
       this.syncInProgress = false;
     }
