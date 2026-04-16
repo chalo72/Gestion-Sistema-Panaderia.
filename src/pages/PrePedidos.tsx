@@ -1,18 +1,21 @@
 import { useState, useMemo, useEffect } from 'react';
-import { 
-  Plus, 
+import {
+  Plus,
   Minus,
-  ShoppingCart, 
-  Package, 
-  Store, 
-  Zap, 
+  ShoppingCart,
+  Package,
+  Store,
+  Zap,
   ChevronRight,
   LayoutGrid,
   X,
-  Search,
   Trash2,
   ChevronLeft,
-  Share2
+  Share2,
+  Truck,
+  CheckCircle2,
+  AlertTriangle,
+  Calendar,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -77,6 +80,8 @@ export default function PrePedidos({
   onGenerarSugerencias
 }: PrePedidosProps) {
   const [activeTab, setActiveTab] = useState<'creacion' | 'gestion'>('creacion');
+  const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
+  const [fechaEntrega, setFechaEntrega] = useState('');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [selectedPrePedido, setSelectedPrePedido] = useState<PrePedido | null>(null);
@@ -298,7 +303,6 @@ export default function PrePedidos({
                     key={prov.id}
                     onClick={() => {
                       setActiveProveedorId(prov.id);
-                      handleAddItemToDraft('', prov.id, 0, 0); 
                       setShowSupplierGrid(false);
                     }}
                     className={cn(

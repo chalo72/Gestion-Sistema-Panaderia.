@@ -264,12 +264,14 @@ export interface PrePedidoItem {
 export interface PrePedido {
   id: string;
   nombre: string; // Nombre del pedido (ej: "Pedido Enero 2024")
+  numeroOrden?: string; // OC-001, OC-002... generado automáticamente
   proveedorId: string;
   items: PrePedidoItem[];
   total: number;
   presupuestoMaximo: number;
-  estado: 'borrador' | 'confirmado' | 'rechazado';
+  estado: 'borrador' | 'confirmado' | 'enviado' | 'recibido' | 'rechazado';
   notas?: string;
+  fechaEntregaEsperada?: string; // ISO string — cuándo llega el pedido
   fechaCreacion: string;
   fechaActualizacion: string;
 }

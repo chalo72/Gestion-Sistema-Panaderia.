@@ -14,16 +14,27 @@ export function usePrePedidos() {
 
   const addPrePedido = useCallback(async (data: Omit<PrePedido, 'id' | 'fechaCreacion' | 'fechaActualizacion'>) => {
     const now = new Date().toISOString();
+
+    // Auto-generar número de orden correlativo (OC-001, OC-002...)
+    const generarNumeroOrden = (lista: PrePedido[]) => {
+      const maxNum = lista.reduce((max, p) => {
+        const num = parseInt(p.numeroOrden?.replace('OC-', '') || '0');
+        return Math.max(max, isNaN(num) ? 0 : num);
+      }, 0);
+      return `OC-${String(maxNum + 1).padStart(3, '0')}`;
+    };
+
     const nuevoPrePedido: PrePedido = {
       ...data,
       id: crypto.randomUUID(),
+      numeroOrden: data.numeroOrden || generarNumeroOrden(prepedidos),
       fechaCreacion: now,
       fechaActualizacion: now,
     };
     await db.addPrePedido(nuevoPrePedido);
     setPrepedidos(prev => [...prev, nuevoPrePedido]);
     return nuevoPrePedido;
-  }, []);
+  }, [prepedidos]);
 
   const updatePrePedido = useCallback(async (id: string, updates: Partial<PrePedido>) => {
     const prepedido = prepedidos.find(p => p.id === id);
