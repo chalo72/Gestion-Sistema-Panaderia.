@@ -48,7 +48,7 @@ interface PrePedidosProps {
   onUpdatePrePedido: (id: string, updates: Partial<PrePedido>) => void;
   onDeletePrePedido: (id: string) => void;
   onAddItem: (pedidoId: string, item: any) => void;
-  onRemoveItem: (itemId: string, pedidoId: string) => void;
+  onRemoveItem: (pedidoId: string, itemId: string) => void;
   onUpdateItemCantidad: (pedidoId: string, itemId: string, cantidad: number) => void;
   getProductoById: (id: string) => Producto | undefined;
   getProveedorById: (id: string) => Proveedor | undefined;
@@ -579,6 +579,11 @@ export default function PrePedidos({
                                 <div className="flex items-start justify-between">
                                   <div className="space-y-1">
                                     <h5 className="font-black uppercase text-[11px] tracking-tight truncate w-32 text-slate-800 dark:text-slate-200">{prod?.nombre}</h5>
+                                    {isBulk && (
+                                      <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest leading-none">
+                                        {embalajeNombre} × {bulkAmount}
+                                      </span>
+                                    )}
                                     <div className="flex items-center gap-2">
                                       {/* CONTROLES DE EDICIÓN EN TICKET - FILA ÚNICA COMPACTA (OPTIMIZADA) */}
                                       <div className="flex items-center gap-1 mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/40">
@@ -651,7 +656,7 @@ export default function PrePedidos({
                                   </div>
                                   <div className="text-right flex flex-col items-end gap-1">
                                     <span className="font-black text-[12px] tabular-nums text-indigo-600">{formatCurrency(item.cantidad * item.precioUnitario)}</span>
-                                    <Button variant="ghost" size="icon" onClick={() => activeDraft && onRemoveItem(item.id, activeDraft.id)} className="h-7 w-7 rounded-lg text-rose-500 hover:bg-rose-50 transition-all opacity-50 hover:opacity-100"><X className="w-3.5 h-3.5" /></Button>
+                                    <Button variant="ghost" size="icon" onClick={() => activeDraft && onRemoveItem(activeDraft.id, item.id)} className="h-7 w-7 rounded-lg text-rose-500 hover:bg-rose-50 transition-all opacity-50 hover:opacity-100"><X className="w-3.5 h-3.5" /></Button>
                                   </div>
                                 </div>
                               </div>
