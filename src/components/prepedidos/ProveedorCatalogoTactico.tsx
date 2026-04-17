@@ -51,6 +51,7 @@ export function ProveedorCatalogoTactico({
   const [search, setSearch] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
+  const [categoriaActiva, setCategoriaActiva] = useState<string>('todos');
 
   const necesidadesProduccion = useMemo(() => {
     return produccion.filter(p => ['pendiente', 'en_progreso'].includes(p.estado));
@@ -87,7 +88,7 @@ export function ProveedorCatalogoTactico({
           necesidadTotal: Math.ceil(Math.max(0, (stockMinimo * 2) + necesidadProd - stockActual)),
           esCritico
         };
-      }).filter(p => p.nombre.toLowerCase().includes(search.toLowerCase()));
+      });
 
       return {
         ...prov,
@@ -98,6 +99,27 @@ export function ProveedorCatalogoTactico({
   }, [proveedores, precios, productos, inventario, necesidadesProduccion, search, recetas]);
 
   const activeProveedor = stats.find(s => s.id === activeProveedorId) || stats.find(s => s.productos.length > 0) || stats[0];
+
+  // Categorias unicas del proveedor activo
+  const categoriasDisponibles = useMemo(() => {
+    if (!activeProveedor) return [];
+    const cats = [...new Set(
+      activeProveedor.productos
+        .map(p => (p as any).categoria as string)
+        .filter(Boolean)
+    )].sort();
+    return cats;
+  }, [activeProveedor]);
+
+  // Productos filtrados por categoria + busqueda de texto
+  const productosFiltrados = useMemo(() => {
+    if (!activeProveedor) return [];
+    return activeProveedor.productos.filter(p => {
+      const matchCat = categoriaActiva === 'todos' || (p as any).categoria === categoriaActiva;
+      const matchSearch = !search || p.nombre.toLowerCase().includes(search.toLowerCase());
+      return matchCat && matchSearch;
+    });
+  }, [activeProveedor, categoriaActiva, search]);
 
   const updateQuantity = (id: string, delta: number, base: number) => {
     setQuantities(prev => {
@@ -139,7 +161,11 @@ export function ProveedorCatalogoTactico({
                <h2 className="text-xl font-black uppercase tracking-tight text-slate-900 group">{activeProveedor.nombre}</h2>
                <div className="flex items-center gap-2">
                   <Badge className="bg-emerald-50 text-emerald-600 border-none font-black text-[9px] px-2 py-0.5 uppercase">Catálogo Activo</Badge>
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{activeProveedor.productos.length} items</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {productosFiltrados.length === activeProveedor.productos.length
+                      ? `${activeProveedor.productos.length} items`
+                      : `${productosFiltrados.length} de ${activeProveedor.productos.length} items`}
+                  </span>
                </div>
             </div>
          </div>
@@ -157,9 +183,49 @@ export function ProveedorCatalogoTactico({
          </div>
       </div>
 
+      {/* PESTAÑAS DE CATEGORIA */}
+      {categoriasDisponibles.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-1">
+          {/* Pestaña "Todos" */}
+          <button
+            onClick={() => setCategoriaActiva('todos')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border
+              ${categoriaActiva === 'todos'
+                ? 'bg-slate-900 text-white border-transparent shadow-md'
+                : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
+          >
+            Todos
+            <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${categoriaActiva === 'todos' ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600'}`}>
+              {activeProveedor.productos.length}
+            </span>
+          </button>
+
+          {/* Una pestaña por categoria */}
+          {categoriasDisponibles.map(cat => {
+            const count = activeProveedor.productos.filter(p => (p as any).categoria === cat).length;
+            const isActive = categoriaActiva === cat;
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategoriaActiva(cat)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border
+                  ${isActive
+                    ? 'bg-indigo-600 text-white border-transparent shadow-md shadow-indigo-500/20'
+                    : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-indigo-200 hover:text-indigo-600'}`}
+              >
+                {cat}
+                <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* GRID ESTÁNDAR MEDIANO: Cards cómodas y balanceadas */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-1">
-        {activeProveedor.productos.map((prod) => {
+        {productosFiltrados.map((prod) => {
           const qty = quantities[prod.id] !== undefined ? quantities[prod.id] : (prod.necesidadTotal || 12);
           const isAdding = addingIds.has(prod.id);
           

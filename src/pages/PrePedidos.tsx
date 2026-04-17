@@ -82,6 +82,7 @@ export default function PrePedidos({
   const [activeTab, setActiveTab] = useState<'creacion' | 'gestion'>('creacion');
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
   const [fechaEntrega, setFechaEntrega] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState<'todos' | PrePedido['estado']>('todos');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isAddItemModalOpen, setIsAddItemModalOpen] = useState(false);
   const [selectedPrePedido, setSelectedPrePedido] = useState<PrePedido | null>(null);
@@ -284,8 +285,50 @@ export default function PrePedidos({
             )}
           </div>
 
+          {/* Pestañas de filtro por estado */}
+          {prepedidos.length > 0 && (() => {
+            const tabs: { key: 'todos' | PrePedido['estado']; label: string; color: string }[] = [
+              { key: 'todos',      label: 'Todos',      color: 'bg-slate-900 text-white' },
+              { key: 'borrador',   label: 'Borradores', color: 'bg-slate-200 text-slate-700' },
+              { key: 'confirmado', label: 'Confirmados', color: 'bg-indigo-600 text-white' },
+              { key: 'enviado',    label: 'Enviados',   color: 'bg-amber-500 text-white' },
+              { key: 'recibido',   label: 'Recibidos',  color: 'bg-emerald-600 text-white' },
+              { key: 'rechazado',  label: 'Rechazados', color: 'bg-rose-500 text-white' },
+            ];
+            const contar = (key: typeof tabs[number]['key']) =>
+              key === 'todos' ? prepedidos.length : prepedidos.filter(p => p.estado === key).length;
+
+            return (
+              <div className="flex flex-wrap gap-2">
+                {tabs.map(t => {
+                  const count = contar(t.key);
+                  if (t.key !== 'todos' && count === 0) return null;
+                  const isActive = filtroEstado === t.key;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setFiltroEstado(t.key)}
+                      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all border
+                        ${isActive ? `${t.color} shadow-md border-transparent` : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-300'}`}
+                    >
+                      {t.label}
+                      <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
           {/* Grid de pedidos */}
-          {prepedidos.length === 0 ? (
+          {(() => {
+            const pedidosFiltrados = filtroEstado === 'todos'
+              ? prepedidos
+              : prepedidos.filter(p => p.estado === filtroEstado);
+
+            return pedidosFiltrados.length === 0 ? (
             <div className="text-center py-24 text-slate-400">
               <Package className="w-16 h-16 mx-auto mb-4 opacity-20" />
               <p className="font-black uppercase text-sm tracking-widest">Sin pedidos aún</p>
@@ -293,7 +336,7 @@ export default function PrePedidos({
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {prepedidos.map(p => {
+              {pedidosFiltrados.map(p => {
                 const cfg = estadoConfig(p.estado);
                 const proveedor = getProveedorById(p.proveedorId);
                 return (
@@ -371,7 +414,8 @@ export default function PrePedidos({
                 );
               })}
             </div>
-          )}
+          );
+          })()}
         </div>
       </div>
     );
