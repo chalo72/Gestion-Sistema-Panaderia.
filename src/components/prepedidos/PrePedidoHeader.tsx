@@ -1,16 +1,18 @@
-import { Plus, Wand2, Fingerprint, Cpu, Activity, Zap, Layers } from 'lucide-react';
+import { Plus, Wand2, Fingerprint, Cpu, Activity, Zap, Layers, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
 interface PrePedidoHeaderProps {
     onAddPrePedido: () => void;
     onGenerarSugerencias: () => void;
+    onVerHistorial: () => void;
     pedidosCount: number;
 }
 
 export function PrePedidoHeader({
     onAddPrePedido,
     onGenerarSugerencias,
+    onVerHistorial,
     pedidosCount
 }: PrePedidoHeaderProps) {
     return (
