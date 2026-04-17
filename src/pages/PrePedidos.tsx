@@ -435,6 +435,7 @@ export default function PrePedidos({
             if (count > 0) toast.success(`${count} Borradores inteligentes generados 🪄`);
             else toast.info('Stock equilibrado.');
           }}
+          onVerHistorial={() => setActiveTab('gestion')}
           pedidosCount={prepedidos.length}
         />
 

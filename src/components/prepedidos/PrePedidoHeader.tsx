@@ -74,6 +74,20 @@ export function PrePedidoHeader({
                         ¿Qué necesito?
                     </Button>
 
+                    {pedidosCount > 0 && (
+                        <Button
+                            variant="ghost"
+                            onClick={onVerHistorial}
+                            className="h-12 px-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-950/30 text-slate-600 dark:text-slate-400 hover:text-indigo-600 border border-slate-200 dark:border-slate-800 hover:border-indigo-200 gap-2.5 font-bold uppercase tracking-widest text-[9px] transition-all"
+                        >
+                            <ClipboardList className="w-4 h-4" />
+                            Historial
+                            <Badge className="bg-indigo-100 text-indigo-700 border-none font-black text-[8px] h-4 px-1.5">
+                                {pedidosCount}
+                            </Badge>
+                        </Button>
+                    )}
+
                     <Button
                         onClick={onAddPrePedido}
                         className="h-12 px-6 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl shadow-lg shadow-indigo-500/20 gap-2.5 font-bold uppercase tracking-[0.15em] text-[10px] transition-all active:scale-95 border-none group"
