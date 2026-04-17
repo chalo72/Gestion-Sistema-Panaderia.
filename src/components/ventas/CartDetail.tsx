@@ -107,7 +107,19 @@ export function CartDetail({
                                         {item.producto.nombre}
                                     </p>
                                     <div className="flex items-center gap-2 mt-1.5">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{formatCurrency(safeNumber(item.producto.precioVenta))} / UNID</span>
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                            {formatCurrency(safeNumber(item.producto.precioVenta))} /
+                                            {(() => {
+                                                // Soporte para tipo de empaque
+                                                const tipo = item.producto.tipoEmbalaje?.toLowerCase?.() || 'unidad';
+                                                const cantidad = item.producto.cantidadEmbalaje || 1;
+                                                if (tipo === 'paca') return ` PACA x${cantidad}`;
+                                                if (tipo === 'bolsa') return ` BOLSA x${cantidad}`;
+                                                if (tipo === 'caja') return ` CAJA x${cantidad}`;
+                                                if (tipo === 'saco') return ` SACO x${cantidad}`;
+                                                return ' UNIDAD';
+                                            })()}
+                                        </span>
                                     </div>
 
                                     <div className="flex items-center gap-2 mt-3">

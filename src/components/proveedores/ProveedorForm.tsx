@@ -93,25 +93,11 @@ const CATEGORIAS_VENTA = [
   'Avena y Granola', 'Pasabocas', 'Piñatería', 'Otro'
 ];
 
-const STICKY_FIELDS_KEY = 'proveedor_form_sticky_fields';
-
 const PROD_INIT: Omit<ProductoCatalogo, 'uid' | 'costoUnitario' | 'precioVenta' | 'precioVentaPack'> = {
   productoId: '', nombre: '', categoria: CATEGORIAS_INSUMO[0],
   precioCosto: 0, margenVenta: 30, cantidadEmbalaje: 1,
   tipoEmbalaje: 'unidad', destino: 'insumo', notas: '',
   stockRecibido: 0,
-};
-
-// Función para obtener el estado inicial mezclado con persistencia
-const getInitialProdActual = () => {
-  try {
-    const saved = localStorage.getItem(STICKY_FIELDS_KEY);
-    if (saved) {
-      const sticky = JSON.parse(saved);
-      return { ...PROD_INIT, ...sticky };
-    }
-  } catch (e) { console.error("Error loading sticky fields", e); }
-  return PROD_INIT;
 };
 
 interface ProveedorFormProps {
@@ -150,7 +136,7 @@ export function ProveedorForm({
   });
 
   const [catalogoItems, setCatalogoItems] = useState<ProductoCatalogo[]>([]);
-  const [prodActual, setProdActual] = useState(getInitialProdActual);
+  const [prodActual, setProdActual] = useState(PROD_INIT);
   const [editingUid, setEditingUid] = useState<string | null>(null);
   const [buscarProd, setBuscarProd] = useState('');
   const [showDropdown, setShowDropdown] = useState(false);
@@ -178,26 +164,6 @@ export function ProveedorForm({
       }));
     } catch { /* localStorage lleno — ignorar */ }
   }, [catalogoItems, formData, isOpen, draftKey]);
-
-  // ── PERSISTENCIA DE CAMPOS PEGAJOSOS (STICKY FIELDS) ──
-  useEffect(() => {
-    if (!isOpen) return;
-    const sticky = {
-      categoria: prodActual.categoria,
-      tipoEmbalaje: prodActual.tipoEmbalaje,
-      cantidadEmbalaje: prodActual.cantidadEmbalaje,
-      destino: prodActual.destino,
-      margenVenta: prodActual.margenVenta
-    };
-    localStorage.setItem(STICKY_FIELDS_KEY, JSON.stringify(sticky));
-  }, [
-    prodActual.categoria, 
-    prodActual.tipoEmbalaje, 
-    prodActual.cantidadEmbalaje, 
-    prodActual.destino, 
-    prodActual.margenVenta,
-    isOpen
-  ]);
 
   // Detectar borrador al abrir
   useEffect(() => {
@@ -319,16 +285,7 @@ export function ProveedorForm({
       setCatalogoItems(prev => [itemData, ...prev]);
       toast.success('Producto añadido al catálogo');
     }
-    
-    // Resetear manteniendo campos pegajosos
-    setProdActual((prev: any) => ({
-      ...PROD_INIT,
-      categoria: prev.categoria,
-      tipoEmbalaje: prev.tipoEmbalaje,
-      cantidadEmbalaje: prev.cantidadEmbalaje,
-      destino: prev.destino,
-      margenVenta: prev.margenVenta
-    }));
+    setProdActual(PROD_INIT);
     setEditingUid(null);
     setBuscarProd('');
   };
@@ -769,7 +726,7 @@ export function ProveedorForm({
                               value={buscarProd}
                               onChange={e => { 
                                 setBuscarProd(e.target.value); 
-                                setProdActual((prev: any) => ({ ...prev, nombre: e.target.value, productoId: '' })); 
+                                setProdActual(prev => ({ ...prev, nombre: e.target.value, productoId: '' })); 
                                 setShowDropdown(true);
                                 setIsCategoriaIA(false); 
                               }}
@@ -782,7 +739,7 @@ export function ProveedorForm({
                                   <button
                                     key={p.id} type="button"
                                     onClick={() => {
-                                      setProdActual((prev: any) => ({ ...prev, productoId: p.id, nombre: p.nombre, categoria: p.categoria, margenVenta: p.margenUtilidad || 30, destino: p.tipo === 'ingrediente' ? 'insumo' : 'venta' }));
+                                      setProdActual(prev => ({ ...prev, productoId: p.id, nombre: p.nombre, categoria: p.categoria, margenVenta: p.margenUtilidad || 30, destino: p.tipo === 'ingrediente' ? 'insumo' : 'venta' }));
                                       setBuscarProd(p.nombre); setShowDropdown(false);
                                       setIsCategoriaIA(false);
                                     }}
@@ -810,7 +767,7 @@ export function ProveedorForm({
                             key={`cat-select-${prodActual.destino}`}
                             value={prodActual.categoria || undefined}
                             onValueChange={v => {
-                              setProdActual((prev: any) => ({ ...prev, categoria: v }));
+                              setProdActual(prev => ({ ...prev, categoria: v }));
                               setIsCategoriaIA(false);
                             }}
                           >
@@ -847,7 +804,7 @@ export function ProveedorForm({
                           <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1 h-12 items-center gap-1">
                             <select
                               value={prodActual.tipoEmbalaje}
-                              onChange={e => setProdActual((prev: any) => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje }))}
+                              onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje }))}
                               className="flex-1 min-w-0 px-1 bg-transparent text-[9px] font-black uppercase outline-none text-slate-700 dark:text-slate-300 cursor-pointer truncate"
                             >
                               {EMBALAJES.map(em => (
@@ -863,7 +820,7 @@ export function ProveedorForm({
                               value={prodActual.cantidadEmbalaje === 0 ? '' : prodActual.cantidadEmbalaje}
                               onChange={e => {
                                 const val = e.target.value === '' ? 0 : parseInt(e.target.value);
-                                setProdActual((prev: any) => ({ ...prev, cantidadEmbalaje: val }));
+                                setProdActual(prev => ({ ...prev, cantidadEmbalaje: val }));
                               }}
                               className="w-10 h-8 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px] hover:bg-indigo-100 transition-all focus:ring-2 focus:ring-indigo-400 shrink-0"
                               placeholder="0"
@@ -879,7 +836,7 @@ export function ProveedorForm({
                               type="button"
                               onClick={() => {
                                 const newDestino = 'insumo';
-                                setProdActual((prev: any) => ({ 
+                                setProdActual(prev => ({ 
                                   ...prev, 
                                   destino: newDestino,
                                   categoria: CATS_INSUMO.includes(prev.categoria) ? prev.categoria : CATS_INSUMO[0] ?? ''
@@ -896,7 +853,7 @@ export function ProveedorForm({
                             <button
                               type="button"
                               onClick={() => {
-                                setProdActual((prev: any) => ({
+                                setProdActual(prev => ({
                                   ...prev,
                                   destino: 'venta',
                                   categoria: CATS_VENTA.includes(prev.categoria) ? prev.categoria : CATS_VENTA[0] ?? ''
@@ -923,7 +880,7 @@ export function ProveedorForm({
                                   value={prodActual.precioCosto || ''}
                                   onChange={e => {
                                     const val = parseFloat(e.target.value) || 0;
-                                    setProdActual((prev: any) => ({
+                                    setProdActual(prev => ({
                                       ...prev,
                                       precioCosto: val
                                     }));
@@ -947,7 +904,7 @@ export function ProveedorForm({
                                 onChange={e => {
                                   const val = parseFloat(e.target.value) || 0;
                                   // [Nexus-Volt] Si cambia el unitario, recalculamos el total de la paca (precioCosto)
-                                  setProdActual((prev: any) => ({ 
+                                  setProdActual(prev => ({ 
                                     ...prev, 
                                     precioCosto: val * (prev.cantidadEmbalaje || 1) 
                                   }));
@@ -989,7 +946,7 @@ export function ProveedorForm({
                                   const newPrice = parseFloat(e.target.value) || 0;
                                   if (costUnit > 0) {
                                     const newMargin = ((newPrice / costUnit) - 1) * 100;
-                                    setProdActual((prev: any) => ({ ...prev, margenVenta: Math.round(newMargin) }));
+                                    setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargin) }));
                                   }
                                 }}
                                 className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10"

@@ -228,7 +228,13 @@ export function Ventas(props: VentasProps) {
     };
 
     const removeFromCart = (productoId: string) => {
-        updateActiveCart(prev => prev.filter(item => item.producto.id !== productoId));
+        console.log('[removeFromCart] id recibido:', productoId);
+        updateActiveCart(prev => {
+            console.log('[removeFromCart] Estado previo del carrito:', prev);
+            const nuevo = prev.filter(item => item.producto.id !== productoId);
+            console.log('[removeFromCart] Estado posterior del carrito:', nuevo);
+            return nuevo;
+        });
     };
 
     const clearCart = () => {
