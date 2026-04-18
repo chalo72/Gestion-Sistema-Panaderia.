@@ -579,11 +579,9 @@ export default function PrePedidos({
                                 <div className="flex items-start justify-between">
                                   <div className="space-y-1">
                                     <h5 className="font-black uppercase text-[11px] tracking-tight truncate w-32 text-slate-800 dark:text-slate-200">{prod?.nombre}</h5>
-                                    {isBulk && (
-                                      <span className="text-[8px] font-black text-indigo-500 uppercase tracking-widest leading-none">
-                                        {embalajeNombre} × {bulkAmount}
-                                      </span>
-                                    )}
+                                    <span className={`text-[8px] font-black uppercase tracking-widest leading-none ${isBulk ? 'text-indigo-500' : 'text-slate-400'}`}>
+                                      {embalajeNombre} × {bulkAmount}
+                                    </span>
                                     <div className="flex items-center gap-2">
                                       {/* CONTROLES DE EDICIÓN EN TICKET - FILA ÚNICA COMPACTA (OPTIMIZADA) */}
                                       <div className="flex items-center gap-1 mt-1 pt-1.5 border-t border-slate-100 dark:border-slate-800/40">

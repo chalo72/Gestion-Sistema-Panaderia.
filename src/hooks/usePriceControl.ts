@@ -697,11 +697,19 @@ export function usePriceControl() {
   }, [prepedidos]);
 
   const removeItemFromPrePedido = useCallback(async (prePedidoId: string, itemId: string) => {
-    const prepedido = prepedidos.find(p => p.id === prePedidoId);
-    if (!prepedido) return;
+    // 🛡️ Buscar en state, y si no existe (stale closure), buscar en DB
+    let prepedido = prepedidos.find(p => p.id === prePedidoId);
+    if (!prepedido) {
+      const allPP = await db.getAllPrePedidos();
+      prepedido = allPP.find(p => p.id === prePedidoId);
+      if (!prepedido) {
+        console.warn('⚠️ [Nexus] removeItem: PrePedido no encontrado:', prePedidoId);
+        return;
+      }
+    }
 
     const newItems = prepedido.items.filter(i => i.id !== itemId);
-    const newTotal = newItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const newTotal = newItems.reduce((sum, i) => sum + (i.subtotal || i.cantidad * i.precioUnitario), 0);
     const updatedPrePedido = {
       ...prepedido,
       items: newItems,
@@ -710,7 +718,11 @@ export function usePriceControl() {
     };
 
     await db.updatePrePedido(updatedPrePedido);
-    setPrepedidos(prev => prev.map(p => p.id === prePedidoId ? updatedPrePedido : p));
+    setPrepedidos(prev => {
+      const exists = prev.some(p => p.id === prePedidoId);
+      if (exists) return prev.map(p => p.id === prePedidoId ? updatedPrePedido : p);
+      return [...prev.filter(p => p.id !== prePedidoId), updatedPrePedido];
+    });
   }, [prepedidos]);
 
   const updateItemCantidad = useCallback(async (prePedidoId: string, itemId: string, cantidad: number) => {
