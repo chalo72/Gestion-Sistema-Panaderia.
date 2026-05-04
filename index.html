@@ -51,21 +51,23 @@
     }
   </style>
   <script>
-    console.log("🚀 Antigravity Shield: Booting Protection Protocols...");
+    console.log("🚀 Antigravity Boot Probe: index.html loaded");
     
-    // [Shield] Desregistro de Service Workers en Localhost (Previene bloqueos en DEV)
-    if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    // [NUCLEAR] Forzar limpieza de SW y caches en CADA carga
+    (function() {
       if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(regs => {
-          for (let r of regs) {
-            r.unregister();
-            console.warn("🛡️ [Shield] Service Worker de desarrollo desregistrado para evitar bloqueos.");
-          }
+        navigator.serviceWorker.getRegistrations().then(function(regs) {
+          for (var r of regs) r.unregister();
         });
       }
-    }
-
-    // [Nexus-Volt] Cache Slayer v3.0 - Fuerza consistencia de versión
+      if ('caches' in window) {
+        caches.keys().then(function(names) {
+          for (var n of names) caches.delete(n);
+        });
+      }
+    })();
+    
+    // [Nexus-Volt] Cache Slayer v2.1 - Fuerza la actualización inmediata del PWA
     (function() {
       const STORAGE_KEY = 'nexus_build_ts';
       const checkVersion = () => {
@@ -73,67 +75,47 @@
           .then(r => r.json())
           .then(data => {
             const localTs = parseInt(localStorage.getItem(STORAGE_KEY) || '0');
-            // Si hay un cambio de versión real detectado
             if (localTs !== 0 && data.timestamp > localTs) {
-              console.warn("🚨 [Nexus-Shield] Nueva actualización detectada en servidor. Sincronizando...");
+              console.warn("🚨 [Shield] Nueva versión detectada. Purgando caché profundo...");
               localStorage.setItem(STORAGE_KEY, data.timestamp);
               
-              // Limpiar caches de navegador
+              // 1. Desregistrar Service Workers
+              if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.getRegistrations().then(regs => {
+                  for(let reg of regs) reg.unregister();
+                });
+              }
+              
+              // 2. Borrar todos los caches del navegador (CacheStorage)
               if ('caches' in window) {
                 caches.keys().then(names => {
                   for (let name of names) caches.delete(name);
                 });
               }
 
-              // Recarga inteligente con bypass de cache del navegador
-              setTimeout(() => {
-                location.replace(location.href);
-              }, 500);
+              // 3. Forzar recarga completa desde el servidor
+              setTimeout(() => window.location.reload(true), 500);
             } else if (localTs === 0) {
               localStorage.setItem(STORAGE_KEY, data.timestamp);
             }
           }).catch(() => {});
       };
       
+      // Ejecutar inmediatamente y cada 10 minutos
       checkVersion();
-      setInterval(checkVersion, 300000); // Cada 5 minutos
+      setInterval(checkVersion, 600000);
     })();
-
-    // Interceptor Global de Fallos de Importación (Shield Recovery)
-    window.addEventListener('error', (e) => {
-      const msg = e.message || '';
-      if (msg.includes('Failed to fetch dynamically imported module') || 
-          msg.includes('Importing a module script failed')) {
-        
-        console.error("🕵️ [Shield] Fallo de importación de módulo detectado globalmente.");
-        
-        // Evitar bucles infinitos de recarga
-        const lastAutoReload = sessionStorage.getItem('last_module_fail_reload');
-        const now = Date.now();
-        
-        if (!lastAutoReload || (now - parseInt(lastAutoReload)) > 60000) {
-          sessionStorage.setItem('last_module_fail_reload', now.toString());
-          console.warn("🔄 [Shield] Reintentando carga de aplicación limpia...");
-          location.reload();
-        }
-      }
-    }, true);
 
     window.onerror = (m, s, l, c, e) => {
       console.error("❌ CRITICAL BOOT ERROR:", m, s, l);
-      // No ocultamos el error, pero permitimos recuperación
-      if (m.includes('Failed to fetch dynamically imported module')) return; // Manejado por el listener de arriba
-      
-      const errorDiv = document.createElement('div');
-      errorDiv.style = "position:fixed;inset:0;padding:40px;text-align:center;background:#0f172a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;color:white;font-family:sans-serif;";
-      errorDiv.innerHTML = `
-          <div style="background:rgba(255,0,127,0.1);padding:40px;border-radius:40px;border:1px solid rgba(255,0,127,0.2);max-width:400px;">
-            <h1 style="color: #ff007f;font-weight:900;margin-bottom:16px;text-transform:uppercase;font-style:italic;">Inconsistencia de Red</h1>
-            <p style="opacity: 0.7;margin-bottom:24px;font-size:14px;line-height:1.5;">Hemos detectado un problema al cargar los recursos del sistema. Esto suele resolverse con una recarga de seguridad.</p>
-            <button onclick="location.reload(true)" style="padding:16px 32px;background:#ff007f;color:#fff;border:none;border-radius:20px;font-weight:900;font-size:12px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;box-shadow:0 10px 20px rgba(255,0,127,0.3);">Reiniciar Sistema</button>
-          </div>
+      document.body.innerHTML = `
+        <div style="padding: 20px; text-align: center;">
+          <h1 style="color: #ff007f;">Error de Carga</h1>
+          <p style="opacity: 0.7;">${m}</p>
+          <p style="font-size: 10px; opacity: 0.4;">${s} (Línea ${l})</p>
+          <button onclick="location.reload(true)" style="margin-top:16px;padding:10px 24px;background:#ff007f;color:#fff;border:none;border-radius:12px;font-weight:900;font-size:14px;cursor:pointer;">Recargar</button>
+        </div>
       `;
-      document.body.appendChild(errorDiv);
     };
   </script>
 </head>

@@ -66,6 +66,51 @@ export function Produccion({
     const [showPlanModal, setShowPlanModal] = useState(false);
     const [activeTab, setActiveTab] = useState('ordenes');
 
+    const guiasProduccion = [
+        {
+            nombre: 'Pan de Queso Tradicional',
+            dificultad: 'Media',
+            tiempo: '45 min',
+            horno: '180°C',
+            instrucciones: [
+                'Mezclar la harina con el queso rallado hasta homogeneizar.',
+                'Añadir huevos uno a uno manteniendo el amasado suave.',
+                'Formar bolitas de 40g (usar báscula de precisión).',
+                'Hornear hasta que el dorado sea uniforme en la base.'
+            ],
+            color: 'text-amber-500',
+            bg: 'bg-amber-500/10'
+        },
+        {
+            nombre: 'Bolsa x6 (Mojicones)',
+            dificultad: 'Alta',
+            tiempo: '120 min',
+            horno: '170°C',
+            instrucciones: [
+                'Activar la levadura en agua tibia por 10 minutos.',
+                'Primer leudado: 60 minutos en zona sin corrientes de aire.',
+                'División manual: piezas exactas para que pesen 350g por bolsa.',
+                'Barnizar con huevo para el brillo característico antes de hornear.'
+            ],
+            color: 'text-orange-500',
+            bg: 'bg-orange-500/10'
+        },
+        {
+            nombre: 'Pan de Sal (Aliñado)',
+            dificultad: 'Baja',
+            tiempo: '60 min',
+            horno: '190°C',
+            instrucciones: [
+                'Incorporar la manteca al final del proceso de amasado.',
+                'Hacer cortes transversales profundos para permitir la expansión.',
+                'Vaporizar el horno al inicio para una corteza crujiente.',
+                'Dejar enfriar en rejilla 15 minutos antes de empacar.'
+            ],
+            color: 'text-emerald-500',
+            bg: 'bg-emerald-500/10'
+        }
+    ];
+
     // Filtrar órdenes por estado
     const columns: { title: string; estado: ProduccionEstado; icon: any; color: string }[] = [
         { title: 'Planeado', estado: 'planeado', icon: ClipboardList, color: 'text-blue-400' },
@@ -144,7 +189,7 @@ export function Produccion({
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-5 w-full max-w-3xl mx-auto">
+                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-6 w-full max-w-4xl mx-auto">
                     <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <ClipboardList className="w-4 h-4" />
                         <span className="hidden sm:inline">Órdenes</span>
@@ -156,6 +201,10 @@ export function Produccion({
                     <TabsTrigger value="modelos" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <Croissant className="w-4 h-4" />
                         <span className="hidden sm:inline">Modelos</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="guias" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                        <Package className="w-4 h-4" />
+                        <span className="hidden sm:inline">Guías</span>
                     </TabsTrigger>
                     <TabsTrigger value="calculadora" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <Calculator className="w-4 h-4" />
@@ -312,6 +361,51 @@ export function Produccion({
                         onDeleteModelo={deleteModeloPan}
                         formatCurrency={formatCurrency}
                     />
+                </TabsContent>
+
+                {/* Tab: Guías de Elaboración (Instructivos) */}
+                <TabsContent value="guias" className="animate-ag-fade-in">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {guiasProduccion.map((guia, idx) => (
+                            <Card key={idx} className="border-none shadow-xl bg-white dark:bg-slate-900/50 overflow-hidden group">
+                                <div className={cn("h-2 w-full", guia.bg.replace('/10', ''))}></div>
+                                <CardHeader className="pb-2">
+                                    <div className="flex justify-between items-start">
+                                        <Badge variant="outline" className={cn("text-[9px] font-black tracking-widest uppercase", guia.color)}>
+                                            {guia.dificultad}
+                                        </Badge>
+                                        <div className="flex items-center gap-1 text-muted-foreground">
+                                            <Flame className="w-3 h-3" />
+                                            <span className="text-[10px] font-bold">{guia.horno}</span>
+                                        </div>
+                                    </div>
+                                    <CardTitle className="text-lg font-black uppercase tracking-tight pt-2">
+                                        {guia.nombre}
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div className="flex items-center gap-2 text-[10px] font-bold text-muted-foreground uppercase tracking-widest pb-2 border-b border-slate-100 dark:border-slate-800">
+                                        <Clock className="w-3 h-3" /> LISTO EN {guia.tiempo}
+                                    </div>
+                                    <div className="space-y-3">
+                                        {guia.instrucciones.map((paso, pIdx) => (
+                                            <div key={pIdx} className="flex gap-3">
+                                                <div className={cn("w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shrink-0", guia.bg, guia.color)}>
+                                                    {pIdx + 1}
+                                                </div>
+                                                <p className="text-[11px] leading-relaxed font-medium text-foreground/80">
+                                                    {paso}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <Button className="w-full mt-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 border-none rounded-xl text-[10px] font-black uppercase tracking-widest">
+                                        Imprimir Ficha Técnica
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </div>
                 </TabsContent>
 
                 {/* Tab: Calculadora de Rendimiento */}

@@ -179,6 +179,72 @@ function PreciosStockTab({ productos, inventario, categorias, formatCurrency }: 
     );
 }
 
+// ─── Subcomponente: Radar de Movimientos Recientes ───────────────────────────
+
+function StockMovementRadar({ movimientos = [], getProductoById }: { 
+    movimientos: MovimientoInventario[]; 
+    getProductoById: (id: string) => Producto | undefined;
+}) {
+    const movsRecientes = useMemo(() => 
+        (movimientos || []).slice(0, 15), 
+    [movimientos]);
+
+    const getIcon = (tipo: string, motivo: string) => {
+        if (motivo.toLowerCase().includes('producción')) return '🍞';
+        if (motivo.toLowerCase().includes('recepción')) return '🚚';
+        if (motivo.toLowerCase().includes('venta')) return '🛒';
+        if (tipo === 'entrada') return '➕';
+        if (tipo === 'salida') return '➖';
+        return '🔄';
+    };
+
+    return (
+        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5 space-y-4">
+            <div className="flex items-center justify-between">
+                <div>
+                    <p className="text-sm font-black text-slate-900 dark:text-white">Radar de Movimientos</p>
+                    <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-0.5">Actividad reciente del stock</p>
+                </div>
+                <Clock className="w-4 h-4 text-indigo-500 opacity-50" />
+            </div>
+
+            {movsRecientes.length === 0 ? (
+                <div className="py-8 text-center border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-xl">
+                    <p className="text-xs font-bold text-slate-400">Sin movimientos hoy</p>
+                </div>
+            ) : (
+                <div className="space-y-3 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[1px] before:bg-slate-100 dark:before:bg-slate-800">
+                    {movsRecientes.map((m) => {
+                        const prod = getProductoById(m.productoId);
+                        const esEntrada = m.tipo === 'entrada';
+                        return (
+                            <div key={m.id} className="flex items-start gap-4 relative group">
+                                <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs shadow-sm shrink-0 z-10 ${
+                                    esEntrada ? 'bg-emerald-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                                }`}>
+                                    {getIcon(m.tipo, m.motivo)}
+                                </div>
+                                <div className="flex-1 min-w-0 bg-slate-50/50 dark:bg-slate-800/30 rounded-xl px-3 py-2 group-hover:bg-indigo-50 dark:group-hover:bg-indigo-950/20 transition-colors">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <p className="font-black text-xs text-slate-800 dark:text-white truncate">{prod?.nombre || 'Producto desconocido'}</p>
+                                        <span className={`text-[10px] font-black tabular-nums ${esEntrada ? 'text-emerald-600' : 'text-slate-400'}`}>
+                                            {esEntrada ? '+' : '-'}{m.cantidad}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[9px] mt-0.5">
+                                        <p className="text-slate-400 font-bold uppercase tracking-tight truncate max-w-[150px]">{m.motivo}</p>
+                                        <p className="text-slate-300 font-bold shrink-0">{new Date(m.fecha).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Props principales ────────────────────────────────────────────────────────
 
 interface InventarioProps {
@@ -780,6 +846,11 @@ export function Inventario({
                             )}
                         </div>
                     </div>
+
+                    {/* Radar de Movimientos Recientes (Antigravity Premium) */}
+                    <div className="animate-ag-slide-up" style={{ animationDelay: '0.2s' }}>
+                        <StockMovementRadar movimientos={movimientos} getProductoById={getProductoById} />
+                    </div>
                 </div>
             )}
 
@@ -1209,52 +1280,139 @@ export function Inventario({
             )}
 
             {/* ════════════════════════════════════════════════════════
-                TAB — ANALÍTICA
+                TAB — ANALÍTICA (Inteligencia de Negocio Premium)
             ════════════════════════════════════════════════════════ */}
             {tab === 'analitica' && (
-                <div className="space-y-4 animate-ag-fade-in">
-                    {/* KPIs analítica */}
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-red-50 dark:bg-red-950/20 rounded-2xl p-5 border border-red-100 dark:border-red-900/40">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-red-400 mb-2">Pérdidas Operativas</p>
-                            <p className="text-2xl font-black text-red-700 dark:text-red-400">{formatCurrency(reporteStats.totalPerdida)}</p>
-                            <p className="text-xs text-red-500 mt-1">en ajustes y rondas</p>
+                <div className="space-y-6 animate-ag-fade-in">
+                    {/* Resumen Ejecutivo */}
+                    <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-6 border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden relative">
+                        <div className="absolute top-0 right-0 p-8 opacity-5">
+                            <BarChart3 className="w-32 h-32 text-indigo-600" />
                         </div>
-                        <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-2xl p-5 border border-emerald-100 dark:border-emerald-900/40">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-emerald-400 mb-2">Recuperaciones</p>
-                            <p className="text-2xl font-black text-emerald-700 dark:text-emerald-400">{formatCurrency(reporteStats.totalGanancia)}</p>
-                            <p className="text-xs text-emerald-500 mt-1">stock encontrado de más</p>
+                        
+                        <div className="relative z-10">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                                    <Activity className="w-6 h-6 text-white" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 dark:text-white">Salud Financiera del Stock</h3>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Análisis de mermas, ajustes y auditorías</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {/* Score de Precisión */}
+                                <div className="bg-slate-50 dark:bg-slate-800/50 rounded-3xl p-5 border border-slate-100 dark:border-slate-800">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4 text-center">Precisión de Conteo</p>
+                                    <div className="relative w-24 h-24 mx-auto mb-3">
+                                        <svg className="w-full h-full" viewBox="0 0 36 36">
+                                            <path className="text-slate-200 dark:text-slate-700" strokeDasharray="100, 100" strokeWidth="3" fill="none" stroke="currentColor" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                            {/* Cálculo de precisión basado en diferencias */}
+                                            <path className="text-indigo-600" strokeDasharray={`${Math.max(0, 100 - (reporteStats.totalPerdida > 0 ? (reporteStats.totalPerdida / (stats.valorTotal || 1)) * 1000 : 0))}, 100`} strokeWidth="3" strokeLinecap="round" fill="none" stroke="currentColor" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                        </svg>
+                                        <div className="absolute inset-0 flex items-center justify-center">
+                                            <span className="text-xl font-black text-slate-900 dark:text-white tabular-nums">
+                                                {Math.max(0, 100 - (reporteStats.totalPerdida > 0 ? Math.ceil((reporteStats.totalPerdida / (stats.valorTotal || 1)) * 100) : 0))}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <p className="text-[9px] font-bold text-center text-slate-500 uppercase">Cerca del 100% es óptimo</p>
+                                </div>
+
+                                {/* Valor en Riesgo (Perdida) */}
+                                <div className="bg-red-50 dark:bg-red-950/20 rounded-3xl p-5 border border-red-100 dark:border-red-900/30 flex flex-col justify-center text-center">
+                                    <p className="text-[9px] font-black text-red-400 uppercase tracking-[0.2em] mb-2">Total Perdidas (Mermas)</p>
+                                    <p className="text-3xl font-black text-red-600 dark:text-red-400 tabular-nums">{formatCurrency(reporteStats.totalPerdida)}</p>
+                                    <div className="mt-4 flex items-center justify-center gap-1.5 py-1 px-3 bg-red-100 dark:bg-red-900/40 rounded-full w-fit mx-auto">
+                                        <TrendingDown className="w-3 h-3 text-red-600" />
+                                        <span className="text-[9px] font-black text-red-700 dark:text-red-300 uppercase">Dinero no encontrado</span>
+                                    </div>
+                                </div>
+
+                                {/* Valor Recuperado */}
+                                <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-3xl p-5 border border-emerald-100 dark:border-emerald-900/30 flex flex-col justify-center text-center">
+                                    <p className="text-[9px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-2">Total Encontrado (Sobrantes)</p>
+                                    <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums">{formatCurrency(reporteStats.totalGanancia)}</p>
+                                    <div className="mt-4 flex items-center justify-center gap-1.5 py-1 px-3 bg-emerald-100 dark:bg-emerald-900/40 rounded-full w-fit mx-auto">
+                                        <TrendingUp className="w-3 h-3 text-emerald-600" />
+                                        <span className="text-[9px] font-black text-emerald-700 dark:text-emerald-300 uppercase">Ajustes a favor</span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Top pérdidas */}
-                    {reporteStats.topPerdidas.length > 0 && (
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-5">
-                            <p className="text-sm font-black text-slate-900 dark:text-white mb-4">Top productos con más diferencias</p>
-                            <div className="space-y-3">
-                                {reporteStats.topPerdidas.map((p, i) => (
-                                    <div key={p.nombre} className="flex items-center gap-3">
-                                        <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black text-white shrink-0 ${i === 0 ? 'bg-red-500' : i === 1 ? 'bg-orange-500' : 'bg-amber-500'}`}>{i + 1}</span>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-black text-xs text-slate-800 dark:text-white truncate">{p.nombre}</p>
-                                            <p className="text-[9px] text-muted-foreground">{p.cantidad} unidades</p>
-                                        </div>
-                                        <p className="text-sm font-black text-red-600 tabular-nums shrink-0">{formatCurrency(p.valor)}</p>
+                    {/* Fugas Críticas y Detalles */}
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 leading-none">
+                        {/* Top Fugas */}
+                        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Top Fugas de Dinero</h4>
+                                <AlertTriangle className="w-4 h-4 text-amber-500" />
+                            </div>
+                            
+                            {reporteStats.topPerdidas.length === 0 ? (
+                                <div className="py-12 text-center">
+                                    <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2 opacity-30" />
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Sin descuadres registrados</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-5">
+                                    {reporteStats.topPerdidas.map((p, i) => {
+                                        const intensity = (p.valor / reporteStats.topPerdidas[0].valor) * 100;
+                                        return (
+                                            <div key={p.nombre} className="group">
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-[10px] font-black text-slate-300">0{i+1}</span>
+                                                        <span className="text-xs font-black text-slate-700 dark:text-slate-200 group-hover:text-red-500 transition-colors">{p.nombre}</span>
+                                                    </div>
+                                                    <span className="text-sm font-black text-red-600 tabular-nums">{formatCurrency(p.valor)}</span>
+                                                </div>
+                                                <div className="h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                                    <div className="h-full rounded-full bg-gradient-to-r from-orange-400 to-red-600 transition-all duration-1000" 
+                                                        style={{ width: `${intensity}%` }} />
+                                                </div>
+                                                <div className="flex justify-between mt-1.5 opacity-60">
+                                                    <span className="text-[9px] font-bold uppercase text-slate-500">Cantidad perdida: {p.cantidad} uds</span>
+                                                    <span className="text-[9px] font-bold uppercase text-slate-500">{intensity.toFixed(0)}% de impacto</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+
+                            {/* Insight de IA */}
+                            {reporteStats.topPerdidas.length > 0 && (
+                                <div className="mt-8 p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-800 flex items-start gap-3">
+                                    <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-widest mb-1 text-left">Recomendación Estratégica</p>
+                                        <p className="text-xs text-indigo-600 dark:text-indigo-400 font-medium leading-relaxed text-left">
+                                            Tu mayor pérdida se concentra en <span className="font-bold">"{reporteStats.topPerdidas[0].nombre}"</span>. Considera revisar los procesos de elaboración o las mermas registradas por los panaderos durante el turno.
+                                        </p>
                                     </div>
-                                ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Listado de Precios y Márgenes */}
+                        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm p-6">
+                            <div className="flex items-center justify-between mb-6">
+                                <div>
+                                    <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Control de Márgenes</h4>
+                                    <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">¿Qué tan rentable es cada producto?</p>
+                                </div>
+                                <Button onClick={handleExportCSV} variant="ghost" className="h-8 px-3 rounded-xl font-black text-[10px] gap-1.5 uppercase tracking-widest text-indigo-600">
+                                    <Download className="w-3 h-3" /> Exportar
+                                </Button>
+                            </div>
+                            <div className="max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                                <PreciosStockTab productos={productos} inventario={inventario} categorias={categorias} formatCurrency={formatCurrency} />
                             </div>
                         </div>
-                    )}
-
-                    {/* Precios + Stock */}
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-4">
-                        <div className="flex items-center justify-between mb-4">
-                            <p className="text-sm font-black text-slate-900 dark:text-white">Precios y Stock — Productos de Venta</p>
-                            <Button onClick={handleExportCSV} variant="outline" className="h-8 px-3 rounded-xl font-black text-xs gap-1.5">
-                                <Download className="w-3.5 h-3.5" /> Exportar
-                            </Button>
-                        </div>
-                        <PreciosStockTab productos={productos} inventario={inventario} categorias={categorias} formatCurrency={formatCurrency} />
                     </div>
                 </div>
             )}
