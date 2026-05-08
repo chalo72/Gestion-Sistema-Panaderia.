@@ -25,6 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Venta, Gasto } from '@/types';
+import { db } from '@/lib/database';
 
 interface AhorrosProps {
     ventas: Venta[];
@@ -88,6 +89,20 @@ export default function Ahorros({ ventas, ahorros, gastos = [], formatCurrency }
     });
     const [formMeta, setFormMeta] = useState({ nombre: '', monto: '', plazo: '' });
 
+    React.useEffect(() => {
+        db.getAllAhorros().then(all => {
+            const metasRecord = all.find(r => r.id === 'metas_ahorro');
+            if (metasRecord) {
+                setMetas(metasRecord.data);
+            } else if (metas.length > 0) {
+                // Migrar de localStorage a IndexedDB
+                db.updateAhorro({ id: 'metas_ahorro', data: metas });
+            }
+        }).catch(err => {
+            console.error('Error al cargar metas de IndexedDB:', err);
+        });
+    }, []);
+
     // Meta principal: usa el monto de la primera meta creada, o $5M por defecto
     const metaAhorro = metas.length > 0 ? metas[0].monto : 5000000;
     const porcentajeMeta = Math.min((ahorroEstimado / metaAhorro) * 100, 100);
@@ -118,7 +133,13 @@ export default function Ahorros({ ventas, ahorros, gastos = [], formatCurrency }
         };
         const actualizadas = [...metas, nueva];
         setMetas(actualizadas);
+        
+        // Guardar en IndexedDB y localStorage (fallback)
+        db.updateAhorro({ id: 'metas_ahorro', data: actualizadas }).catch(err => {
+            console.error('Error al guardar meta en IndexedDB:', err);
+        });
         localStorage.setItem('dp_metas_ahorro', JSON.stringify(actualizadas));
+        
         setFormMeta({ nombre: '', monto: '', plazo: '' });
         setShowMetaModal(false);
         toast.success(`Meta "${nueva.nombre}" creada por ${formatCurrency(nueva.monto)}`);
