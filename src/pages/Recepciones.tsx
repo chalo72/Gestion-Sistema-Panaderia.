@@ -383,20 +383,22 @@ export default function Recepciones({
         const pedido = prepedidos.find(p => p.id === pedidoId);
         if (!pedido) return;
 
-        const itemsDesdePrePedido: RecepcionItem[] = pedido.items.map(item => ({
-            id: crypto.randomUUID(),
-            productoId: item.productoId,
-            cantidadEsperada: item.cantidad,
-            cantidadRecibida: item.cantidad, // Pre-rellenado con lo esperado
-            precioEsperado: item.precioUnitario,
-            precioFacturado: item.precioUnitario, // Pre-rellenado
-            embalajeOk: true,
-            productoOk: true,
-            cantidadOk: true,
-            modeloOk: true,
-            defectuosos: 0,
-            observaciones: ''
-        }));
+        const itemsDesdePrePedido: RecepcionItem[] = pedido.items
+            .filter(item => getProductoById(item.productoId))
+            .map(item => ({
+                id: crypto.randomUUID(),
+                productoId: item.productoId,
+                cantidadEsperada: item.cantidad,
+                cantidadRecibida: item.cantidad, // Pre-rellenado con lo esperado
+                precioEsperado: item.precioUnitario,
+                precioFacturado: item.precioUnitario, // Pre-rellenado
+                embalajeOk: true,
+                productoOk: true,
+                cantidadOk: true,
+                modeloOk: true,
+                defectuosos: 0,
+                observaciones: ''
+            }));
 
         setNewRecepcion(prev => ({
             ...prev,

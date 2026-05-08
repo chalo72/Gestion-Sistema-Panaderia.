@@ -421,6 +421,13 @@ export function usePriceControl() {
 
   // Funciones de Productos
   const addProducto = useCallback(async (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => {
+    // Validar duplicados por nombre
+    const existe = productos.find(p => p.nombre.toLowerCase() === producto.nombre.toLowerCase());
+    if (existe) {
+      toast.error(`Ya existe un producto con el nombre "${producto.nombre}"`);
+      return null;
+    }
+
     const now = new Date().toISOString();
     const nuevoProducto: Producto = {
       ...producto,
@@ -588,7 +595,8 @@ export function usePriceControl() {
             producto = allP.find(px => px.id === productoId);
           }
           if (producto) {
-            const costoUnitario = safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1);
+            // Redondear costo unitario a 2 decimales
+            const costoUnitario = Math.round((safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1)) * 100) / 100;
             const nuevoPrecioVenta = Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100;
             await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
           }
@@ -632,7 +640,8 @@ export function usePriceControl() {
           producto = allP.find(px => px.id === productoId);
         }
         if (producto) {
-          const costoUnitario = safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1);
+          // Redondear costo unitario a 2 decimales
+          const costoUnitario = Math.round((safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1)) * 100) / 100;
           const nuevoPrecioVenta = Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100;
           await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
         }
