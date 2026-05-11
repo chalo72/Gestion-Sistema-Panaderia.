@@ -333,7 +333,7 @@ export function Proveedores({
                 precioVenta: Number(item.precioVenta) || 0,
                 margenUtilidad: Number(item.margenVenta) || 30,
                 tipo,
-                costoBase: Number(item.costoUnitario) || 0,
+                costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
               });
               productoId = np.id;
             }
@@ -343,7 +343,7 @@ export function Proveedores({
               await onAddOrUpdatePrecio({
                 productoId,
                 proveedorId: provId,
-                precioCosto: Number(item.precioCosto) || 0,
+                precioCosto: Math.round((Number(item.precioCosto) || 0) / 100) * 100,
                 notas: item.notas || descripcionGenerada,
                 destino: item.destino,
                 tipoEmbalaje: item.tipoEmbalaje,
@@ -357,7 +357,7 @@ export function Proveedores({
                 categoria: item.categoria || 'Otro',
                 descripcion: descripcionGenerada,
                 tipo,
-                costoBase: Number(item.costoUnitario) || 0,
+                costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
                 margenUtilidad: Number(item.margenVenta) || 30,
                 precioVenta: Number(item.precioVenta) || 0,
                 updatedAt: new Date().toISOString()

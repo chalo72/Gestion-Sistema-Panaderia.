@@ -96,6 +96,7 @@
 - **Seguridad**: RLS (Row Level Security) activo en Supabase.
 - **Sincronización**: Siempre intentar descargar datos de la nube tras un login exitoso.
 - **Integridad**: No usar contenido truncado (`[truncated]`) para reescribir archivos.
+- **Flujo Vercel-First**: Todas las actualizaciones y cambios de funciones, código y UI deben desplegarse y verificarse primero en Vercel (`https://app-eight-sigma-13.vercel.app/`) y después consolidarse en el entorno local.
 
 ## 🔑 Decisiones Clave (Historial)
 | Fecha | Decisión | Razón |

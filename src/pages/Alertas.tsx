@@ -64,6 +64,7 @@ export function Alertas({
   formatCurrency,
 }: AlertasProps) {
   const [filtroTipo, setFiltroTipo] = useState<string>('todas');
+  const [filtroPrioridad, setFiltroPrioridad] = useState<string>('todas');
 
   const alertasNoLeidas = alertas.filter(a => !a.leida);
   const alertasLeidas = alertas.filter(a => a.leida);
@@ -94,11 +95,15 @@ export function Alertas({
   }, [alertas]);
 
   const alertasFiltradas = useMemo(() => {
-    const base = filtroTipo === 'todas'
+    let base = filtroTipo === 'todas'
       ? (alertasNoLeidas.length > 0 ? alertasEnriquecidas.filter(a => !a.leida) : alertasEnriquecidas.filter(a => a.leida))
       : alertasEnriquecidas.filter(a => a.tipo === filtroTipo);
+      
+    if (filtroPrioridad !== 'todas') {
+      base = base.filter(a => a.prioridad === filtroPrioridad);
+    }
     return base;
-  }, [alertasEnriquecidas, alertasNoLeidas.length, filtroTipo]);
+  }, [alertasEnriquecidas, alertasNoLeidas.length, filtroTipo, filtroPrioridad]);
 
   const handleMarcarTodas = () => {
     onMarcarTodasLeidas();
@@ -218,6 +223,18 @@ export function Alertas({
             <SelectItem value="todas" className="rounded-lg">Todas</SelectItem>
             <SelectItem value="subida" className="rounded-lg text-destructive">Subidas</SelectItem>
             <SelectItem value="bajada" className="rounded-lg text-ag-success">Bajadas</SelectItem>
+          </SelectContent>
+        </Select>
+        <div className="h-4 w-px bg-border/50 mx-2" />
+        <Select value={filtroPrioridad} onValueChange={setFiltroPrioridad}>
+          <SelectTrigger className="w-32 border-none bg-transparent focus:ring-0 shadow-none h-8 font-medium">
+            <SelectValue placeholder="Prioridad" />
+          </SelectTrigger>
+          <SelectContent className="glass-layer-2 border-white/20">
+            <SelectItem value="todas" className="rounded-lg">Todas</SelectItem>
+            <SelectItem value="CRÍTICA" className="rounded-lg text-rose-500">Crítica</SelectItem>
+            <SelectItem value="ALTA" className="rounded-lg text-amber-500">Alta</SelectItem>
+            <SelectItem value="NORMAL" className="rounded-lg text-slate-500">Normal</SelectItem>
           </SelectContent>
         </Select>
       </div>

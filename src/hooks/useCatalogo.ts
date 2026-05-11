@@ -316,8 +316,14 @@ export function useCatalogo(deps: {
   const formatCurrency = useCallback((value: any) => {
     try {
       if (value === null || value === undefined) return '$0.00';
-      const numValue = typeof value === 'number' ? value : Number(value) || 0;
+      let numValue = typeof value === 'number' ? value : Number(value) || 0;
       const monedaConfig = MONEDAS.find(m => m.code === (configuracion.moneda || 'COP')) || MONEDAS[0];
+      
+      // Ajuste para COP (Pesos Colombianos): Redondear al 50 más cercano
+      if (monedaConfig.code === 'COP') {
+        numValue = Math.round(numValue / 50) * 50;
+      }
+
       return new Intl.NumberFormat(monedaConfig.locale, {
         style: 'currency',
         currency: monedaConfig.code,
