@@ -82,7 +82,10 @@
     "tesseract.js": "^7.0.0",
     "vaul": "^1.1.2",
     "xlsx": "^0.18.5",
-    "zod": "^4.3.5"
+    "zod": "^4.3.5",
+    "firebase": "^12.12.1",
+    "appwrite": "^25.0.0",
+    "pocketbase": "^0.21.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
