@@ -546,7 +546,8 @@ export function usePriceControl() {
     tipoEmbalaje?: string;
     cantidadEmbalaje?: number;
   }) => {
-    const { productoId, proveedorId, precioCosto, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
+    const { productoId, proveedorId, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
+    const precioCosto = Math.round(safeNumber(data.precioCosto) / 100) * 100;
     const existingPrecio = await db.getPrecioByProductoProveedor(productoId, proveedorId);
 
     const now = new Date().toISOString();
