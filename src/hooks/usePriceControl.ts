@@ -131,12 +131,9 @@ export function usePriceControl() {
         // Limpieza de datos de ejemplo (fantasmas)
         let prodsFinal = prods;
         let provsFinal = provs;
-        if (prods.length > 0) {
-          const idsEjemplo = DATOS_EJEMPLO.productos.map(p => p.id);
-          const provsEjemplo = DATOS_EJEMPLO.proveedores.map(p => p.id);
-          prodsFinal = prods.filter(p => !idsEjemplo.includes(p.id));
-          provsFinal = provs.filter(p => !provsEjemplo.includes(p.id));
-        }
+        // Se eliminó el filtrado restrictivo de DATOS_EJEMPLO para asegurar que ningún dato ingresado se oculte.
+        prodsFinal = prods;
+        provsFinal = provs;
 
         // [Nexus-Volt] Sincronizar categorías huérfanas de los productos (Autocuración)
         const catsDeProductos = Array.from(new Set(prodsFinal.map(p => p.categoria).filter(Boolean)));
@@ -174,7 +171,7 @@ export function usePriceControl() {
           if (!hasLocalData) toast.info('Sincronizando con Dulce Placer...');
           
           try {
-            await db.downloadFromCloud?.();
+            await db.syncCloudToLocal?.();
             
             // Recargar datos tras sync (solo si es necesario actualizar la UI)
             const [c, p, pr, prc] = await Promise.all([

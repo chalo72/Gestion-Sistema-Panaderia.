@@ -33,6 +33,11 @@ export interface IDatabase {
   // Configuración
   getConfiguracion(): Promise<any>;
   saveConfiguracion(config: any): Promise<void>;
+
+  // Sincronización
+  syncCloudToLocal(): Promise<void>;
+  syncLocalToCloud(): Promise<void>;
+  clearAll(): Promise<void>;
 }
 
 /**
@@ -97,6 +102,23 @@ const COLECCIONES_PRINCIPALES = [
   'configuracion',
   'ventas',
   'inventario',
+  'movimientos',
+  'recepciones',
+  'historial',
+  'sesiones_caja',
+  'pre_pedidos',
+  'alertas',
+  'gastos',
+  'mesas',
+  'ahorros',
+  'creditos_clientes',
+  'creditos_trabajadores',
+  'trabajadores',
+  'pedidos_activos',
+  'recetas',
+  'formulaciones',
+  'modelosPan',
+  'backups',
 ];
 
 /**
@@ -106,15 +128,17 @@ const COLECCIONES_PRINCIPALES = [
 async function hydratarDesdeNube(
   localDB: IndexedDBAdapter,
   nube: FirebaseAdapter,
-  colecciones: string[]
+  colecciones: string[],
+  force: boolean = false
 ): Promise<void> {
-  console.log('🌊 [NEXUS]: Iniciando hidratación Firebase → IndexedDB...');
+  console.log(`🌊 [NEXUS]: Iniciando hidratación Firebase → IndexedDB (Force: ${force})...`);
   for (const col of colecciones) {
     try {
       const localCount = await localDB.count(col);
-      if (localCount === 0) {
+      if (localCount === 0 || force) {
         const datosNube = await nube.getCollection<any>(col);
         if (datosNube.length > 0) {
+          console.log(`📥 [NEXUS]: Descargando ${datosNube.length} items para '${col}'...`);
           await localDB.hydrateFromCloud(col, datosNube);
         }
       } else {
@@ -223,6 +247,106 @@ class NexusDatabase implements IDatabase {
   async getBackup(key: string) { return this.adapter.getDocument('backups', key); }
   async saveBackup(key: string, val: any) {
     return this.adapter.setDocument('backups', key, { id: key, ...val });
+  }
+
+  // Recetas
+  async getAllRecetas() { return this.adapter.getCollection('recetas'); }
+  async addReceta(r: any) { return this.adapter.setDocument('recetas', r.id, r); }
+  async updateReceta(r: any) { return this.adapter.setDocument('recetas', r.id, r); }
+  async deleteReceta(id: string) { return this.adapter.deleteDocument('recetas', id); }
+
+  // Producción & Formulaciones
+  async getAllFormulaciones() { return this.adapter.getCollection('formulaciones'); }
+  async addFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
+  async updateFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
+  async deleteFormulacion(id: string) { return this.adapter.deleteDocument('formulaciones', id); }
+
+  async getAllModelosPan() { return this.adapter.getCollection('modelosPan'); }
+  async addModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
+  async updateModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
+  async deleteModeloPan(id: string) { return this.adapter.deleteDocument('modelosPan', id); }
+
+  async getAllProduccion() { return this.adapter.getCollection('produccion'); }
+  async addOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
+  async updateOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
+
+  // Finanzas
+  async addGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
+  async updateGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
+  async deleteGasto(id: string) { return this.adapter.deleteDocument('gastos', id); }
+
+  async addCreditoCliente(c: any) { return this.adapter.setDocument('creditos_clientes', c.id, c); }
+  async updateCreditoCliente(c: any) { return this.adapter.setDocument('creditos_clientes', c.id, c); }
+  async deleteCreditoCliente(id: string) { return this.adapter.deleteDocument('creditos_clientes', id); }
+
+  async addCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
+  async updateCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
+  async deleteCreditoTrabajador(id: string) { return this.adapter.deleteDocument('creditos_trabajadores', id); }
+
+  async addTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
+  async updateTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
+  async deleteTrabajador(id: string) { return this.adapter.deleteDocument('trabajadores', id); }
+
+  // Movimientos e Inventario
+  async addMovimiento(m: any) { return this.adapter.setDocument('movimientos', m.id, m); }
+  async addRecepcion(r: any) { return this.adapter.setDocument('recepciones', r.id, r); }
+  async updateRecepcion(r: any) { return this.adapter.setDocument('recepciones', r.id, r); }
+  async deleteRecepcion(id: string) { return this.adapter.deleteDocument('recepciones', id); }
+
+  // Operaciones Atómicas (Simuladas por ahora)
+  async batchAjustarStock(ajustes: any[]) {
+    for (const a of ajustes) {
+      const invItem = await this.getInventarioItemByProducto(a.productoId);
+      const stockActual = invItem ? invItem.stockActual : 0;
+      const nuevoStock = a.tipo === 'entrada' ? stockActual + a.cantidad : Math.max(0, stockActual - a.cantidad);
+      
+      const item = {
+        id: invItem?.id || crypto.randomUUID(),
+        productoId: a.productoId,
+        stockActual: nuevoStock,
+        stockMinimo: invItem?.stockMinimo || 10,
+        ultimoMovimiento: new Date().toISOString()
+      };
+      
+      await this.updateInventarioItem(item);
+      await this.addMovimiento({
+        id: crypto.randomUUID(),
+        productoId: a.productoId,
+        tipo: a.tipo,
+        cantidad: a.cantidad,
+        motivo: a.motivo,
+        fecha: new Date().toISOString(),
+        usuario: a.usuario || 'sistema'
+      });
+    }
+  }
+
+  // Sincronización Bidireccional
+  async syncCloudToLocal() {
+    if (firebaseAdapter) {
+      await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
+    }
+  }
+
+  async syncLocalToCloud() {
+    if (firebaseAdapter) {
+      console.log('📤 [NEXUS]: Iniciando respaldo local → nube...');
+      for (const col of COLECCIONES_PRINCIPALES) {
+        const items = await localAdapter.getCollection<any>(col);
+        for (const item of items) {
+          await firebaseAdapter.setDocument(col, item.id, item);
+        }
+      }
+      console.log('✅ [NEXUS]: Respaldo completado.');
+    }
+  }
+
+  async clearAll() {
+    console.log('🗑️ [NEXUS]: Borrando todos los datos locales...');
+    for (const col of COLECCIONES_PRINCIPALES) {
+      await localAdapter.clearCollection(col);
+    }
+    console.log('✅ [NEXUS]: Base de datos local limpia.');
   }
 }
 

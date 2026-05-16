@@ -52,6 +52,7 @@ export function ProveedorCatalogoTactico({
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addingIds, setAddingIds] = useState<Set<string>>(new Set());
   const [categoriaActiva, setCategoriaActiva] = useState<string>('todos');
+  const [selectedProvId, setSelectedProvId] = useState<string | null>(activeProveedorId);
 
   const necesidadesProduccion = useMemo(() => {
     return produccion.filter(p => ['pendiente', 'en_progreso'].includes(p.estado));
@@ -98,7 +99,7 @@ export function ProveedorCatalogoTactico({
     });
   }, [proveedores, precios, productos, inventario, necesidadesProduccion, search, recetas]);
 
-  const activeProveedor = stats.find(s => s.id === activeProveedorId) || stats.find(s => s.productos.length > 0) || stats[0];
+  const activeProveedor = stats.find(s => s.id === (selectedProvId || activeProveedorId)) || stats.find(s => s.productos.length > 0) || stats[0];
 
   // Categorias unicas del proveedor activo
   const categoriasDisponibles = useMemo(() => {
@@ -182,6 +183,33 @@ export function ProveedorCatalogoTactico({
             </div>
          </div>
       </div>
+
+      {/* SELECTOR DE PROVEEDORES (pills horizontales) */}
+      {stats.length > 1 && (
+        <div className="flex gap-2 overflow-x-auto pb-1 px-1 scrollbar-hide">
+          {stats.map(prov => {
+            const isActive = activeProveedor?.id === prov.id;
+            return (
+              <button
+                key={prov.id}
+                onClick={() => { setSelectedProvId(prov.id); setCategoriaActiva('todos'); }}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest whitespace-nowrap transition-all border shrink-0
+                  ${isActive
+                    ? 'bg-indigo-600 text-white border-transparent shadow-md shadow-indigo-500/20'
+                    : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-indigo-200 hover:text-indigo-600'}`}
+              >
+                <Store className="w-3.5 h-3.5" />
+                {prov.nombre}
+                {prov.itemsCriticos > 0 && (
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${isActive ? 'bg-white/20' : 'bg-rose-100 text-rose-600'}`}>
+                    {prov.itemsCriticos}!
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* PESTAÑAS DE CATEGORIA */}
       {categoriasDisponibles.length > 0 && (

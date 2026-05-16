@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import {
     CreditCard, Plus, Search, Trash2, DollarSign,
     CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp,
-    Camera, ShoppingCart, X, Package, Image, UserCircle2, Scissors, Edit2, FolderOpen
+    Camera, ShoppingCart, X, Package, Image, UserCircle2, Scissors, Edit2, FolderOpen, Users, ArrowLeft
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -304,8 +304,14 @@ export default function CreditosClientes({
 
     const productosFiltrados = useMemo(() => {
         const q = buscarProducto.toLowerCase();
-        return q ? productos.filter(p => p.nombre.toLowerCase().includes(q)).slice(0, 8) : [];
+        if (q) return productos.filter(p => p.nombre.toLowerCase().includes(q) && p.precioVenta > 0).slice(0, 12);
+        return [];
     }, [productos, buscarProducto]);
+
+    // Productos populares para mostrar en la grilla cuando no hay búsqueda
+    const productosPopulares = useMemo(() => {
+        return productos.filter(p => p.precioVenta > 0 && !p.categoria?.toLowerCase().startsWith('ins:')).slice(0, 12);
+    }, [productos]);
 
     const creditosTrabFiltrados = useMemo(() => {
         return creditosTrabajadores.filter(c => {
@@ -748,6 +754,14 @@ export default function CreditosClientes({
                                     {/* Detalle Expandido - Mini POS + Historial */}
                                     {expandedClienteId === cliente.nombre && (
                                         <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
+                                            {/* Botón Volver */}
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setExpandedClienteId(null); setItemsCliente([]); setBuscarProducto(''); }}
+                                                className="mb-4 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors bg-blue-50 dark:bg-blue-900/20 px-4 py-2.5 rounded-xl border border-blue-200 dark:border-blue-800/40 shadow-sm hover:shadow-md"
+                                            >
+                                                <ArrowLeft className="w-4 h-4" /> Volver a la lista
+                                            </button>
+
                                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                                 
                                                 {/* Columna Izquierda: NUEVA VENTA A CRÉDITO (Mini POS) */}
@@ -756,12 +770,20 @@ export default function CreditosClientes({
                                                         <ShoppingCart className="w-4 h-4" /> Nueva Venta a Crédito
                                                     </h4>
                                                     
-                                                    {/* Selector productos */}
+                                                    {/* Buscador de productos */}
                                                     <div className="relative mb-4">
-                                                        <Input placeholder="Buscar producto para fiar..." value={buscarProducto}
-                                                            onChange={e => setBuscarProducto(e.target.value)} className="rounded-xl bg-slate-50 dark:bg-slate-900 border-none shadow-inner h-10 text-sm" />
+                                                        <div className="relative">
+                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                                            <Input placeholder="Buscar producto..." value={buscarProducto}
+                                                                onChange={e => setBuscarProducto(e.target.value)} className="pl-9 rounded-xl bg-slate-50 dark:bg-slate-900 border-none shadow-inner h-10 text-sm" />
+                                                            {buscarProducto && (
+                                                                <button onClick={() => setBuscarProducto('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                                    <X className="w-4 h-4" />
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                         {productosFiltrados.length > 0 && (
-                                                            <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                                                            <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
                                                                 {productosFiltrados.map(p => (
                                                                     <button key={p.id} onClick={() => agregarProducto(p)}
                                                                         className="w-full flex items-center justify-between px-4 py-2.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0">
@@ -773,8 +795,25 @@ export default function CreditosClientes({
                                                         )}
                                                     </div>
 
+                                                    {/* Grilla de productos rápidos (visible siempre) */}
+                                                    {!buscarProducto && productosPopulares.length > 0 && (
+                                                        <div className="mb-4">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Toca para agregar</p>
+                                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
+                                                                {productosPopulares.map(p => (
+                                                                    <button key={p.id} onClick={() => agregarProducto(p)}
+                                                                        className="flex flex-col items-start p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-300 dark:hover:border-blue-700 transition-all text-left group">
+                                                                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 leading-tight truncate w-full group-hover:text-blue-700 dark:group-hover:text-blue-300">{p.nombre}</span>
+                                                                        <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 mt-0.5">{formatCurrency(p.precioVenta)}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {itemsCliente.length > 0 ? (
                                                         <div className="space-y-2 mb-4 animate-ag-fade-in">
+                                                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-1">🛒 Productos seleccionados</p>
                                                             {itemsCliente.map(item => (
                                                                 <div key={item.productoId} className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
                                                                     <div className="flex items-center justify-between">
@@ -811,7 +850,6 @@ export default function CreditosClientes({
                                                             </div>
                                                             <Button 
                                                                 onClick={() => {
-                                                                    // Validamos que exista un cliente seleccionado al darle Fiar
                                                                     if(!formCliente.clienteNombre) {
                                                                         setFormCliente(p => ({ ...p, clienteNombre: cliente.nombre }));
                                                                     }
@@ -823,15 +861,7 @@ export default function CreditosClientes({
                                                                 {isSavingCliente ? 'Procesando...' : 'Confirmar y Fiar'}
                                                             </Button>
                                                         </div>
-                                                    ) : (
-                                                        <div className="text-center p-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-900/30">
-                                                            <div className="w-12 h-12 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center mx-auto mb-3 shadow-sm">
-                                                                <ShoppingCart className="w-5 h-5 text-slate-400" />
-                                                            </div>
-                                                            <p className="text-xs font-bold text-slate-500">Busca productos arriba para fiar</p>
-                                                            <p className="text-[10px] text-slate-400 mt-1">Podrás ajustar el precio especial y cantidades</p>
-                                                        </div>
-                                                    )}
+                                                    ) : null}
                                                 </div>
 
                                                 {/* Columna Derecha: HISTORIAL */}

@@ -3,7 +3,7 @@ import {
     Store, Users, TrendingUp, DollarSign, Package, AlertTriangle,
     CheckCircle2, XCircle, ChevronDown, ChevronUp, Plus, Trash2,
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
-    ShieldCheck, Percent, ArrowRight, ShoppingCart
+    ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ import { exportCSV, getExportFilename } from '@/lib/exportUtils';
 interface ClienteMayorista {
     id: string;
     nombre: string;
-    tipo: 'tienda' | 'vendedor' | 'distribuidor';
+    tipo: 'mayorista' | 'detal' | 'trabajador';
     telefono?: string;
     margenPersonalizado?: number; // override del margen revendedor global
     notas?: string;
@@ -65,10 +65,14 @@ function calcularCosto(producto: Producto, mejorPrecio: PrecioProveedor | null):
     return 0;
 }
 
-const TIPO_CONFIG = {
-    tienda:       { label: 'Tienda',         color: 'text-indigo-600',  bg: 'bg-indigo-50  dark:bg-indigo-950/20' },
+const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
+    mayorista:  { label: 'Al por Mayor',  color: 'text-indigo-600',  bg: 'bg-indigo-50  dark:bg-indigo-950/20' },
+    detal:      { label: 'Detal',         color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/20' },
+    trabajador: { label: 'Trabajador',    color: 'text-amber-600',   bg: 'bg-amber-50   dark:bg-amber-950/20'  },
+    // Compatibilidad con tipos anteriores
+    tienda:       { label: 'Tienda',          color: 'text-indigo-600',  bg: 'bg-indigo-50  dark:bg-indigo-950/20' },
     vendedor:     { label: 'Vendedor Indep.', color: 'text-amber-600',   bg: 'bg-amber-50   dark:bg-amber-950/20'  },
-    distribuidor: { label: 'Distribuidor',   color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/20' },
+    distribuidor: { label: 'Distribuidor',    color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/20' },
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -88,6 +92,8 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
     const [formCliente, setFormCliente] = useState<Partial<ClienteMayorista>>({ tipo: 'tienda' });
     const [clienteSeleccionado, setClienteSeleccionado] = useState<ClienteMayorista | null>(null);
     const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
+    const [viendoPerfilCliente, setViendoPerfilCliente] = useState<ClienteMayorista | null>(null);
+    const [busquedaPerfil, setBusquedaPerfil] = useState('');
 
     // Filtros de tabla
     const [busqueda, setBusqueda] = useState('');
@@ -181,7 +187,7 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
     // ── Handlers de clientes ─────────────────────────────────────────────────
     const abrirNuevoCliente = () => {
         setEditandoCliente(null);
-        setFormCliente({ tipo: 'tienda' });
+        setFormCliente({ tipo: 'mayorista' });
         setShowModalCliente(true);
     };
 
@@ -248,6 +254,120 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
         );
         toast.success(`Lista de precios exportada${clienteSeleccionado ? ` para ${clienteSeleccionado.nombre}` : ''}`);
     };
+
+    // ── Vista de Perfil del Cliente (similar al módulo de órdenes de compra) ──
+    if (viendoPerfilCliente) {
+        const cliente = viendoPerfilCliente;
+        const tConf = TIPO_CONFIG[cliente.tipo] || TIPO_CONFIG.mayorista;
+        const margenEfectivo = cliente.margenPersonalizado ?? config.margenRevendedor;
+        const productosPerfil = tablaDatos
+            .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()))
+            .filter(d => d.viabilidad !== 'inviable');
+
+        return (
+            <div className="min-h-full flex flex-col gap-6 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+
+                {/* Header del perfil */}
+                <div className="flex flex-col md:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-20">
+                    <div className="flex items-center gap-4">
+                        <Button
+                            onClick={() => { setViendoPerfilCliente(null); setBusquedaPerfil(''); }}
+                            variant="outline"
+                            className="w-10 h-10 rounded-xl border-slate-200 text-slate-400 hover:text-indigo-600 shadow-sm"
+                        >
+                            <ArrowLeft className="w-5 h-5" />
+                        </Button>
+                        <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center', tConf.bg)}>
+                            <UserCheck className={cn('w-6 h-6', tConf.color)} />
+                        </div>
+                        <div>
+                            <h2 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">{cliente.nombre}</h2>
+                            <div className="flex items-center gap-2">
+                                <Badge className={cn('text-[9px] font-black border-none px-2 py-0.5 uppercase', tConf.bg, tConf.color)}>
+                                    {tConf.label}
+                                </Badge>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                    Margen revendedor: {margenEfectivo}% · {productosPerfil.length} productos
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 w-full md:w-auto">
+                        <div className="relative flex-1 md:w-72">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                                placeholder="BUSCAR PRODUCTO..."
+                                value={busquedaPerfil}
+                                onChange={e => setBusquedaPerfil(e.target.value)}
+                                className="h-10 pl-10 rounded-xl border-slate-200 bg-slate-50 text-xs font-bold uppercase"
+                            />
+                        </div>
+                        <Button onClick={exportarListaPrecios} variant="outline" className="h-10 px-4 rounded-xl gap-2 font-black uppercase tracking-widest text-xs border-indigo-200 text-indigo-600 shrink-0">
+                            <Download className="w-4 h-4" /> Exportar
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Grid de productos */}
+                {productosPerfil.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-24 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200">
+                        <Package className="w-16 h-16 text-slate-200 mb-4" />
+                        <p className="text-sm font-black uppercase tracking-widest text-slate-400">Sin productos disponibles</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-1">
+                        {productosPerfil.map(d => {
+                            const viabConf = {
+                                excelente: { color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
+                                viable:    { color: 'text-indigo-600',  bg: 'bg-indigo-50  border-indigo-100'  },
+                                ajustado:  { color: 'text-amber-600',   bg: 'bg-amber-50   border-amber-100'   },
+                                inviable:  { color: 'text-rose-600',    bg: 'bg-rose-50    border-rose-100'    },
+                            }[d.viabilidad];
+
+                            return (
+                                <Card key={d.producto.id} className="rounded-2xl border border-slate-100 bg-white shadow-sm hover:shadow-md transition-all flex flex-col min-h-[260px]">
+                                    <CardContent className="p-4 flex flex-col flex-1">
+                                        <div className="mb-3">
+                                            <h4 className="font-black uppercase text-sm tracking-tight text-slate-900 leading-tight line-clamp-2 min-h-[40px]">
+                                                {d.producto.nombre}
+                                            </h4>
+                                            <span className="text-[10px] font-bold text-slate-300 uppercase block mt-1 tracking-widest">
+                                                #{d.producto.id.slice(-4).toUpperCase()}
+                                            </span>
+                                        </div>
+
+                                        {/* Precio mayorista */}
+                                        <div className={cn('rounded-2xl p-3 mb-3 border', viabConf.bg)}>
+                                            <p className={cn('text-[9px] font-black uppercase tracking-widest mb-1', viabConf.color)}>Precio {tConf.label}</p>
+                                            <p className="text-xl font-black text-slate-900 tabular-nums">{formatCurrency(d.precioMayorista)}</p>
+                                        </div>
+
+                                        {/* Desglose */}
+                                        <div className="grid grid-cols-2 gap-2 mt-auto">
+                                            <div className="bg-slate-50 rounded-xl p-2 text-center border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5">Costo</p>
+                                                <p className="text-sm font-black text-slate-700 tabular-nums">{formatCurrency(d.costo)}</p>
+                                            </div>
+                                            <div className="bg-slate-50 rounded-xl p-2 text-center border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase mb-0.5">P. Reventa</p>
+                                                <p className={cn('text-sm font-black tabular-nums', viabConf.color)}>{formatCurrency(d.precioReventa)}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Ganancia panadería */}
+                                        <div className="mt-3 flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-400 border-t border-slate-50 pt-2">
+                                            <span>Tu ganancia</span>
+                                            <span className="text-emerald-600">+{formatCurrency(d.gananciaPanaderiaPorUnidad)}/ud</span>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
@@ -617,12 +737,13 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
                                                 <Button
                                                     onClick={() => {
                                                         setClienteSeleccionado(c);
-                                                        setActiveTab('precios');
+                                                        setViendoPerfilCliente(c);
+                                                        setBusquedaPerfil('');
                                                     }}
                                                     variant="outline"
                                                     className="flex-1 h-10 text-xs font-black uppercase tracking-widest border-indigo-200 text-indigo-600 hover:bg-indigo-50 gap-2"
                                                 >
-                                                    <BarChart3 className="w-4 h-4" /> Ver Precios
+                                                    <BarChart3 className="w-4 h-4" /> Ver Perfil
                                                 </Button>
                                                 <Button
                                                     onClick={() => {
@@ -663,16 +784,29 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
                             />
                         </div>
                         <div>
-                            <Label className="text-[10px] font-black uppercase tracking-widest">Tipo</Label>
-                            <select
-                                value={formCliente.tipo || 'tienda'}
-                                onChange={e => setFormCliente(f => ({ ...f, tipo: e.target.value as ClienteMayorista['tipo'] }))}
-                                className="w-full mt-1 h-10 px-3 rounded-xl border border-input bg-background text-sm font-bold uppercase"
-                            >
-                                <option value="tienda">Tienda</option>
-                                <option value="vendedor">Vendedor Independiente</option>
-                                <option value="distribuidor">Distribuidor</option>
-                            </select>
+                            <Label className="text-[10px] font-black uppercase tracking-widest">Tipo de cliente</Label>
+                            <div className="grid grid-cols-3 gap-2 mt-1">
+                                {(['mayorista', 'detal', 'trabajador'] as const).map(tipo => {
+                                    const tc = TIPO_CONFIG[tipo];
+                                    const isSelected = (formCliente.tipo || 'mayorista') === tipo;
+                                    return (
+                                        <button
+                                            key={tipo}
+                                            type="button"
+                                            onClick={() => setFormCliente(f => ({ ...f, tipo }))}
+                                            className={cn(
+                                                'h-16 rounded-xl border-2 flex flex-col items-center justify-center gap-1 text-[10px] font-black uppercase tracking-widest transition-all',
+                                                isSelected
+                                                    ? `${tc.bg} ${tc.color} border-current`
+                                                    : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-slate-300'
+                                            )}
+                                        >
+                                            <Store className="w-4 h-4" />
+                                            {tc.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
                         <div>
                             <Label className="text-[10px] font-black uppercase tracking-widest">Teléfono</Label>
