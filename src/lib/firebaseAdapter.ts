@@ -13,8 +13,13 @@ export class FirebaseAdapter implements DatabaseAdapter {
   }
 
   async getCollection<T>(name: string): Promise<T[]> {
-    const querySnapshot = await getDocs(collection(this.db, name));
-    return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as T));
+    try {
+      const querySnapshot = await getDocs(collection(this.db, name));
+      return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as T));
+    } catch (e) {
+      console.error(`🔥 [FIREBASE-ERROR] Fallo al leer colección '${name}':`, e);
+      throw e;
+    }
   }
 
   async getDocument<T>(collectionName: string, id: string): Promise<T | null> {

@@ -668,7 +668,7 @@ const App = () => {
                   <span className="text-emerald-600 font-black">SYNC ACTIVE</span>
                 </div>
               )}
-              <span className="opacity-50">© 2026 Antigravity Systems</span>
+              <span className="opacity-50">NEXUS-ARMAGEDDON v5.4.0 | © 2026 Antigravity Systems</span>
             </div>
           </footer>
         )}

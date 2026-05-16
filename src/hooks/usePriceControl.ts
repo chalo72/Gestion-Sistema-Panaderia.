@@ -182,6 +182,7 @@ export function usePriceControl() {
             ]);
             
             await applyData(c, p, pr, prc);
+            await loadSecondaryDataInBackground();
             
             if (!hasLocalData) {
               setLoaded(true);

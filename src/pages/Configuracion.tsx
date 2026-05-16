@@ -365,7 +365,7 @@ function Configuracion(props: ConfiguracionProps) {
 
                 <Button
                   onClick={async () => {
-                    const id = toast.loading('Sincronizando con Supabase...');
+                    const id = toast.loading('Sincronizando con la nube activa...');
                     try {
                       if (onSyncWithCloud) {
                         await onSyncWithCloud();
@@ -381,6 +381,35 @@ function Configuracion(props: ConfiguracionProps) {
                 >
                   <RefreshCw className="w-4 h-4" />
                   Sincronizar Ahora
+                </Button>
+              </div>
+
+              {/* PROTOCOLO ARMAGEDÓN (BOTÓN DE EMERGENCIA) */}
+              <div className="mt-4 p-4 rounded-xl border-2 border-red-500/30 bg-red-500/5 space-y-3">
+                <div className="flex items-center gap-2 text-red-600 font-black text-xs uppercase tracking-tighter">
+                  <Zap className="w-4 h-4 animate-pulse" />
+                  Protocolo Armagedón: Rescate Crítico
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Si tras refrescar no ves tus productos, usa este botón para <strong>extraer todo de Supabase</strong> y moverlo al nuevo sistema. Úsalo solo en emergencias.
+                </p>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="w-full h-10 font-black uppercase text-[10px] tracking-widest hover:scale-[1.02] transition-transform"
+                  onClick={async () => {
+                    if (!confirm('🚨 ¿INICIAR RESCATE CRÍTICO?\n\nEsto buscará todos tus datos en el servidor de respaldo (Supabase) y los volcará en este dispositivo. No borra nada, solo suma lo que falte.')) return;
+                    const id = toast.loading('INICIANDO PROTOCOLO DE RESCATE...');
+                    try {
+                      await db.rescueFromSupabase();
+                      toast.success('🏁 ¡RESCATE COMPLETADO! Tus datos han vuelto.', { id });
+                      setTimeout(() => window.location.reload(), 2000);
+                    } catch (e) {
+                      toast.error('Fallo en el rescate: ' + (e as Error).message, { id });
+                    }
+                  }}
+                >
+                  Iniciar Rescate desde Supabase
                 </Button>
               </div>
             </CardContent>

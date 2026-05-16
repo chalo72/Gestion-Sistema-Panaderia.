@@ -42,6 +42,9 @@ const COLLECTIONS = [
   'recetas',
   'formulaciones',
   'modelosPan',
+  'produccion',
+  'agente_misiones',
+  'agente_hallazgos',
 ];
 
 export class IndexedDBAdapter implements DatabaseAdapter {

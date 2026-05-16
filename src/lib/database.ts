@@ -1,6 +1,7 @@
 import type { DatabaseAdapter } from './dbAdapter';
 import { FirebaseAdapter } from './firebaseAdapter';
 import { IndexedDBAdapter } from './indexedDBAdapter';
+import { SupabaseDatabase } from './supabase-db';
 
 // Definición de la interfaz IDatabase que la app espera
 export interface IDatabase {
@@ -38,6 +39,77 @@ export interface IDatabase {
   syncCloudToLocal(): Promise<void>;
   syncLocalToCloud(): Promise<void>;
   clearAll(): Promise<void>;
+  rescueFromSupabase(): Promise<void>;
+
+  // Métodos Delegados
+  getAllVentas(): Promise<any[]>;
+  addVenta(v: any): Promise<void>;
+  getAllSesionesCaja(): Promise<any[]>;
+  getSesionCajaActiva(): Promise<any | null>;
+  addSesionCaja(s: any): Promise<void>;
+  updateSesionCaja(s: any): Promise<void>;
+  
+  getAllRecetas(): Promise<any[]>;
+  addReceta(r: any): Promise<void>;
+  updateReceta(r: any): Promise<void>;
+  deleteReceta(id: string): Promise<void>;
+
+  getAllFormulaciones(): Promise<any[]>;
+  addFormulacion(f: any): Promise<void>;
+  updateFormulacion(f: any): Promise<void>;
+  deleteFormulacion(id: string): Promise<void>;
+
+  getAllModelosPan(): Promise<any[]>;
+  addModeloPan(m: any): Promise<void>;
+  updateModeloPan(m: any): Promise<void>;
+  deleteModeloPan(id: string): Promise<void>;
+
+  getAllOrdenesProduccion(): Promise<any[]>;
+  addOrdenProduccion(o: any): Promise<void>;
+  updateOrdenProduccion(o: any): Promise<void>;
+  batchAjustarStock(ajustes: any[]): Promise<void>;
+
+  getAllInventario(): Promise<any[]>;
+  getInventarioItemByProducto(id: string): Promise<any>;
+  updateInventarioItem(item: any): Promise<void>;
+  getAllMovimientos(): Promise<any[]>;
+  addMovimiento(m: any): Promise<void>;
+  getAllRecepciones(): Promise<any[]>;
+  addRecepcion(r: any): Promise<void>;
+  updateRecepcion(r: any): Promise<void>;
+  deleteRecepcion(id: string): Promise<void>;
+
+  getAllGastos(): Promise<any[]>;
+  addGasto(g: any): Promise<void>;
+  updateGasto(g: any): Promise<void>;
+  deleteGasto(id: string): Promise<void>;
+
+  getAllCreditosClientes(): Promise<any[]>;
+  addCreditoCliente(c: any): Promise<void>;
+  updateCreditoCliente(c: any): Promise<void>;
+  deleteCreditoCliente(id: string): Promise<void>;
+
+  getAllCreditosTrabajadores(): Promise<any[]>;
+  addCreditoTrabajador(c: any): Promise<void>;
+  updateCreditoTrabajador(c: any): Promise<void>;
+  deleteCreditoTrabajador(id: string): Promise<void>;
+
+  getAllTrabajadores(): Promise<any[]>;
+  addTrabajador(t: any): Promise<void>;
+  updateTrabajador(t: any): Promise<void>;
+  deleteTrabajador(id: string): Promise<void>;
+
+  getAllAlertas(): Promise<any[]>;
+  addAlerta(a: any): Promise<void>;
+  updateAlerta(a: any): Promise<void>;
+  clearAllAlertas(): Promise<void>;
+
+  getAgenteMisiones(agenteId: string): Promise<any[]>;
+  getAgenteHallazgos(agenteId: string): Promise<any[]>;
+  addAgenteHallazgo(agenteId: string, h: any): Promise<void>;
+  
+  getBackup(key: string): Promise<any>;
+  saveBackup(key: string, val: any): Promise<void>;
 }
 
 /**
@@ -118,7 +190,10 @@ const COLECCIONES_PRINCIPALES = [
   'recetas',
   'formulaciones',
   'modelosPan',
+  'produccion',
   'backups',
+  'agente_misiones',
+  'agente_hallazgos',
 ];
 
 /**
@@ -136,10 +211,14 @@ async function hydratarDesdeNube(
     try {
       const localCount = await localDB.count(col);
       if (localCount === 0 || force) {
+        console.log(`📡 [NEXUS-DEBUG]: Intentando recuperar '${col}' desde la nube...`);
         const datosNube = await nube.getCollection<any>(col);
+        console.log(`📡 [NEXUS-DEBUG]: Recibidos ${datosNube.length} items de '${col}' de la nube.`);
         if (datosNube.length > 0) {
-          console.log(`📥 [NEXUS]: Descargando ${datosNube.length} items para '${col}'...`);
+          console.log(`📡 [NEXUS-DEBUG]: Ejemplo primer item de ${col}:`, JSON.stringify(datosNube[0]).substring(0, 100));
           await localDB.hydrateFromCloud(col, datosNube);
+        } else {
+          console.warn(`📡 [NEXUS-DEBUG]: La colección '${col}' está VACÍA en la nube.`);
         }
       } else {
         console.log(`✅ [NEXUS]: '${col}' ya tiene ${localCount} items locales. No se sobrescribe.`);
@@ -266,9 +345,24 @@ class NexusDatabase implements IDatabase {
   async updateModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
   async deleteModeloPan(id: string) { return this.adapter.deleteDocument('modelosPan', id); }
 
-  async getAllProduccion() { return this.adapter.getCollection('produccion'); }
+  async getAllOrdenesProduccion() { return this.adapter.getCollection('produccion'); }
   async addOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
   async updateOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
+
+  // Agentes
+  async getAgenteMisiones(agenteId: string) {
+    const misiones = await this.adapter.getCollection<any>('agente_misiones');
+    return misiones.filter(m => m.agenteId === agenteId);
+  }
+  async getAgenteHallazgos(agenteId: string) {
+    const hallazgos = await this.adapter.getCollection<any>('agente_hallazgos');
+    return hallazgos.filter(h => h.agenteId === agenteId);
+  }
+  async addAgenteHallazgo(agenteId: string, h: any) {
+    return this.adapter.setDocument('agente_hallazgos', h.id, { ...h, agenteId });
+  }
+
+  // Finanzas
 
   // Finanzas
   async addGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
@@ -347,6 +441,46 @@ class NexusDatabase implements IDatabase {
       await localAdapter.clearCollection(col);
     }
     console.log('✅ [NEXUS]: Base de datos local limpia.');
+  }
+
+  async rescueFromSupabase() {
+    console.log('🚨 [NEXUS]: Iniciando Protocolo Armagedón — Rescate desde Supabase...');
+    const legacyDB = new SupabaseDatabase();
+    
+    // Lista de rescate extendida
+    const rescate = [
+      { col: 'productos', fn: () => legacyDB.getAllProductos() },
+      { col: 'proveedores', fn: () => legacyDB.getAllProveedores() },
+      { col: 'precios', fn: () => legacyDB.getAllPrecios() },
+      { col: 'recetas', fn: () => legacyDB.getAllRecetas() },
+      { col: 'configuracion', fn: async () => { 
+          const c = await legacyDB.getConfiguracion(); 
+          return c ? [c] : []; 
+      }},
+      { col: 'ventas', fn: () => legacyDB.getAllVentas() },
+      { col: 'inventario', fn: () => legacyDB.getAllInventario() },
+      { col: 'movimientos', fn: () => legacyDB.getAllMovimientos() },
+      { col: 'gastos', fn: () => legacyDB.getAllGastos() },
+      { col: 'creditos_clientes', fn: async () => {
+          const { data } = await (legacyDB as any).supabase.from('creditos_clientes').select('*');
+          return data || [];
+      }},
+    ];
+
+    for (const task of rescate) {
+      try {
+        console.log(`📡 [RESCATE]: Recuperando '${task.col}'...`);
+        const items = await task.fn();
+        if (items && items.length > 0) {
+          console.log(`📥 [RESCATE]: Volcando ${items.length} items en local...`);
+          await localAdapter.hydrateFromCloud(task.col, items);
+        }
+      } catch (e) {
+        console.error(`❌ [RESCATE]: Error en '${task.col}':`, e);
+      }
+    }
+    console.log('🏁 [NEXUS]: Rescate completado. Sincronizando con nueva nube...');
+    await this.syncLocalToCloud();
   }
 }
 
