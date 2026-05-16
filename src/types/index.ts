@@ -702,10 +702,31 @@ export interface PagoCredito {
 }
 
 // ============================================================
+// CLIENTES (CRM)
+// ============================================================
+export type ClienteTipo = 'particular' | 'empresa' | 'frecuente' | 'mayorista';
+
+export interface Cliente {
+  id: string;
+  nombre: string;
+  identificacion?: string; // Cédula o NIT
+  telefono?: string;
+  email?: string;
+  direccion?: string;
+  ciudad?: string;
+  fechaNacimiento?: string;
+  tipo: ClienteTipo;
+  notas?: string;
+  puntosLealtad?: number;
+  createdAt: string;
+}
+
+// ============================================================
 // CRÉDITOS A CLIENTES
 // ============================================================
 export interface CreditoCliente {
   id: string;
+  clienteId?: string;         // Referencia al maestro de clientes (Opcional por ahora)
   clienteNombre: string;
   clienteTelefono?: string;
   categoriaCliente?: string;  // NUEVO: Categoría para agrupar clientes (Alcaldía, Tienda, etc.)

@@ -58,6 +58,10 @@ export function usePriceControl() {
 
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [loaded, setLoaded] = useState(false);
+  
+  // 🛡️ PATRÓN: BACKUP PENDING (Trigger System)
+  const [backupPending, setBackupPending] = useState<{ ts: number; trigger: string } | null>(null);
+  const triggerBackup = (trigger: string) => setBackupPending({ ts: Date.now(), trigger });
 
   // 📦 PATRÓN: LATEST DATA REF (Soberanía de Datos)
   const latestDataRef = useRef({ productos, proveedores, precios, configuracion, recetas });
@@ -65,14 +69,15 @@ export function usePriceControl() {
     latestDataRef.current = { productos, proveedores, precios, configuracion, recetas };
   }, [productos, proveedores, precios, configuracion, recetas]);
 
-  // 🛡️ PATRÓN: DEBOUNCED SIDE EFFECT (Auto-Snapshot de 600ms)
+  // 🛡️ PATRÓN: DEBOUNCED SIDE EFFECT (Auto-Backup Universal de 600ms)
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !backupPending) return;
     const timer = setTimeout(() => {
-      backupService.createSnapshot('Auto-Snapshot Sistema', latestDataRef.current);
-    }, 6000); // 6 segundos para no saturar en el ERP
+      backupService.createBackup(latestDataRef.current, backupPending.trigger);
+      setBackupPending(null);
+    }, 600); // 600ms según patrón maestro
     return () => clearTimeout(timer);
-  }, [productos, proveedores, precios, configuracion, recetas, loaded]);
+  }, [backupPending, loaded]);
 
   // Sub-hooks delegados (Fase 4 de refactoring)
   // onAjustarStock se define más abajo, así que usamos un ref para romper la dependencia circular
@@ -469,6 +474,7 @@ export function usePriceControl() {
     };
     await db.addProducto(nuevoProducto);
     setProductos(prev => [...prev, nuevoProducto]);
+    triggerBackup(`add_producto:${nuevoProducto.nombre}`);
 
     // ── Sincronización automática: crear InventarioItem con stock 0 ──
     // Así el producto aparece de inmediato en el módulo de Inventario
@@ -503,6 +509,7 @@ export function usePriceControl() {
     const updatedProducto = { ...producto, ...updates, updatedAt: new Date().toISOString() };
     await db.updateProducto(updatedProducto);
     setProductos(prev => prev.map(p => p.id === id ? updatedProducto : p));
+    triggerBackup(`update_producto:${updatedProducto.nombre}`);
   }, [productos]);
 
   // PROTEGIDO: Capa 2 — Guard defensivo: tombstone se crea SIEMPRE, sin importar errores parciales
@@ -515,6 +522,7 @@ export function usePriceControl() {
       await db.addTombstone('productos', id).catch(() => {});
     }
     setProductos(prev => prev.filter(p => p.id !== id));
+    triggerBackup(`delete_producto:${id}`);
     // También eliminar precios asociados
     const preciosProducto = precios.filter(p => p.productoId === id);
     for (const precio of preciosProducto) {
@@ -536,6 +544,7 @@ export function usePriceControl() {
     };
     await db.addProveedor(nuevoProveedor);
     setProveedores(prev => [...prev, nuevoProveedor]);
+    triggerBackup(`add_proveedor:${nuevoProveedor.nombre}`);
     return nuevoProveedor;
   }, []);
 

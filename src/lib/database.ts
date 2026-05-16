@@ -108,6 +108,12 @@ export interface IDatabase {
   getAgenteHallazgos(agenteId: string): Promise<any[]>;
   addAgenteHallazgo(agenteId: string, h: any): Promise<void>;
   
+  // Clientes (CRM)
+  getAllClientes(): Promise<any[]>;
+  addCliente(c: any): Promise<void>;
+  updateCliente(c: any): Promise<void>;
+  deleteCliente(id: string): Promise<void>;
+
   getBackup(key: string): Promise<any>;
   saveBackup(key: string, val: any): Promise<void>;
 }
@@ -171,6 +177,7 @@ const COLECCIONES_PRINCIPALES = [
   'productos',
   'proveedores',
   'precios',
+  'clientes',
   'configuracion',
   'ventas',
   'inventario',
@@ -361,6 +368,12 @@ class NexusDatabase implements IDatabase {
   async addAgenteHallazgo(agenteId: string, h: any) {
     return this.adapter.setDocument('agente_hallazgos', h.id, { ...h, agenteId });
   }
+
+  // Clientes (CRM)
+  async getAllClientes() { return this.adapter.getCollection('clientes'); }
+  async addCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
+  async updateCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
+  async deleteCliente(id: string) { return this.adapter.deleteDocument('clientes', id); }
 
   // Finanzas
 

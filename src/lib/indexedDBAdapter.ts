@@ -21,6 +21,7 @@ const COLLECTIONS = [
   'productos',
   'proveedores',
   'precios',
+  'clientes',
   'tombstones',
   'configuracion',
   'ventas',

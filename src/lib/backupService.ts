@@ -11,21 +11,24 @@ export interface BackupState {
   id: string;
   timestamp: string;
   label: string;
-  data: any; // El estado completo de la app
+  trigger: string; // Qué acción disparó el backup (add_item, delete, etc)
+  data: any; 
 }
 
 export const backupService = {
   /**
    * Guarda un nuevo snapshot eliminando el más antiguo si excede el límite.
    */
-  async createSnapshot(label: string, data: any): Promise<string> {
+  async createBackup(data: any, trigger: string = 'manual'): Promise<string> {
     const snapshots = this.getAllSnapshots();
     const id = `snap_${Date.now()}`;
+    const label = `Backup ${new Date().toLocaleTimeString()} - ${trigger}`;
     
     const newSnapshot: BackupState = {
       id,
       timestamp: new Date().toISOString(),
       label,
+      trigger,
       data
     };
 
