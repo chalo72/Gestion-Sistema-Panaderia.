@@ -72,6 +72,8 @@ interface VentasProps {
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
     onAddMesa?: (mesa: Mesa) => Promise<void>;
     onDeleteMesa?: (id: string) => Promise<void>;
+    onAddCreditoCliente?: (credito: any) => Promise<any>;
+    creditosClientes?: any[];
 }
 
 // ID constante para la pestaña de Venta Rápida
@@ -458,6 +460,31 @@ export function Ventas(props: VentasProps) {
 
             const result = await onRegistrarVenta(ventaData);
             setLastVenta(result);
+            
+            // Sincronización con el módulo de Créditos a Clientes
+            if (tipoTransaccion === 'credito' && props.onAddCreditoCliente) {
+                const existingClient = props.creditosClientes?.find(c => c.clienteNombre.toLowerCase() === cliente.trim().toLowerCase());
+                
+                await props.onAddCreditoCliente({
+                    clienteNombre: cliente.trim(),
+                    categoriaCliente: existingClient?.categoriaCliente || '',
+                    monto: totalToPay,
+                    saldo: totalToPay,
+                    descripcion: 'Crédito generado automáticamente desde POS',
+                    fecha: new Date().toISOString().split('T')[0],
+                    estado: 'activo',
+                    items: cart.map(item => ({
+                        productoId: item.producto.id,
+                        nombre: item.producto.nombre,
+                        cantidad: item.cantidad,
+                        precioVenta: safeNumber(item.producto.precioVenta),
+                        subtotal: safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1)
+                    })),
+                    pagos: [],
+                    usuarioId: usuario?.id || 'anon'
+                });
+            }
+
             setShowPagoModal(false);
             setShowSuccessModal(true);
 
@@ -674,12 +701,22 @@ export function Ventas(props: VentasProps) {
                                 <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-center">
                                     <AlertCircle className="w-10 h-10 text-amber-500 mx-auto mb-2" />
                                     <h4 className="text-sm font-bold text-amber-700 mb-1">Venta a Crédito</h4>
-                                    <p className="text-xs text-amber-600">Se registrará como deuda del cliente</p>
+                                    <p className="text-xs text-amber-600">Se registrará como deuda del cliente en el módulo de Créditos</p>
                                 </div>
                                 <div>
                                     <Label className="text-sm font-bold text-slate-500 block mb-2">Nombre del Cliente *</Label>
-                                    <Input value={cliente} onChange={e => setCliente(e.target.value)}
-                                        placeholder="¿A quién se le fía?" className="h-12 text-base rounded-xl border-slate-200" />
+                                    <Input 
+                                        value={cliente} 
+                                        onChange={e => setCliente(e.target.value)}
+                                        list="clientes-pos-list"
+                                        placeholder="¿A quién se le fía?" 
+                                        className="h-12 text-base rounded-xl border-slate-200" 
+                                    />
+                                    <datalist id="clientes-pos-list">
+                                        {Array.from(new Set((props.creditosClientes || []).map(c => c.clienteNombre))).map(nombre => (
+                                            <option key={nombre} value={nombre} />
+                                        ))}
+                                    </datalist>
                                 </div>
                             </div>
                         )}

@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Producto, Proveedor, PrecioProveedor, Categoria } from '@/types';
+import type { Producto, Proveedor, PrecioProveedor, Categoria, InventarioItem } from '@/types';
 import { ProductHeader } from '@/components/productos/ProductHeader';
 import { ProductCard } from '@/components/productos/ProductCard';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
@@ -95,7 +95,9 @@ export default function Productos({
         let precioVenta = parseFloat(formData.precioVenta) || 0;
         const margen = parseFloat(formData.margenUtilidad) || 30;
         const costo = parseFloat(formData.precioCosto) || 0;
-        if (costo > 0 && precioVenta === 0) precioVenta = costo * (1 + margen / 100);
+        if (costo > 0 && precioVenta === 0) precioVenta = Math.round(costo * (1 + margen / 100) / 100) * 100;
+        // Redondear siempre al múltiplo de 100 más cercano (moneda COP)
+        if (precioVenta > 0) precioVenta = Math.round(precioVenta / 100) * 100;
         
         const stockActualNum = formData.stockActual === '' ? undefined : parseInt(formData.stockActual) || 0;
         const stockMinimoNum = parseInt(formData.stockMinimo) || 5;

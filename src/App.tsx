@@ -294,6 +294,9 @@ const App = () => {
             onCerrarCaja={cerrarCaja}
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
             onFinalizarTurno={cerrarCaja}
+            onRegistrarVenta={registrarVenta}
+            onAddCreditoCliente={addCreditoCliente}
+            creditosClientes={creditosClientes}
             formatCurrency={formatCurrency}
             usuario={user}
             categorias={configuracion.categorias}
@@ -430,7 +433,7 @@ const App = () => {
           />
         );
       case 'mayoristas':
-        return <Mayoristas productos={productos} precios={precios} getMejorPrecio={getMejorPrecio} formatCurrency={formatCurrency} />;
+        return <Mayoristas productos={productos} precios={precios} getMejorPrecio={getMejorPrecio} formatCurrency={formatCurrency} onNavigateTo={(view: any) => setCurrentView(view)} />;
       case 'reportes':
         return (
           <Reportes 

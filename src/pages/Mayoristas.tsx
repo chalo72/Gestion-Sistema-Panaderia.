@@ -3,7 +3,7 @@ import {
     Store, Users, TrendingUp, DollarSign, Package, AlertTriangle,
     CheckCircle2, XCircle, ChevronDown, ChevronUp, Plus, Trash2,
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
-    ShieldCheck, Percent, ArrowRight
+    ShieldCheck, Percent, ArrowRight, ShoppingCart
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ interface MayoristasProps {
     precios: PrecioProveedor[];
     getMejorPrecio: (productoId: string) => PrecioProveedor | null;
     formatCurrency: (value: number) => string;
+    onNavigateTo?: (view: string) => void;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -71,11 +72,14 @@ const TIPO_CONFIG = {
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
-export default function Mayoristas({ productos, precios, getMejorPrecio, formatCurrency }: MayoristasProps) {
+export default function Mayoristas({ productos, precios, getMejorPrecio, formatCurrency, onNavigateTo }: MayoristasProps) {
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
     const [configTemp, setConfigTemp] = useState(config);
+
+    // Estado de Pestañas
+    const [activeTab, setActiveTab] = useState('precios');
 
     // Clientes mayoristas
     const [clientes, setClientes] = useState<ClienteMayorista[]>(cargarClientes);
@@ -83,6 +87,7 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
     const [editandoCliente, setEditandoCliente] = useState<ClienteMayorista | null>(null);
     const [formCliente, setFormCliente] = useState<Partial<ClienteMayorista>>({ tipo: 'tienda' });
     const [clienteSeleccionado, setClienteSeleccionado] = useState<ClienteMayorista | null>(null);
+    const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
 
     // Filtros de tabla
     const [busqueda, setBusqueda] = useState('');
@@ -351,7 +356,7 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
                 </CardContent>
             </Card>
 
-            <Tabs defaultValue="precios" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-12 p-1 mb-5 flex items-center gap-1">
                     <TabsTrigger value="precios" className="rounded-xl h-9 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <BarChart3 className="w-4 h-4 mr-2" /> Lista de Precios
@@ -555,8 +560,11 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
                             {clientes.map(c => {
                                 const tConf = TIPO_CONFIG[c.tipo];
                                 return (
-                                    <Card key={c.id} className="rounded-2xl border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md transition-all">
-                                        <CardContent className="p-5">
+                                    <Card key={c.id} className="rounded-2xl border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md transition-all overflow-hidden">
+                                        <div 
+                                            className="p-5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                                            onClick={() => setExpandedClienteId(expandedClienteId === c.id ? null : c.id)}
+                                        >
                                             <div className="flex items-start justify-between mb-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', tConf.bg)}>
@@ -569,13 +577,16 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
                                                         </Badge>
                                                     </div>
                                                 </div>
-                                                <div className="flex gap-1">
-                                                    <button onClick={() => abrirEditarCliente(c)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 transition-all">
+                                                <div className="flex gap-1 items-center">
+                                                    <button onClick={(e) => { e.stopPropagation(); abrirEditarCliente(c); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 transition-all">
                                                         <Pencil className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <button onClick={() => eliminarCliente(c.id)} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all">
+                                                    <button onClick={(e) => { e.stopPropagation(); eliminarCliente(c.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all">
                                                         <Trash2 className="w-3.5 h-3.5" />
                                                     </button>
+                                                    <div className="w-8 h-8 ml-2 rounded-lg flex items-center justify-center text-slate-400">
+                                                        {expandedClienteId === c.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -599,15 +610,32 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
                                                     </div>
                                                 )}
                                             </div>
+                                        </div>
 
-                                            <Button
-                                                onClick={() => setClienteSeleccionado(c)}
-                                                variant="outline"
-                                                className="w-full mt-4 h-9 text-xs font-black uppercase tracking-widest border-indigo-200 text-indigo-600 hover:bg-indigo-50"
-                                            >
-                                                Ver precios para este cliente
-                                            </Button>
-                                        </CardContent>
+                                        {expandedClienteId === c.id && (
+                                            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 animate-ag-fade-in flex flex-col sm:flex-row gap-3">
+                                                <Button
+                                                    onClick={() => {
+                                                        setClienteSeleccionado(c);
+                                                        setActiveTab('precios');
+                                                    }}
+                                                    variant="outline"
+                                                    className="flex-1 h-10 text-xs font-black uppercase tracking-widest border-indigo-200 text-indigo-600 hover:bg-indigo-50 gap-2"
+                                                >
+                                                    <BarChart3 className="w-4 h-4" /> Ver Precios
+                                                </Button>
+                                                <Button
+                                                    onClick={() => {
+                                                        if (onNavigateTo) {
+                                                            onNavigateTo('creditos');
+                                                        }
+                                                    }}
+                                                    className="flex-1 h-10 text-xs font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                                                >
+                                                    <ShoppingCart className="w-4 h-4" /> Vender / Mini-POS
+                                                </Button>
+                                            </div>
+                                        )}
                                     </Card>
                                 );
                             })}

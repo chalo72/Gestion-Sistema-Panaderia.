@@ -40,7 +40,7 @@ export default function ListaPreciosProvincial({
     productos = [],
     inventario = [],
     categorias = [],
-    formatCurrency = (v: number) => '$' + v.toLocaleString('es-ES'),
+    formatCurrency = (v: number) => '$\u00a0' + (Math.round(v / 100) * 100).toLocaleString('es-CO'),
     onAddProducto,
 }: ListaPreciosProvincialProps) {
 
@@ -146,7 +146,8 @@ export default function ListaPreciosProvincial({
         try {
             onAddProducto({
                 ...form,
-                precioVenta:    Number(form.precioVenta),
+                // [Nexus-Shield] Redondear siempre al 100 más cercano (COP)
+                precioVenta:    Math.round(Number(form.precioVenta) / 100) * 100,
                 precioCompra:   Number(form.precioCompra),
                 margenUtilidad: Number(form.margenUtilidad),
             });

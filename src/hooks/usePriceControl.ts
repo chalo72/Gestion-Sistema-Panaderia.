@@ -138,6 +138,22 @@ export function usePriceControl() {
           provsFinal = provs.filter(p => !provsEjemplo.includes(p.id));
         }
 
+        // [Nexus-Volt] Sincronizar categorías huérfanas de los productos (Autocuración)
+        const catsDeProductos = Array.from(new Set(prodsFinal.map(p => p.categoria).filter(Boolean)));
+        const catsFaltantes = catsDeProductos.filter(
+          catName => !finalConfig.categorias.map(c => c.nombre).includes(catName)
+        );
+        if (catsFaltantes.length > 0) {
+          const nuevasCats = catsFaltantes.map(catName => ({
+            id: crypto.randomUUID(),
+            nombre: catName,
+            color: '#6b7280', // Color neutro por defecto
+            tipo: 'venta' // Por defecto venta
+          }));
+          finalConfig.categorias = [...finalConfig.categorias, ...nuevasCats];
+          await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+        }
+
         setConfiguracion(finalConfig);
         setProductos(prodsFinal);
         setProveedores(provsFinal);
@@ -384,11 +400,12 @@ export function usePriceControl() {
   }, [configuracion]);
 
   // Funciones de Categorías
-  const addCategoria = useCallback(async (nombre: string, color: string) => {
+  const addCategoria = useCallback(async (nombre: string, color: string, tipo?: 'venta' | 'insumo') => {
     const nuevaCategoria: Categoria = {
       id: crypto.randomUUID(),
       nombre,
       color,
+      tipo,
     };
     const newCategorias = [...configuracion.categorias, nuevaCategoria];
     const newConfig = { ...configuracion, categorias: newCategorias };
@@ -404,9 +421,9 @@ export function usePriceControl() {
     setConfiguracion(newConfig);
   }, [configuracion]);
 
-  const updateCategoria = useCallback(async (id: string, nuevoNombre: string) => {
+  const updateCategoria = useCallback(async (id: string, nuevoNombre: string, color: string, tipo?: 'venta' | 'insumo') => {
     const newCategorias = configuracion.categorias.map(c => 
-      c.id === id ? { ...c, nombre: nuevoNombre } : c
+      c.id === id ? { ...c, nombre: nuevoNombre, color, tipo } : c
     );
     const newConfig = { ...configuracion, categorias: newCategorias };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
@@ -789,11 +806,14 @@ export function usePriceControl() {
     try {
       if (value === null || value === undefined) return '$ 0';
       let numValue = typeof value === 'number' ? value : Number(value) || 0;
-      const monedaConfig = MONEDAS.find(m => m.code === (configuracion.moneda || 'COP')) || MONEDAS[0];
+      // Fallback robusto: si moneda no está configurada, usar COP por defecto
+      const monedaCode = configuracion.moneda || 'COP';
+      const monedaConfig = MONEDAS.find(m => m.code === monedaCode) || MONEDAS[0];
       
-      // Ajuste para COP (Pesos Colombianos): Redondear al 50 más cercano
+      // Ajuste para COP (Pesos Colombianos): Redondear al 100 más cercano
+      // (estándar colombiano — evita precios con centenas incompletas como $1.810 o $3.120)
       if (monedaConfig.code === 'COP') {
-        numValue = Math.round(numValue / 50) * 50;
+        numValue = Math.round(numValue / 100) * 100;
       }
 
       return new Intl.NumberFormat(monedaConfig.locale, {

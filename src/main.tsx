@@ -24,6 +24,35 @@ import './index.css'
   };
 })();
 
+// [Nexus-Shield] Interceptor Global de ChunkLoadError
+// Captura errores de imports dinámicos fallidos ANTES de que lleguen al ErrorBoundary
+// Esto protege casos donde el error ocurre fuera del árbol de React
+window.addEventListener('unhandledrejection', (event) => {
+  const error = event.reason;
+  const msg = error?.message || String(error) || '';
+  const isChunk =
+    error?.name === 'ChunkLoadError' ||
+    msg.includes('Failed to fetch dynamically imported module') ||
+    msg.includes('Importing a module script failed') ||
+    msg.includes('Unable to preload CSS') ||
+    msg.includes('Loading chunk');
+
+  if (isChunk) {
+    console.warn('⚡ [Nexus-Shield] ChunkLoadError global detectado — purgando caché y recargando...');
+    event.preventDefault(); // No mostrar en consola como error no manejado
+    if ('caches' in window) {
+      caches.keys().then(keys => {
+        keys
+          .filter(k => !k.includes('data') && !k.includes('idb'))
+          .forEach(k => caches.delete(k));
+        setTimeout(() => window.location.reload(), 600);
+      });
+    } else {
+      setTimeout(() => window.location.reload(), 600);
+    }
+  }
+});
+
 // Registro de Service Worker para PWA — recargar SOLO después de confirmar datos guardados
 const updateSW = registerSW({
   onNeedRefresh() {

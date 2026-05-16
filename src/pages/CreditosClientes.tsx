@@ -127,6 +127,7 @@ export default function CreditosClientes({
     const [formCliente, setFormCliente] = useState({
         clienteNombre: '',
         clienteTelefono: '',
+        categoriaCliente: '',
         descripcion: '',
         fecha: new Date().toISOString().split('T')[0],
         fechaVencimiento: '',
@@ -143,6 +144,55 @@ export default function CreditosClientes({
     const [editandoCredito, setEditandoCredito] = useState<CreditoCliente | null>(null);
     const [formEditCliente, setFormEditCliente] = useState({ estado: 'activo', descripcion: '', fechaVencimiento: '' });
     const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
+
+    // ── Carpetas (Categorías) ────────────────────────────────────────────────
+    const [carpetas, setCarpetas] = useState<string[]>(() => {
+        const stored = localStorage.getItem('carpetasClientes');
+        return stored ? JSON.parse(stored) : ['Alcaldía', 'Tienda', 'Gimnasio'];
+    });
+    const [showCarpetasModal, setShowCarpetasModal] = useState(false);
+    const [nuevaCarpeta, setNuevaCarpeta] = useState('');
+    const [editandoCarpetaIndex, setEditandoCarpetaIndex] = useState<number | null>(null);
+    const [carpetaEditNombre, setCarpetaEditNombre] = useState('');
+
+    useEffect(() => {
+        localStorage.setItem('carpetasClientes', JSON.stringify(carpetas));
+    }, [carpetas]);
+
+    const handleAgregarCarpeta = () => {
+        const trimName = nuevaCarpeta.trim();
+        if (!trimName) return;
+        if (carpetas.includes(trimName)) { toast.error('La carpeta ya existe'); return; }
+        setCarpetas([...carpetas, trimName]);
+        setNuevaCarpeta('');
+    };
+
+    const handleEliminarCarpeta = (index: number) => {
+        if (!confirm('¿Eliminar esta carpeta? Los créditos no se borrarán, solo perderán la etiqueta en nuevas búsquedas.')) return;
+        setCarpetas(carpetas.filter((_, i) => i !== index));
+    };
+
+    const handleGuardarEdicionCarpeta = async (index: number) => {
+        const oldName = carpetas[index];
+        const newName = carpetaEditNombre.trim();
+        if (!newName || newName === oldName) { setEditandoCarpetaIndex(null); return; }
+        if (carpetas.includes(newName)) { toast.error('El nombre ya existe'); return; }
+        
+        // Actualizar la lista
+        const nuevas = [...carpetas];
+        nuevas[index] = newName;
+        setCarpetas(nuevas);
+        setEditandoCarpetaIndex(null);
+
+        // Actualizar todos los créditos que tenían este nombre (esto es opcional pero muy útil)
+        const creditosAActualizar = creditosClientes.filter(c => c.categoriaCliente === oldName);
+        for (const c of creditosAActualizar) {
+            await onUpdateCreditoCliente(c.id, { categoriaCliente: newName });
+        }
+        if (creditosAActualizar.length > 0) {
+            toast.success(`Se actualizaron ${creditosAActualizar.length} créditos a la nueva carpeta`);
+        }
+    };
 
     // ── Estado tab trabajadores ───────────────────────────────────────────
     const [searchTrabajador, setSearchTrabajador] = useState('');
@@ -177,13 +227,72 @@ export default function CreditosClientes({
 
     const montoTotalCliente = useMemo(() => itemsCliente.reduce((s, i) => s + i.subtotal, 0), [itemsCliente]);
 
-    const creditosClienteFiltrados = useMemo(() => {
-        return creditosClientes.filter(c => {
-            const q = searchCliente.toLowerCase();
-            const matchSearch = c.clienteNombre.toLowerCase().includes(q) || c.descripcion.toLowerCase().includes(q);
-            const matchEstado = filtroEstadoCliente === 'todos' || c.estado === filtroEstadoCliente;
-            return matchSearch && matchEstado;
-        }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    interface ClienteAgrupado {
+        nombre: string;
+        telefono?: string;
+        categoria?: string;
+        creditosActivos: CreditoCliente[];
+        creditosPagados: CreditoCliente[];
+        creditosVencidos: CreditoCliente[];
+        saldoTotal: number;
+    }
+
+    const clientesAgrupados = useMemo(() => {
+        const map = new Map<string, ClienteAgrupado>();
+        creditosClientes.forEach(c => {
+            const key = c.clienteNombre.toLowerCase().trim();
+            if (!map.has(key)) {
+                map.set(key, {
+                    nombre: c.clienteNombre.trim(),
+                    telefono: c.clienteTelefono,
+                    categoria: c.categoriaCliente,
+                    creditosActivos: [],
+                    creditosPagados: [],
+                    creditosVencidos: [],
+                    saldoTotal: 0
+                });
+            }
+            const g = map.get(key)!;
+            
+            // Preferimos la info más reciente si no estaba
+            if (!g.telefono && c.clienteTelefono) g.telefono = c.clienteTelefono;
+            if (!g.categoria && c.categoriaCliente) g.categoria = c.categoriaCliente;
+
+            if (c.estado === 'activo') g.creditosActivos.push(c);
+            else if (c.estado === 'vencido') g.creditosVencidos.push(c);
+            else if (c.estado === 'pagado') g.creditosPagados.push(c);
+
+            if (c.estado !== 'pagado') {
+                g.saldoTotal += c.saldo;
+            }
+        });
+
+        let result = Array.from(map.values());
+
+        // Filtrado por búsqueda
+        const q = searchCliente.toLowerCase();
+        if (q) {
+            result = result.filter(c => 
+                c.nombre.toLowerCase().includes(q) || 
+                (c.categoria && c.categoria.toLowerCase().includes(q))
+            );
+        }
+
+        // Filtrado por estado
+        if (filtroEstadoCliente !== 'todos') {
+            result = result.filter(c => {
+                if (filtroEstadoCliente === 'activo') return c.creditosActivos.length > 0;
+                if (filtroEstadoCliente === 'vencido') return c.creditosVencidos.length > 0;
+                if (filtroEstadoCliente === 'pagado') return c.creditosPagados.length > 0 && c.saldoTotal === 0;
+                return true;
+            });
+        }
+
+        // Ordenar por mayor deuda primero, luego alfabéticamente
+        return result.sort((a, b) => {
+            if (b.saldoTotal !== a.saldoTotal) return b.saldoTotal - a.saldoTotal;
+            return a.nombre.localeCompare(b.nombre);
+        });
     }, [creditosClientes, searchCliente, filtroEstadoCliente]);
 
     const statsCliente = useMemo(() => {
@@ -242,6 +351,12 @@ export default function CreditosClientes({
         }
     };
 
+    const cambiarPrecio = (productoId: string, nuevoPrecio: number) => {
+        const precio = Math.max(0, nuevoPrecio);
+        setItemsCliente(prev => prev.map(i => i.productoId === productoId
+            ? { ...i, precioUnitario: precio, subtotal: i.cantidad * precio } : i));
+    };
+
     const handleFotoCliente = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -252,7 +367,7 @@ export default function CreditosClientes({
     };
 
     const resetFormCliente = () => {
-        setFormCliente({ clienteNombre: '', clienteTelefono: '', descripcion: '', fecha: new Date().toISOString().split('T')[0], fechaVencimiento: '' });
+        setFormCliente({ clienteNombre: '', clienteTelefono: '', categoriaCliente: '', descripcion: '', fecha: new Date().toISOString().split('T')[0], fechaVencimiento: '' });
         setItemsCliente([]);
         setFotoEvidenciaCliente(undefined);
         setBuscarProducto('');
@@ -266,6 +381,7 @@ export default function CreditosClientes({
             await onAddCreditoCliente({
                 clienteNombre: formCliente.clienteNombre.trim(),
                 clienteTelefono: formCliente.clienteTelefono.trim() || undefined,
+                categoriaCliente: formCliente.categoriaCliente.trim() || undefined,
                 monto: montoTotalCliente,
                 saldo: montoTotalCliente,
                 descripcion: formCliente.descripcion.trim() || itemsCliente.map(i => `${i.cantidad}x ${i.nombre}`).join(', '),
@@ -381,6 +497,12 @@ export default function CreditosClientes({
             setItemsTrab(prev => prev.map(i => i.productoId === productoId
                 ? { ...i, cantidad, subtotal: cantidad * i.precioUnitario } : i));
         }
+    };
+
+    const cambiarPrecioTrab = (productoId: string, nuevoPrecio: number) => {
+        const precio = Math.max(0, nuevoPrecio);
+        setItemsTrab(prev => prev.map(i => i.productoId === productoId
+            ? { ...i, precioUnitario: precio, subtotal: i.cantidad * precio } : i));
     };
 
     const resetFormTrab = () => {
@@ -510,6 +632,10 @@ export default function CreditosClientes({
                 </button>
             </div>
 
+            <datalist id="listaCarpetas">
+                {carpetas.map((c, i) => <option key={i} value={c} />)}
+            </datalist>
+
             {/* ════════════════════════════════════════════════════════════
                 TAB — CLIENTES
             ════════════════════════════════════════════════════════════ */}
@@ -536,12 +662,16 @@ export default function CreditosClientes({
                         <div className="relative flex-1 min-w-[200px]">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
-                                placeholder="Buscar cliente o descripción..."
+                                placeholder="Buscar cliente, descripción o carpeta..."
                                 value={searchCliente}
                                 onChange={e => setSearchCliente(e.target.value)}
                                 className="pl-9 rounded-xl"
                             />
                         </div>
+                        <Button variant="outline" onClick={() => setShowCarpetasModal(true)} className="rounded-xl border-slate-200 dark:border-slate-800 flex items-center gap-2">
+                            <FolderOpen className="w-4 h-4 text-blue-500" />
+                            <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">Carpetas</span>
+                        </Button>
                         <Select value={filtroEstadoCliente} onValueChange={setFiltroEstadoCliente}>
                             <SelectTrigger className="w-36 rounded-xl"><SelectValue /></SelectTrigger>
                             <SelectContent>
@@ -555,105 +685,251 @@ export default function CreditosClientes({
 
                     {/* Lista créditos clientes */}
                     <div className="flex-1 space-y-3 overflow-y-auto">
-                        {creditosClienteFiltrados.length === 0 ? (
+                        {clientesAgrupados.length === 0 ? (
                             <Card className="rounded-2xl border-dashed">
                                 <CardContent className="p-12 text-center text-muted-foreground">
-                                    <CreditCard className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                                    <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
                                     <p className="font-bold uppercase tracking-widest text-xs">
-                                        {searchCliente || filtroEstadoCliente !== 'todos' ? 'Sin resultados' : 'No hay créditos de clientes'}
+                                        {searchCliente || filtroEstadoCliente !== 'todos' ? 'Sin resultados' : 'No hay clientes registrados'}
                                     </p>
                                 </CardContent>
                             </Card>
-                        ) : creditosClienteFiltrados.map(credito => (
-                            <Card key={credito.id} className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
-                                <CardContent className="p-4">
-                                    <div className="flex items-start justify-between gap-3">
+                        ) : clientesAgrupados.map(cliente => (
+                            <Card key={cliente.nombre} className="rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden border border-slate-200 dark:border-slate-800">
+                                <CardContent className="p-0">
+                                    {/* Cabecera del Cliente */}
+                                    <div 
+                                        className="p-4 flex items-center justify-between cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                                        onClick={() => {
+                                            if (expandedClienteId === cliente.nombre) {
+                                                setExpandedClienteId(null);
+                                            } else {
+                                                setExpandedClienteId(cliente.nombre);
+                                                setFormCliente({
+                                                    clienteNombre: cliente.nombre,
+                                                    clienteTelefono: cliente.telefono || '',
+                                                    categoriaCliente: cliente.categoria || '',
+                                                    descripcion: '',
+                                                    fecha: new Date().toISOString().split('T')[0],
+                                                    fechaVencimiento: ''
+                                                });
+                                                setItemsCliente([]);
+                                                setFotoEvidenciaCliente(undefined);
+                                                setBuscarProducto('');
+                                            }
+                                        }}
+                                    >
                                         <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="font-black text-base text-gray-900 dark:text-white truncate">{credito.clienteNombre}</span>
-                                                <Badge className={`${ESTADO_COLOR_CLIENTE[credito.estado]} text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 border-none`}>
-                                                    {credito.estado === 'activo' && <Clock className="w-3 h-3" />}
-                                                    {credito.estado === 'pagado' && <CheckCircle className="w-3 h-3" />}
-                                                    {credito.estado === 'vencido' && <AlertTriangle className="w-3 h-3" />}
-                                                    {credito.estado}
-                                                </Badge>
-                                                {credito.fotoEvidencia && (
-                                                    <button
-                                                        onClick={() => setShowFotoModal(credito.fotoEvidencia!)}
-                                                        className="flex items-center gap-1 text-[10px] font-bold text-blue-500 hover:text-blue-700 uppercase tracking-widest"
-                                                    >
-                                                        <Image className="w-3 h-3" /> Ver foto
-                                                    </button>
+                                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                                                <span className="font-black text-lg text-slate-800 dark:text-slate-200 truncate">{cliente.nombre}</span>
+                                                {cliente.categoria && (
+                                                    <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300 text-[10px] font-black uppercase tracking-widest border-none px-2 py-0">
+                                                        {cliente.categoria}
+                                                    </Badge>
                                                 )}
                                             </div>
-                                            <p className="text-xs text-muted-foreground mt-0.5 truncate">{credito.descripcion}</p>
-                                            <div className="flex items-center gap-4 mt-2">
-                                                <span className="text-xs font-bold text-gray-500 dark:text-gray-400">Original: {formatCurrency(credito.monto)}</span>
-                                                <span className="text-sm font-black text-blue-600 dark:text-blue-400">Saldo: {formatCurrency(credito.saldo)}</span>
+                                            <div className="flex items-center gap-4">
+                                                <span className={`text-sm font-black ${cliente.saldoTotal > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                                    Saldo: {formatCurrency(cliente.saldoTotal)}
+                                                </span>
+                                                <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">
+                                                    {cliente.creditosActivos.length + cliente.creditosVencidos.length} Pendientes
+                                                </span>
                                             </div>
-                                            {credito.clienteTelefono && <p className="text-xs text-muted-foreground mt-0.5">📞 {credito.clienteTelefono}</p>}
-                                            {credito.fechaVencimiento && <p className="text-xs text-muted-foreground mt-0.5">⏰ Vence: {credito.fechaVencimiento}</p>}
-
-                                            {/* Items expandidos */}
-                                            {expandedClienteId === credito.id && credito.items && credito.items.length > 0 && (
-                                                <div className="mt-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-                                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1.5">
-                                                        <Package className="inline w-3 h-3 mr-1" />Productos fiados
-                                                    </p>
-                                                    {credito.items.map(item => (
-                                                        <div key={item.productoId} className="flex justify-between items-center text-xs py-0.5">
-                                                            <span className="text-muted-foreground">{item.cantidad}x {item.nombre}</span>
-                                                            <span className="font-bold text-slate-700 dark:text-slate-300">{formatCurrency(item.subtotal)}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
-                                            )}
+                                            {cliente.telefono && <p className="text-[11px] text-slate-500 mt-1">📞 {cliente.telefono}</p>}
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
-                                            {credito.estado !== 'pagado' && (
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() => { setSelectedCredito(credito); setShowPagoClienteModal(true); }}
-                                                    className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black border-none"
-                                                >
-                                                    <DollarSign className="w-3 h-3 mr-1" /> Pago
-                                                </Button>
-                                            )}
-                                            <Button size="sm" variant="ghost"
-                                                onClick={() => setExpandedClienteId(expandedClienteId === credito.id ? null : credito.id)}
-                                                className="h-8 w-8 p-0 rounded-xl">
-                                                {expandedClienteId === credito.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                                            </Button>
-                                            <Button size="sm" variant="ghost"
-                                                onClick={() => abrirEditarCredito(credito)}
-                                                className="h-8 w-8 p-0 rounded-xl text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                                                title="Editar crédito">
-                                                <Edit2 className="w-4 h-4" />
-                                            </Button>
-                                            <Button size="sm" variant="ghost"
-                                                onClick={async () => { await onDeleteCreditoCliente(credito.id); toast.success('Crédito eliminado'); }}
-                                                className="h-8 w-8 p-0 rounded-xl text-red-500 hover:text-red-700 hover:bg-red-50">
-                                                <Trash2 className="w-4 h-4" />
-                                            </Button>
+                                            <div className={`p-2 rounded-full ${expandedClienteId === cliente.nombre ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-slate-100 dark:bg-slate-900 text-slate-400'}`}>
+                                                {expandedClienteId === cliente.nombre ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Pagos expandidos */}
-                                    {expandedClienteId === credito.id && credito.pagos.length > 0 && (
-                                        <div className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 space-y-1">
-                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">Pagos realizados</p>
-                                            {credito.pagos.map(pago => (
-                                                <div key={pago.id} className="flex justify-between items-center text-xs py-1 px-2 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                                                    <span className="text-muted-foreground">{pago.fecha}</span>
-                                                    <span className="font-bold text-emerald-600">{formatCurrency(pago.monto)}</span>
-                                                    <span className="text-muted-foreground capitalize">{pago.metodoPago}</span>
-                                                    {pago.nota && <span className="text-muted-foreground italic text-[10px]">{pago.nota}</span>}
+                                    {/* Detalle Expandido - Mini POS + Historial */}
+                                    {expandedClienteId === cliente.nombre && (
+                                        <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20">
+                                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                                
+                                                {/* Columna Izquierda: NUEVA VENTA A CRÉDITO (Mini POS) */}
+                                                <div className="bg-white dark:bg-slate-950 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-900/30">
+                                                    <h4 className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-4 flex items-center gap-2">
+                                                        <ShoppingCart className="w-4 h-4" /> Nueva Venta a Crédito
+                                                    </h4>
+                                                    
+                                                    {/* Selector productos */}
+                                                    <div className="relative mb-4">
+                                                        <Input placeholder="Buscar producto para fiar..." value={buscarProducto}
+                                                            onChange={e => setBuscarProducto(e.target.value)} className="rounded-xl bg-slate-50 dark:bg-slate-900 border-none shadow-inner h-10 text-sm" />
+                                                        {productosFiltrados.length > 0 && (
+                                                            <div className="absolute z-10 left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                                                                {productosFiltrados.map(p => (
+                                                                    <button key={p.id} onClick={() => agregarProducto(p)}
+                                                                        className="w-full flex items-center justify-between px-4 py-2.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0">
+                                                                        <span className="font-bold text-slate-800 dark:text-slate-200">{p.nombre}</span>
+                                                                        <span className="text-blue-600 dark:text-blue-400 font-black">{formatCurrency(p.precioVenta)}</span>
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {itemsCliente.length > 0 ? (
+                                                        <div className="space-y-2 mb-4 animate-ag-fade-in">
+                                                            {itemsCliente.map(item => (
+                                                                <div key={item.productoId} className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
+                                                                    <div className="flex items-center justify-between">
+                                                                        <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate">{item.nombre}</span>
+                                                                        <button onClick={() => cambiarCantidad(item.productoId, 0)} className="text-red-400 hover:text-red-600 transition-colors">
+                                                                            <X className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-2 text-xs">
+                                                                        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                                            <button onClick={() => cambiarCantidad(item.productoId, item.cantidad - 1)}
+                                                                                className="w-6 h-6 rounded bg-slate-50 dark:bg-slate-700 font-black hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center">-</button>
+                                                                            <span className="w-6 text-center font-black">{item.cantidad}</span>
+                                                                            <button onClick={() => cambiarCantidad(item.productoId, item.cantidad + 1)}
+                                                                                className="w-6 h-6 rounded bg-slate-50 dark:bg-slate-700 font-black hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center">+</button>
+                                                                        </div>
+                                                                        <span className="text-slate-400">x</span>
+                                                                        <div className="flex-1 flex items-center gap-1 bg-white dark:bg-slate-800 rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 shadow-sm">
+                                                                            <span className="text-slate-500 font-bold">$</span>
+                                                                            <input 
+                                                                                type="number" 
+                                                                                value={item.precioUnitario || ''} 
+                                                                                onChange={(e) => cambiarPrecio(item.productoId, parseFloat(e.target.value) || 0)}
+                                                                                className="w-full bg-transparent outline-none font-black text-slate-700 dark:text-slate-300 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                            />
+                                                                        </div>
+                                                                        <span className="font-black text-blue-600 dark:text-blue-400 w-20 text-right ml-auto">{formatCurrency(item.subtotal)}</span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                            <div className="border-t border-slate-200 dark:border-slate-800 pt-3 mt-3 flex justify-between items-center font-black">
+                                                                <span className="text-slate-500 uppercase tracking-widest text-[10px]">Total Fiado</span>
+                                                                <span className="text-lg text-blue-600 dark:text-blue-400">{formatCurrency(montoTotalCliente)}</span>
+                                                            </div>
+                                                            <Button 
+                                                                onClick={() => {
+                                                                    // Validamos que exista un cliente seleccionado al darle Fiar
+                                                                    if(!formCliente.clienteNombre) {
+                                                                        setFormCliente(p => ({ ...p, clienteNombre: cliente.nombre }));
+                                                                    }
+                                                                    handleGuardarCredito();
+                                                                }} 
+                                                                disabled={isSavingCliente}
+                                                                className="w-full h-10 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md text-xs uppercase tracking-widest"
+                                                            >
+                                                                {isSavingCliente ? 'Procesando...' : 'Confirmar y Fiar'}
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center p-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-900/30">
+                                                            <div className="w-12 h-12 rounded-full bg-white dark:bg-slate-800 flex items-center justify-center mx-auto mb-3 shadow-sm">
+                                                                <ShoppingCart className="w-5 h-5 text-slate-400" />
+                                                            </div>
+                                                            <p className="text-xs font-bold text-slate-500">Busca productos arriba para fiar</p>
+                                                            <p className="text-[10px] text-slate-400 mt-1">Podrás ajustar el precio especial y cantidades</p>
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ))}
+
+                                                {/* Columna Derecha: HISTORIAL */}
+                                                <div>
+                                                    <div className="mb-4 flex justify-between items-center">
+                                                        <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
+                                                            <Clock className="w-4 h-4" /> Historial y Abonos
+                                                        </h4>
+                                                    </div>
+
+                                                    {cliente.creditosActivos.length === 0 && cliente.creditosVencidos.length === 0 && cliente.creditosPagados.length === 0 ? (
+                                                        <div className="text-center p-8 border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950">
+                                                            <p className="text-xs font-bold text-slate-400">Cliente sin historial de créditos.</p>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                                            {[...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados].map(credito => (
+                                                                <div key={credito.id} className="p-3.5 bg-white dark:bg-slate-950 shadow-sm border border-slate-200 dark:border-slate-800 rounded-2xl relative overflow-hidden group">
+                                                                    <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${credito.estado === 'activo' ? 'bg-amber-500' : credito.estado === 'vencido' ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
+                                                                    
+                                                                    <div className="flex items-start justify-between gap-3 pl-3">
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                                                                <Badge className={`${ESTADO_COLOR_CLIENTE[credito.estado]} text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 border-none px-1.5 py-0`}>
+                                                                                    {credito.estado === 'activo' && <Clock className="w-3 h-3" />}
+                                                                                    {credito.estado === 'pagado' && <CheckCircle className="w-3 h-3" />}
+                                                                                    {credito.estado === 'vencido' && <AlertTriangle className="w-3 h-3" />}
+                                                                                    {credito.estado}
+                                                                                </Badge>
+                                                                                <span className="text-[10px] text-slate-500 font-bold">{new Date(credito.createdAt || credito.fecha).toLocaleDateString()}</span>
+                                                                            </div>
+                                                                            {credito.descripcion && <p className="text-xs text-slate-600 dark:text-slate-400 truncate mb-1">{credito.descripcion}</p>}
+                                                                            <div className="flex items-center gap-4 mt-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl">
+                                                                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Deuda:<br/><span className="text-xs text-slate-700 dark:text-slate-300">{formatCurrency(credito.monto)}</span></span>
+                                                                                <span className={`text-[10px] font-black uppercase tracking-widest ${credito.saldo > 0 ? 'text-red-600/70 dark:text-red-400/70' : 'text-emerald-600/70 dark:text-emerald-400/70'}`}>
+                                                                                    Saldo:<br/><span className={`text-xs ${credito.saldo > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(credito.saldo)}</span>
+                                                                                </span>
+                                                                            </div>
+                                                                        </div>
+                                                                        
+                                                                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                                                            {credito.estado !== 'pagado' && (
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    onClick={(e) => { e.stopPropagation(); setSelectedCredito(credito); setShowPagoClienteModal(true); }}
+                                                                                    className="h-8 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest border-none shadow-sm"
+                                                                                >
+                                                                                    <DollarSign className="w-3.5 h-3.5 mr-1" /> Abonar
+                                                                                </Button>
+                                                                            )}
+                                                                            <div className="flex gap-1">
+                                                                                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); abrirEditarCredito(credito); }} className="h-7 w-7 p-0 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-3.5 h-3.5" /></Button>
+                                                                                <Button size="sm" variant="ghost" onClick={async (e) => { e.stopPropagation(); await onDeleteCreditoCliente(credito.id); toast.success('Crédito eliminado'); }} className="h-7 w-7 p-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Detalles adicionales si existen */}
+                                                                    {(credito.items?.length > 0 || credito.pagos?.length > 0) && (
+                                                                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4 pl-3">
+                                                                            {/* Items */}
+                                                                            {credito.items && credito.items.length > 0 && (
+                                                                                <div>
+                                                                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Productos</p>
+                                                                                    <div className="space-y-1">
+                                                                                        {credito.items.map(item => (
+                                                                                            <div key={item.productoId} className="flex justify-between items-center text-[10px]">
+                                                                                                <span className="text-slate-600 dark:text-slate-400 truncate pr-2">{item.cantidad}x {item.nombre}</span>
+                                                                                                <span className="font-bold text-slate-700 dark:text-slate-300">{formatCurrency(item.subtotal)}</span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* Pagos */}
+                                                                            {credito.pagos && credito.pagos.length > 0 && (
+                                                                                <div>
+                                                                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Abonos Realizados</p>
+                                                                                    <div className="space-y-1">
+                                                                                        {credito.pagos.map(pago => (
+                                                                                            <div key={pago.id} className="flex justify-between items-center text-[10px]">
+                                                                                                <span className="text-slate-500">{pago.fecha}</span>
+                                                                                                <span className="font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-1 rounded">{formatCurrency(pago.monto)}</span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
-                                    )}
-                                    {expandedClienteId === credito.id && credito.pagos.length === 0 && (
-                                        <p className="mt-3 pt-3 border-t border-gray-100 dark:border-gray-800 text-xs text-muted-foreground text-center">Sin pagos registrados aún</p>
                                     )}
                                 </CardContent>
                             </Card>
@@ -867,6 +1143,52 @@ export default function CreditosClientes({
                 </DialogContent>
             </Dialog>
 
+            {/* Gestor de Carpetas */}
+            <Dialog open={showCarpetasModal} onOpenChange={setShowCarpetasModal}>
+                <DialogContent className="rounded-3xl max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle className="font-black uppercase tracking-tight flex items-center gap-2">
+                            <FolderOpen className="w-5 h-5 text-blue-500" />
+                            Gestor de Carpetas
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="flex gap-2">
+                            <Input placeholder="Nueva carpeta..." value={nuevaCarpeta} onChange={e => setNuevaCarpeta(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleAgregarCarpeta()} className="rounded-xl" />
+                            <Button onClick={handleAgregarCarpeta} className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black"><Plus className="w-4 h-4" /></Button>
+                        </div>
+                        <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2">
+                            {carpetas.length === 0 ? (
+                                <p className="text-center text-xs text-muted-foreground italic py-4">No hay carpetas creadas</p>
+                            ) : carpetas.map((c, i) => (
+                                <div key={i} className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800">
+                                    {editandoCarpetaIndex === i ? (
+                                        <Input 
+                                            value={carpetaEditNombre} 
+                                            onChange={e => setCarpetaEditNombre(e.target.value)}
+                                            onKeyDown={e => e.key === 'Enter' && handleGuardarEdicionCarpeta(i)}
+                                            autoFocus
+                                            className="h-8 text-xs font-bold"
+                                        />
+                                    ) : (
+                                        <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{c}</span>
+                                    )}
+                                    <div className="flex items-center gap-1">
+                                        {editandoCarpetaIndex === i ? (
+                                            <Button size="sm" variant="ghost" onClick={() => handleGuardarEdicionCarpeta(i)} className="h-8 w-8 p-0 text-emerald-500 hover:text-emerald-700 hover:bg-emerald-50"><CheckCircle className="w-4 h-4" /></Button>
+                                        ) : (
+                                            <Button size="sm" variant="ghost" onClick={() => { setEditandoCarpetaIndex(i); setCarpetaEditNombre(c); }} className="h-8 w-8 p-0 text-blue-500 hover:text-blue-700 hover:bg-blue-50"><Edit2 className="w-4 h-4" /></Button>
+                                        )}
+                                        <Button size="sm" variant="ghost" onClick={() => handleEliminarCarpeta(i)} className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"><Trash2 className="w-4 h-4" /></Button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             {/* Nuevo Crédito Cliente */}
             <Dialog open={showFormModal} onOpenChange={v => { if (!v) resetFormCliente(); setShowFormModal(v); }}>
                 <DialogContent className="rounded-3xl max-w-lg">
@@ -884,6 +1206,12 @@ export default function CreditosClientes({
                                 <Label className="text-xs font-bold uppercase tracking-widest">Teléfono</Label>
                                 <Input placeholder="ej: 300 123 4567" value={formCliente.clienteTelefono}
                                     onChange={e => setFormCliente(p => ({ ...p, clienteTelefono: e.target.value }))} className="mt-1" />
+                            </div>
+                            <div>
+                                <Label className="text-xs font-bold uppercase tracking-widest">Categoría / Carpeta</Label>
+                                <Input placeholder="ej: Alcaldía, Tienda..." value={formCliente.categoriaCliente}
+                                    list="listaCarpetas"
+                                    onChange={e => setFormCliente(p => ({ ...p, categoriaCliente: e.target.value }))} className="mt-1" />
                             </div>
                             <div>
                                 <Label className="text-xs font-bold uppercase tracking-widest">Fecha</Label>
@@ -915,19 +1243,34 @@ export default function CreditosClientes({
                             {itemsCliente.length > 0 && (
                                 <div className="mt-2 space-y-1.5 border border-slate-200 dark:border-slate-700 rounded-xl p-3 bg-slate-50 dark:bg-slate-900/50">
                                     {itemsCliente.map(item => (
-                                        <div key={item.productoId} className="flex items-center gap-2 text-xs">
-                                            <span className="flex-1 font-bold text-slate-700 dark:text-slate-300 truncate">{item.nombre}</span>
-                                            <div className="flex items-center gap-1">
-                                                <button onClick={() => cambiarCantidad(item.productoId, item.cantidad - 1)}
-                                                    className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 font-black text-sm flex items-center justify-center">-</button>
-                                                <span className="w-5 text-center font-black">{item.cantidad}</span>
-                                                <button onClick={() => cambiarCantidad(item.productoId, item.cantidad + 1)}
-                                                    className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 font-black text-sm flex items-center justify-center">+</button>
+                                        <div key={item.productoId} className="flex flex-col gap-2 p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-slate-700 dark:text-slate-300 truncate">{item.nombre}</span>
+                                                <button onClick={() => cambiarCantidad(item.productoId, 0)} className="text-red-400 hover:text-red-600">
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
                                             </div>
-                                            <span className="font-black text-blue-600 w-16 text-right">{formatCurrency(item.subtotal)}</span>
-                                            <button onClick={() => cambiarCantidad(item.productoId, 0)} className="text-red-400 hover:text-red-600">
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+                                                    <button onClick={() => cambiarCantidad(item.productoId, item.cantidad - 1)}
+                                                        className="w-6 h-6 rounded-md bg-white dark:bg-slate-700 font-black flex items-center justify-center shadow-sm">-</button>
+                                                    <span className="w-6 text-center font-black">{item.cantidad}</span>
+                                                    <button onClick={() => cambiarCantidad(item.productoId, item.cantidad + 1)}
+                                                        className="w-6 h-6 rounded-md bg-white dark:bg-slate-700 font-black flex items-center justify-center shadow-sm">+</button>
+                                                </div>
+                                                <span className="text-slate-400">x</span>
+                                                <div className="flex-1 flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1">
+                                                    <span className="text-slate-500 font-bold">$</span>
+                                                    <input 
+                                                        type="number" 
+                                                        value={item.precioUnitario || ''} 
+                                                        onChange={(e) => cambiarPrecio(item.productoId, parseFloat(e.target.value) || 0)}
+                                                        className="w-full bg-transparent outline-none font-black text-slate-700 dark:text-slate-300 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                                <span className="font-black text-blue-600 w-20 text-right ml-auto">{formatCurrency(item.subtotal)}</span>
+                                            </div>
                                         </div>
                                     ))}
                                     <div className="border-t border-slate-200 dark:border-slate-700 pt-1.5 mt-1.5 flex justify-between font-black text-sm">
@@ -1108,19 +1451,35 @@ export default function CreditosClientes({
                             {itemsTrab.length > 0 && (
                                 <div className="mt-2 space-y-1.5 border border-violet-200 dark:border-violet-800 rounded-xl p-3 bg-violet-50 dark:bg-violet-950/20">
                                     {itemsTrab.map(item => (
-                                        <div key={item.productoId} className="flex items-center gap-2 text-xs">
-                                            <span className="flex-1 font-bold text-slate-700 dark:text-slate-300 truncate">{item.nombre}</span>
-                                            <div className="flex items-center gap-1">
-                                                <button onClick={() => cambiarCantidadTrab(item.productoId, item.cantidad - 1)}
-                                                    className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 font-black text-sm flex items-center justify-center">-</button>
-                                                <span className="w-5 text-center font-black">{item.cantidad}</span>
-                                                <button onClick={() => cambiarCantidadTrab(item.productoId, item.cantidad + 1)}
-                                                    className="w-5 h-5 rounded-full bg-slate-200 dark:bg-slate-700 font-black text-sm flex items-center justify-center">+</button>
+                                        <div key={item.productoId} className="flex flex-col gap-2 p-2 bg-white dark:bg-slate-900 rounded-lg border border-slate-100 dark:border-slate-800">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-bold text-slate-700 dark:text-slate-300 truncate">{item.nombre}</span>
+                                                <button onClick={() => cambiarCantidadTrab(item.productoId, 0)} className="text-red-400 hover:text-red-600">
+                                                    <X className="w-3.5 h-3.5" />
+                                                </button>
                                             </div>
-                                            <span className="font-black text-violet-600 w-16 text-right">{formatCurrency(item.subtotal)}</span>
-                                            <button onClick={() => cambiarCantidadTrab(item.productoId, 0)} className="text-red-400 hover:text-red-600">
-                                                <X className="w-3.5 h-3.5" />
-                                            </button>
+                                            <div className="flex items-center gap-2 text-xs">
+                                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
+                                                    <button onClick={() => cambiarCantidadTrab(item.productoId, item.cantidad - 1)}
+                                                        className="w-6 h-6 rounded-md bg-white dark:bg-slate-700 font-black flex items-center justify-center shadow-sm">-</button>
+                                                    <span className="w-6 text-center font-black">{item.cantidad}</span>
+                                                    <button onClick={() => cambiarCantidadTrab(item.productoId, item.cantidad + 1)}
+                                                        className="w-6 h-6 rounded-md bg-white dark:bg-slate-700 font-black flex items-center justify-center shadow-sm">+</button>
+                                                </div>
+                                                <span className="text-slate-400">x</span>
+                                                <div className="flex-1 flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg px-2 py-1">
+                                                    <span className="text-slate-500 font-bold">$</span>
+                                                    <input 
+                                                        type="number" 
+                                                        value={item.precioUnitario || ''} 
+                                                        onChange={(e) => cambiarPrecioTrab(item.productoId, parseFloat(e.target.value) || 0)}
+                                                        disabled={usuario.rol !== 'ADMIN' && usuario.rol !== 'GERENTE'}
+                                                        className={`w-full bg-transparent outline-none font-black text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${usuario.rol !== 'ADMIN' && usuario.rol !== 'GERENTE' ? 'text-slate-400 dark:text-slate-500 cursor-not-allowed' : 'text-slate-700 dark:text-slate-300'}`}
+                                                        placeholder="0"
+                                                    />
+                                                </div>
+                                                <span className="font-black text-violet-600 w-20 text-right ml-auto">{formatCurrency(item.subtotal)}</span>
+                                            </div>
                                         </div>
                                     ))}
                                     <div className="border-t border-violet-200 dark:border-violet-700 pt-1.5 mt-1.5 flex justify-between font-black text-sm">

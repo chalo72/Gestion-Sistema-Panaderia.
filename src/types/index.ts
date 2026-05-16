@@ -317,6 +317,7 @@ export interface Configuracion {
   publicUrl?: string;             // URL de producción (Vercel) para enlaces de acceso
   unidades?: string[];
   destinos?: string[];
+  carpetasClientes?: string[];  // NUEVO: Nombres de carpetas/categorías para los créditos de clientes
   aiMode?: 'local' | 'hybrid' | 'off'; // MODO DE IA: Local, Híbrido o Apagado (Kill Switch)
 }
 
@@ -707,6 +708,7 @@ export interface CreditoCliente {
   id: string;
   clienteNombre: string;
   clienteTelefono?: string;
+  categoriaCliente?: string;  // NUEVO: Categoría para agrupar clientes (Alcaldía, Tienda, etc.)
   monto: number;              // Monto total del crédito
   saldo: number;              // Saldo pendiente
   descripcion: string;        // Qué se fió / por qué
@@ -714,7 +716,7 @@ export interface CreditoCliente {
   fechaVencimiento?: string;  // Fecha límite de pago
   estado: 'activo' | 'pagado' | 'vencido';
   items: ItemCredito[];       // Productos fiados
-  fotoEvidencia?: string;     // base64 foto del producto/cliente
+  fotoEvidencia?: string;     // base64 foto de factura o remisión
   pagos: PagoCredito[];
   usuarioId: string;
   createdAt: string;
