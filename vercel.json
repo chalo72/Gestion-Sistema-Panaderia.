@@ -1,6 +1,6 @@
 {
   "installCommand": "npm install --ignore-scripts",
-  "buildCommand": "npm run build",
+  "buildCommand": "npm run update-version && vite build",
   "outputDirectory": "dist",
   "framework": "vite",
   "headers": [
