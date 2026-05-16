@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import {
     CreditCard, Plus, Search, Trash2, DollarSign,
     CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp,
-    Camera, ShoppingCart, X, Package, Image, UserCircle2, Scissors, Edit2
+    Camera, ShoppingCart, X, Package, Image, UserCircle2, Scissors, Edit2, FolderOpen
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
