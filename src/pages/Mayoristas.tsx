@@ -858,7 +858,7 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
                                                     variant="outline"
                                                     className="flex-1 h-10 text-xs font-black uppercase tracking-widest border-blue-200 text-blue-600 hover:bg-blue-50 gap-2"
                                                 >
-                                                    <FileText className="w-4 h-4" /> Ver Cr\u00e9ditos
+                                                    <FileText className="w-4 h-4" /> Ver Créditos
                                                 </Button>
                                             </div>
                                         )}
