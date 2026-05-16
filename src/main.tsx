@@ -6,6 +6,10 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { CentinelaProvider } from '@/components/providers/CentinelaProvider'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import './index.css'
+import { NexusDiagnostics } from '@/lib/nexus-diagnostics'
+
+// Exponer herramientas de diagnóstico Nexus
+NexusDiagnostics.expose();
 
 // Antigravity Type-Safety Shield - Blindaje de Tipos
 (function () {

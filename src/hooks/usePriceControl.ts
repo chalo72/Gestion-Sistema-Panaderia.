@@ -21,6 +21,8 @@ import { useFinanzas } from './useFinanzas';
 import { useProduccionHook } from './useProduccionHook';
 import { useVentas } from './useVentas';
 import { useInventario } from './useInventario';
+import { backupService } from '@/lib/backupService';
+import { useRef } from 'react';
 
 import {
   CATEGORIAS_DEFAULT,
@@ -56,6 +58,21 @@ export function usePriceControl() {
 
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [loaded, setLoaded] = useState(false);
+
+  // 📦 PATRÓN: LATEST DATA REF (Soberanía de Datos)
+  const latestDataRef = useRef({ productos, proveedores, precios, configuracion, recetas });
+  useEffect(() => {
+    latestDataRef.current = { productos, proveedores, precios, configuracion, recetas };
+  }, [productos, proveedores, precios, configuracion, recetas]);
+
+  // 🛡️ PATRÓN: DEBOUNCED SIDE EFFECT (Auto-Snapshot de 600ms)
+  useEffect(() => {
+    if (!loaded) return;
+    const timer = setTimeout(() => {
+      backupService.createSnapshot('Auto-Snapshot Sistema', latestDataRef.current);
+    }, 6000); // 6 segundos para no saturar en el ERP
+    return () => clearTimeout(timer);
+  }, [productos, proveedores, precios, configuracion, recetas, loaded]);
 
   // Sub-hooks delegados (Fase 4 de refactoring)
   // onAjustarStock se define más abajo, así que usamos un ref para romper la dependencia circular
