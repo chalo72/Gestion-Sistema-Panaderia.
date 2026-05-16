@@ -97,6 +97,7 @@ export function Sidebar({
         { id: 'ventas',          label: 'Ventas / POS',         icon: ShoppingCart, permission: 'VER_VENTAS' },
         { id: 'historial-ventas',label: 'Historial de Ventas',  icon: History,      permission: 'VER_VENTAS' },
         { id: 'caja',            label: 'Control de Caja',      icon: Wallet,       permission: 'ABRIR_CERRAR_CAJA' },
+        { id: 'clientes',        label: 'Gestión de Clientes',  icon: Users,        permission: 'VER_USUARIOS' },
         { id: 'creditos',        label: 'Créditos a Clientes',  icon: CreditCard,   permission: 'VER_FINANZAS' },
       ],
     },

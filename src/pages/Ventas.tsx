@@ -41,7 +41,8 @@ import type {
     Categoria,
     Mesa,
     PedidoActivo,
-    VentaItem
+    VentaItem,
+    Cliente
 } from '@/types';
 
 // Estado del carrito por pestaña
@@ -74,6 +75,7 @@ interface VentasProps {
     onDeleteMesa?: (id: string) => Promise<void>;
     onAddCreditoCliente?: (credito: any) => Promise<any>;
     creditosClientes?: any[];
+    clientes: Cliente[];
 }
 
 // ID constante para la pestaña de Venta Rápida
@@ -101,7 +103,8 @@ export function Ventas(props: VentasProps) {
         onUpdateProducto,
         onAjustarStock,
         onAddMesa,
-        onDeleteMesa
+        onDeleteMesa,
+        clientes: masterClientes
     } = props;
 
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
@@ -713,7 +716,11 @@ export function Ventas(props: VentasProps) {
                                         className="h-12 text-base rounded-xl border-slate-200" 
                                     />
                                     <datalist id="clientes-pos-list">
-                                        {Array.from(new Set((props.creditosClientes || []).map(c => c.clienteNombre))).map(nombre => (
+                                        {/* Combinar nombres de créditos previos y nombres de la DB maestra */}
+                                        {Array.from(new Set([
+                                            ...(props.creditosClientes || []).map(c => c.clienteNombre),
+                                            ...(masterClientes || []).map(c => c.nombre)
+                                        ])).map(nombre => (
                                             <option key={nombre} value={nombre} />
                                         ))}
                                     </datalist>

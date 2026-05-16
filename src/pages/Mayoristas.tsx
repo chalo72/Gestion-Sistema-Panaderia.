@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Producto, PrecioProveedor } from '@/types';
+import type { Producto, PrecioProveedor, Cliente } from '@/types';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
 
 // ─── Tipos locales ───────────────────────────────────────────────────────────
@@ -33,20 +33,16 @@ interface ClienteMayorista {
 interface MayoristasProps {
     productos: Producto[];
     precios: PrecioProveedor[];
+    clientes: Cliente[];
+    addCliente: (c: any) => Promise<any>;
+    updateCliente: (id: string, updates: any) => Promise<void>;
+    deleteCliente: (id: string) => Promise<void>;
     getMejorPrecio: (productoId: string) => PrecioProveedor | null;
     formatCurrency: (value: number) => string;
     onNavigateTo?: (view: string) => void;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-function cargarClientes(): ClienteMayorista[] {
-    try { return JSON.parse(localStorage.getItem('ag_clientes_mayoristas') || '[]'); }
-    catch { return []; }
-}
-
-function guardarClientes(cs: ClienteMayorista[]) {
-    try { localStorage.setItem('ag_clientes_mayoristas', JSON.stringify(cs)); } catch {}
-}
+// Clientes se manejan por props ahora
 
 function cargarConfig(): { margenNegocio: number; margenRevendedor: number } {
     try { return JSON.parse(localStorage.getItem('ag_mayoristas_config') || '{"margenNegocio":20,"margenRevendedor":25}'); }
@@ -78,7 +74,7 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
-export default function Mayoristas({ productos, precios, getMejorPrecio, formatCurrency, onNavigateTo }: MayoristasProps) {
+export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo }: MayoristasProps) {
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -87,14 +83,17 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
     // Estado de Pestañas
     const [activeTab, setActiveTab] = useState('precios');
 
-    // Clientes mayoristas
-    const [clientes, setClientes] = useState<ClienteMayorista[]>(cargarClientes);
+    // Clientes mayoristas — Filtrados de la DB Maestra
+    const clientes = useMemo(() => {
+        return allClientes.filter(c => c.tipo === 'mayorista');
+    }, [allClientes]);
+
     const [showModalCliente, setShowModalCliente] = useState(false);
-    const [editandoCliente, setEditandoCliente] = useState<ClienteMayorista | null>(null);
-    const [formCliente, setFormCliente] = useState<Partial<ClienteMayorista>>({ tipo: 'tienda' });
-    const [clienteSeleccionado, setClienteSeleccionado] = useState<ClienteMayorista | null>(null);
+    const [editandoCliente, setEditandoCliente] = useState<Cliente | null>(null);
+    const [formCliente, setFormCliente] = useState<Partial<Cliente>>({ tipo: 'mayorista' });
+    const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
     const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
-    const [viendoPerfilCliente, setViendoPerfilCliente] = useState<ClienteMayorista | null>(null);
+    const [viendoPerfilCliente, setViendoPerfilCliente] = useState<Cliente | null>(null);
     const [busquedaPerfil, setBusquedaPerfil] = useState('');
     const [carritoPos, setCarritoPos] = useState<{ productoId: string; nombre: string; precio: number; cantidad: number }[]>([]);
 
@@ -220,23 +219,35 @@ export default function Mayoristas({ productos, precios, getMejorPrecio, formatC
         setShowModalCliente(true);
     };
 
-    const handleGuardarCliente = () => {
+    const handleGuardarCliente = async () => {
         if (!formCliente.nombre?.trim()) { toast.error('El nombre es obligatorio'); return; }
-        const lista = editandoCliente
-            ? clientes.map(c => c.id === editandoCliente.id ? { ...c, ...formCliente } as ClienteMayorista : c)
-            : [...clientes, { id: crypto.randomUUID(), creadoEn: new Date().toISOString(), tipo: 'tienda', ...formCliente } as ClienteMayorista];
-        setClientes(lista);
-        guardarClientes(lista);
-        setShowModalCliente(false);
-        toast.success(editandoCliente ? 'Cliente actualizado' : `"${formCliente.nombre}" agregado`);
+        
+        try {
+            if (editandoCliente) {
+                await updateCliente(editandoCliente.id, formCliente);
+                toast.success('Cliente actualizado');
+            } else {
+                await addCliente({
+                    ...formCliente,
+                    tipo: 'mayorista' // Forzar tipo mayorista al crear desde aquí
+                });
+                toast.success(`"${formCliente.nombre}" agregado`);
+            }
+            setShowModalCliente(false);
+        } catch (error) {
+            toast.error('Error al guardar cliente');
+        }
     };
 
-    const eliminarCliente = (id: string) => {
-        const nuevos = clientes.filter(c => c.id !== id);
-        setClientes(nuevos);
-        guardarClientes(nuevos);
-        if (clienteSeleccionado?.id === id) setClienteSeleccionado(null);
-        toast.success('Cliente eliminado');
+    const eliminarCliente = async (id: string) => {
+        if (!confirm('¿Seguro que quieres eliminar este cliente?')) return;
+        try {
+            await deleteCliente(id);
+            if (clienteSeleccionado?.id === id) setClienteSeleccionado(null);
+            toast.success('Cliente eliminado');
+        } catch (error) {
+            toast.error('Error al eliminar cliente');
+        }
     };
 
     // ── Guardar config de márgenes ───────────────────────────────────────────

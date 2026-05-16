@@ -13,6 +13,7 @@ import type {
   InventarioItem,
   Receta,
   Recepcion,
+  Cliente,
 } from '@/types';
 import { toast } from 'sonner';
 
@@ -57,6 +58,7 @@ export function usePriceControl() {
   const [prepedidos, setPrepedidos] = useState<PrePedido[]>([]);
 
   const [recetas, setRecetas] = useState<Receta[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loaded, setLoaded] = useState(false);
   
   // 🛡️ PATRÓN: BACKUP PENDING (Trigger System)
@@ -64,10 +66,10 @@ export function usePriceControl() {
   const triggerBackup = (trigger: string) => setBackupPending({ ts: Date.now(), trigger });
 
   // 📦 PATRÓN: LATEST DATA REF (Soberanía de Datos)
-  const latestDataRef = useRef({ productos, proveedores, precios, configuracion, recetas });
+  const latestDataRef = useRef({ productos, proveedores, precios, configuracion, recetas, clientes });
   useEffect(() => {
-    latestDataRef.current = { productos, proveedores, precios, configuracion, recetas };
-  }, [productos, proveedores, precios, configuracion, recetas]);
+    latestDataRef.current = { productos, proveedores, precios, configuracion, recetas, clientes };
+  }, [productos, proveedores, precios, configuracion, recetas, clientes]);
 
   // 🛡️ PATRÓN: DEBOUNCED SIDE EFFECT (Auto-Backup Universal de 600ms)
   useEffect(() => {
@@ -310,7 +312,8 @@ export function usePriceControl() {
       const [
         alertas, inventario, movimientos, gastos, recepciones, historial, recetas, 
         ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, 
-        produccion, creditosClientes, creditosTrabajadoresData, trabajadores, prepedidos
+        produccion, creditosClientes, creditosTrabajadoresData, trabajadores, prepedidos,
+        clientesData
       ] = await Promise.all([
         db.getAllAlertas(),
         db.getAllInventario(),
@@ -330,6 +333,7 @@ export function usePriceControl() {
         db.getAllCreditosTrabajadores(),
         db.getAllTrabajadores(),
         db.getAllPrePedidos(),
+        db.getAllClientes(),
       ]);
 
       setAlertas(alertas);
@@ -350,6 +354,7 @@ export function usePriceControl() {
       finanzas.setCreditosClientes(creditosClientes as any);
       finanzas.setCreditosTrabajadores(creditosTrabajadoresData as any);
       finanzas.setTrabajadores(trabajadores as any);
+      setClientes(clientesData);
 
       // Auto-inicializar InventarioItem para productos sin registro
       const idsConInventario = new Set(inventario.map((i: any) => i.productoId));
@@ -798,6 +803,34 @@ export function usePriceControl() {
     setPrepedidos(prev => prev.map(p => p.id === prePedidoId ? updatedPrePedido : p));
   }, [prepedidos]);
 
+  // Funciones de Clientes (CRM)
+  const addCliente = useCallback(async (cliente: Omit<Cliente, 'id' | 'createdAt'>) => {
+    const nuevo: Cliente = {
+      ...cliente,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+    };
+    await db.addCliente(nuevo);
+    setClientes(prev => [...prev, nuevo]);
+    triggerBackup(`add_cliente:${nuevo.nombre}`);
+    return nuevo;
+  }, []);
+
+  const updateCliente = useCallback(async (id: string, updates: Partial<Cliente>) => {
+    const cliente = clientes.find(c => c.id === id);
+    if (!cliente) return;
+    const updated = { ...cliente, ...updates };
+    await db.updateCliente(updated);
+    setClientes(prev => prev.map(c => c.id === id ? updated : c));
+    triggerBackup(`update_cliente:${updated.nombre}`);
+  }, [clientes]);
+
+  const deleteCliente = useCallback(async (id: string) => {
+    await db.deleteCliente(id);
+    setClientes(prev => prev.filter(c => c.id !== id));
+    triggerBackup(`delete_cliente:${id}`);
+  }, []);
+
   // Funciones de Alertas
   const marcarAlertaLeida = useCallback(async (id: string) => {
     const alerta = alertas.find(a => a.id === id);
@@ -1216,6 +1249,9 @@ export function usePriceControl() {
     formatCurrency, getMonedaActual, getPreciosByProducto, getPreciosByProveedor, getMejorPrecio, getMejorPrecioByProveedor,
     generarSugerenciasPedido, getProductoById, getProveedorById, getPrecioByIds, getPrePedidoById, getPrePedidosByProveedor,
     getAlertasNoLeidas, getEstadisticas,
+
+    // --- CRM: CLIENTES ---
+    clientes, addCliente, updateCliente, deleteCliente,
 
     // --- DELEGACIÓN A SUB-HOOK: PRODUCCIÓN ---
     ...produccionHook,

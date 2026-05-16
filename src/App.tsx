@@ -46,6 +46,7 @@ import Reportes from '@/pages/Reportes';
 import Precios from '@/pages/Precios';
 import CargaMasiva from '@/pages/CargaMasiva';
 import ListaPreciosProvincial from '@/pages/ListaPreciosProvincial';
+import Clientes from '@/pages/Clientes';
 
 const App = () => {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -147,7 +148,8 @@ const App = () => {
     addTrabajador,
     updateTrabajador,
     deleteTrabajador,
-    generarReporte
+    generarReporte,
+    clientes,
   } = usePriceControl();
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
@@ -299,6 +301,7 @@ const App = () => {
             creditosClientes={creditosClientes}
             formatCurrency={formatCurrency}
             usuario={user}
+            clientes={clientes}
             categorias={configuracion.categorias}
             onRegistrarMovimientoCaja={registrarMovimientoCaja}
             mesas={[]} // placeholder
@@ -433,7 +436,17 @@ const App = () => {
           />
         );
       case 'mayoristas':
-        return <Mayoristas productos={productos} precios={precios} getMejorPrecio={getMejorPrecio} formatCurrency={formatCurrency} onNavigateTo={(view: any) => setCurrentView(view)} />;
+        return <Mayoristas 
+          productos={productos} 
+          precios={precios} 
+          clientes={clientes} 
+          addCliente={addCliente}
+          updateCliente={updateCliente}
+          deleteCliente={deleteCliente}
+          getMejorPrecio={getMejorPrecio} 
+          formatCurrency={formatCurrency} 
+          onNavigateTo={(view: any) => setCurrentView(view)} 
+        />;
       case 'reportes':
         return (
           <Reportes 
@@ -546,6 +559,8 @@ const App = () => {
         return <Usuarios />;
       case 'agentes-ia':
         return <AgentesIA />;
+      case 'clientes':
+        return <Clientes />;
       case 'login':
         return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
       default:
