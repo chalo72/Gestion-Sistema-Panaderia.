@@ -80,7 +80,7 @@ describe('CAPA 1: Fórmulas de cálculo de precios', () => {
 describe('CAPA 2: addOrUpdatePrecio usa fórmula con costoUnitario', () => {
 
   it('usePriceControl divide precioCosto por cantidadEmbalaje', () => {
-    expect(usePriceControlSrc).toContain('precioCosto / (cantidadEmbalaje || 1)');
+    expect(usePriceControlSrc).toContain('safeNumber(cantidadEmbalaje) || 1)');
   });
 
   it('usePriceControl ajusta precio en subidas Y bajadas (sin "diferencia > 0")', () => {
@@ -91,7 +91,7 @@ describe('CAPA 2: addOrUpdatePrecio usa fórmula con costoUnitario', () => {
   });
 
   it('usePriceControl calcula nuevoPrecioVenta redondeado a centenas', () => {
-    expect(usePriceControlSrc).toContain('Math.round(costoUnitario * (1 + producto.margenUtilidad / 100) / 100) * 100');
+    expect(usePriceControlSrc).toContain('Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100');
   });
 
   it('usePriceControl actualiza costoBase junto con precioVenta', () => {
@@ -146,19 +146,19 @@ describe('CAPA 3: BusquedaRapida sincronizada con precios de proveedor', () => {
 describe('CAPA 4: Proveedores.tsx sincroniza con módulo de productos', () => {
 
   it('handleSubmit llama onAddOrUpdatePrecio con cantidadEmbalaje', () => {
-    expect(proveedoresSrc).toContain('cantidadEmbalaje: item.cantidadEmbalaje');
+    expect(proveedoresSrc).toContain('cantidadEmbalaje: Number(item.cantidadEmbalaje)');
   });
 
   it('handleSubmit actualiza producto con precioVenta del formulario', () => {
-    expect(proveedoresSrc).toContain('precioVenta: item.precioVenta');
+    expect(proveedoresSrc).toContain('precioVenta: Number(item.precioVenta)');
   });
 
   it('handleSubmit actualiza producto con margenUtilidad', () => {
-    expect(proveedoresSrc).toContain('margenUtilidad: item.margenVenta');
+    expect(proveedoresSrc).toContain('margenUtilidad: Number(item.margenVenta)');
   });
 
   it('handleSubmit actualiza producto con costoBase (costo unitario)', () => {
-    expect(proveedoresSrc).toContain('costoBase: item.costoUnitario');
+    expect(proveedoresSrc).toContain('costoBase: Math.round((Number(item.costoUnitario)');
   });
 
   it('handleEdit carga margenVenta REAL del producto (no hardcodeado)', () => {

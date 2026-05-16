@@ -62,8 +62,8 @@ describe('CAPA 2 — CADENA: handleSubmit transmite todos los campos a DB', () =
   
   // Campos que handleSubmit DEBE enviar a onAddOrUpdatePrecio
   const camposPrecio = [
-    'precioCosto: item.precioCosto',
-    'cantidadEmbalaje: item.cantidadEmbalaje',
+    'precioCosto: Math.round((Number(item.precioCosto)',
+    'cantidadEmbalaje: Number(item.cantidadEmbalaje)',
     'tipoEmbalaje: item.tipoEmbalaje',
     'destino: item.destino',
   ];
@@ -77,9 +77,9 @@ describe('CAPA 2 — CADENA: handleSubmit transmite todos los campos a DB', () =
   // Campos que handleSubmit DEBE enviar a onUpdateProducto
   const camposProducto = [
     'nombre: item.nombre',
-    'costoBase: item.costoUnitario',
-    'margenUtilidad: item.margenVenta',
-    'precioVenta: item.precioVenta',
+    'costoBase: Math.round((Number(item.costoUnitario)',
+    'margenUtilidad: Number(item.margenVenta)',
+    'precioVenta: Number(item.precioVenta)',
   ];
   
   camposProducto.forEach(campo => {
@@ -203,11 +203,11 @@ describe('CAPA 5 — CENTINELA: Fórmulas matemáticas blindadas', () => {
 
   // --- Fórmulas de usePriceControl (addOrUpdatePrecio) ---
   it('Hook: costoUnitario = precioCosto / (cantidadEmbalaje || 1)', () => {
-    expect(usePriceControl).toContain('precioCosto / (cantidadEmbalaje || 1)');
+    expect(usePriceControl).toContain('safeNumber(cantidadEmbalaje) || 1)');
   });
 
   it('Hook: nuevoPrecioVenta usa margenUtilidad del producto', () => {
-    expect(usePriceControl).toContain('producto.margenUtilidad / 100');
+    expect(usePriceControl).toContain('(producto.margenUtilidad || 0) / 100');
   });
 
   it('Hook: precio de venta redondeado a centenas', () => {

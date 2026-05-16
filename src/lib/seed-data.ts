@@ -38,6 +38,7 @@ export const CATEGORIAS_DEFAULT: Categoria[] = [
   { id: 'ins-beb-prep', nombre: 'INS: Bebidas Preparadas', color: '#22c55e', icono: '🥤', tipo: 'insumo' },
   { id: 'ins-repo-fria', nombre: 'INS: Repostería Fría', color: '#3b82f6', icono: '🧁', tipo: 'insumo' },
   { id: 'ins-cafe', nombre: 'INS: Cafetería', color: '#8b5cf6', icono: '☕', tipo: 'insumo' },
+  { id: 'ins-hela', nombre: 'INS: Helados', color: '#60a5fa', icono: '🍦', tipo: 'insumo' },
 
   // === MATERIA PRIMA (para inventario/compras) ===
   { id: '3606f157-8df1-419b-a010-0968997e0001', nombre: 'Harinas y Materia Prima', color: '#8b5e3c', icono: '🌾', tipo: 'insumo' },

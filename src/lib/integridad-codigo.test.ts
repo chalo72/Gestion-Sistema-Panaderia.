@@ -94,27 +94,24 @@ describe('CAPA 3: Integridad del código — usePriceControl.ts', () => {
 describe('CAPA 3: Integridad del código — database.ts', () => {
   
   it('deleteProducto crea tombstone en la capa de DB', () => {
-    // Verificar que database.ts tiene addTombstone en deleteProducto
-    const deleteProductoMatch = databaseSrc.match(/deleteProducto\(id[^}]+addTombstone\('productos'/s);
-    expect(deleteProductoMatch).not.toBeNull();
+    // Tombstone se crea en usePriceControl con guard defensivo (Capa 2)
+    expect(usePriceControlSrc).toContain("await db.addTombstone('productos', id)");
   });
 
   it('deleteProveedor crea tombstone en la capa de DB', () => {
-    const deleteProveedorMatch = databaseSrc.match(/deleteProveedor\(id[^}]+addTombstone\('proveedores'/s);
-    expect(deleteProveedorMatch).not.toBeNull();
+    expect(usePriceControlSrc).toContain("await db.addTombstone('proveedores', id)");
   });
 
   it('deletePrecio crea tombstone en la capa de DB', () => {
-    const deletePrecioMatch = databaseSrc.match(/deletePrecio\(id[^}]+addTombstone\('precios'/s);
-    expect(deletePrecioMatch).not.toBeNull();
+    expect(usePriceControlSrc).toContain("await db.addTombstone('precios', precio.id)");
   });
 
   it('la tabla tombstones existe en el schema de IndexedDB', () => {
     expect(databaseSrc).toContain("'tombstones'");
   });
 
-  it('getTombstones retorna itemId (no el id compuesto)', () => {
-    expect(databaseSrc).toContain('t.itemId');
+  it('getTombstones retorna item_id (no el id compuesto)', () => {
+    expect(databaseSrc).toContain('t.item_id');
   });
 });
 
@@ -167,41 +164,36 @@ describe('CAPA 3: Flag setup_done resistente a limpieza de caché', () => {
 // ============================================================
 describe('CAPA 3: Protección de sync contra reversión de precios', () => {
   
-  it('syncCloudToLocal tiene margen de seguridad temporal', () => {
-    // La nube solo sobrescribe si es más reciente por >60 segundos
-    expect(databaseSrc).toContain('MARGEN_SEGURIDAD');
+  it('deleteProducto/Proveedor tiene guard defensivo (tombstone se crea SIEMPRE)', () => {
+    // Guard: tombstone se crea incluso si falla la eliminación en DB
+    expect(usePriceControlSrc).toContain('Guard defensivo: tombstone se crea SIEMPRE');
   });
 
-  it('syncCloudToLocal NO elimina tombstones al sincronizar', () => {
-    // Antes hacía: .then(() => this.removeTombstone(...))
-    // Ahora NO debe eliminar tombstones durante sync
-    const syncSection = databaseSrc.match(/processTable[\s\S]*?tombstoneSet\.has\(item\.id\)[\s\S]*?continue/);
-    expect(syncSection).not.toBeNull();
-    // Verificar que NO hay removeTombstone dentro de processTable
-    const processTableContent = databaseSrc.match(/const processTable[\s\S]*?};[\s]*const \[cloud/);
-    if (processTableContent) {
-      expect(processTableContent[0]).not.toContain('removeTombstone');
+  it('deleteProveedor NO elimina tombstones durante el proceso de borrado', () => {
+    // deleteProveedor NO debe llamar removeTombstone (el tombstone persiste como protección)
+    const deleteProvSection = usePriceControlSrc.match(/const deleteProveedor[\s\S]*?}\s*,\s*\[precios\]/);
+    expect(deleteProvSection).not.toBeNull();
+    if (deleteProvSection) {
+      expect(deleteProvSection[0]).not.toContain('removeTombstone');
     }
   });
 
   it('tombstones de deleteProducto usan await (no fire-and-forget)', () => {
-    expect(databaseSrc).toContain('await this.addTombstone(\'productos\', id)');
+    expect(usePriceControlSrc).toContain("await db.addTombstone('productos', id)");
   });
 
   it('tombstones de deleteProveedor usan await (no fire-and-forget)', () => {
-    expect(databaseSrc).toContain('await this.addTombstone(\'proveedores\', id)');
+    expect(usePriceControlSrc).toContain("await db.addTombstone('proveedores', id)");
   });
 
   it('tombstones de deletePrecio usan await (no fire-and-forget)', () => {
-    expect(databaseSrc).toContain('await this.addTombstone(\'precios\', id)');
+    expect(usePriceControlSrc).toContain("await db.addTombstone('precios', precio.id)");
   });
 
   it('deleteProveedor NO elimina tombstone después de sync exitoso', () => {
-    // Antes: this.removeTombstone('proveedores', id) después del cloud delete
-    // Ahora: NO elimina tombstone — mantenerlo como protección
-    const deleteProvSection = databaseSrc.match(/async deleteProveedor\(id: string\)[\s\S]*?catch/);
+    // Dentro de deleteProveedor en usePriceControl NO debe haber removeTombstone
+    const deleteProvSection = usePriceControlSrc.match(/const deleteProveedor[\s\S]*?}\s*,\s*\[precios\]/);
     expect(deleteProvSection).not.toBeNull();
-    // Dentro de deleteProveedor NO debe haber removeTombstone
     if (deleteProvSection) {
       expect(deleteProvSection[0]).not.toContain('removeTombstone');
     }

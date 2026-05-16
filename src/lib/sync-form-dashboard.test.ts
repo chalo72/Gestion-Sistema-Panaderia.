@@ -94,11 +94,11 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
   });
 
   it('handleSubmit envía precioCosto al crear precio', () => {
-    expect(proveedoresPageSrc).toContain('precioCosto: item.precioCosto');
+    expect(proveedoresPageSrc).toContain('precioCosto: Math.round((Number(item.precioCosto)');
   });
 
   it('handleSubmit envía cantidadEmbalaje al crear precio', () => {
-    expect(proveedoresPageSrc).toContain('cantidadEmbalaje: item.cantidadEmbalaje');
+    expect(proveedoresPageSrc).toContain('cantidadEmbalaje: Number(item.cantidadEmbalaje)');
   });
 
   it('handleSubmit envía tipoEmbalaje al crear precio', () => {
@@ -110,15 +110,15 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
   });
 
   it('handleSubmit actualiza producto con precioVenta del formulario', () => {
-    expect(proveedoresPageSrc).toContain('precioVenta: item.precioVenta');
+    expect(proveedoresPageSrc).toContain('precioVenta: Number(item.precioVenta)');
   });
 
   it('handleSubmit actualiza producto con costoBase unitario', () => {
-    expect(proveedoresPageSrc).toContain('costoBase: item.costoUnitario');
+    expect(proveedoresPageSrc).toContain('costoBase: Math.round((Number(item.costoUnitario)');
   });
 
   it('handleSubmit actualiza producto con margenUtilidad', () => {
-    expect(proveedoresPageSrc).toContain('margenUtilidad: item.margenVenta');
+    expect(proveedoresPageSrc).toContain('margenUtilidad: Number(item.margenVenta)');
   });
 
   it('handleSubmit actualiza producto con la categoría del formulario', () => {
