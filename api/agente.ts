@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
 // ── System prompts del Holding Dulce Placer (20 Agentes) ─────────────────────
 const PROMPTS: Record<string, string> = {
