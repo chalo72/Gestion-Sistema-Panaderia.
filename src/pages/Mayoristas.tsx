@@ -237,15 +237,12 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     const actualizarItemEnPendiente = (ticketId: string, productoId: string, delta: number) => {
         setTicketsPendientes(prev => {
-            const nuevos = prev
-                .map(t => {
-                    if (t.id !== ticketId) return t;
-                    const items = t.items
-                        .map(i => i.productoId === productoId ? { ...i, cantidad: i.cantidad + delta } : i)
-                        .filter(i => i.cantidad > 0);
-                    return { ...t, items };
-                })
-                .filter(t => t.items.length > 0);
+            const nuevos = prev.map(t => {
+                if (t.id !== ticketId) return t;
+                const items = t.items
+                    .map(i => i.productoId === productoId ? { ...i, cantidad: Math.max(1, i.cantidad + delta) } : i);
+                return { ...t, items };
+            });
             localStorage.setItem('ag_tickets_pendientes', JSON.stringify(nuevos));
             return nuevos;
         });
