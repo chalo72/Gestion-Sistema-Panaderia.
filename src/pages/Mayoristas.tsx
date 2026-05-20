@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
     Store, Users, TrendingUp, DollarSign, Package, AlertTriangle,
     CheckCircle2, XCircle, ChevronDown, ChevronUp, Plus, Trash2,
@@ -124,6 +124,22 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const [clienteSeleccionado, setClienteSeleccionado] = useState<Cliente | null>(null);
     const [expandedClienteId, setExpandedClienteId] = useState<string | null>(null);
     const [viendoPerfilCliente, setViendoPerfilCliente] = useState<Cliente | null>(null);
+
+    // Persistir cliente visto en sessionStorage para sobrevivir recarga de página
+    useEffect(() => {
+        if (viendoPerfilCliente) sessionStorage.setItem('ag_viewing_client', viendoPerfilCliente.id);
+        else sessionStorage.removeItem('ag_viewing_client');
+    }, [viendoPerfilCliente]);
+
+    // Restaurar cliente tras recarga cuando allClientes ya cargó
+    useEffect(() => {
+        if (viendoPerfilCliente) return;
+        const savedId = sessionStorage.getItem('ag_viewing_client');
+        if (!savedId) return;
+        const found = allClientes.find(c => c.id === savedId);
+        if (found) setViendoPerfilCliente(found);
+    }, [allClientes]);
+
     const [busquedaPerfil, setBusquedaPerfil] = useState('');
     const [carritoPos, setCarritoPos] = useState<{ productoId: string; nombre: string; precio: number; cantidad: number }[]>([]);
 
