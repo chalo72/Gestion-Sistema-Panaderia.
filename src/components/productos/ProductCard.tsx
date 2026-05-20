@@ -31,7 +31,7 @@ export function ProductCard({
 }: ProductCardProps) {
     return (
         <Card
-            className="group relative overflow-hidden border-none bg-white/40 dark:bg-gray-950/40 backdrop-blur-2xl rounded-[2.5rem] shadow-xl hover:shadow-3xl transition-all duration-700 hover:-translate-y-4 cursor-pointer border border-white/40 dark:border-gray-800/20 active:scale-95"
+            className="group relative overflow-hidden border-none bg-white dark:bg-gray-900 backdrop-blur-2xl rounded-[2.5rem] shadow-xl hover:shadow-3xl transition-all duration-700 hover:-translate-y-4 cursor-pointer border border-slate-200 dark:border-gray-800/60 active:scale-95"
             onClick={() => onExpand(producto.id)}
         >
             <div className="h-36 sm:h-48 bg-slate-100 dark:bg-gray-900 relative overflow-hidden">

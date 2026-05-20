@@ -348,8 +348,8 @@ export default function Productos({
                                                                 {esInsumo ? <Warehouse className="w-5 h-5 text-blue-600" /> : <ChefHat className="w-5 h-5 text-orange-600" />}
                                                             </div>}
                                                         <div>
-                                                            <span className="text-base font-bold block">{producto.nombre}</span>
-                                                            {producto.descripcion && <span className="text-sm text-slate-400 line-clamp-1">{producto.descripcion}</span>}
+                                                            <span className="text-base font-bold text-slate-900 dark:text-white block">{producto.nombre}</span>
+                                                            {producto.descripcion && <span className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{producto.descripcion}</span>}
                                                         </div>
                                                     </div>
                                                 </td>
@@ -359,7 +359,7 @@ export default function Productos({
                                                     </span>
                                                 </td>
                                                 <td className="px-5 py-4"><span className="text-sm font-bold px-3 py-1.5 rounded-lg" style={{ backgroundColor: `${cc}15`, color: cc }}>{producto.categoria}</span></td>
-                                                <td className="px-5 py-4 text-base">{cb > 0 ? <span className="font-bold">{formatCurrency(cb)}</span> : <span className="text-slate-300">—</span>}</td>
+                                                <td className="px-5 py-4 text-base">{cb > 0 ? <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(cb)}</span> : <span className="text-slate-300">—</span>}</td>
                                                 <td className="px-5 py-4 text-base font-bold text-emerald-600">{pv > 0 ? formatCurrency(pv) : <span className="text-slate-300">—</span>}</td>
                                                 <td className="px-5 py-4">{cb > 0 ? <span className={cn("text-sm font-bold px-2.5 py-1 rounded-full", ut >= 30 ? "bg-emerald-50 text-emerald-600" : ut >= 15 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600")}>{ut.toFixed(1)}%</span> : <span className="text-slate-300">—</span>}</td>
                                                 <td className="px-5 py-4">
