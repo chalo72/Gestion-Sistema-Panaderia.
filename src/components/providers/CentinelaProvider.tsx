@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { db } from '@/lib/database';
 import type { DBMisionAgent, DBHallazgoAgente } from '@/lib/database';
 import { consultarAgente } from '@/constants/agentes';
+import { useAutoUpdate } from '@/hooks/useAutoUpdate';
 
 interface CentinelaContextType {
   misionesActivas: DBMisionAgent[];
@@ -17,6 +18,9 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [hallazgos, setHallazgos] = useState<DBHallazgoAgente[]>([]);
   const [isVigilando, setIsVigilando] = useState(false);
   const timerRef = useRef<any>(null);
+
+  // ── Polling de versiones — detecta deploy nuevo y recarga automático ──
+  const { countdown, updateAvailable, recargar } = useAutoUpdate();
 
   // Cargar misiones y hallazgos iniciales
   useEffect(() => {
@@ -116,13 +120,36 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   return (
-    <CentinelaContext.Provider value={{ 
-      misionesActivas, 
-      hallazgos, 
+    <CentinelaContext.Provider value={{
+      misionesActivas,
+      hallazgos,
       ejecutarMisionManual: ejecutarMision,
-      isVigilando 
+      isVigilando
     }}>
       {children}
+      {/* Banner de actualización disponible */}
+      {updateAvailable && (
+        <div
+          style={{
+            position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+            zIndex: 9999, display: 'flex', alignItems: 'center', gap: 12,
+            background: '#4f46e5', color: '#fff', borderRadius: 16,
+            padding: '12px 20px', boxShadow: '0 8px 32px rgba(79,70,229,0.4)',
+            fontSize: 13, fontWeight: 800
+          }}
+        >
+          <span>🔄 Nueva versión disponible{countdown !== null ? ` — recargando en ${countdown}s` : ''}</span>
+          <button
+            onClick={recargar}
+            style={{
+              background: '#fff', color: '#4f46e5', border: 'none', borderRadius: 10,
+              padding: '4px 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer'
+            }}
+          >
+            Actualizar ya
+          </button>
+        </div>
+      )}
     </CentinelaContext.Provider>
   );
 };
