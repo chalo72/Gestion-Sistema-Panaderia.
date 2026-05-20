@@ -150,6 +150,9 @@ const App = () => {
     deleteTrabajador,
     generarReporte,
     clientes,
+    addCliente,
+    updateCliente,
+    deleteCliente,
   } = usePriceControl();
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');

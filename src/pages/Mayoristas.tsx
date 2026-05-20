@@ -1,10 +1,10 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import {
     Store, Users, TrendingUp, DollarSign, Package, AlertTriangle,
     CheckCircle2, XCircle, ChevronDown, ChevronUp, Plus, Trash2,
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
-    Minus, Receipt, Banknote
+    Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -28,6 +28,24 @@ interface ClienteMayorista {
     margenPersonalizado?: number; // override del margen revendedor global
     notas?: string;
     creadoEn: string;
+}
+
+interface TicketPendiente {
+    id: string;
+    clienteId: string;
+    clienteNombre: string;
+    items: { productoId: string; nombre: string; precio: number; cantidad: number }[];
+    guardadoEn: number;
+}
+
+interface HistorialMayorista {
+    id: string;
+    clienteId: string;
+    clienteNombre: string;
+    items: { productoId: string; nombre: string; precio: number; cantidad: number }[];
+    total: number;
+    fecha: number;
+    fotoFactura?: string;
 }
 
 interface MayoristasProps {
@@ -106,14 +124,116 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     };
 
     const actualizarCantidadPos = (productoId: string, delta: number) => {
-        setCarritoPos(prev =>
-            prev.map(i => i.productoId === productoId ? { ...i, cantidad: Math.max(1, i.cantidad + delta) } : i)
-        );
+        setCarritoPos(prev => {
+            const item = prev.find(i => i.productoId === productoId);
+            if (item && item.cantidad + delta <= 0) return prev.filter(i => i.productoId !== productoId);
+            return prev.map(i => i.productoId === productoId ? { ...i, cantidad: i.cantidad + delta } : i);
+        });
     };
 
     const eliminarDelCarrito = (productoId: string) => {
         setCarritoPos(prev => prev.filter(i => i.productoId !== productoId));
     };
+
+    // ── Tickets pendientes (guardados sin cobrar) ────────────────────────────
+    const [ticketsPendientes, setTicketsPendientes] = useState<TicketPendiente[]>(() => {
+        try { return JSON.parse(localStorage.getItem('ag_tickets_pendientes') || '[]'); } catch { return []; }
+    });
+
+    const actualizarTicketsPersistidos = (nuevos: TicketPendiente[]) => {
+        setTicketsPendientes(nuevos);
+        localStorage.setItem('ag_tickets_pendientes', JSON.stringify(nuevos));
+    };
+
+    const guardarTicketPendiente = () => {
+        if (!viendoPerfilCliente || carritoPos.length === 0) return;
+        const nuevo: TicketPendiente = {
+            id: crypto.randomUUID(),
+            clienteId: viendoPerfilCliente.id,
+            clienteNombre: viendoPerfilCliente.nombre,
+            items: [...carritoPos],
+            guardadoEn: Date.now(),
+        };
+        actualizarTicketsPersistidos([...ticketsPendientes, nuevo]);
+        setCarritoPos([]);
+        toast.success('Ticket guardado — retómalo cuando quieras');
+    };
+
+    const retomarTicket = (ticket: TicketPendiente) => {
+        if (carritoPos.length > 0 && !window.confirm('¿Reemplazar el ticket actual con el guardado?')) return;
+        setCarritoPos(ticket.items);
+        actualizarTicketsPersistidos(ticketsPendientes.filter(t => t.id !== ticket.id));
+        toast.success('Ticket retomado');
+    };
+
+    const cancelarTicketPendiente = (ticketId: string) => {
+        if (editandoPendienteId === ticketId) setEditandoPendienteId(null);
+        actualizarTicketsPersistidos(ticketsPendientes.filter(t => t.id !== ticketId));
+        toast.success('Ticket descartado');
+    };
+
+    // ── Historial de ventas mayoristas ───────────────────────────────────────
+    const [historialMayoristas, setHistorialMayoristas] = useState<HistorialMayorista[]>(() => {
+        try { return JSON.parse(localStorage.getItem('ag_historial_mayoristas') || '[]'); } catch { return []; }
+    });
+
+    const guardarEnHistorial = (items: typeof carritoPos, total: number, foto?: string) => {
+        if (!viendoPerfilCliente) return;
+        const nuevo: HistorialMayorista = {
+            id: crypto.randomUUID(),
+            clienteId: viendoPerfilCliente.id,
+            clienteNombre: viendoPerfilCliente.nombre,
+            items: [...items],
+            total,
+            fecha: Date.now(),
+            fotoFactura: foto,
+        };
+        const nuevos = [nuevo, ...historialMayoristas];
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+    };
+
+    // Foto temporal adjunta al carrito actual
+    const [fotoFactura, setFotoFactura] = useState<string | undefined>(undefined);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Edición inline de ticket pendiente
+    const [editandoPendienteId, setEditandoPendienteId] = useState<string | null>(null);
+
+    const actualizarItemEnPendiente = (ticketId: string, productoId: string, delta: number) => {
+        setTicketsPendientes(prev => {
+            const nuevos = prev
+                .map(t => {
+                    if (t.id !== ticketId) return t;
+                    const items = t.items
+                        .map(i => i.productoId === productoId ? { ...i, cantidad: i.cantidad + delta } : i)
+                        .filter(i => i.cantidad > 0);
+                    return { ...t, items };
+                })
+                .filter(t => t.items.length > 0);
+            localStorage.setItem('ag_tickets_pendientes', JSON.stringify(nuevos));
+            return nuevos;
+        });
+    };
+
+    // Dialog de historial
+    const [verHistorial, setVerHistorial] = useState(false);
+
+    // ── Overrides de precio mayorista por producto ───────────────────────────
+    const [preciosOverride, setPreciosOverride] = useState<Record<string, number>>(() => {
+        try { return JSON.parse(localStorage.getItem('ag_precios_mayorista_override') || '{}'); } catch { return {}; }
+    });
+
+    const setOverridePrecio = (productoId: string, precio: number | null) => {
+        const nuevos = { ...preciosOverride };
+        if (precio === null) delete nuevos[productoId];
+        else nuevos[productoId] = precio;
+        setPreciosOverride(nuevos);
+        localStorage.setItem('ag_precios_mayorista_override', JSON.stringify(nuevos));
+    };
+
+    const [editandoPrecioId, setEditandoPrecioId] = useState<string | null>(null);
+    const [tempPrecio, setTempPrecio] = useState('');
 
     const totalCarrito = carritoPos.reduce((s, i) => s + i.precio * i.cantidad, 0);
 
@@ -138,8 +258,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 // Precio mínimo al que la panadería puede vender sin perder
                 const precioMinPanaderia = costo; // sin margen = break-even
 
-                // Precio mayorista con el margen configurado del negocio
-                const precioMayorista = costo * (1 + config.margenNegocio / 100);
+                // Precio mayorista: usa override manual si existe, sino calcula con margen
+                const precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);
+                const precioMayorista = preciosOverride[p.id] ?? precioMayoristaAuto;
+                const tieneOverride = preciosOverride[p.id] !== undefined;
 
                 // Precio de reventa que el cliente puede usar (su margen sobre el mayorista)
                 const precioReventa = precioMayorista * (1 + margenRevendedorEfectivo / 100);
@@ -165,11 +287,16 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 else if (panaderiaGana) viabilidad = 'ajustado';
                 else viabilidad = 'inviable';
 
+                // Comparativa vs precio detal (PVP)
+                const descuentoMonto = pvp - precioMayorista;
+                const descuentoPct = pvp > 0 ? (descuentoMonto / pvp) * 100 : 0;
+
                 return {
                     producto: p,
                     costo,
                     precioMinPanaderia,
                     precioMayorista,
+                    precioMayoristaAuto,
                     precioReventa,
                     pvp,
                     margenPanaderiaReal,
@@ -178,6 +305,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     gananciRevendedorPorUnidad,
                     viabilidad,
                     reventaMenorQuePVP,
+                    tieneOverride,
+                    descuentoMonto,
+                    descuentoPct,
                 };
             })
             .filter((d): d is NonNullable<typeof d> => d !== null)
@@ -186,7 +316,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, soloViables]);
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, soloViables, preciosOverride]);
 
     // Stats del resumen
     const stats = useMemo(() => {
@@ -320,14 +450,28 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             </Badge>
                         </div>
                     </div>
-                    <div className="relative w-56 hidden sm:block">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <Input
-                            placeholder="Buscar producto..."
-                            value={busquedaPerfil}
-                            onChange={e => setBusquedaPerfil(e.target.value)}
-                            className="h-9 pl-9 rounded-xl border-slate-200 bg-slate-50 text-xs font-bold"
-                        />
+                    <div className="flex items-center gap-2">
+                        <div className="relative w-56 hidden sm:block">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                                placeholder="Buscar producto..."
+                                value={busquedaPerfil}
+                                onChange={e => setBusquedaPerfil(e.target.value)}
+                                className="h-9 pl-9 rounded-xl border-slate-200 bg-slate-50 text-xs font-bold"
+                            />
+                        </div>
+                        <button
+                            onClick={() => setVerHistorial(true)}
+                            className="relative w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
+                            title="Ver historial"
+                        >
+                            <History className="w-4 h-4" />
+                            {historialMayoristas.filter(h => h.clienteId === cliente.id).length > 0 && (
+                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                                    {historialMayoristas.filter(h => h.clienteId === cliente.id).length}
+                                </span>
+                            )}
+                        </button>
                     </div>
                 </div>
 
@@ -359,7 +503,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     return (
                                         <Card
                                             key={d.producto.id}
-                                            onClick={() => agregarAlCarrito(d.producto.id, d.producto.nombre, d.precioMayorista)}
+                                            onClick={() => !enCarrito && agregarAlCarrito(d.producto.id, d.producto.nombre, d.precioMayorista)}
                                             className={cn(
                                                 'rounded-2xl border cursor-pointer transition-all hover:shadow-md active:scale-95 flex flex-col',
                                                 enCarrito ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100 bg-white'
@@ -424,6 +568,76 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             </Badge>
                         </div>
 
+                        {/* Tickets pendientes de este cliente */}
+                        {ticketsPendientes.filter(t => t.clienteId === cliente.id).length > 0 && (
+                            <div className="border-b border-slate-100 dark:border-slate-800">
+                                <div className="px-5 py-2 bg-amber-50 dark:bg-amber-950/20 flex items-center gap-1.5">
+                                    <Clock className="w-3 h-3 text-amber-600" />
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">
+                                        Guardados ({ticketsPendientes.filter(t => t.clienteId === cliente.id).length})
+                                    </p>
+                                </div>
+                                {ticketsPendientes.filter(t => t.clienteId === cliente.id).map(ticket => (
+                                    <div key={ticket.id} className="border-b border-slate-50 dark:border-slate-800/50 last:border-0">
+                                        {/* Fila principal */}
+                                        <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-black text-slate-700 dark:text-slate-300">
+                                                    {ticket.items.length} item{ticket.items.length !== 1 ? 's' : ''} · {formatCurrency(ticket.items.reduce((s, i) => s + i.precio * i.cantidad, 0))}
+                                                </p>
+                                                <p className="text-[9px] text-slate-400">
+                                                    {new Date(ticket.guardadoEn).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-1.5 shrink-0">
+                                                <button
+                                                    onClick={() => setEditandoPendienteId(editandoPendienteId === ticket.id ? null : ticket.id)}
+                                                    className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide transition-colors ${editandoPendienteId === ticket.id ? 'bg-slate-200 text-slate-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
+                                                >
+                                                    <Pencil className="w-3 h-3" /> Editar
+                                                </button>
+                                                <button
+                                                    onClick={() => retomarTicket(ticket)}
+                                                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 text-[9px] font-black uppercase tracking-wide transition-colors"
+                                                >
+                                                    <PlayCircle className="w-3 h-3" /> Retomar
+                                                </button>
+                                                <button
+                                                    onClick={() => cancelarTicketPendiente(ticket.id)}
+                                                    className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {/* Modo edición inline */}
+                                        {editandoPendienteId === ticket.id && (
+                                            <div className="px-4 pb-3 space-y-1.5 bg-slate-50 dark:bg-slate-800/30">
+                                                {ticket.items.map(item => (
+                                                    <div key={item.productoId} className="flex items-center gap-2">
+                                                        <p className="flex-1 text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate">{item.nombre}</p>
+                                                        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 px-1 py-0.5">
+                                                            <button onClick={() => actualizarItemEnPendiente(ticket.id, item.productoId, -1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-rose-500">
+                                                                <Minus className="w-3 h-3" />
+                                                            </button>
+                                                            <span className="text-xs font-black w-4 text-center tabular-nums">{item.cantidad}</span>
+                                                            <button onClick={() => actualizarItemEnPendiente(ticket.id, item.productoId, 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-500">
+                                                                <Plus className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                        <p className="text-[11px] font-black text-indigo-600 w-14 text-right tabular-nums">{formatCurrency(item.precio * item.cantidad)}</p>
+                                                    </div>
+                                                ))}
+                                                <p className="text-[10px] font-black text-right text-slate-500 pt-1 border-t border-slate-200 dark:border-slate-700">
+                                                    Total: {formatCurrency(ticket.items.reduce((s, i) => s + i.precio * i.cantidad, 0))}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
                         {/* Lista del carrito */}
                         <ScrollArea className="flex-1 max-h-[40vh] lg:max-h-none">
                             {carritoPos.length === 0 ? (
@@ -456,15 +670,63 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                         {/* Total + Acciones */}
                         <div className="p-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                            {/* Input de cámara oculto */}
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = ev => setFotoFactura(ev.target?.result as string);
+                                    reader.readAsDataURL(file);
+                                    e.target.value = '';
+                                }}
+                            />
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total</span>
                                 <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{formatCurrency(totalCarrito)}</span>
                             </div>
+                            {/* Foto de factura */}
+                            {fotoFactura ? (
+                                <div className="relative">
+                                    <img src={fotoFactura} alt="Factura" className="w-full h-24 object-cover rounded-xl border border-slate-200" />
+                                    <button
+                                        onClick={() => setFotoFactura(undefined)}
+                                        className="absolute top-1.5 right-1.5 w-6 h-6 bg-rose-500 text-white rounded-full flex items-center justify-center shadow-md"
+                                    >
+                                        <X className="w-3 h-3" />
+                                    </button>
+                                    <div className="absolute bottom-1.5 left-2 flex items-center gap-1 bg-black/50 rounded-md px-1.5 py-0.5">
+                                        <ImageIcon className="w-2.5 h-2.5 text-white" />
+                                        <span className="text-[9px] text-white font-bold">Factura adjunta</span>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full h-9 rounded-xl border border-dashed border-slate-300 text-slate-400 hover:border-indigo-300 hover:text-indigo-500 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"
+                                >
+                                    <Camera className="w-3.5 h-3.5" /> Tomar foto de factura
+                                </button>
+                            )}
+                            <Button
+                                disabled={carritoPos.length === 0}
+                                onClick={guardarTicketPendiente}
+                                variant="outline"
+                                className="w-full h-10 rounded-xl font-black uppercase text-xs tracking-widest gap-2 border-amber-200 text-amber-600 hover:bg-amber-50 disabled:opacity-40"
+                            >
+                                <Clock className="w-4 h-4" /> Guardar para después
+                            </Button>
                             <Button
                                 disabled={carritoPos.length === 0}
                                 onClick={() => {
+                                    guardarEnHistorial(carritoPos, totalCarrito, fotoFactura);
                                     toast.success(`Venta registrada para ${cliente.nombre}: ${formatCurrency(totalCarrito)}`);
                                     setCarritoPos([]);
+                                    setFotoFactura(undefined);
                                 }}
                                 className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg shadow-indigo-500/20"
                             >
@@ -482,6 +744,66 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         </div>
                     </div>
                 </div>
+
+            {/* ── Dialog: Historial de ventas ── */}
+            <Dialog open={verHistorial} onOpenChange={setVerHistorial}>
+                <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] flex flex-col">
+                    <DialogHeader className="shrink-0">
+                        <DialogTitle className="font-black uppercase tracking-tight flex items-center gap-2">
+                            <History className="w-5 h-5 text-indigo-600" />
+                            Historial — {cliente.nombre}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="overflow-y-auto flex-1 space-y-3 py-2 pr-1">
+                        {historialMayoristas.filter(h => h.clienteId === cliente.id).length === 0 ? (
+                            <div className="flex flex-col items-center py-12 text-center">
+                                <History className="w-10 h-10 text-slate-200 mb-3" />
+                                <p className="text-sm font-bold text-slate-400">Sin ventas registradas</p>
+                                <p className="text-xs text-slate-400 mt-1">Las ventas confirmadas aparecerán aquí con fecha y foto</p>
+                            </div>
+                        ) : (
+                            historialMayoristas.filter(h => h.clienteId === cliente.id).map(h => (
+                                <Card key={h.id} className="rounded-2xl border-slate-100 dark:border-slate-700 overflow-hidden">
+                                    <CardContent className="p-4 space-y-3">
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <p className="text-xs font-black text-slate-900 dark:text-white">
+                                                    {new Date(h.fecha).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                                </p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                                    {new Date(h.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                            </div>
+                                            <span className="text-lg font-black text-indigo-600 tabular-nums">{formatCurrency(h.total)}</span>
+                                        </div>
+                                        <div className="space-y-1 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3">
+                                            {h.items.map(item => (
+                                                <div key={item.productoId} className="flex justify-between text-xs">
+                                                    <span className="text-slate-600 dark:text-slate-400 truncate flex-1">{item.nombre} × {item.cantidad}</span>
+                                                    <span className="font-bold text-slate-900 dark:text-white ml-3 tabular-nums shrink-0">{formatCurrency(item.precio * item.cantidad)}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        {h.fotoFactura && (
+                                            <div>
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5 flex items-center gap-1">
+                                                    <ImageIcon className="w-3 h-3" /> Factura
+                                                </p>
+                                                <img
+                                                    src={h.fotoFactura}
+                                                    alt="Factura"
+                                                    className="w-full h-44 object-cover rounded-xl border border-slate-200 cursor-pointer hover:opacity-90 transition-opacity"
+                                                    onClick={() => window.open(h.fotoFactura)}
+                                                />
+                                            </div>
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            ))
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
             </div>
         );
     }
@@ -714,8 +1036,32 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     <p className="text-xs font-black text-slate-600 dark:text-slate-400 tabular-nums">{formatCurrency(d.costo)}</p>
                                                 </div>
                                                 <div className="text-center">
-                                                    <p className="text-[8px] font-black uppercase tracking-widest text-indigo-500">Mayorista</p>
-                                                    <p className="text-sm font-black text-indigo-600 tabular-nums">{formatCurrency(d.precioMayorista)}</p>
+                                                    <p className="text-[8px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-1 justify-center">
+                                                        Mayorista {d.tieneOverride && <span className="text-amber-500 text-[10px]">✎</span>}
+                                                    </p>
+                                                    {editandoPrecioId === d.producto.id ? (
+                                                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                                            <input
+                                                                type="number"
+                                                                value={tempPrecio}
+                                                                onChange={e => setTempPrecio(e.target.value)}
+                                                                onKeyDown={e => {
+                                                                    if (e.key === 'Enter') { const v = parseFloat(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }
+                                                                    if (e.key === 'Escape') setEditandoPrecioId(null);
+                                                                }}
+                                                                autoFocus
+                                                                className="w-20 h-7 text-xs font-black text-center border border-indigo-400 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                                                                step="0.01" min="0"
+                                                            />
+                                                            <button onClick={e => { e.stopPropagation(); const v = parseFloat(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3.5 h-3.5" /></button>
+                                                            <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(null); }} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="flex items-center gap-1 justify-center">
+                                                            <p className={`text-sm font-black tabular-nums ${d.tieneOverride ? 'text-amber-600' : 'text-indigo-600'}`}>{formatCurrency(d.precioMayorista)}</p>
+                                                            <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(d.producto.id); setTempPrecio(String(d.precioMayorista)); }} className="text-slate-300 hover:text-indigo-500 transition-colors"><Pencil className="w-3 h-3" /></button>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <div className="text-center">
                                                     <p className="text-[8px] font-black uppercase tracking-widest text-emerald-500">Reventa</p>
@@ -758,6 +1104,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                             {d.reventaMenorQuePVP ? '✓ Competitivo vs PVP' : '⚠ Cerca del PVP'}
                                                         </p>
                                                     </div>
+                                                </div>
+
+                                                {/* Comparativa Detal vs Mayor */}
+                                                <div className="mt-4 p-4 rounded-2xl bg-white/80 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-1.5">
+                                                        📊 Comparativa Detal vs Mayor
+                                                    </p>
+                                                    <div className="flex items-center gap-3 flex-wrap">
+                                                        <div className="text-center px-4 py-2 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                                                            <p className="text-[8px] font-black text-slate-400 uppercase">PVP (Detal)</p>
+                                                            <p className="text-lg font-black text-slate-700 dark:text-slate-200 tabular-nums">{formatCurrency(d.pvp)}</p>
+                                                        </div>
+                                                        <ArrowRight className="w-4 h-4 text-slate-300 shrink-0" />
+                                                        <div className={`text-center px-4 py-2 rounded-xl border ${d.tieneOverride ? 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800' : 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800'}`}>
+                                                            <p className={`text-[8px] font-black uppercase ${d.tieneOverride ? 'text-amber-500' : 'text-indigo-500'}`}>Al Mayor</p>
+                                                            <p className={`text-lg font-black tabular-nums ${d.tieneOverride ? 'text-amber-600 dark:text-amber-400' : 'text-indigo-600 dark:text-indigo-400'}`}>{formatCurrency(d.precioMayorista)}</p>
+                                                        </div>
+                                                        <ArrowRight className="w-4 h-4 text-slate-300 shrink-0" />
+                                                        <div className={`text-center px-4 py-2 rounded-xl border ${d.descuentoMonto > 0 ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800' : 'bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800'}`}>
+                                                            <p className={`text-[8px] font-black uppercase ${d.descuentoMonto > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>Descuento</p>
+                                                            <p className={`text-lg font-black tabular-nums ${d.descuentoMonto > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                                                {d.descuentoMonto > 0 ? '-' : '+'}{formatCurrency(Math.abs(d.descuentoMonto))}
+                                                            </p>
+                                                            <p className={`text-[9px] font-black ${d.descuentoMonto > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                                                ({Math.abs(d.descuentoPct).toFixed(1)}% {d.descuentoMonto > 0 ? 'dto' : 'por encima'})
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    {d.tieneOverride && (
+                                                        <div className="mt-2 flex items-center justify-between">
+                                                            <p className="text-[9px] text-amber-600 font-bold">✎ Precio manual (auto: {formatCurrency(d.precioMayoristaAuto)})</p>
+                                                            <button
+                                                                onClick={e => { e.stopPropagation(); setOverridePrecio(d.producto.id, null); }}
+                                                                className="text-[9px] font-black text-rose-400 hover:text-rose-600 uppercase transition-colors"
+                                                            >
+                                                                Restablecer auto
+                                                            </button>
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Mensaje de viabilidad */}
