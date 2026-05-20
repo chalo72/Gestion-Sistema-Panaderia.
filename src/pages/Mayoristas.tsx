@@ -1329,8 +1329,28 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             <p className="text-xs text-muted-foreground mt-1">Agrega costos en el catálogo de Productos o registra precios de proveedores</p>
                         </div>
                     ) : (
-                        <div className="space-y-3">
-                            {tablaDatos.map(d => {
+                        <div className="space-y-6">
+                            {(() => {
+                                // Agrupar por categoría manteniendo el orden
+                                const grupos: Record<string, typeof tablaDatos> = {};
+                                tablaDatos.forEach(d => {
+                                    const cat = d.producto.categoria || 'Sin categoría';
+                                    if (!grupos[cat]) grupos[cat] = [];
+                                    grupos[cat].push(d);
+                                });
+                                return Object.entries(grupos).map(([categoria, items]) => (
+                                    <div key={categoria}>
+                                        {/* Encabezado de categoría */}
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="flex items-center gap-2 bg-indigo-50 dark:bg-indigo-950/30 px-3 py-1.5 rounded-xl border border-indigo-100 dark:border-indigo-800">
+                                                <Package className="w-3.5 h-3.5 text-indigo-500" />
+                                                <span className="text-xs font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">{categoria}</span>
+                                                <span className="text-[10px] font-bold text-indigo-400 bg-indigo-100 dark:bg-indigo-900 px-1.5 py-0.5 rounded-full">{items.length}</span>
+                                            </div>
+                                            <div className="flex-1 h-px bg-slate-100 dark:bg-slate-800" />
+                                        </div>
+                                        <div className="space-y-3">
+                                        {items.map(d => {
                                 const vConf = VIABILIDAD_CONFIG[d.viabilidad];
                                 const VIcon = vConf.icon;
                                 const isOpen = expandido === d.producto.id;
@@ -1484,6 +1504,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     </Card>
                                 );
                             })}
+                                        </div>
+                                    </div>
+                                ));
+                            })()}
                         </div>
                     )}
                 </TabsContent>
