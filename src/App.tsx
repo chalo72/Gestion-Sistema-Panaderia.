@@ -307,12 +307,14 @@ const App = () => {
             clientes={clientes}
             categorias={configuracion.categorias}
             onRegistrarMovimientoCaja={registrarMovimientoCaja}
-            mesas={[]} // placeholder
+            mesas={[]}
             pedidosActivos={pedidosActivos}
-            onUpdateMesa={async (m) => {}} // Placeholder
+            onUpdateMesa={async (_m) => {}}
             onAddPedidoActivo={onAddPedidoActivo}
             onUpdatePedidoActivo={onUpdatePedidoActivo}
             onDeletePedidoActivo={onDeletePedidoActivo}
+            onUpdateProducto={async (id, updates) => { updateProducto(id, updates); }}
+            onAjustarStock={onAjustarStock}
           />
         );
       case 'caja':
@@ -563,7 +565,12 @@ const App = () => {
       case 'agentes-ia':
         return <AgentesIA />;
       case 'clientes':
-        return <Clientes />;
+        return <Clientes
+          clientesExternos={clientes}
+          onAddCliente={addCliente}
+          onUpdateCliente={updateCliente}
+          onDeleteCliente={deleteCliente}
+        />;
       case 'login':
         return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
       default:

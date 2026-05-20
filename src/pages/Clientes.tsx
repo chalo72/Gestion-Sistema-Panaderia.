@@ -27,11 +27,18 @@ const TIPO_CLIENTE_CONFIG: Record<ClienteTipo, { label: string; color: string; b
   mayorista: { label: 'Mayorista', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-950/30', icon: BadgeCheck },
 };
 
-export default function Clientes() {
+interface ClientesProps {
+  clientesExternos?: Cliente[];
+  onAddCliente?: (c: Omit<Cliente, 'id' | 'createdAt'> & Partial<Cliente>) => Promise<any>;
+  onUpdateCliente?: (id: string, updates: Partial<Cliente>) => Promise<void>;
+  onDeleteCliente?: (id: string) => Promise<void>;
+}
+
+export default function Clientes({ clientesExternos, onAddCliente, onUpdateCliente, onDeleteCliente }: ClientesProps = {}) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [busqueda, setBusqueda] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!clientesExternos);
   
   // Estado para el Modal
   const [showModal, setShowModal] = useState(false);
@@ -47,9 +54,17 @@ export default function Clientes() {
     notas: ''
   });
 
-  // Carga inicial
+  // Si hay datos externos, sincronizarlos directamente
   useEffect(() => {
-    cargarClientes();
+    if (clientesExternos) {
+      setClientes(clientesExternos);
+      setLoading(false);
+    }
+  }, [clientesExternos]);
+
+  // Carga inicial desde db solo si no hay datos externos
+  useEffect(() => {
+    if (!clientesExternos) cargarClientes();
   }, []);
 
   const cargarClientes = async () => {
@@ -105,15 +120,17 @@ export default function Clientes() {
       };
 
       if (editando) {
-        await db.updateCliente(payload);
+        if (onUpdateCliente) await onUpdateCliente(payload.id, payload);
+        else await db.updateCliente(payload);
         toast.success('Cliente actualizado correctamente');
       } else {
-        await db.addCliente(payload);
+        if (onAddCliente) await onAddCliente(payload);
+        else await db.addCliente(payload);
         toast.success('Cliente registrado exitosamente');
       }
 
       setShowModal(false);
-      cargarClientes();
+      if (!clientesExternos) cargarClientes();
     } catch (error) {
       toast.error('Error al guardar el cliente');
     }
@@ -123,9 +140,10 @@ export default function Clientes() {
     if (!confirm('¿Estás seguro de eliminar este cliente?')) return;
     
     try {
-      await db.deleteCliente(id);
+      if (onDeleteCliente) await onDeleteCliente(id);
+      else await db.deleteCliente(id);
       toast.success('Cliente eliminado');
-      cargarClientes();
+      if (!clientesExternos) cargarClientes();
     } catch (error) {
       toast.error('Error al eliminar cliente');
     }

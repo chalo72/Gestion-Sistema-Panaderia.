@@ -19,6 +19,7 @@ import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { cn } from '@/lib/utils';
 import type { Producto, AlertaPrecio } from '@/types';
 import { FindingsFeed } from '@/components/agentes/FindingsFeed';
+import { FinancialDashboard } from '@/components/FinancialDashboard';
 
 // Fallback preventivo (Hoisted safe)
 const LayoutList = LayoutListIcon || Package;
@@ -194,6 +195,15 @@ export default function Dashboard(props: DashboardProps) {
           );
         })}
       </div>
+
+      {/* ═══ Resumen Financiero (Yimi-Style) ═══ */}
+      <FinancialDashboard
+        totalSales={estadisticas.ventasHoy}
+        totalRevenue={estadisticas.ingresosHoy}
+        activeOrders={estadisticas.ventasHoy}
+        totalCustomers={estadisticas.totalProveedores}
+        averageOrderValue={estadisticas.ticketPromedio}
+      />
 
       {/* ═══ Sección Mixta: Inteligencia CLAW & Alertas ═══ */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
