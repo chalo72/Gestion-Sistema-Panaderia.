@@ -603,14 +603,100 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             />
                         </div>
 
+                        {/* ── Créditos pendientes del cliente ── */}
+                        {(() => {
+                            const histCliente = historialMayoristas.filter(h => h.clienteId === cliente.id);
+                            const creditosPendientes = histCliente.filter(h => {
+                                const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                return h.metodoPago === 'credito' && h.total - abonado > 0;
+                            });
+                            const totalDeuda = creditosPendientes.reduce((s, h) => {
+                                const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
+                                return s + (h.total - abonado);
+                            }, 0);
+                            if (creditosPendientes.length === 0) return null;
+                            return (
+                                <div className="bg-rose-50 dark:bg-rose-950/20 rounded-2xl border border-rose-200 dark:border-rose-800 p-4 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <Banknote className="w-4 h-4 text-rose-600" />
+                                            <p className="text-xs font-black uppercase tracking-widest text-rose-700 dark:text-rose-400">
+                                                Créditos Pendientes ({creditosPendientes.length})
+                                            </p>
+                                        </div>
+                                        <p className="text-base font-black text-rose-600 tabular-nums">{formatCurrency(totalDeuda)}</p>
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        {creditosPendientes.map(h => {
+                                            const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                            const saldo = h.total - abonado;
+                                            return (
+                                                <div key={h.id} className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-xl px-3 py-2">
+                                                    <div>
+                                                        <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                                                            {new Date(h.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
+                                                        </p>
+                                                        <p className="text-[9px] text-slate-400">{h.items.length} productos · total {formatCurrency(h.total)}</p>
+                                                        {abonado > 0 && <p className="text-[9px] text-emerald-600">Abonado: {formatCurrency(abonado)}</p>}
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-sm font-black text-rose-600 tabular-nums">Debe: {formatCurrency(saldo)}</p>
+                                                        {abonandoId === h.id ? (
+                                                            <div className="flex items-center gap-1">
+                                                                <Input
+                                                                    type="number"
+                                                                    value={montoAbono}
+                                                                    onChange={e => setMontoAbono(e.target.value)}
+                                                                    placeholder="Monto"
+                                                                    className="w-24 h-7 text-xs rounded-lg"
+                                                                    autoFocus
+                                                                />
+                                                                <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-7 px-2 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black hover:bg-emerald-200">✓ Efectivo</button>
+                                                                <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-7 px-2 rounded-lg bg-violet-100 text-violet-700 text-[9px] font-black hover:bg-violet-200">Nequi</button>
+                                                                <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200">
+                                                                    <X className="w-3 h-3 text-slate-500" />
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <button
+                                                                onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }}
+                                                                className="h-7 px-3 rounded-xl bg-rose-100 text-rose-700 text-[9px] font-black uppercase hover:bg-rose-200 transition-colors"
+                                                            >
+                                                                + Abono
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            );
+                        })()}
+
                         {productosPerfil.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-24 text-center bg-white rounded-2xl border border-dashed border-slate-200">
                                 <Package className="w-12 h-12 text-slate-200 mb-3" />
                                 <p className="text-xs font-black uppercase tracking-widest text-slate-400">Sin productos disponibles</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
-                                {productosPerfil.map(d => {
+                            <div className="space-y-4">
+                                {Object.entries(
+                                    productosPerfil.reduce((acc, d) => {
+                                        const cat = d.producto.categoria || 'Sin categoría';
+                                        if (!acc[cat]) acc[cat] = [];
+                                        acc[cat].push(d);
+                                        return acc;
+                                    }, {} as Record<string, typeof productosPerfil>)
+                                ).map(([categoria, items]) => (
+                                    <div key={categoria}>
+                                        <div className="flex items-center gap-2 mb-2 px-1">
+                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">{categoria}</span>
+                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                                        {items.map(d => {
                                     const enCarrito = carritoPos.find(i => i.productoId === d.producto.id);
                                     return (
                                         <Card
@@ -658,6 +744,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         </Card>
                                     );
                                 })}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </div>
