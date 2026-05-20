@@ -255,6 +255,48 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         toast.success(`Abono de ${formatCurrency(monto)} registrado`);
     };
 
+    // Foto adjunta a entrada del historial (después de guardar)
+    const historialFileInputRef = useRef<HTMLInputElement>(null);
+    const [adjuntandoFotoHistorialId, setAdjuntandoFotoHistorialId] = useState<string | null>(null);
+
+    const adjuntarFotoHistorial = (historialId: string, foto: string) => {
+        const nuevos = historialMayoristas.map(h => h.id === historialId ? { ...h, fotoFactura: foto } : h);
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        toast.success('Foto adjuntada');
+    };
+
+    // Edición de ítems en entrada del historial (crédito)
+    const [editandoHistorialId, setEditandoHistorialId] = useState<string | null>(null);
+
+    const actualizarItemEnHistorial = (historialId: string, productoId: string, delta: number) => {
+        const nuevos = historialMayoristas.map(h => {
+            if (h.id !== historialId) return h;
+            const items = h.items
+                .map(i => i.productoId === productoId ? { ...i, cantidad: i.cantidad + delta } : i)
+                .filter(i => i.cantidad > 0);
+            const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+            return { ...h, items, total };
+        }).filter(h => h.items.length > 0);
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+    };
+
+    // Cambiar fecha de una entrada del historial
+    const [editandoFechaHistorialId, setEditandoFechaHistorialId] = useState<string | null>(null);
+    const [fechaHistorialTemp, setFechaHistorialTemp] = useState('');
+
+    const guardarFechaHistorial = (historialId: string) => {
+        if (!fechaHistorialTemp) return;
+        const nuevaFecha = new Date(fechaHistorialTemp).getTime();
+        if (isNaN(nuevaFecha)) { toast.error('Fecha inválida'); return; }
+        const nuevos = historialMayoristas.map(h => h.id === historialId ? { ...h, fecha: nuevaFecha } : h);
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        setEditandoFechaHistorialId(null);
+        toast.success('Fecha actualizada');
+    };
+
     // ── Overrides de precio mayorista por producto ───────────────────────────
     const [preciosOverride, setPreciosOverride] = useState<Record<string, number>>(() => {
         try { return JSON.parse(localStorage.getItem('ag_precios_mayorista_override') || '{}'); } catch { return {}; }
@@ -706,6 +748,25 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                         {/* Total + Acciones */}
                         <div className="p-5 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                            {/* Input cámara para historial existente */}
+                            <input
+                                ref={historialFileInputRef}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="hidden"
+                                onChange={e => {
+                                    const file = e.target.files?.[0];
+                                    if (!file || !adjuntandoFotoHistorialId) return;
+                                    const reader = new FileReader();
+                                    reader.onload = ev => {
+                                        adjuntarFotoHistorial(adjuntandoFotoHistorialId, ev.target?.result as string);
+                                        setAdjuntandoFotoHistorialId(null);
+                                    };
+                                    reader.readAsDataURL(file);
+                                    e.target.value = '';
+                                }}
+                            />
                             {/* Input de cámara oculto */}
                             <input
                                 ref={fileInputRef}
@@ -848,15 +909,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 return (
                                 <Card key={h.id} className={`rounded-2xl overflow-hidden ${esCreditoPendiente ? 'border-rose-200 dark:border-rose-800' : 'border-slate-100 dark:border-slate-700'}`}>
                                     <CardContent className="p-4 space-y-3">
-                                        {/* Encabezado: fecha + método + total */}
+                                        {/* Encabezado: fecha editable + método + total */}
                                         <div className="flex items-start justify-between gap-2">
-                                            <div>
-                                                <p className="text-xs font-black text-slate-900 dark:text-white">
-                                                    {new Date(h.fecha).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                                                </p>
-                                                <p className="text-[10px] text-slate-400 mt-0.5">
-                                                    {new Date(h.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
+                                            <div className="flex-1">
+                                                {editandoFechaHistorialId === h.id ? (
+                                                    <div className="flex items-center gap-1.5">
+                                                        <input
+                                                            type="datetime-local"
+                                                            value={fechaHistorialTemp}
+                                                            onChange={e => setFechaHistorialTemp(e.target.value)}
+                                                            className="flex-1 h-8 rounded-lg border border-indigo-300 bg-white dark:bg-slate-800 px-2 text-xs font-bold focus:outline-none focus:border-indigo-500"
+                                                            autoFocus
+                                                        />
+                                                        <button onClick={() => guardarFechaHistorial(h.id)} className="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center hover:bg-indigo-200 transition-colors">
+                                                            <Check className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button onClick={() => setEditandoFechaHistorialId(null)} className="w-7 h-7 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 transition-colors">
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        className="text-left group"
+                                                        onClick={() => {
+                                                            const d = new Date(h.fecha);
+                                                            const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                                                            setFechaHistorialTemp(local);
+                                                            setEditandoFechaHistorialId(h.id);
+                                                        }}
+                                                        title="Toca para cambiar la fecha"
+                                                    >
+                                                        <p className="text-xs font-black text-slate-900 dark:text-white group-hover:text-indigo-600 transition-colors">
+                                                            {new Date(h.fecha).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                                                            <Pencil className="inline w-2.5 h-2.5 ml-1 opacity-0 group-hover:opacity-40" />
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400 mt-0.5">
+                                                            {new Date(h.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                                        </p>
+                                                    </button>
+                                                )}
                                                 <span className={`inline-block mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${metodoBadge.cls}`}>
                                                     {metodoBadge.label}
                                                 </span>
@@ -871,14 +962,37 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             </div>
                                         </div>
 
-                                        {/* Ítems */}
+                                        {/* Ítems (editables) */}
                                         <div className="space-y-1 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3">
                                             {h.items.map(item => (
-                                                <div key={item.productoId} className="flex justify-between text-xs">
-                                                    <span className="text-slate-600 dark:text-slate-400 truncate flex-1">{item.nombre} × {item.cantidad}</span>
-                                                    <span className="font-bold text-slate-900 dark:text-white ml-3 tabular-nums shrink-0">{formatCurrency(item.precio * item.cantidad)}</span>
+                                                <div key={item.productoId} className="flex items-center gap-2 text-xs">
+                                                    <span className="text-slate-600 dark:text-slate-400 truncate flex-1">{item.nombre}</span>
+                                                    {editandoHistorialId === h.id ? (
+                                                        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 px-1 py-0.5 shrink-0">
+                                                            <button onClick={() => actualizarItemEnHistorial(h.id, item.productoId, -1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-rose-500">
+                                                                <Minus className="w-3 h-3" />
+                                                            </button>
+                                                            <span className="font-black w-4 text-center tabular-nums">{item.cantidad}</span>
+                                                            <button onClick={() => actualizarItemEnHistorial(h.id, item.productoId, 1)} className="w-5 h-5 flex items-center justify-center text-slate-400 hover:text-indigo-500">
+                                                                <Plus className="w-3 h-3" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-500 shrink-0">× {item.cantidad}</span>
+                                                    )}
+                                                    <span className="font-bold text-slate-900 dark:text-white tabular-nums shrink-0">{formatCurrency(item.precio * item.cantidad)}</span>
                                                 </div>
                                             ))}
+                                            <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700 mt-1">
+                                                <button
+                                                    onClick={() => setEditandoHistorialId(editandoHistorialId === h.id ? null : h.id)}
+                                                    className={`text-[9px] font-black uppercase tracking-wide flex items-center gap-1 transition-colors ${editandoHistorialId === h.id ? 'text-indigo-600' : 'text-slate-400 hover:text-indigo-500'}`}
+                                                >
+                                                    <Pencil className="w-2.5 h-2.5" />
+                                                    {editandoHistorialId === h.id ? 'Listo' : 'Editar cantidades'}
+                                                </button>
+                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 tabular-nums">Total: {formatCurrency(h.total)}</span>
+                                            </div>
                                         </div>
 
                                         {/* Abonos registrados */}
@@ -948,11 +1062,19 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         )}
 
                                         {/* Foto de factura */}
-                                        {h.fotoFactura && (
+                                        {h.fotoFactura ? (
                                             <div>
-                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5 flex items-center gap-1">
-                                                    <ImageIcon className="w-3 h-3" /> Factura adjunta
-                                                </p>
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                                                        <ImageIcon className="w-3 h-3" /> Factura adjunta
+                                                    </p>
+                                                    <button
+                                                        onClick={() => { setAdjuntandoFotoHistorialId(h.id); historialFileInputRef.current?.click(); }}
+                                                        className="text-[9px] font-black text-slate-400 hover:text-indigo-500 uppercase transition-colors"
+                                                    >
+                                                        Cambiar
+                                                    </button>
+                                                </div>
                                                 <img
                                                     src={h.fotoFactura}
                                                     alt="Factura"
@@ -960,6 +1082,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     onClick={() => window.open(h.fotoFactura)}
                                                 />
                                             </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => { setAdjuntandoFotoHistorialId(h.id); historialFileInputRef.current?.click(); }}
+                                                className="w-full h-8 rounded-xl border border-dashed border-slate-300 text-slate-400 hover:border-indigo-300 hover:text-indigo-500 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"
+                                            >
+                                                <Camera className="w-3.5 h-3.5" /> Adjuntar foto de factura
+                                            </button>
                                         )}
                                     </CardContent>
                                 </Card>
