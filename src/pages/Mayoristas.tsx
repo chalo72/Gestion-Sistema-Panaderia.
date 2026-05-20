@@ -4,7 +4,8 @@ import {
     CheckCircle2, XCircle, ChevronDown, ChevronUp, Plus, Trash2,
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
-    Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon
+    Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon,
+    Smartphone, CreditCard, PlusCircle, ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -30,6 +31,15 @@ interface ClienteMayorista {
     creadoEn: string;
 }
 
+type MetodoPago = 'efectivo' | 'nequi' | 'credito';
+
+interface Abono {
+    id: string;
+    monto: number;
+    fecha: number;
+    metodoPago: MetodoPago;
+}
+
 interface TicketPendiente {
     id: string;
     clienteId: string;
@@ -46,6 +56,8 @@ interface HistorialMayorista {
     total: number;
     fecha: number;
     fotoFactura?: string;
+    metodoPago?: MetodoPago;
+    abonos?: Abono[];
 }
 
 interface MayoristasProps {
@@ -177,7 +189,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         try { return JSON.parse(localStorage.getItem('ag_historial_mayoristas') || '[]'); } catch { return []; }
     });
 
-    const guardarEnHistorial = (items: typeof carritoPos, total: number, foto?: string) => {
+    const guardarEnHistorial = (items: typeof carritoPos, total: number, foto?: string, metodo?: MetodoPago) => {
         if (!viendoPerfilCliente) return;
         const nuevo: HistorialMayorista = {
             id: crypto.randomUUID(),
@@ -187,6 +199,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             total,
             fecha: Date.now(),
             fotoFactura: foto,
+            metodoPago: metodo ?? 'efectivo',
+            abonos: metodo === 'credito' ? [] : undefined,
         };
         const nuevos = [nuevo, ...historialMayoristas];
         setHistorialMayoristas(nuevos);
@@ -218,6 +232,28 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // Dialog de historial
     const [verHistorial, setVerHistorial] = useState(false);
+
+    // Forma de pago seleccionada en el mini-POS
+    const [metodoPagoSeleccionado, setMetodoPagoSeleccionado] = useState<MetodoPago>('efectivo');
+
+    // Abonos en historial
+    const [abonandoId, setAbonandoId] = useState<string | null>(null);
+    const [montoAbono, setMontoAbono] = useState('');
+
+    const registrarAbono = (historialId: string, metodo: MetodoPago) => {
+        const monto = parseFloat(montoAbono);
+        if (isNaN(monto) || monto <= 0) { toast.error('Ingresa un monto válido'); return; }
+        const nuevos = historialMayoristas.map(h => {
+            if (h.id !== historialId) return h;
+            const abonos: Abono[] = [...(h.abonos ?? []), { id: crypto.randomUUID(), monto, fecha: Date.now(), metodoPago: metodo }];
+            return { ...h, abonos };
+        });
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        setAbonandoId(null);
+        setMontoAbono('');
+        toast.success(`Abono de ${formatCurrency(monto)} registrado`);
+    };
 
     // ── Overrides de precio mayorista por producto ───────────────────────────
     const [preciosOverride, setPreciosOverride] = useState<Record<string, number>>(() => {
@@ -586,7 +622,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     {ticket.items.length} item{ticket.items.length !== 1 ? 's' : ''} · {formatCurrency(ticket.items.reduce((s, i) => s + i.precio * i.cantidad, 0))}
                                                 </p>
                                                 <p className="text-[9px] text-slate-400">
-                                                    {new Date(ticket.guardadoEn).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                                    {new Date(ticket.guardadoEn).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(ticket.guardadoEn).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
                                             </div>
                                             <div className="flex gap-1.5 shrink-0">
@@ -720,17 +756,55 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             >
                                 <Clock className="w-4 h-4" /> Guardar para después
                             </Button>
+                            {/* Selector de método de pago */}
+                            <div>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Forma de pago</p>
+                                <div className="grid grid-cols-3 gap-1.5">
+                                    {([
+                                        { id: 'efectivo', label: 'Efectivo', Icon: Banknote, color: 'emerald' },
+                                        { id: 'nequi',    label: 'Nequi',    Icon: Smartphone, color: 'violet' },
+                                        { id: 'credito',  label: 'Crédito',  Icon: CreditCard,  color: 'rose' },
+                                    ] as const).map(({ id, label, Icon, color }) => (
+                                        <button
+                                            key={id}
+                                            onClick={() => setMetodoPagoSeleccionado(id)}
+                                            className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wide transition-all ${metodoPagoSeleccionado === id
+                                                ? color === 'emerald' ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-700 dark:text-emerald-400'
+                                                : color === 'violet'  ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30 dark:border-violet-700 dark:text-violet-400'
+                                                :                       'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/30 dark:border-rose-700 dark:text-rose-400'
+                                                : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 dark:bg-slate-800/40 dark:border-slate-700'
+                                            }`}
+                                        >
+                                            <Icon className="w-3.5 h-3.5" />
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {metodoPagoSeleccionado === 'credito' && (
+                                    <p className="text-[9px] text-rose-500 font-bold mt-1.5 flex items-center gap-1">
+                                        <CreditCard className="w-3 h-3" /> Se registrará como cuenta por cobrar — podrás abonar después
+                                    </p>
+                                )}
+                            </div>
                             <Button
                                 disabled={carritoPos.length === 0}
                                 onClick={() => {
-                                    guardarEnHistorial(carritoPos, totalCarrito, fotoFactura);
+                                    guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
                                     toast.success(`Venta registrada para ${cliente.nombre}: ${formatCurrency(totalCarrito)}`);
                                     setCarritoPos([]);
                                     setFotoFactura(undefined);
+                                    setMetodoPagoSeleccionado('efectivo');
                                 }}
-                                className="w-full h-12 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg shadow-indigo-500/20"
+                                className={`w-full h-12 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg transition-colors ${
+                                    metodoPagoSeleccionado === 'nequi'   ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-500/20' :
+                                    metodoPagoSeleccionado === 'credito' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' :
+                                    'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20'
+                                }`}
                             >
-                                <Banknote className="w-4 h-4" /> Confirmar Venta
+                                {metodoPagoSeleccionado === 'efectivo' && <Banknote className="w-4 h-4" />}
+                                {metodoPagoSeleccionado === 'nequi'    && <Smartphone className="w-4 h-4" />}
+                                {metodoPagoSeleccionado === 'credito'  && <CreditCard className="w-4 h-4" />}
+                                {metodoPagoSeleccionado === 'credito' ? 'Registrar a Crédito' : `Confirmar — ${metodoPagoSeleccionado === 'nequi' ? 'Nequi' : 'Efectivo'}`}
                             </Button>
                             {carritoPos.length > 0 && (
                                 <Button
@@ -746,7 +820,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 </div>
 
             {/* ── Dialog: Historial de ventas ── */}
-            <Dialog open={verHistorial} onOpenChange={setVerHistorial}>
+            <Dialog open={verHistorial} onOpenChange={v => { setVerHistorial(v); if (!v) { setAbonandoId(null); setMontoAbono(''); } }}>
                 <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] flex flex-col">
                     <DialogHeader className="shrink-0">
                         <DialogTitle className="font-black uppercase tracking-tight flex items-center gap-2">
@@ -759,13 +833,23 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             <div className="flex flex-col items-center py-12 text-center">
                                 <History className="w-10 h-10 text-slate-200 mb-3" />
                                 <p className="text-sm font-bold text-slate-400">Sin ventas registradas</p>
-                                <p className="text-xs text-slate-400 mt-1">Las ventas confirmadas aparecerán aquí con fecha y foto</p>
+                                <p className="text-xs text-slate-400 mt-1">Las ventas confirmadas aparecerán aquí con fecha, foto y abonos</p>
                             </div>
                         ) : (
-                            historialMayoristas.filter(h => h.clienteId === cliente.id).map(h => (
-                                <Card key={h.id} className="rounded-2xl border-slate-100 dark:border-slate-700 overflow-hidden">
+                            historialMayoristas.filter(h => h.clienteId === cliente.id).map(h => {
+                                const totalAbonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                const saldoPendiente = h.total - totalAbonado;
+                                const esCreditoPendiente = h.metodoPago === 'credito' && saldoPendiente > 0;
+                                const metodoBadge = {
+                                    efectivo: { label: 'Efectivo', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' },
+                                    nequi:    { label: 'Nequi',    cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400' },
+                                    credito:  { label: 'Crédito',  cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400' },
+                                }[h.metodoPago ?? 'efectivo'];
+                                return (
+                                <Card key={h.id} className={`rounded-2xl overflow-hidden ${esCreditoPendiente ? 'border-rose-200 dark:border-rose-800' : 'border-slate-100 dark:border-slate-700'}`}>
                                     <CardContent className="p-4 space-y-3">
-                                        <div className="flex items-start justify-between">
+                                        {/* Encabezado: fecha + método + total */}
+                                        <div className="flex items-start justify-between gap-2">
                                             <div>
                                                 <p className="text-xs font-black text-slate-900 dark:text-white">
                                                     {new Date(h.fecha).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
@@ -773,9 +857,21 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 <p className="text-[10px] text-slate-400 mt-0.5">
                                                     {new Date(h.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
+                                                <span className={`inline-block mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${metodoBadge.cls}`}>
+                                                    {metodoBadge.label}
+                                                </span>
                                             </div>
-                                            <span className="text-lg font-black text-indigo-600 tabular-nums">{formatCurrency(h.total)}</span>
+                                            <div className="text-right shrink-0">
+                                                <p className="text-lg font-black text-indigo-600 tabular-nums">{formatCurrency(h.total)}</p>
+                                                {h.metodoPago === 'credito' && (
+                                                    <p className={`text-[10px] font-black tabular-nums ${saldoPendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        {saldoPendiente > 0 ? `Debe: ${formatCurrency(saldoPendiente)}` : '✓ Pagado'}
+                                                    </p>
+                                                )}
+                                            </div>
                                         </div>
+
+                                        {/* Ítems */}
                                         <div className="space-y-1 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-3">
                                             {h.items.map(item => (
                                                 <div key={item.productoId} className="flex justify-between text-xs">
@@ -784,10 +880,78 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 </div>
                                             ))}
                                         </div>
+
+                                        {/* Abonos registrados */}
+                                        {(h.abonos ?? []).length > 0 && (
+                                            <div className="space-y-1">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                                                    <ChevronRight className="w-3 h-3" /> Abonos
+                                                </p>
+                                                {(h.abonos ?? []).map(a => (
+                                                    <div key={a.id} className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 rounded-lg px-3 py-1.5">
+                                                        <div>
+                                                            <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full mr-2 ${metodoBadge.cls}`}>
+                                                                {{ efectivo: 'Efectivo', nequi: 'Nequi', credito: 'Crédito' }[a.metodoPago]}
+                                                            </span>
+                                                            <span className="text-[10px] text-slate-500">
+                                                                {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(a.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        </div>
+                                                        <span className="text-sm font-black text-emerald-600 tabular-nums">+{formatCurrency(a.monto)}</span>
+                                                    </div>
+                                                ))}
+                                                {h.metodoPago === 'credito' && (
+                                                    <div className="flex justify-between px-3 pt-1 border-t border-slate-200 dark:border-slate-700">
+                                                        <span className="text-[10px] font-black text-slate-500 uppercase">Saldo pendiente</span>
+                                                        <span className={`text-sm font-black tabular-nums ${saldoPendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                            {formatCurrency(Math.max(0, saldoPendiente))}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Registrar abono */}
+                                        {(h.metodoPago === 'credito' || (h.abonos ?? []).length > 0) && saldoPendiente > 0 && (
+                                            abonandoId === h.id ? (
+                                                <div className="space-y-2">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-rose-500">Registrar abono</p>
+                                                    <div className="flex gap-2">
+                                                        <input
+                                                            type="number"
+                                                            value={montoAbono}
+                                                            onChange={e => setMontoAbono(e.target.value)}
+                                                            placeholder={`Máx. ${formatCurrency(saldoPendiente)}`}
+                                                            className="flex-1 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs font-bold focus:outline-none focus:border-indigo-400"
+                                                            autoFocus
+                                                        />
+                                                        <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-9 px-3 rounded-xl bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase hover:bg-emerald-200 transition-colors">
+                                                            <Banknote className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-9 px-3 rounded-xl bg-violet-100 text-violet-700 text-[10px] font-black uppercase hover:bg-violet-200 transition-colors">
+                                                            <Smartphone className="w-3.5 h-3.5" />
+                                                        </button>
+                                                        <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="h-9 px-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
+                                                            <X className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-[9px] text-slate-400">Toca 💵 para efectivo o 📱 para Nequi</p>
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }}
+                                                    className="w-full h-8 rounded-xl border border-dashed border-rose-300 text-rose-500 hover:bg-rose-50 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"
+                                                >
+                                                    <PlusCircle className="w-3.5 h-3.5" /> Registrar abono
+                                                </button>
+                                            )
+                                        )}
+
+                                        {/* Foto de factura */}
                                         {h.fotoFactura && (
                                             <div>
                                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5 flex items-center gap-1">
-                                                    <ImageIcon className="w-3 h-3" /> Factura
+                                                    <ImageIcon className="w-3 h-3" /> Factura adjunta
                                                 </p>
                                                 <img
                                                     src={h.fotoFactura}
@@ -799,7 +963,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         )}
                                     </CardContent>
                                 </Card>
-                            ))
+                                );
+                            })
                         )}
                     </div>
                 </DialogContent>
