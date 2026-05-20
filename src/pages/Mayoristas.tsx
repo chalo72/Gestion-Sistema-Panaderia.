@@ -171,11 +171,32 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         toast.success('Ticket guardado — retómalo cuando quieras');
     };
 
+    // ID del ticket pendiente que fue retomado al carrito actual
+    const [ticketRetomadoId, setTicketRetomadoId] = useState<string | null>(null);
+
     const retomarTicket = (ticket: TicketPendiente) => {
         if (carritoPos.length > 0 && !window.confirm('¿Reemplazar el ticket actual con el guardado?')) return;
         setCarritoPos(ticket.items);
+        setTicketRetomadoId(ticket.id);
         actualizarTicketsPersistidos(ticketsPendientes.filter(t => t.id !== ticket.id));
         toast.success('Ticket retomado');
+    };
+
+    // Limpiar carrito: si vino de un ticket guardado, lo devuelve a pendientes
+    const limpiarCarrito = () => {
+        if (ticketRetomadoId && viendoPerfilCliente && carritoPos.length > 0) {
+            const devuelto: TicketPendiente = {
+                id: ticketRetomadoId,
+                clienteId: viendoPerfilCliente.id,
+                clienteNombre: viendoPerfilCliente.nombre,
+                items: [...carritoPos],
+                guardadoEn: Date.now(),
+            };
+            actualizarTicketsPersistidos([...ticketsPendientes, devuelto]);
+            toast('Ticket devuelto a guardados');
+        }
+        setCarritoPos([]);
+        setTicketRetomadoId(null);
     };
 
     const cancelarTicketPendiente = (ticketId: string) => {
@@ -855,6 +876,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     setCarritoPos([]);
                                     setFotoFactura(undefined);
                                     setMetodoPagoSeleccionado('efectivo');
+                                    setTicketRetomadoId(null);
                                 }}
                                 className={`w-full h-12 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg transition-colors ${
                                     metodoPagoSeleccionado === 'nequi'   ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-500/20' :
@@ -869,11 +891,12 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             </Button>
                             {carritoPos.length > 0 && (
                                 <Button
-                                    onClick={() => setCarritoPos([])}
+                                    onClick={limpiarCarrito}
                                     variant="ghost"
                                     className="w-full h-9 text-xs font-black text-slate-400 hover:text-rose-500 uppercase tracking-widest"
                                 >
-                                    <Trash2 className="w-3.5 h-3.5 mr-1" /> Limpiar ticket
+                                    <Trash2 className="w-3.5 h-3.5 mr-1" />
+                                    {ticketRetomadoId ? 'Guardar y limpiar' : 'Limpiar ticket'}
                                 </Button>
                             )}
                         </div>
