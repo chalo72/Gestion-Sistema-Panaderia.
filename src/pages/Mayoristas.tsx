@@ -952,24 +952,25 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                         </button>
                                                     </div>
                                                 ) : (
-                                                    <button
-                                                        className="text-left group"
-                                                        onClick={() => {
-                                                            const d = new Date(h.fecha);
-                                                            const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-                                                            setFechaHistorialTemp(local);
-                                                            setEditandoFechaHistorialId(h.id);
-                                                        }}
-                                                        title="Toca para cambiar la fecha"
-                                                    >
-                                                        <p className="text-xs font-black text-slate-900 dark:text-white group-hover:text-indigo-600 transition-colors">
+                                                    <div>
+                                                        <p className="text-xs font-black text-slate-900 dark:text-white">
                                                             {new Date(h.fecha).toLocaleDateString('es', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                                                            <Pencil className="inline w-2.5 h-2.5 ml-1 opacity-0 group-hover:opacity-40" />
                                                         </p>
                                                         <p className="text-[10px] text-slate-400 mt-0.5">
                                                             {new Date(h.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                                                         </p>
-                                                    </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                const d = new Date(h.fecha);
+                                                                const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                                                                setFechaHistorialTemp(local);
+                                                                setEditandoFechaHistorialId(h.id);
+                                                            }}
+                                                            className="mt-1 flex items-center gap-1 text-[9px] font-black uppercase text-indigo-400 hover:text-indigo-600 transition-colors"
+                                                        >
+                                                            <Pencil className="w-2.5 h-2.5" /> Cambiar fecha
+                                                        </button>
+                                                    </div>
                                                 )}
                                                 <span className={`inline-block mt-1 text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${metodoBadge.cls}`}>
                                                     {metodoBadge.label}
@@ -1022,64 +1023,70 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         {(h.abonos ?? []).length > 0 && (
                                             <div className="space-y-1">
                                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
-                                                    <ChevronRight className="w-3 h-3" /> Abonos
+                                                    <ChevronRight className="w-3 h-3" /> Abonos recibidos
                                                 </p>
-                                                {(h.abonos ?? []).map(a => (
-                                                    <div key={a.id} className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 rounded-lg px-3 py-1.5">
-                                                        <div>
-                                                            <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full mr-2 ${metodoBadge.cls}`}>
-                                                                {{ efectivo: 'Efectivo', nequi: 'Nequi', credito: 'Crédito' }[a.metodoPago]}
-                                                            </span>
-                                                            <span className="text-[10px] text-slate-500">
-                                                                {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(a.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
-                                                            </span>
+                                                {(h.abonos ?? []).map(a => {
+                                                    const aBadge = {
+                                                        efectivo: 'bg-emerald-100 text-emerald-700',
+                                                        nequi:    'bg-violet-100 text-violet-700',
+                                                        credito:  'bg-rose-100 text-rose-700',
+                                                    }[a.metodoPago] ?? 'bg-slate-100 text-slate-600';
+                                                    return (
+                                                        <div key={a.id} className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 rounded-lg px-3 py-1.5">
+                                                            <div>
+                                                                <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full mr-2 ${aBadge}`}>
+                                                                    {{ efectivo: 'Efectivo', nequi: 'Nequi', credito: 'Crédito' }[a.metodoPago]}
+                                                                </span>
+                                                                <span className="text-[10px] text-slate-500">
+                                                                    {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(a.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-sm font-black text-emerald-600 tabular-nums">+{formatCurrency(a.monto)}</span>
                                                         </div>
-                                                        <span className="text-sm font-black text-emerald-600 tabular-nums">+{formatCurrency(a.monto)}</span>
-                                                    </div>
-                                                ))}
-                                                {h.metodoPago === 'credito' && (
-                                                    <div className="flex justify-between px-3 pt-1 border-t border-slate-200 dark:border-slate-700">
-                                                        <span className="text-[10px] font-black text-slate-500 uppercase">Saldo pendiente</span>
-                                                        <span className={`text-sm font-black tabular-nums ${saldoPendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                                            {formatCurrency(Math.max(0, saldoPendiente))}
-                                                        </span>
-                                                    </div>
-                                                )}
+                                                    );
+                                                })}
+                                                <div className="flex justify-between px-3 pt-1 border-t border-slate-200 dark:border-slate-700">
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase">Saldo pendiente</span>
+                                                    <span className={`text-sm font-black tabular-nums ${saldoPendiente > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        {saldoPendiente > 0 ? formatCurrency(saldoPendiente) : '✓ Pagado'}
+                                                    </span>
+                                                </div>
                                             </div>
                                         )}
 
-                                        {/* Registrar abono */}
-                                        {(h.metodoPago === 'credito' || (h.abonos ?? []).length > 0) && saldoPendiente > 0 && (
+                                        {/* Registrar abono — disponible en CUALQUIER factura */}
+                                        {saldoPendiente > 0 && (
                                             abonandoId === h.id ? (
-                                                <div className="space-y-2">
-                                                    <p className="text-[9px] font-black uppercase tracking-widest text-rose-500">Registrar abono</p>
+                                                <div className="space-y-2 p-3 bg-rose-50 dark:bg-rose-950/20 rounded-xl border border-rose-200 dark:border-rose-800">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-rose-600">Registrar abono — saldo: {formatCurrency(saldoPendiente)}</p>
                                                     <div className="flex gap-2">
                                                         <input
                                                             type="number"
                                                             value={montoAbono}
                                                             onChange={e => setMontoAbono(e.target.value)}
-                                                            placeholder={`Máx. ${formatCurrency(saldoPendiente)}`}
-                                                            className="flex-1 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-xs font-bold focus:outline-none focus:border-indigo-400"
+                                                            placeholder="Monto del abono"
+                                                            className="flex-1 h-9 rounded-xl border border-rose-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 text-sm font-bold focus:outline-none focus:border-indigo-400"
                                                             autoFocus
                                                         />
-                                                        <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-9 px-3 rounded-xl bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase hover:bg-emerald-200 transition-colors">
-                                                            <Banknote className="w-3.5 h-3.5" />
+                                                    </div>
+                                                    <div className="grid grid-cols-3 gap-1.5">
+                                                        <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-9 rounded-xl bg-emerald-100 text-emerald-700 text-[10px] font-black uppercase hover:bg-emerald-200 transition-colors flex items-center justify-center gap-1">
+                                                            <Banknote className="w-3.5 h-3.5" /> Efectivo
                                                         </button>
-                                                        <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-9 px-3 rounded-xl bg-violet-100 text-violet-700 text-[10px] font-black uppercase hover:bg-violet-200 transition-colors">
-                                                            <Smartphone className="w-3.5 h-3.5" />
+                                                        <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-9 rounded-xl bg-violet-100 text-violet-700 text-[10px] font-black uppercase hover:bg-violet-200 transition-colors flex items-center justify-center gap-1">
+                                                            <Smartphone className="w-3.5 h-3.5" /> Nequi
                                                         </button>
-                                                        <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="h-9 px-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors">
+                                                        <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="h-9 rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors flex items-center justify-center">
                                                             <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
-                                                    <p className="text-[9px] text-slate-400">Toca 💵 para efectivo o 📱 para Nequi</p>
                                                 </div>
                                             ) : (
                                                 <button
                                                     onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }}
-                                                    className="w-full h-8 rounded-xl border border-dashed border-rose-300 text-rose-500 hover:bg-rose-50 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"
+                                                    className="w-full h-9 rounded-xl border border-dashed border-rose-300 text-rose-500 hover:bg-rose-50 flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest transition-colors"
                                                 >
-                                                    <PlusCircle className="w-3.5 h-3.5" /> Registrar abono
+                                                    <PlusCircle className="w-3.5 h-3.5" /> Registrar abono · debe {formatCurrency(saldoPendiente)}
                                                 </button>
                                             )
                                         )}
