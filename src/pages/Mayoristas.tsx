@@ -603,73 +603,97 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             />
                         </div>
 
-                        {/* ── Créditos pendientes del cliente ── */}
+                        {/* ── Panel de Créditos y Abonos (siempre visible) ── */}
                         {(() => {
                             const histCliente = historialMayoristas.filter(h => h.clienteId === cliente.id);
-                            const creditosPendientes = histCliente.filter(h => {
-                                const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
-                                return h.metodoPago === 'credito' && h.total - abonado > 0;
-                            });
-                            const totalDeuda = creditosPendientes.reduce((s, h) => {
+                            const creditosAll = histCliente.filter(h => h.metodoPago === 'credito');
+                            const totalDeuda = creditosAll.reduce((s, h) => {
                                 const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
-                                return s + (h.total - abonado);
+                                const saldo = h.total - abonado;
+                                return s + (saldo > 0 ? saldo : 0);
                             }, 0);
-                            if (creditosPendientes.length === 0) return null;
+                            const hasPendientes = totalDeuda > 0;
                             return (
-                                <div className="bg-rose-50 dark:bg-rose-950/20 rounded-2xl border border-rose-200 dark:border-rose-800 p-4 space-y-2">
+                                <div className={`rounded-2xl border p-4 space-y-2 ${hasPendientes ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800' : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700'}`}>
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-2">
-                                            <Banknote className="w-4 h-4 text-rose-600" />
-                                            <p className="text-xs font-black uppercase tracking-widest text-rose-700 dark:text-rose-400">
-                                                Créditos Pendientes ({creditosPendientes.length})
+                                            <Banknote className={`w-4 h-4 ${hasPendientes ? 'text-rose-600' : 'text-slate-400'}`} />
+                                            <p className={`text-xs font-black uppercase tracking-widest ${hasPendientes ? 'text-rose-700 dark:text-rose-400' : 'text-slate-500'}`}>
+                                                Créditos {creditosAll.length > 0 ? `(${creditosAll.length})` : ''}
                                             </p>
                                         </div>
-                                        <p className="text-base font-black text-rose-600 tabular-nums">{formatCurrency(totalDeuda)}</p>
+                                        {hasPendientes
+                                            ? <p className="text-base font-black text-rose-600 tabular-nums">Debe: {formatCurrency(totalDeuda)}</p>
+                                            : <span className="text-[10px] font-black text-emerald-600 uppercase">✓ Al día</span>
+                                        }
                                     </div>
-                                    <div className="space-y-1.5">
-                                        {creditosPendientes.map(h => {
-                                            const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
-                                            const saldo = h.total - abonado;
-                                            return (
-                                                <div key={h.id} className="flex items-center justify-between bg-white dark:bg-slate-900 rounded-xl px-3 py-2">
-                                                    <div>
-                                                        <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
-                                                            {new Date(h.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })}
-                                                        </p>
-                                                        <p className="text-[9px] text-slate-400">{h.items.length} productos · total {formatCurrency(h.total)}</p>
-                                                        {abonado > 0 && <p className="text-[9px] text-emerald-600">Abonado: {formatCurrency(abonado)}</p>}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="text-sm font-black text-rose-600 tabular-nums">Debe: {formatCurrency(saldo)}</p>
-                                                        {abonandoId === h.id ? (
-                                                            <div className="flex items-center gap-1">
-                                                                <Input
-                                                                    type="number"
-                                                                    value={montoAbono}
-                                                                    onChange={e => setMontoAbono(e.target.value)}
-                                                                    placeholder="Monto"
-                                                                    className="w-24 h-7 text-xs rounded-lg"
-                                                                    autoFocus
-                                                                />
-                                                                <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-7 px-2 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black hover:bg-emerald-200">✓ Efectivo</button>
-                                                                <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-7 px-2 rounded-lg bg-violet-100 text-violet-700 text-[9px] font-black hover:bg-violet-200">Nequi</button>
-                                                                <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200">
-                                                                    <X className="w-3 h-3 text-slate-500" />
-                                                                </button>
+                                    {creditosAll.length === 0 ? (
+                                        <p className="text-[10px] text-slate-400 text-center py-2">Sin ventas a crédito registradas</p>
+                                    ) : (
+                                        <div className="space-y-1.5">
+                                            {creditosAll.map(h => {
+                                                const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                                const saldo = h.total - abonado;
+                                                const pagado = saldo <= 0;
+                                                return (
+                                                    <div key={h.id} className={`rounded-xl px-3 py-2 ${pagado ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-900'}`}>
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div>
+                                                                <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                                                                    {new Date(h.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                                </p>
+                                                                <p className="text-[9px] text-slate-400">{h.items.length} prod. · Total: {formatCurrency(h.total)}</p>
+                                                                {abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">Abonado: {formatCurrency(abonado)}</p>}
+                                                                {/* Lista de abonos individuales */}
+                                                                {(h.abonos ?? []).length > 0 && (
+                                                                    <div className="mt-1 space-y-0.5">
+                                                                        {(h.abonos ?? []).map(a => (
+                                                                            <p key={a.id} className="text-[8px] text-slate-400">
+                                                                                · {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} — {formatCurrency(a.monto)} ({a.metodoPago})
+                                                                            </p>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
                                                             </div>
-                                                        ) : (
-                                                            <button
-                                                                onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }}
-                                                                className="h-7 px-3 rounded-xl bg-rose-100 text-rose-700 text-[9px] font-black uppercase hover:bg-rose-200 transition-colors"
-                                                            >
-                                                                + Abono
-                                                            </button>
-                                                        )}
+                                                            <div className="flex items-center gap-2 shrink-0">
+                                                                {pagado ? (
+                                                                    <span className="text-[9px] font-black text-emerald-600 uppercase">✓ Pagado</span>
+                                                                ) : (
+                                                                    <>
+                                                                        <p className="text-sm font-black text-rose-600 tabular-nums">Debe: {formatCurrency(saldo)}</p>
+                                                                        {abonandoId === h.id ? (
+                                                                            <div className="flex items-center gap-1">
+                                                                                <Input
+                                                                                    type="number"
+                                                                                    value={montoAbono}
+                                                                                    onChange={e => setMontoAbono(e.target.value)}
+                                                                                    placeholder="Monto"
+                                                                                    className="w-20 h-7 text-xs rounded-lg"
+                                                                                    autoFocus
+                                                                                />
+                                                                                <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-7 px-2 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black hover:bg-emerald-200">✓ Efvo</button>
+                                                                                <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-7 px-2 rounded-lg bg-violet-100 text-violet-700 text-[9px] font-black hover:bg-violet-200">Nequi</button>
+                                                                                <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200">
+                                                                                    <X className="w-3 h-3 text-slate-500" />
+                                                                                </button>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <button
+                                                                                onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }}
+                                                                                className="h-7 px-3 rounded-xl bg-rose-100 text-rose-700 text-[9px] font-black uppercase hover:bg-rose-200 transition-colors"
+                                                                            >
+                                                                                + Abono
+                                                                            </button>
+                                                                        )}
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
                                 </div>
                             );
                         })()}
