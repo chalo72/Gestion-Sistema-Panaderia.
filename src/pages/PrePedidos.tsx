@@ -18,11 +18,13 @@ import {
   Calendar,
   Check,
   Search,
+  Receipt,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { PrePedidoHeader } from '@/components/prepedidos/PrePedidoHeader';
@@ -57,6 +59,7 @@ interface PrePedidosProps {
   getMejorPrecioByProveedor: (productoId: string, proveedorId: string) => PrecioProveedor | undefined;
   getPreciosByProveedor: (proveedorId: string) => PrecioProveedor[];
   formatCurrency: (amount: number) => string;
+  onAjustarStock: (productoId: string, cantidad: number, motivo: string) => void;
   onGenerarSugerencias: () => Promise<number>;
 }
 
@@ -79,6 +82,7 @@ export default function PrePedidos({
   getMejorPrecioByProveedor,
   getPreciosByProveedor,
   formatCurrency,
+  onAjustarStock,
   onGenerarSugerencias
 }: PrePedidosProps) {
   const [activeTab, setActiveTab] = useState<'creacion' | 'gestion'>('creacion');
@@ -106,6 +110,20 @@ export default function PrePedidos({
   const [activeProveedorId, setActiveProveedorId] = useState<string | null>(null);
   const [showProveedorPanel, setShowProveedorPanel] = useState(false); // ✅ NUEVO: Panel de proveedor abierto
   const [searchProveedorText, setSearchProveedorText] = useState(''); // ✅ NUEVO: Buscador de proveedores
+
+  // Estados para la vista de Cuenta
+  const [panelView, setPanelView] = useState<'ticket' | 'cuenta'>('ticket');
+  const [pedidosSeleccionados, setPedidosSeleccionados] = useState<Set<string>>(new Set());
+  const [abonandoId, setAbonandoId] = useState<string | null>(null);
+  const [montoAbono, setMontoAbono] = useState('');
+  const [fechaAbono, setFechaAbono] = useState(() => {
+      const d = new Date();
+      return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
+  const [metodoAbono, setMetodoAbono] = useState<'efectivo' | 'nequi'>('efectivo');
+  
+  // Para ver detalles en historial
+  const [verDetallePedido, setVerDetallePedido] = useState<PrePedido | null>(null);
 
   // Proveedores filtrados por búsqueda
   const proveedoresFiltrados = useMemo(() => {
@@ -146,6 +164,66 @@ export default function PrePedidos({
     setIsCreateModalOpen(false);
     setSelectedPrePedido(created);
     toast.success('Orden de planificación creada');
+  };
+
+  const handleMarcarRecibido = (pedido: PrePedido) => {
+    if (confirm(`¿El proveedor envió las cantidades exactas pedidas? Si es así, se ajustará automáticamente el inventario.`)) {
+      // Ajustar inventario para cada item
+      pedido.items.forEach(item => {
+        onAjustarStock(item.productoId, item.cantidad, `Recepcion OC: ${pedido.nombre}`);
+      });
+      onUpdatePrePedido(pedido.id, { estado: 'recibido' });
+      toast.success('Pedido marcado como recibido e inventario actualizado');
+    } else {
+      toast.info('Ve al módulo de "Recepciones" para detallar diferencias de inventario.');
+    }
+  };
+
+  const handleRegistrarAbono = (pedidoId: string) => {
+    if (!montoAbono || isNaN(Number(montoAbono)) || Number(montoAbono) <= 0) {
+        toast.error('Ingresa un monto válido');
+        return;
+    }
+    const pedido = prepedidos.find(p => p.id === pedidoId);
+    if (!pedido) return;
+
+    const abono = {
+        id: crypto.randomUUID(),
+        creditoId: pedido.id,
+        monto: Number(montoAbono),
+        fecha: new Date(fechaAbono).toISOString(),
+        metodoPago: metodoAbono as any
+    };
+
+    const nuevosAbonos = [...(pedido.abonos || []), abono];
+    onUpdatePrePedido(pedido.id, { abonos: nuevosAbonos });
+    
+    setAbonandoId(null);
+    setMontoAbono('');
+    const d = new Date();
+    setFechaAbono(new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16));
+    toast.success('Abono registrado');
+  };
+
+  const sharePedidoWhatsApp = (pedido: PrePedido) => {
+    const prov = getProveedorById(pedido.proveedorId);
+    let msg = `📦 *ORDEN DE COMPRA - DULCE PLACER* 🍞\n\n`;
+    if (pedido.numeroOrden) msg += `*Orden:* ${pedido.numeroOrden}\n`;
+    msg += `*Fecha:* ${new Date().toLocaleDateString('es-CO')}\n`;
+    if (pedido.fechaEntregaEsperada) msg += `*Entrega esperada:* ${new Date(pedido.fechaEntregaEsperada).toLocaleDateString('es-CO')}\n`;
+    msg += `\n*Detalle de Productos:*\n`;
+    pedido.items.forEach(item => {
+      const p = getProductoById(item.productoId);
+      msg += `▪ ${item.cantidad} x ${p?.nombre || 'Producto'}\n`;
+    });
+    if (pedido.notas) msg += `\n*Notas:* ${pedido.notas}\n`;
+    msg += `\nPor favor confirmar recepción. ¡Gracias!`;
+
+    const encoded = encodeURIComponent(msg);
+    const phone = prov?.telefono ? prov.telefono.replace(/\D/g,'') : '';
+    const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
+    window.open(url, '_blank');
+    onUpdatePrePedido(pedido.id, { estado: 'enviado' });
   };
 
   const handleAddItemToDraft = async (productoId: string, proveedorId: string, cantidad: number, precio: number) => {
@@ -350,7 +428,7 @@ export default function PrePedidos({
                 const cfg = estadoConfig(p.estado);
                 const proveedor = getProveedorById(p.proveedorId);
                 return (
-                  <Card key={p.id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm hover:shadow-md transition-all">
+                  <Card key={p.id} onClick={() => setVerDetallePedido(p)} className="cursor-pointer rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm hover:shadow-md transition-all">
                     {/* Franja de color por estado */}
                     <div className={`h-1.5 w-full ${p.estado === 'recibido' ? 'bg-emerald-500' : p.estado === 'enviado' ? 'bg-amber-500' : p.estado === 'confirmado' ? 'bg-indigo-500' : p.estado === 'rechazado' ? 'bg-rose-500' : 'bg-slate-300'}`} />
                     <div className="p-5 space-y-4">
@@ -391,14 +469,14 @@ export default function PrePedidos({
                           {p.estado === 'confirmado' && (
                             <Button size="sm" variant="outline"
                               className="flex-1 h-8 text-[10px] font-black uppercase border-amber-200 text-amber-700 hover:bg-amber-50 gap-1"
-                              onClick={() => onUpdatePrePedido(p.id, { estado: 'enviado' })}>
-                              <Truck className="w-3.5 h-3.5" /> Marcar Enviado
+                              onClick={(e) => { e.stopPropagation(); sharePedidoWhatsApp(p); }}>
+                              <Share2 className="w-3.5 h-3.5" /> Enviar y marcar
                             </Button>
                           )}
                           {p.estado === 'enviado' && (
                             <Button size="sm"
                               className="flex-1 h-8 text-[10px] font-black uppercase bg-emerald-600 hover:bg-emerald-700 text-white gap-1"
-                              onClick={() => onUpdatePrePedido(p.id, { estado: 'recibido' })}>
+                              onClick={(e) => { e.stopPropagation(); handleMarcarRecibido(p); }}>
                               <CheckCircle2 className="w-3.5 h-3.5" /> Marcar Recibido
                             </Button>
                           )}
@@ -531,29 +609,49 @@ export default function PrePedidos({
         )}
       </div>
 
-      {/* ═══ PANEL DERECHO (TICKET) ═══ */}
+      {/* ═══ PANEL DERECHO (TICKET / CUENTA) ═══ */}
       <div className="w-[320px] lg:w-[380px] xl:w-[420px] h-full flex flex-col bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0">
           
-          {/* HEADER DEL TICKET ESTILO "VENTA RÁPIDA" */}
-          <div className="bg-[#1a1c2e] p-5 text-white shadow-lg z-20 flex flex-col gap-4">
-             <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                  <ShoppingCart className="w-6 h-6 text-indigo-300" />
-                </div>
-                <div>
-                  <h3 className="font-black text-sm uppercase tracking-widest text-indigo-100">Órdenes de Compra</h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-                     {activeProveedorId ? getProveedorById(activeProveedorId)?.nombre : 'Selecciona proveedor'}
-                  </p>
-                </div>
-             </div>
-             {activeDraft && (
-               <div className="bg-white/5 rounded-xl px-4 py-2.5 border border-white/10 flex items-center gap-2">
-                 <Store className="w-4 h-4 text-indigo-400" />
-                 <span className="text-xs font-black text-slate-200 truncate flex-1 uppercase tracking-wider">{activeDraft.nombre}</span>
-               </div>
-             )}
+          {/* TABS DEL PANEL DERECHO */}
+          <div className="flex bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
+            <button
+              onClick={() => setPanelView('ticket')}
+              className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all
+                ${panelView === 'ticket' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+            >
+              📝 Pedido
+            </button>
+            <button
+              onClick={() => setPanelView('cuenta')}
+              className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all
+                ${panelView === 'cuenta' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+            >
+              💰 Cuenta Prov.
+            </button>
           </div>
+
+          {panelView === 'ticket' ? (
+            <>
+              {/* HEADER DEL TICKET ESTILO "VENTA RÁPIDA" */}
+              <div className="bg-[#1a1c2e] p-5 text-white shadow-lg z-20 flex flex-col gap-4 border-t border-white/5">
+                 <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                      <ShoppingCart className="w-6 h-6 text-indigo-300" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-sm uppercase tracking-widest text-indigo-100">Nuevo Pedido</h3>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                         {activeProveedorId ? getProveedorById(activeProveedorId)?.nombre : 'Selecciona proveedor'}
+                      </p>
+                    </div>
+                 </div>
+                 {activeDraft && (
+                   <div className="bg-white/5 rounded-xl px-4 py-2.5 border border-white/10 flex items-center gap-2">
+                     <Store className="w-4 h-4 text-indigo-400" />
+                     <span className="text-xs font-black text-slate-200 truncate flex-1 uppercase tracking-wider">{activeDraft.nombre}</span>
+                   </div>
+                 )}
+              </div>
 
           {/* LISTADO DE ITEMS DEL TICKET */}
           <div className="flex-1 overflow-hidden relative bg-white dark:bg-slate-900 min-h-0">
@@ -649,7 +747,233 @@ export default function PrePedidos({
               </Button>
             </div>
           </div>
+          </>
+          ) : (
+            /* ═══ VISTA CUENTA: Órdenes de Compra + Abonos ═══ */
+            <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <ScrollArea className="flex-1">
+                    <div className="p-4 space-y-3">
+                        {(() => {
+                            if (!activeProveedorId) return (
+                                <div className="flex flex-col items-center justify-center py-16 opacity-40">
+                                    <Store className="w-12 h-12 text-slate-300 mb-3" />
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-center">Selecciona un proveedor</p>
+                                </div>
+                            );
+
+                            // Mostrar pedidos confirmados, enviados o recibidos
+                            const histProv = prepedidos.filter(p => p.proveedorId === activeProveedorId && p.estado !== 'borrador' && p.estado !== 'rechazado').sort((a,b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime());
+
+                            if (histProv.length === 0) return (
+                                <div className="flex flex-col items-center justify-center py-16 opacity-40">
+                                    <Receipt className="w-12 h-12 text-slate-300 mb-3" />
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-center">Sin órdenes registradas</p>
+                                    <p className="text-[9px] text-slate-400 mt-1">Crea un pedido y confírmalo para verlo aquí</p>
+                                </div>
+                            );
+
+                            const selAll = histProv.every(h => pedidosSeleccionados.has(h.id));
+                            const toggleAll = () => {
+                                if (selAll) {
+                                    setPedidosSeleccionados(new Set());
+                                } else {
+                                    setPedidosSeleccionados(new Set(histProv.map(h => h.id)));
+                                }
+                            };
+                            const toggleOne = (id: string) => {
+                                setPedidosSeleccionados(prev => {
+                                    const next = new Set(prev);
+                                    if (next.has(id)) next.delete(id); else next.add(id);
+                                    return next;
+                                });
+                            };
+
+                            // Calcular totales
+                            const seleccionados = histProv.filter(h => pedidosSeleccionados.has(h.id));
+                            const totalSeleccionado = seleccionados.reduce((s, h) => s + h.total, 0);
+                            const totalAbonadoSel = seleccionados.reduce((s, h) => s + (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0), 0);
+                            const saldoSeleccionado = totalSeleccionado - totalAbonadoSel;
+
+                            return (
+                                <>
+                                    {/* Seleccionar todos */}
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <button onClick={toggleAll} className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selAll ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 hover:border-indigo-400'}`}>
+                                            {selAll && <Check className="w-3 h-3" />}
+                                        </button>
+                                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Seleccionar todos ({histProv.length})</span>
+                                    </div>
+
+                                    {/* Lista de órdenes */}
+                                    {histProv.map(h => {
+                                        const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                        const saldo = h.total - abonado;
+                                        const checked = pedidosSeleccionados.has(h.id);
+                                        const cfg = estadoConfig(h.estado);
+                                        return (
+                                            <div key={h.id} className={`rounded-xl border p-3 space-y-2 transition-all ${checked ? 'border-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-700'}`}>
+                                                <div className="flex items-start gap-2">
+                                                    <button onClick={() => toggleOne(h.id)} className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${checked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 hover:border-indigo-400'}`}>
+                                                        {checked && <Check className="w-3 h-3" />}
+                                                    </button>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1 mb-0.5">
+                                                          <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                                                              {new Date(h.fechaCreacion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                          </p>
+                                                        </div>
+                                                        <p className="text-[11px] font-black uppercase text-indigo-600 truncate">{h.nombre}</p>
+                                                        <p className="text-[9px] font-bold text-slate-500 truncate">{h.numeroOrden || 'Sin número'}</p>
+                                                        
+                                                        {/* Estado Badge */}
+                                                        <div className="mt-1">
+                                                          <Badge className={`${cfg.color} border-none font-black text-[8px] uppercase px-1.5 py-0`}>
+                                                            {cfg.label}
+                                                          </Badge>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right shrink-0">
+                                                        <p className="text-sm font-black text-indigo-600 tabular-nums">{formatCurrency(h.total)}</p>
+                                                        {abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">Abonado: {formatCurrency(abonado)}</p>}
+                                                        {saldo > 0 && <p className="text-[9px] text-rose-600 font-bold">Debe: {formatCurrency(saldo)}</p>}
+                                                        {saldo <= 0 && abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">✓ Pagado</p>}
+                                                    </div>
+                                                </div>
+
+                                                {/* Abonos */}
+                                                {(h.abonos ?? []).length > 0 && (
+                                                    <div className="pl-7 space-y-0.5">
+                                                        {(h.abonos ?? []).map(a => (
+                                                            <div key={a.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 rounded p-1">
+                                                                <span className="text-[8px] text-slate-400">{new Date(a.fecha).toLocaleDateString('es-CO')}</span>
+                                                                <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300">{formatCurrency(a.monto)} <span className="uppercase text-[8px] opacity-60">({a.metodoPago})</span></span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                {/* Botón de abono */}
+                                                {saldo > 0 && (
+                                                    <div className="pl-7 mt-1">
+                                                        {abonandoId === h.id ? (
+                                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded-lg border border-indigo-100 dark:border-indigo-800 space-y-2 mt-2">
+                                                                <Input type="number" placeholder="Monto" value={montoAbono} onChange={e => setMontoAbono(e.target.value)} className="h-7 text-xs bg-white" />
+                                                                <Input type="datetime-local" value={fechaAbono} onChange={e => setFechaAbono(e.target.value)} className="h-7 text-xs bg-white" />
+                                                                <select value={metodoAbono} onChange={e => setMetodoAbono(e.target.value as any)} className="w-full h-7 text-xs rounded-md border border-slate-200 px-2 outline-none">
+                                                                    <option value="efectivo">Efectivo</option>
+                                                                    <option value="nequi">Nequi</option>
+                                                                    <option value="credito">Transferencia</option>
+                                                                </select>
+                                                                <div className="flex gap-1">
+                                                                    <Button size="sm" onClick={() => setAbonandoId(null)} variant="outline" className="flex-1 h-7 text-[10px]">Cancelar</Button>
+                                                                    <Button size="sm" onClick={() => handleRegistrarAbono(h.id)} className="flex-1 h-7 text-[10px] bg-indigo-600 text-white">Guardar</Button>
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <button onClick={() => setAbonandoId(h.id)} className="text-[9px] font-black uppercase text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded w-full flex justify-center items-center gap-1 transition-colors">
+                                                                <Plus className="w-3 h-3" /> Abonar a esta orden
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </>
+                            );
+                        })()}
+                    </div>
+                </ScrollArea>
+                
+                {/* FOOTER TOTALES SELECCIONADOS */}
+                <div className="p-4 bg-[#1a1c2e] text-white shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.1)] z-20">
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seleccionado ({pedidosSeleccionados.size})</span>
+                        <span className="text-sm font-black tabular-nums">{(() => {
+                            if (!activeProveedorId) return formatCurrency(0);
+                            const sel = prepedidos.filter(p => p.proveedorId === activeProveedorId && pedidosSeleccionados.has(p.id));
+                            return formatCurrency(sel.reduce((s, h) => s + h.total, 0));
+                        })()}</span>
+                    </div>
+                    <div className="flex justify-between items-center mb-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400/70">Abonado</span>
+                        <span className="text-sm font-black tabular-nums text-emerald-400">{(() => {
+                            if (!activeProveedorId) return formatCurrency(0);
+                            const sel = prepedidos.filter(p => p.proveedorId === activeProveedorId && pedidosSeleccionados.has(p.id));
+                            return formatCurrency(sel.reduce((s, h) => s + (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0), 0));
+                        })()}</span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-white/10 mt-1">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-rose-400/70">Saldo Pendiente</span>
+                        <span className="text-xl font-black tabular-nums text-rose-400">{(() => {
+                            if (!activeProveedorId) return formatCurrency(0);
+                            const sel = prepedidos.filter(p => p.proveedorId === activeProveedorId && pedidosSeleccionados.has(p.id));
+                            const tot = sel.reduce((s, h) => s + h.total, 0);
+                            const ab = sel.reduce((s, h) => s + (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0), 0);
+                            return formatCurrency(tot - ab);
+                        })()}</span>
+                    </div>
+                </div>
+            </div>
+          )}
       </div>
+
+      {/* Modal Historial de Pedidos */}
+      {verDetallePedido && (
+         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+             <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
+                <div className="p-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+                    <div>
+                        <h3 className="font-black text-lg uppercase text-slate-900 dark:text-white">{verDetallePedido.nombre}</h3>
+                        <p className="text-xs font-bold text-slate-500">{verDetallePedido.numeroOrden || 'Sin número'}</p>
+                    </div>
+                    <button onClick={() => setVerDetallePedido(null)} className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-rose-500 transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-auto p-5">
+                    <div className="space-y-4 mb-6">
+                        {verDetallePedido.items.map(item => {
+                            const prod = getProductoById(item.productoId);
+                            return (
+                                <div key={item.id} className="flex items-center justify-between text-sm">
+                                    <div className="flex-1">
+                                        <p className="font-bold text-slate-700 dark:text-slate-300">{prod?.nombre}</p>
+                                        <p className="text-xs text-slate-400">{item.cantidad} x {formatCurrency(item.precioUnitario)}</p>
+                                    </div>
+                                    <p className="font-black text-indigo-600">{formatCurrency(item.cantidad * item.precioUnitario)}</p>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl">
+                        <div className="flex justify-between items-center mb-1 text-sm font-bold text-slate-600 dark:text-slate-300">
+                            <span>TOTAL</span>
+                            <span className="text-lg text-slate-900 dark:text-white">{formatCurrency(verDetallePedido.total)}</span>
+                        </div>
+                        {(() => {
+                           const abonado = (verDetallePedido.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                           if (abonado > 0) {
+                               return (
+                                   <>
+                                       <div className="flex justify-between items-center text-xs font-bold text-emerald-600 mt-1">
+                                           <span>ABONADO</span>
+                                           <span>-{formatCurrency(abonado)}</span>
+                                       </div>
+                                       <div className="flex justify-between items-center text-xs font-black text-rose-600 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                                           <span>PENDIENTE</span>
+                                           <span>{formatCurrency(verDetallePedido.total - abonado)}</span>
+                                       </div>
+                                   </>
+                               )
+                           }
+                           return null;
+                        })()}
+                    </div>
+                </div>
+             </div>
+         </div>
+      )}
 
       <PrePedidoModal isOpen={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} nuevoPedido={nuevoPedido} setNuevoPedido={setNuevoPedido} proveedores={proveedores} onSubmit={handleCrearPedido} />
     </div>

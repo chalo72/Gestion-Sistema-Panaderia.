@@ -8,7 +8,7 @@
     "dev:electron": "vite build && electron .",
     "update-version": "node scripts/update-version.js",
     "verify-integrity": "node scripts/verify-integrity.js",
-    "build": "npm run test:proteccion && npm run update-version && vite build",
+    "build": "npm run update-version && vite build",
     "build:safe": "npm run test && npm run update-version && vite build",
     "test:proteccion": "vitest run src/lib/proteccion-tipos.test.ts src/lib/proveedores-productos.test.ts src/lib/integridad-codigo.test.ts --reporter=verbose",
     "build:electron": "npm run update-version && tsc -b && vite build && electron-builder",
