@@ -19,6 +19,11 @@ import {
   Check,
   Search,
   Receipt,
+  ArrowLeft,
+  Send,
+  PackageCheck,
+  Edit3,
+  Save,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -120,7 +125,7 @@ export default function PrePedidos({
       const d = new Date();
       return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   });
-  const [metodoAbono, setMetodoAbono] = useState<'efectivo' | 'nequi'>('efectivo');
+  const [metodoAbono, setMetodoAbono] = useState<'efectivo' | 'nequi' | 'transferencia' | 'credito'>('efectivo');
   
   // Para ver detalles en historial
   const [verDetallePedido, setVerDetallePedido] = useState<PrePedido | null>(null);
@@ -515,7 +520,134 @@ export default function PrePedidos({
       {/* ═══ PANEL PRINCIPAL (IZQUIERDA) ═══ */}
       <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-900 z-10 relative min-w-0">
 
-        {activeProveedorId && showProveedorPanel ? (
+        {verDetallePedido ? (
+          <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-hidden min-h-0">
+             {/* HEADER */}
+             <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-6 shrink-0 flex flex-wrap items-center gap-4">
+                <Button variant="ghost" onClick={() => setVerDetallePedido(null)} className="h-12 w-12 rounded-full text-slate-500 hover:text-indigo-600 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 shrink-0">
+                   <ArrowLeft className="w-5 h-5" />
+                </Button>
+                <div className="flex-1 min-w-[200px]">
+                   <div className="flex items-center gap-3">
+                      <h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white tracking-tight">{verDetallePedido.nombre}</h2>
+                      <Badge className="bg-indigo-100 text-indigo-700 border-none px-3 font-bold uppercase tracking-widest">{verDetallePedido.estado}</Badge>
+                   </div>
+                   <p className="text-sm font-bold text-slate-400 mt-1 uppercase tracking-widest">
+                      {getProveedorById(verDetallePedido.proveedorId)?.nombre} • ORDEN {verDetallePedido.numeroOrden || '#000'}
+                   </p>
+                </div>
+                <div className="flex gap-2 w-full sm:w-auto">
+                   {(verDetallePedido.estado === 'borrador' || verDetallePedido.estado === 'confirmado') && (
+                      <Button onClick={() => {
+                          onUpdatePrePedido(verDetallePedido.id, { estado: 'borrador' });
+                          setActiveProveedorId(verDetallePedido.proveedorId);
+                          setShowProveedorPanel(true);
+                          setPanelView('ticket');
+                          setVerDetallePedido(null);
+                      }} variant="outline" className="h-12 px-6 rounded-xl font-bold uppercase tracking-widest border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex gap-2 items-center flex-1 sm:flex-none">
+                         <Edit3 className="w-4 h-4" /> Editar
+                      </Button>
+                   )}
+                   <Button onClick={(e) => { e.stopPropagation(); handleShareWhatsApp(verDetallePedido); }} className="h-12 px-6 rounded-xl font-black uppercase tracking-widest bg-[#25D366] hover:bg-[#1DA851] text-white flex gap-2 items-center shadow-lg shadow-emerald-500/20 flex-1 sm:flex-none">
+                      <Send className="w-4 h-4" /> WhatsApp
+                   </Button>
+                </div>
+             </div>
+             
+             {/* BODY */}
+             <div className="flex-1 overflow-auto p-4 lg:p-10 flex flex-col items-center">
+                <div className="w-full max-w-4xl space-y-6 pb-20">
+                   {/* ACCIONES DE ESTADO DE ENVÍO */}
+                   {(verDetallePedido.estado === 'confirmado' || verDetallePedido.estado === 'enviado') && (
+                     <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-3xl p-6 border border-indigo-100 dark:border-indigo-800/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+                        <div>
+                           <h4 className="font-black text-indigo-900 dark:text-indigo-200 text-lg uppercase tracking-tight">¿La mercancía ya viene en camino o ya llegó?</h4>
+                           <p className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold mt-1">Actualiza el estado para controlar tu inventario.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-3 w-full md:w-auto">
+                           {verDetallePedido.estado === 'confirmado' && (
+                             <Button onClick={() => onUpdatePrePedido(verDetallePedido.id, { estado: 'enviado' })} className="h-12 flex-1 md:flex-none px-6 bg-blue-500 hover:bg-blue-600 text-white font-black rounded-xl shadow-lg flex gap-2 items-center uppercase tracking-widest text-[10px]">
+                                <Truck className="w-4 h-4" /> En Camino
+                             </Button>
+                           )}
+                           <Button onClick={() => handleMarcarRecibido(verDetallePedido)} className="h-12 flex-1 md:flex-none px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl shadow-lg shadow-indigo-500/20 flex gap-2 items-center uppercase tracking-widest text-[10px]">
+                              <PackageCheck className="w-4 h-4" /> Recibir e Ingresar
+                           </Button>
+                        </div>
+                     </div>
+                   )}
+                   
+                   {/* DETALLE ITEMS */}
+                   <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-white dark:bg-slate-900">
+                      <div className="bg-slate-50 dark:bg-slate-950 px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
+                         <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 flex items-center justify-center">
+                            <ShoppingCart className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                         </div>
+                         <h3 className="font-black uppercase tracking-widest text-slate-700 dark:text-slate-300 text-xs">Productos Solicitados</h3>
+                      </div>
+                      <div className="p-0 overflow-x-auto">
+                         <table className="w-full text-left border-collapse min-w-[500px]">
+                            <thead>
+                               <tr className="border-b border-slate-100 dark:border-slate-800 text-[10px] uppercase tracking-widest text-slate-400 bg-white dark:bg-slate-900">
+                                  <th className="px-6 py-4 font-bold">Producto</th>
+                                  <th className="px-6 py-4 font-bold text-center">Cant.</th>
+                                  <th className="px-6 py-4 font-bold text-right">Precio Ud.</th>
+                                  <th className="px-6 py-4 font-bold text-right">Subtotal</th>
+                               </tr>
+                            </thead>
+                            <tbody>
+                               {verDetallePedido.items.map(item => {
+                                   const prod = getProductoById(item.productoId);
+                                   return (
+                                       <tr key={item.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                          <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-200 text-sm">
+                                             <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0 font-black text-slate-400 text-xs">
+                                                   {prod?.nombre?.charAt(0) || 'P'}
+                                                </div>
+                                                {prod?.nombre}
+                                             </div>
+                                          </td>
+                                          <td className="px-6 py-4 font-black text-slate-900 dark:text-white text-center tabular-nums text-base">{item.cantidad}</td>
+                                          <td className="px-6 py-4 font-semibold text-slate-500 text-right text-xs tabular-nums">{formatCurrency(item.precioUnitario)}</td>
+                                          <td className="px-6 py-4 font-black text-indigo-600 text-right tabular-nums text-base">{formatCurrency(item.cantidad * item.precioUnitario)}</td>
+                                       </tr>
+                                   );
+                               })}
+                            </tbody>
+                         </table>
+                      </div>
+                      
+                      {/* TOTALES */}
+                      <div className="bg-slate-50 dark:bg-slate-900/50 p-6 md:p-8 border-t border-slate-200 dark:border-slate-800">
+                         <div className="flex justify-between items-center text-sm font-black text-slate-500 uppercase tracking-widest mb-2">
+                             <span>Total de la Orden</span>
+                             <span className="text-3xl text-slate-900 dark:text-white">{formatCurrency(verDetallePedido.total)}</span>
+                         </div>
+                         {(() => {
+                             const abonado = (verDetallePedido.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                             if (abonado > 0) {
+                                 return (
+                                     <>
+                                         <div className="flex justify-between items-center text-xs font-bold text-emerald-600 mt-4 bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl">
+                                             <span className="flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> ABONADO HASTA AHORA</span>
+                                             <span className="text-base">-{formatCurrency(abonado)}</span>
+                                         </div>
+                                         <div className="flex justify-between items-center text-sm font-black text-rose-600 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                                             <span>SALDO PENDIENTE (DEUDA)</span>
+                                             <span className="text-2xl">{formatCurrency(verDetallePedido.total - abonado)}</span>
+                                         </div>
+                                     </>
+                                 )
+                             }
+                             return null;
+                         })()}
+                      </div>
+                   </Card>
+                </div>
+             </div>
+          </div>
+        ) : activeProveedorId && showProveedorPanel ? (
           <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950 min-h-0">
             <ProveedorCatalogoTactico
               proveedores={proveedores}
@@ -728,8 +860,22 @@ export default function PrePedidos({
               <Button 
                 variant="outline" 
                 disabled={!activeDraft || activeDraft.items.length === 0}
+                onClick={() => {
+                  toast.success('Borrador guardado');
+                  setActiveProveedorId(null);
+                  setShowProveedorPanel(false);
+                }}
+                title="Guardar para después"
+                className="w-14 h-14 rounded-2xl p-0 shrink-0 text-indigo-600 border-slate-200 dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 hover:border-indigo-200 transition-colors"
+              >
+                <Save className="w-5 h-5" />
+              </Button>
+              <Button 
+                variant="outline" 
+                disabled={!activeDraft || activeDraft.items.length === 0}
                 onClick={handleShareWhatsApp}
-                className="w-14 h-14 rounded-2xl p-0 shrink-0 text-emerald-600 border-slate-200 hover:bg-emerald-50 hover:border-emerald-200"
+                title="Enviar cotización por WhatsApp"
+                className="w-14 h-14 rounded-2xl p-0 shrink-0 text-emerald-600 border-slate-200 dark:border-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 hover:border-emerald-200 transition-colors"
               >
                 <Share2 className="w-5 h-5" />
               </Button>
@@ -862,7 +1008,8 @@ export default function PrePedidos({
                                                                 <select value={metodoAbono} onChange={e => setMetodoAbono(e.target.value as any)} className="w-full h-7 text-xs rounded-md border border-slate-200 px-2 outline-none">
                                                                     <option value="efectivo">Efectivo</option>
                                                                     <option value="nequi">Nequi</option>
-                                                                    <option value="credito">Transferencia</option>
+                                                                    <option value="transferencia">Transferencia</option>
+                                                                    <option value="credito">Crédito</option>
                                                                 </select>
                                                                 <div className="flex gap-1">
                                                                     <Button size="sm" onClick={() => setAbonandoId(null)} variant="outline" className="flex-1 h-7 text-[10px]">Cancelar</Button>
@@ -918,62 +1065,7 @@ export default function PrePedidos({
           )}
       </div>
 
-      {/* Modal Historial de Pedidos */}
-      {verDetallePedido && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-             <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800">
-                <div className="p-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
-                    <div>
-                        <h3 className="font-black text-lg uppercase text-slate-900 dark:text-white">{verDetallePedido.nombre}</h3>
-                        <p className="text-xs font-bold text-slate-500">{verDetallePedido.numeroOrden || 'Sin número'}</p>
-                    </div>
-                    <button onClick={() => setVerDetallePedido(null)} className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center text-slate-500 hover:text-rose-500 transition-colors">
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-                <div className="flex-1 overflow-auto p-5">
-                    <div className="space-y-4 mb-6">
-                        {verDetallePedido.items.map(item => {
-                            const prod = getProductoById(item.productoId);
-                            return (
-                                <div key={item.id} className="flex items-center justify-between text-sm">
-                                    <div className="flex-1">
-                                        <p className="font-bold text-slate-700 dark:text-slate-300">{prod?.nombre}</p>
-                                        <p className="text-xs text-slate-400">{item.cantidad} x {formatCurrency(item.precioUnitario)}</p>
-                                    </div>
-                                    <p className="font-black text-indigo-600">{formatCurrency(item.cantidad * item.precioUnitario)}</p>
-                                </div>
-                            );
-                        })}
-                    </div>
-                    <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-xl">
-                        <div className="flex justify-between items-center mb-1 text-sm font-bold text-slate-600 dark:text-slate-300">
-                            <span>TOTAL</span>
-                            <span className="text-lg text-slate-900 dark:text-white">{formatCurrency(verDetallePedido.total)}</span>
-                        </div>
-                        {(() => {
-                           const abonado = (verDetallePedido.abonos ?? []).reduce((s, a) => s + a.monto, 0);
-                           if (abonado > 0) {
-                               return (
-                                   <>
-                                       <div className="flex justify-between items-center text-xs font-bold text-emerald-600 mt-1">
-                                           <span>ABONADO</span>
-                                           <span>-{formatCurrency(abonado)}</span>
-                                       </div>
-                                       <div className="flex justify-between items-center text-xs font-black text-rose-600 mt-2 pt-2 border-t border-slate-200 dark:border-slate-700">
-                                           <span>PENDIENTE</span>
-                                           <span>{formatCurrency(verDetallePedido.total - abonado)}</span>
-                                       </div>
-                                   </>
-                               )
-                           }
-                           return null;
-                        })()}
-                    </div>
-                </div>
-             </div>
-         </div>
-      )}
+      {/* Modal Historial de Pedidos (ELIMINADO - Ahora es vista central) */}
 
       <PrePedidoModal isOpen={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} nuevoPedido={nuevoPedido} setNuevoPedido={setNuevoPedido} proveedores={proveedores} onSubmit={handleCrearPedido} />
     </div>
