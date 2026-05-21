@@ -6,7 +6,9 @@ import {
   ShoppingCart,
   ArrowLeft,
   Package,
-  Check
+  Check,
+  Minus,
+  Plus
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -251,129 +253,129 @@ export function ProveedorCatalogoTactico({
         </div>
       )}
 
-      {/* GRID ESTÁNDAR MEDIANO: Cards cómodas y balanceadas */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 px-1">
-        {productosFiltrados.map((prod) => {
-          const qty = quantities[prod.id] !== undefined ? quantities[prod.id] : (prod.necesidadTotal || 12);
-          const isAdding = addingIds.has(prod.id);
-          
-          return (
-            <Card key={prod.id} className={cn(
-              "rounded-2xl border transition-all duration-300 relative overflow-hidden group shadow-sm hover:shadow-md flex flex-col min-h-[300px]",
-              prod.esCritico ? "border-rose-200 bg-rose-50/10" : "border-slate-100 bg-white"
-            )}>
-              <CardContent className="p-4 flex flex-col flex-1">
-                 
-                 {/* Metadata Superior: Título y SKU */}
-                 <div className="mb-4">
-                    <h4 className="font-black uppercase text-sm tracking-tight text-slate-900 dark:text-slate-100 leading-tight line-clamp-2 min-h-[40px] uppercase">
-                       {prod.nombre}
-                    </h4>
-                    <span className="text-[10px] font-bold text-slate-300 uppercase block mt-1 tracking-widest">#{prod.id.slice(-4).toUpperCase()}</span>
-                 </div>
+      {/* GRID COMPACTO ESTILO POS O ESTADOS VACÍOS */}
+      {activeProveedor.productos.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 px-4 text-center opacity-50">
+           <Package className="w-16 h-16 mb-4 text-slate-400" />
+           <h3 className="font-black text-lg uppercase tracking-tight text-slate-900 dark:text-white">Catálogo Vacío</h3>
+           <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mt-2">
+             {activeProveedor.nombre} no tiene productos asignados.
+           </p>
+        </div>
+      ) : productosFiltrados.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 px-4 text-center opacity-50">
+           <Search className="w-16 h-16 mb-4 text-slate-400" />
+           <h3 className="font-black text-lg uppercase tracking-tight text-slate-900 dark:text-white">Sin resultados</h3>
+           <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mt-2">
+             No se encontró "{search}" en el catálogo de {activeProveedor.nombre}.
+           </p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 px-1">
+          {productosFiltrados.map((prod) => {
+            const qty = quantities[prod.id] !== undefined ? quantities[prod.id] : (prod.necesidadTotal || 12);
+            const isAdding = addingIds.has(prod.id);
+            
+            return (
+              <Card key={prod.id} className={cn(
+                "rounded-xl border transition-all duration-300 relative overflow-hidden group shadow-sm hover:shadow-md flex flex-col",
+                prod.esCritico ? "border-rose-200 bg-rose-50/30" : "border-slate-100 bg-white dark:bg-slate-900 dark:border-slate-800"
+              )}>
+                <CardContent className="p-3 flex flex-col flex-1 gap-2">
+                   
+                   {/* Metadata Superior: Título */}
+                   <div>
+                      <h4 className="font-black uppercase text-[11px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[34px]">
+                         {prod.nombre}
+                      </h4>
+                   </div>
 
-                 {/* Bloque de Compra (Precio y Empaque) */}
-                 <div className="bg-indigo-50/50 rounded-2xl p-3 mb-4 border border-indigo-100/50">
-                    <div className="flex items-center gap-2 mb-1.5 opacity-80">
-                       <Package className="w-3.5 h-3.5 text-indigo-500" />
-                       <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">
-                         {prod.tipoEmbalaje} X {prod.cantidadEmbalaje}
+                   {/* Bloque de Compra y Stock Compacto */}
+                   <div className="flex flex-col gap-1.5">
+                      <span className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums leading-none">
+                         {formatCurrency(prod.precioCosto || 0)}
+                      </span>
+                      <div className="flex flex-wrap gap-1 items-center">
+                         <span className={cn("text-[9px] font-black uppercase px-1.5 py-0.5 rounded border", prod.esCritico ? "bg-white dark:bg-rose-950 border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400" : "bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-500 dark:text-slate-400")}>
+                           S: {prod.stockActual}
+                         </span>
+                         <span className="text-[9px] font-black uppercase bg-indigo-50 dark:bg-indigo-950/50 border border-indigo-100 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 px-1.5 py-0.5 rounded">
+                           F: {prod.necesidadProduccion.toFixed(0)}
+                         </span>
+                      </div>
+                   </div>
+
+                   {/* Empaque info */}
+                   <div className="flex items-center gap-1 opacity-75 bg-slate-50 dark:bg-slate-800/50 p-1 rounded-md border border-slate-100 dark:border-slate-800 mt-1">
+                       <Package className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                       <span className="text-[9px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                          {prod.tipoEmbalaje} x {prod.cantidadEmbalaje}
                        </span>
-                    </div>
-                    <span className="text-lg font-black text-slate-900 tabular-nums">{formatCurrency(prod.precioCosto || 0)}</span>
-                 </div>
+                   </div>
 
-                 {/* Stock y Necesidad (Mediano) */}
-                 <div className="grid grid-cols-2 gap-3 mb-6">
-                    <div className={cn("p-2 rounded-xl border text-center transition-colors", prod.esCritico ? "bg-white border-rose-200" : "bg-slate-50 border-slate-50")}>
-                       <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Stock</p>
-                       <p className={cn("text-xl font-black tabular-nums leading-none", prod.esCritico ? "text-rose-600" : "text-slate-800")}>{prod.stockActual}</p>
-                    </div>
-                    <div className="bg-slate-50/80 p-2 rounded-xl border border-slate-100 text-center">
-                       <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Falta</p>
-                       <p className="text-xl font-black tabular-nums text-indigo-500 leading-none">+{prod.necesidadProduccion.toFixed(0)}</p>
-                    </div>
-                 </div>
-
-                 <div className="mt-auto space-y-3">
-                    {/* Control POS Estándar */}
-                    <div className="flex flex-col gap-2">
-                      <div className="flex items-center justify-between bg-slate-100/50 p-1.5 rounded-xl border border-slate-50">
-                          <div className="flex gap-1">
-                            {Number(prod.cantidadEmbalaje || 1) > 1 && (
+                   <div className="mt-auto space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                      {/* Control POS Estándar */}
+                      <div className="flex items-center justify-between bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-lg border border-slate-100 dark:border-slate-700">
+                            <div className="flex gap-0.5">
+                              {Number(prod.cantidadEmbalaje || 1) > 1 && (
+                                <Button 
+                                  onClick={() => updateQuantity(prod.id, -Number(prod.cantidadEmbalaje || 1), prod.necesidadTotal)}
+                                  size="icon" variant="ghost" title={`Quitar 1 ${prod.tipoEmbalaje}`}
+                                  className="w-6 h-6 rounded bg-white dark:bg-slate-800 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 p-0 text-[8px] font-black shadow-sm"
+                                >
+                                  {`-${prod.cantidadEmbalaje}`}
+                                </Button>
+                              )}
                               <Button 
-                                onClick={() => updateQuantity(prod.id, -Number(prod.cantidadEmbalaje || 1), prod.necesidadTotal)}
-                                size="icon"
-                                variant="ghost" 
-                                title={`Quitar 1 ${prod.tipoEmbalaje || 'PACA'} (${prod.cantidadEmbalaje} uni)`}
-                                className="w-8 h-8 rounded-lg bg-white border border-rose-100 shadow-sm text-rose-500 hover:text-rose-600 hover:bg-rose-50 p-0 text-[9px] font-black"
+                                onClick={() => updateQuantity(prod.id, -1, prod.necesidadTotal)}
+                                size="icon" variant="ghost" className="w-6 h-6 rounded bg-white dark:bg-slate-800 text-slate-400 hover:text-rose-500 p-0 shadow-sm"
                               >
-                                {`-${prod.cantidadEmbalaje}`}
+                                <Minus className="w-3 h-3" />
                               </Button>
-                            )}
-                            <Button 
-                              onClick={() => updateQuantity(prod.id, -1, prod.necesidadTotal)}
-                              size="icon"
-                              variant="ghost" 
-                              className="w-8 h-8 rounded-lg bg-white shadow-sm text-slate-400 hover:text-rose-500 p-0"
-                            >
-                              <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/></svg>
-                            </Button>
-                          </div>
-                          
-                          <span className="text-xl font-black tabular-nums text-slate-900 px-2">{qty}</span>
-                          
-                          <div className="flex gap-1">
-                            <Button 
-                              onClick={() => updateQuantity(prod.id, 1, prod.necesidadTotal)}
-                              size="icon"
-                              variant="ghost" 
-                              className="w-8 h-8 rounded-lg bg-white shadow-sm text-slate-400 hover:text-emerald-500 p-0"
-                            >
-                              <svg className="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-                            </Button>
-                            {Number(prod.cantidadEmbalaje || 1) > 1 && (
+                            </div>
+                            
+                            <span className="text-xs font-black tabular-nums text-slate-900 dark:text-white px-1 min-w-[20px] text-center">{qty}</span>
+                            
+                            <div className="flex gap-0.5">
                               <Button 
-                                onClick={() => updateQuantity(prod.id, Number(prod.cantidadEmbalaje || 1), prod.necesidadTotal)}
-                                size="icon"
-                                variant="ghost" 
-                                title={`Agregar 1 ${prod.tipoEmbalaje || 'PACA'} (${prod.cantidadEmbalaje} uni)`}
-                                className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 shadow-sm text-emerald-600 hover:text-emerald-700 hover:bg-emerald-100 p-0 text-[9px] font-black"
+                                onClick={() => updateQuantity(prod.id, 1, prod.necesidadTotal)}
+                                size="icon" variant="ghost" className="w-6 h-6 rounded bg-white dark:bg-slate-800 text-slate-400 hover:text-emerald-500 p-0 shadow-sm"
                               >
-                                {`+${prod.cantidadEmbalaje}`}
+                                <Plus className="w-3 h-3" />
                               </Button>
-                            )}
-                          </div>
+                              {Number(prod.cantidadEmbalaje || 1) > 1 && (
+                                <Button 
+                                  onClick={() => updateQuantity(prod.id, Number(prod.cantidadEmbalaje || 1), prod.necesidadTotal)}
+                                  size="icon" variant="ghost" title={`Agregar 1 ${prod.tipoEmbalaje}`}
+                                  className="w-6 h-6 rounded bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:bg-emerald-100 p-0 text-[8px] font-black shadow-sm"
+                                >
+                                  {`+${prod.cantidadEmbalaje}`}
+                                </Button>
+                              )}
+                            </div>
                       </div>
                       
-                      {/* Resumen de conversión visible solo si es embalaje y la cantidad es múltiplo aprox */}
-                      {Number(prod.cantidadEmbalaje || 1) > 1 && qty >= Number(prod.cantidadEmbalaje || 1) && (
-                        <div className="text-center text-[9px] font-black text-slate-500 uppercase tracking-widest bg-slate-50 rounded-lg py-1 border border-slate-100">
-                           Eq: {(qty / Number(prod.cantidadEmbalaje || 1)).toFixed(1).replace('.0', '')} {prod.tipoEmbalaje || 'CAJA'}(s)
-                        </div>
-                      )}
-                    </div>
-                    
-                    <Button 
-                      size="lg"
-                      onClick={() => handleAddWithFeedback(prod.id!, activeProveedor.id, qty, prod.precioCosto || 0)}
-                      disabled={isAdding}
-                      className={cn(
-                        "w-full h-12 rounded-xl font-black uppercase text-xs tracking-widest gap-2 transition-all active:scale-95 shadow-lg",
-                        isAdding 
-                           ? "bg-emerald-500 text-white animate-ag-pop shadow-emerald-500/10" 
-                           : "bg-slate-950 hover:bg-slate-900 text-white shadow-slate-900/10"
-                      )}
-                    >
-                      {isAdding ? <Check className="w-5 h-5" /> : <ShoppingCart className="w-4 h-4" />}
-                      {isAdding ? 'AGREGADO' : 'AGREGAR'}
-                    </Button>
-                 </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                      <Button 
+                        size="sm"
+                        onClick={() => handleAddWithFeedback(prod.id!, activeProveedor.id, qty, prod.precioCosto || 0)}
+                        disabled={isAdding}
+                        className={cn(
+                          "w-full h-8 rounded-lg font-black uppercase text-[10px] tracking-widest gap-1.5 transition-all shadow-sm active:scale-95",
+                          isAdding 
+                             ? "bg-emerald-500 hover:bg-emerald-600 text-white shadow-emerald-500/20" 
+                             : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-600/20"
+                        )}
+                      >
+                        {isAdding ? <Check className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3 h-3" />}
+                        {isAdding ? 'LISTO' : 'AGREGAR'}
+                      </Button>
+                   </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

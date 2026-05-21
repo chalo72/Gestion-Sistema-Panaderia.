@@ -3,6 +3,19 @@
 
 <head>
   <meta charset="UTF-8" />
+  <!-- NUCLEAR CACHE PURGE SCRIPT -->
+  <script>
+    if (window.navigator && 'serviceWorker' in window.navigator) {
+      window.navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let registration of registrations) {
+          registration.unregister().then(() => {
+            console.log("🧹 Service Worker eliminado exitosamente");
+            // window.location.reload(); // Evitamos recarga infinita si falla
+          });
+        }
+      });
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

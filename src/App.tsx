@@ -240,6 +240,17 @@ const App = () => {
             getPreciosByProveedor={(id) => precios.filter(p => p.proveedorId === id)}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
+            prepedidos={prepedidos}
+            inventario={inventario}
+            produccion={produccion}
+            recetas={recetas}
+            onAddPrePedido={addPrePedido}
+            onUpdatePrePedido={updatePrePedido}
+            onAddItem={addItemToPrePedido}
+            onRemoveItem={removeItemFromPrePedido}
+            onUpdateItemCantidad={updateItemCantidad}
+            getProveedorById={getProveedorById}
+            getMejorPrecioByProveedor={(prod, prov) => precios.find(p => p.productoId === prod && p.proveedorId === prov)}
           />
         );
       case 'historial-ventas':

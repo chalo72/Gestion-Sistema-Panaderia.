@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Calendar,
   Check,
+  Search,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -104,6 +105,13 @@ export default function PrePedidos({
   const [showSupplierGrid, setShowSupplierGrid] = useState(true); // ✅ INICIAR EN GRID SIEMPRE
   const [activeProveedorId, setActiveProveedorId] = useState<string | null>(null);
   const [showProveedorPanel, setShowProveedorPanel] = useState(false); // ✅ NUEVO: Panel de proveedor abierto
+  const [searchProveedorText, setSearchProveedorText] = useState(''); // ✅ NUEVO: Buscador de proveedores
+
+  // Proveedores filtrados por búsqueda
+  const proveedoresFiltrados = useMemo(() => {
+    if (!searchProveedorText.trim()) return proveedores;
+    return proveedores.filter(p => p.nombre?.toLowerCase().includes(searchProveedorText.toLowerCase()));
+  }, [proveedores, searchProveedorText]);
 
   // Pedidos en borrador para el ticket rápido
   const pedidosBorrador = useMemo(() => 
@@ -424,235 +432,223 @@ export default function PrePedidos({
   }
 
   return (
-    <div className="min-h-screen flex flex-col gap-6 px-4 md:px-6 py-8 bg-gradient-to-br from-slate-50 to-indigo-50/20 dark:from-slate-950 dark:to-slate-900/50">
-      <div className="max-w-7xl mx-auto w-full space-y-6">
-        
-        {/* HEADER */}
-        <PrePedidoHeader
-          onAddPrePedido={() => setIsCreateModalOpen(true)}
-          onGenerarSugerencias={async () => {
-            const count = await onGenerarSugerencias();
-            if (count > 0) toast.success(`${count} Borradores inteligentes generados 🪄`);
-            else toast.info('Stock equilibrado.');
-          }}
-          onVerHistorial={() => setActiveTab('gestion')}
-          pedidosCount={prepedidos.length}
-        />
+    <div className="h-[100dvh] w-full flex bg-slate-50 dark:bg-slate-950 overflow-hidden font-sans">
+      
+      {/* ═══ PANEL PRINCIPAL (IZQUIERDA) ═══ */}
+      <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-900 z-10 relative min-w-0">
 
-        {/* MAIN LAYOUT: GRID DE PROVEEDORES + PANEL LATERAL CON PRODUCTOS */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 min-h-[70vh]">
+        {activeProveedorId && showProveedorPanel ? (
+          <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950 min-h-0">
+            <ProveedorCatalogoTactico
+              proveedores={proveedores}
+              productos={productos}
+              precios={precios}
+              inventario={inventario}
+              produccion={produccion}
+              recetas={recetas}
+              formatCurrency={formatCurrency}
+              onAddItemToDraft={handleAddItemToDraft}
+              getProductoById={getProductoById}
+              activeProveedorId={activeProveedorId}
+              onShowBoard={() => setShowProveedorPanel(false)}
+            />
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col h-full overflow-hidden p-6 lg:p-8 min-h-0">
+             {/* Header y Buscador estilo POS */}
+             <div className="flex items-center gap-4 mb-6">
+                <Button variant="ghost" onClick={() => setActiveTab('gestion')} className="shrink-0 gap-2 font-black rounded-2xl text-slate-500 hover:bg-slate-100 px-4 h-14 bg-slate-50 border border-slate-100">
+                   <LayoutGrid className="w-5 h-5" /> HISTORIAL
+                </Button>
+                <div className="relative flex-1 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center px-5 h-14 border border-slate-100 dark:border-slate-700 transition-all focus-within:bg-white focus-within:shadow-md focus-within:border-indigo-200">
+                   <Search className="w-5 h-5 text-slate-400" />
+                   <input 
+                     value={searchProveedorText}
+                     onChange={(e) => setSearchProveedorText(e.target.value)}
+                     placeholder="Busca un proveedor por nombre para iniciar un pedido..." 
+                     className="bg-transparent border-none outline-none flex-1 px-4 text-sm font-bold placeholder:text-slate-400 text-slate-900 dark:text-white h-full"
+                   />
+                </div>
+             </div>
+
+             {/* Metadatos */}
+             <div className="flex items-center justify-between px-2 mb-6 border-b border-slate-100 pb-4 shrink-0">
+                <div className="flex items-center gap-2 text-[11px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg">
+                   <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                   SELECCIONA UN PROVEEDOR PARA EMPEZAR
+                </div>
+                <div className="text-[11px] font-black text-slate-400 uppercase tracking-widest">
+                  {proveedoresFiltrados.length} PROVEEDORES ENCONTRADOS
+                </div>
+             </div>
+
+             {/* GRID ESTILO POS */}
+             <ScrollArea className="flex-1 -mx-2 px-2 min-h-0">
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-4 pb-20">
+                  {proveedoresFiltrados.length === 0 ? (
+                    <div className="col-span-full py-16 flex flex-col items-center justify-center opacity-50 text-center">
+                       <Search className="w-12 h-12 mb-3 text-slate-400" />
+                       <p className="text-sm font-black uppercase tracking-widest text-slate-500">No hay proveedores que coincidan con "{searchProveedorText}"</p>
+                    </div>
+                  ) : proveedoresFiltrados.map(prov => {
+                    const tieneBorrador = prepedidos.some(p => p.proveedorId === prov.id && p.estado === 'borrador');
+                    const colorClasses = [
+                      "bg-amber-100/50 text-amber-600", "bg-rose-100/50 text-rose-600", 
+                      "bg-indigo-100/50 text-indigo-600", "bg-emerald-100/50 text-emerald-600", 
+                      "bg-sky-100/50 text-sky-600", "bg-fuchsia-100/50 text-fuchsia-600"
+                    ];
+                    const charCode = prov.nombre ? prov.nombre.charCodeAt(0) : 0;
+                    const colorClass = colorClasses[charCode % colorClasses.length];
+
+                    return (
+                      <button 
+                        key={prov.id}
+                        onClick={() => {
+                          setActiveProveedorId(prov.id);
+                          setShowProveedorPanel(true);
+                        }}
+                        className="flex flex-col items-center justify-start p-5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all active:scale-95 group gap-3 relative h-full"
+                      >
+                         <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl transition-transform group-hover:scale-110 group-hover:rotate-3 shadow-inner shrink-0", colorClass)}>
+                            {prov.nombre ? prov.nombre.charAt(0) : 'P'}
+                         </div>
+                         <div className="text-center w-full flex flex-col flex-1">
+                            <h3 className="font-black text-[11px] uppercase tracking-tight text-[#1a1c2e] dark:text-slate-200 px-1 leading-snug line-clamp-3 mb-2 break-words">
+                               {prov.nombre}
+                            </h3>
+                            <div className="mt-auto">
+                               <Badge className="bg-slate-50 text-slate-400 border border-slate-100 shadow-sm text-[9px] uppercase font-black px-3 py-1 rounded-full tracking-widest">
+                                 {tieneBorrador ? 'TICKET ACTIVO' : 'NUEVO PEDIDO'}
+                               </Badge>
+                            </div>
+                         </div>
+                      </button>
+                    );
+                  })}
+                </div>
+             </ScrollArea>
+          </div>
+        )}
+      </div>
+
+      {/* ═══ PANEL DERECHO (TICKET) ═══ */}
+      <div className="w-[320px] lg:w-[380px] xl:w-[420px] h-full flex flex-col bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0">
           
-          {/* ═══ PARTE IZQUIERDA: GRILLA DE PROVEEDORES ═══ */}
-          <div className="lg:col-span-1 space-y-4">
-            <div>
-              <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Proveedores</h2>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Toca uno para empezar</p>
-            </div>
-            
-            <ScrollArea className="h-[600px] pr-4">
-              <div className="space-y-3">
-                {proveedores.map(prov => {
-                  const isSelected = activeProveedorId === prov.id;
-                  const tieneBorrador = prepedidos.some(p => p.proveedorId === prov.id && p.estado === 'borrador');
-                  const criticalCount = productos.filter(p => {
-                    const precio = precios.find(pr => pr.productoId === p.id && pr.proveedorId === prov.id);
-                    const inv = inventario.find(i => i.productoId === p.id);
-                    return precio && inv && inv.stockActual < inv.stockMinimo;
-                  }).length;
-                  
-                  return (
-                    <Card 
-                      key={prov.id}
-                      onClick={() => {
-                        setActiveProveedorId(prov.id);
-                        setShowProveedorPanel(true);
-                      }}
-                      className={cn(
-                        "rounded-2xl border cursor-pointer transition-all group relative p-4 hover:shadow-lg",
-                        isSelected 
-                          ? "bg-indigo-600 border-indigo-500 shadow-lg shadow-indigo-500/20 text-white" 
-                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300"
-                      )}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div className={cn(
-                          "w-10 h-10 rounded-xl flex items-center justify-center border transition-all text-lg font-black",
-                          isSelected ? "bg-white/20 border-white/30 text-white" : "bg-indigo-100 dark:bg-indigo-950 text-indigo-600 border-indigo-200"
-                        )}>
-                          {prov.nombre.charAt(0)}
+          {/* HEADER DEL TICKET ESTILO "VENTA RÁPIDA" */}
+          <div className="bg-[#1a1c2e] p-5 text-white shadow-lg z-20 flex flex-col gap-4">
+             <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                  <ShoppingCart className="w-6 h-6 text-indigo-300" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm uppercase tracking-widest text-indigo-100">Órdenes de Compra</h3>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                     {activeProveedorId ? getProveedorById(activeProveedorId)?.nombre : 'Selecciona proveedor'}
+                  </p>
+                </div>
+             </div>
+             {activeDraft && (
+               <div className="bg-white/5 rounded-xl px-4 py-2.5 border border-white/10 flex items-center gap-2">
+                 <Store className="w-4 h-4 text-indigo-400" />
+                 <span className="text-xs font-black text-slate-200 truncate flex-1 uppercase tracking-wider">{activeDraft.nombre}</span>
+               </div>
+             )}
+          </div>
+
+          {/* LISTADO DE ITEMS DEL TICKET */}
+          <div className="flex-1 overflow-hidden relative bg-white dark:bg-slate-900 min-h-0">
+            <ScrollArea className="h-full p-4 lg:p-6 min-h-0">
+              {!activeDraft || activeDraft.items.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center opacity-20 pt-32">
+                  <ShoppingCart className="w-32 h-32 mb-6 text-slate-400" />
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activeDraft?.items.map((item) => {
+                    const prod = getProductoById(item.productoId);
+                    return (
+                      <div key={item.id} className="border-b border-slate-100 dark:border-slate-800 pb-4 last:border-none group">
+                        <div className="flex items-start justify-between mb-2">
+                          <h5 className="font-black text-xs uppercase tracking-tight text-slate-900 dark:text-slate-100 leading-snug pr-2">
+                            {prod?.nombre}
+                          </h5>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            onClick={() => activeDraft && onRemoveItem(activeDraft.id, item.id)} 
+                            className="h-7 w-7 text-rose-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
                         </div>
-                        {criticalCount > 0 && (
-                          <Badge className="bg-rose-500 text-white border-none font-black text-[8px] px-1.5 py-0.5 animate-pulse">
-                            {criticalCount}!
-                          </Badge>
-                        )}
+                        <div className="flex items-center justify-between mt-3">
+                          <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-800 rounded-xl p-1 border border-slate-100">
+                            <button 
+                              onClick={() => {
+                                const newQty = Math.max(1, item.cantidad - 1);
+                                activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty);
+                              }}
+                              className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-white rounded-lg transition-colors shadow-sm bg-slate-100"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="text-sm font-black min-w-[28px] text-center text-slate-900 dark:text-slate-100">
+                              {item.cantidad}
+                            </span>
+                            <button 
+                              onClick={() => {
+                                const newQty = item.cantidad + 1;
+                                activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty);
+                              }}
+                              className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-emerald-500 hover:bg-white rounded-lg transition-colors shadow-sm bg-slate-100"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <span className="font-black text-sm text-indigo-600 tabular-nums">
+                            {formatCurrency(item.cantidad * item.precioUnitario)}
+                          </span>
+                        </div>
                       </div>
-                      <h3 className={cn(
-                        "font-black text-sm uppercase tracking-tight truncate",
-                        isSelected ? "text-white" : "text-slate-900 dark:text-slate-100"
-                      )}>
-                        {prov.nombre}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={cn(
-                          "text-[9px] font-black uppercase tracking-widest",
-                          isSelected ? "text-indigo-100" : "text-slate-400"
-                        )}>
-                          CATÁLOGO
-                        </span>
-                        {tieneBorrador && (
-                          <Badge className={isSelected ? "bg-white/20 text-white" : "bg-emerald-500/10 text-emerald-600"} style={{fontSize: "7px"}}>
-                            ACTIVO
-                          </Badge>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </ScrollArea>
           </div>
 
-          {/* ═══ PARTE CENTRAL: CATÁLOGO DEL PROVEEDOR ═══ */}
-          <div className="lg:col-span-2">
-            {activeProveedorId && showProveedorPanel ? (
-              <ProveedorCatalogoTactico
-                proveedores={proveedores}
-                productos={productos}
-                precios={precios}
-                inventario={inventario}
-                produccion={produccion}
-                recetas={recetas}
-                formatCurrency={formatCurrency}
-                onAddItemToDraft={handleAddItemToDraft}
-                getProductoById={getProductoById}
-                activeProveedorId={activeProveedorId}
-                onShowBoard={() => setShowProveedorPanel(false)}
-              />
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate-400 py-20">
-                <Store className="w-16 h-16 mb-4 opacity-20" />
-                <p className="font-black uppercase text-sm tracking-widest">Selecciona un proveedor</p>
-                <p className="text-xs mt-2">para ver su catálogo</p>
-              </div>
-            )}
-          </div>
+          {/* FOOTER DEL TICKET */}
+          <div className="p-5 lg:p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] z-20">
+            <div className="flex justify-between items-center mb-5">
+              <span className="text-xs font-black uppercase tracking-widest text-slate-400">Total</span>
+              <span className="text-3xl font-black text-[#1a1c2e] dark:text-white tabular-nums tracking-tighter">
+                {formatCurrency(activeDraft?.total || 0)}
+              </span>
+            </div>
 
-          {/* ═══ PARTE DERECHA: TICKET/CARRITO ═══ */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-8 h-fit">
-              <Card className="rounded-3xl bg-white dark:bg-slate-900 shadow-2xl border-slate-200 dark:border-slate-800 overflow-hidden">
-                <div className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-6 text-white">
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className="w-10 h-10 rounded-lg bg-white/20 flex items-center justify-center">
-                      <ShoppingCart className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-black uppercase text-sm tracking-tight">Ticket</h3>
-                      <p className="text-xs font-bold uppercase tracking-widest text-indigo-100">Resumen</p>
-                    </div>
-                  </div>
-                </div>
-
-                <CardContent className="p-0">
-                  <ScrollArea className="h-[350px] p-6">
-                    {!activeDraft || activeDraft.items.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center py-16 opacity-40">
-                        <Package className="w-12 h-12 mb-4 text-slate-300" />
-                        <p className="text-xs font-black uppercase tracking-widest text-slate-400">Carrito vacío</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {activeDraft?.items.map((item) => {
-                          const prod = getProductoById(item.productoId);
-                          return (
-                            <div key={item.id} className="border-b border-slate-100 dark:border-slate-800 pb-3 last:border-none">
-                              <div className="flex items-start justify-between mb-2">
-                                <h5 className="font-black text-xs uppercase tracking-tight text-slate-900 dark:text-slate-100 flex-1">
-                                  {prod?.nombre}
-                                </h5>
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  onClick={() => activeDraft && onRemoveItem(activeDraft.id, item.id)} 
-                                  className="h-6 w-6 text-rose-500 hover:bg-rose-50"
-                                >
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              </div>
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
-                                  <button 
-                                    onClick={() => {
-                                      const newQty = Math.max(1, item.cantidad - 1);
-                                      activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty);
-                                    }}
-                                    className="w-5 h-5 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded text-xs"
-                                  >
-                                    <Minus className="w-3 h-3" />
-                                  </button>
-                                  <span className="text-xs font-black min-w-[20px] text-center text-slate-900 dark:text-slate-100">
-                                    {item.cantidad}
-                                  </span>
-                                  <button 
-                                    onClick={() => {
-                                      const newQty = item.cantidad + 1;
-                                      activeDraft && onUpdateItemCantidad(activeDraft.id, item.id, newQty);
-                                    }}
-                                    className="w-5 h-5 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-200 rounded text-xs"
-                                  >
-                                    <Plus className="w-3 h-3" />
-                                  </button>
-                                </div>
-                                <span className="font-black text-xs text-indigo-600 tabular-nums">
-                                  {formatCurrency(item.cantidad * item.precioUnitario)}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </ScrollArea>
-
-                  <div className="p-6 bg-slate-50 dark:bg-slate-950 border-t border-slate-100 dark:border-slate-800 space-y-4">
-                    <div className="flex justify-between items-center pt-2 border-t-2 border-dashed border-slate-200 dark:border-slate-800">
-                      <span className="text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-400">Total</span>
-                      <span className="text-2xl font-black text-indigo-600 tabular-nums">
-                        {formatCurrency(activeDraft?.total || 0)}
-                      </span>
-                    </div>
-
-                    <div className="flex gap-2 pt-2">
-                      <Button 
-                        variant="outline" 
-                        disabled={!activeDraft || activeDraft.items.length === 0}
-                        onClick={handleShareWhatsApp}
-                        className="flex-1 h-10 rounded-xl font-black text-xs uppercase gap-2"
-                      >
-                        <Share2 className="w-4 h-4" /> WhatsApp
-                      </Button>
-                      <Button
-                        disabled={!activeDraft || activeDraft.items.length === 0}
-                        onClick={() => {
-                          if (activeDraft) {
-                            onUpdatePrePedido(activeDraft.id, { estado: 'confirmado' });
-                            toast.success('Pedido confirmado ✓');
-                          }
-                        }}
-                        className="flex-1 h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs uppercase"
-                      >
-                        <Check className="w-4 h-4" /> Confirmar
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                disabled={!activeDraft || activeDraft.items.length === 0}
+                onClick={handleShareWhatsApp}
+                className="w-14 h-14 rounded-2xl p-0 shrink-0 text-emerald-600 border-slate-200 hover:bg-emerald-50 hover:border-emerald-200"
+              >
+                <Share2 className="w-5 h-5" />
+              </Button>
+              <Button
+                disabled={!activeDraft || activeDraft.items.length === 0}
+                onClick={() => {
+                  if (activeDraft) {
+                    onUpdatePrePedido(activeDraft.id, { estado: 'confirmado' });
+                    toast.success('Pedido confirmado ✓');
+                  }
+                }}
+                className="flex-1 h-14 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
+              >
+                Confirmar <Check className="w-5 h-5 ml-2" />
+              </Button>
             </div>
           </div>
-
-        </div>
-
       </div>
 
       <PrePedidoModal isOpen={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} nuevoPedido={nuevoPedido} setNuevoPedido={setNuevoPedido} proveedores={proveedores} onSubmit={handleCrearPedido} />

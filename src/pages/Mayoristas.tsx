@@ -5,7 +5,7 @@ import {
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
     Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon,
-    Smartphone, CreditCard, PlusCircle, ChevronRight
+    Smartphone, CreditCard, PlusCircle, ChevronRight, Folder
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -857,10 +857,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     }, {} as Record<string, typeof productosPerfil>)
                                 ).map(([categoria, items]) => (
                                     <div key={categoria}>
-                                        <div className="flex items-center gap-2 mb-2 px-1">
-                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
-                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-2">{categoria}</span>
-                                            <div className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                                        <div className="flex items-center gap-3 mb-4 mt-6">
+                                            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                                              <Folder className="w-4 h-4 text-slate-500" />
+                                            </div>
+                                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white">
+                                              {categoria}
+                                            </h3>
+                                            <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800" />
                                         </div>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
                                         {items.map(d => {
@@ -874,39 +878,48 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 enCarrito ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100 bg-white'
                                             )}
                                         >
-                                            <CardContent className="p-3 flex flex-col gap-2">
-                                                <h4 className="font-black text-xs uppercase tracking-tight text-slate-900 leading-tight line-clamp-2 min-h-[32px]">
-                                                    {d.producto.nombre}
-                                                </h4>
-                                                <div className="bg-indigo-50 rounded-xl p-2 border border-indigo-100">
-                                                    <p className="text-[8px] font-black text-indigo-500 uppercase tracking-widest">Precio {tConf.label}</p>
-                                                    <p className="text-lg font-black text-slate-900 tabular-nums leading-none mt-0.5">{formatCurrency(d.precioMayorista)}</p>
-                                                </div>
-                                                <div className="flex items-center justify-between text-[8px] font-black text-slate-400 uppercase">
-                                                    <span>Ganancia</span>
-                                                    <span className="text-emerald-600">+{formatCurrency(d.gananciaPanaderiaPorUnidad)}</span>
-                                                </div>
-                                                {enCarrito ? (
-                                                    <div className="flex items-center justify-between bg-indigo-600 rounded-xl px-2 py-1.5">
-                                                        <button
-                                                            onClick={e => { e.stopPropagation(); actualizarCantidadPos(d.producto.id, -1); }}
-                                                            className="w-6 h-6 rounded-lg bg-white/20 text-white flex items-center justify-center hover:bg-white/30"
-                                                        >
-                                                            <Minus className="w-3 h-3" />
-                                                        </button>
-                                                        <span className="text-sm font-black text-white tabular-nums">{enCarrito.cantidad}</span>
-                                                        <button
-                                                            onClick={e => { e.stopPropagation(); actualizarCantidadPos(d.producto.id, 1); }}
-                                                            className="w-6 h-6 rounded-lg bg-white/20 text-white flex items-center justify-center hover:bg-white/30"
-                                                        >
-                                                            <Plus className="w-3 h-3" />
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center justify-center gap-1 text-[9px] font-black text-indigo-500 uppercase tracking-widest">
-                                                        <Plus className="w-3 h-3" /> Toca para agregar
-                                                    </div>
+                                            <CardContent className="p-3 flex flex-col h-full relative overflow-hidden">
+                                                {enCarrito && (
+                                                   <div className="absolute top-0 right-0 bg-indigo-600 text-white font-black text-[10px] px-2 py-1 rounded-bl-xl z-10 shadow-sm">
+                                                      EN TICKET
+                                                   </div>
                                                 )}
+                                                <div className="flex-1">
+                                                   <h4 className="font-black text-[11px] uppercase tracking-tight text-[#1a1c2e] dark:text-slate-200 leading-snug line-clamp-2 mb-2 pr-4 break-words">
+                                                       {d.producto.nombre}
+                                                   </h4>
+                                                </div>
+                                                <div className="flex flex-col gap-1.5 mt-auto">
+                                                   <div className="flex items-end justify-between">
+                                                      <p className="text-xl font-black text-slate-900 dark:text-white tabular-nums leading-none tracking-tighter">
+                                                        {formatCurrency(d.precioMayorista)}
+                                                      </p>
+                                                      <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
+                                                        +{formatCurrency(d.gananciaPanaderiaPorUnidad)}
+                                                      </span>
+                                                   </div>
+                                                   {enCarrito ? (
+                                                      <div className="flex items-center justify-between bg-indigo-600 rounded-xl px-2 py-1.5 mt-2 shadow-inner" onClick={e => e.stopPropagation()}>
+                                                          <button
+                                                              onClick={e => { e.preventDefault(); e.stopPropagation(); actualizarCantidadPos(d.producto.id, -1); }}
+                                                              className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center hover:bg-white/30 active:scale-95 transition-all"
+                                                          >
+                                                              <Minus className="w-4 h-4" />
+                                                          </button>
+                                                          <span className="text-sm font-black text-white tabular-nums w-8 text-center">{enCarrito.cantidad}</span>
+                                                          <button
+                                                              onClick={e => { e.preventDefault(); e.stopPropagation(); actualizarCantidadPos(d.producto.id, 1); }}
+                                                              className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center hover:bg-white/30 active:scale-95 transition-all"
+                                                          >
+                                                              <Plus className="w-4 h-4" />
+                                                          </button>
+                                                      </div>
+                                                  ) : (
+                                                      <div className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2 py-1.5 bg-slate-50 rounded-xl group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
+                                                          <Plus className="w-3 h-3" /> Toca para agregar
+                                                      </div>
+                                                  )}
+                                                </div>
                                             </CardContent>
                                         </Card>
                                     );
@@ -921,19 +934,23 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     {/* ── PANEL DERECHO: Ticket ── */}
                     <div className="w-full lg:w-[360px] bg-white dark:bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 flex flex-col shadow-2xl">
                         {/* Ticket header */}
-                        <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center">
-                                    <Receipt className="w-5 h-5 text-white" />
+                        {/* Ticket header estio Venta Rápida */}
+                        <div className="bg-[#1a1c2e] p-5 text-white shadow-lg z-20 flex flex-col gap-4">
+                             <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                                  <Receipt className="w-6 h-6 text-indigo-300" />
                                 </div>
                                 <div>
-                                    <p className="text-sm font-black uppercase tracking-tight text-slate-900 dark:text-white">Ticket</p>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase">{cliente.nombre}</p>
+                                  <h3 className="font-black text-sm uppercase tracking-widest text-indigo-100">Ticket</h3>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                                     {cliente.nombre}
+                                  </p>
                                 </div>
-                            </div>
-                            <Badge variant="outline" className="font-black text-indigo-600 border-indigo-100 bg-white px-3 rounded-full">
-                                {carritoPos.length} items
-                            </Badge>
+                             </div>
+                             <div className="bg-white/5 rounded-xl px-4 py-2 flex items-center justify-between border border-white/10">
+                                <span className="text-[10px] font-black uppercase text-slate-300">Items agregados</span>
+                                <span className="text-xs font-black text-white bg-indigo-600 px-2.5 py-0.5 rounded-lg shadow-inner">{carritoPos.length}</span>
+                             </div>
                         </div>
 
                         {/* Tickets pendientes de este cliente */}
