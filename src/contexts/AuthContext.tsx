@@ -33,25 +33,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
 
-  // Gestión de Usuarios LOCAL
+  // Gestión de Usuarios LOCAL (con preservación de datos)
   const loadUsuarios = useCallback(() => {
     try {
       const savedUsuariosStr = localStorage.getItem('pricecontrol_local_user_list');
       const savedUsuarios = savedUsuariosStr ? JSON.parse(savedUsuariosStr) : [];
 
-      // Limpieza Forzada de Usuarios de Prueba
-      const hasOldTestData = savedUsuarios.some((u: any) =>
-        u.email === 'admin@example.com' ||
-        u.email === 'gerente@example.com' ||
-        u.email === 'comprador@example.com' ||
-        u.email === 'vendedor@example.com'
-      );
+      // Detectar si la lista contiene únicamente usuarios de prueba (emails de ejemplo)
+      const testEmails = ['admin@example.com', 'gerente@example.com', 'comprador@example.com', 'vendedor@example.com'];
+      const isOnlyTest = savedUsuarios.length > 0 && savedUsuarios.every((u: any) => testEmails.includes(u.email));
 
-      if (!savedUsuariosStr || hasOldTestData) {
-        console.log("🧹 Limpiando usuarios de prueba antiguos...");
+      // Si no hay datos, la lista está vacía o sólo hay usuarios de prueba, inicializamos con los usuarios de prueba
+      if (!savedUsuariosStr || savedUsuarios.length === 0 || isOnlyTest) {
+        console.log('🧹 Inicializando usuarios de prueba (primer arranque o datos de prueba)');
         setUsuarios(USUARIOS_PRUEBA);
         localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(USUARIOS_PRUEBA));
       } else {
+        // Caso normal: conservamos la lista guardada por el usuario
         setUsuarios(savedUsuarios);
       }
     } catch (e) {
@@ -84,17 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
-        // Si no hay usuario (o expiró) y estamos en DEV, forzar ADMIN
-        if (!currentUser && import.meta.env.DEV) {
-          // --- PROTOCOLO: ACCESO DIRECTO DESARROLLADOR ---
-          const devAdmin = USUARIOS_PRUEBA.find(u => u.rol === 'ADMIN' && u.email === 'Chalo8321@gmail.com');
-          if (devAdmin) {
-            console.log('⚡ [Nexus-Auth] Modo Desarrollo Detectado: Bypass de Seguridad Activo.');
-            console.log('🗝️ Iniciando sesión automática como Administrador (Chalo).');
-            currentUser = { ...devAdmin, ultimoAcceso: new Date().toISOString() };
-            localStorage.setItem('pricecontrol_local_user', JSON.stringify(currentUser));
-          }
-        }
+        // No hay sesión guardada → el usuario deberá iniciar sesión manualmente
 
         if (currentUser) {
           setUsuario(currentUser);
@@ -106,10 +94,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Sello de Seguridad: Purga de Usuarios de Prueba Antiguos
-    localStorage.removeItem('pricecontrol_local_user_list');
-    localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(USUARIOS_PRUEBA));
-
     initializeAuth();
     loadUsuarios();
     return () => { mounted = false; };
@@ -117,50 +101,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 400));
 
     const emailLower = email.toLowerCase().trim();
+
+    // Cargar lista de usuarios desde localStorage (o usar los de prueba si no hay)
     const localUserListStr = localStorage.getItem('pricecontrol_local_user_list');
-    const localUserList = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
-    const localUser = (localUserList as Usuario[]).find(u => u.email.toLowerCase() === emailLower);
+    const localUserList: Usuario[] = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
 
-    // PROTEGIDO: Validación de credenciales con comparación segura de tiempo constante
-    const passMaestra = import.meta.env.VITE_MASTER_PASSWORD;
-    const passInvitado = import.meta.env.VITE_GUEST_PASSWORD;
-    if (!passMaestra) {
-      setIsLoading(false);
-      toast.error('Error de configuración del sistema.');
-      return { success: false, error: 'Sistema no configurado.' };
-    }
-    // Comparación segura para evitar timing attacks
-    const safeCompare = (a: string, b: string): boolean => {
-      if (a.length !== b.length) return false;
-      let result = 0;
-      for (let i = 0; i < a.length; i++) {
-        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-      }
-      return result === 0;
-    };
-    const isAdmin = localUser?.rol === 'ADMIN' && safeCompare(password, passMaestra);
-    const isGuest = localUser?.rol !== 'ADMIN' && (safeCompare(password, passInvitado || '') || safeCompare(password, passMaestra));
-    
-    // --- PROTOCOLO: BYPASS TOTAL DE DESARROLLO ---
-    const isDevAdmin = import.meta.env.DEV && localUser?.rol === 'ADMIN' && localUser?.email === 'Chalo8321@gmail.com';
-    const isMasterPass = isAdmin || isGuest || isDevAdmin;
+    // Buscar usuario por email (insensible a mayúsculas)
+    const localUser = localUserList.find(u => (u.email || '').toLowerCase() === emailLower);
 
-    if (localUser && isMasterPass) {
-      const userData = { ...localUser, ultimoAcceso: new Date().toISOString() };
-      setUsuario(userData);
-      localStorage.setItem('pricecontrol_local_user', JSON.stringify(userData));
+    if (!localUser) {
       setIsLoading(false);
-      toast.success(isDevAdmin ? 'Bypass de Desarrollo Activado' : '¡Bienvenido! Iniciando en modo local seguro.');
-      return { success: true };
+      toast.error('No existe un usuario con ese correo.');
+      return { success: false, error: 'Correo no registrado.' };
     }
 
+    if (!localUser.activo) {
+      setIsLoading(false);
+      toast.error('Este usuario está desactivado. Contacta al administrador.');
+      return { success: false, error: 'Usuario inactivo.' };
+    }
+
+    // Verificar contraseña:
+    // - Si el usuario tiene una contraseña asignada → debe coincidir exactamente
+    // - Si NO tiene contraseña asignada → puede entrar con cualquier contraseña (acceso abierto)
+    const passwordOk = localUser.password
+      ? password === localUser.password
+      : true;
+
+    if (!passwordOk) {
+      setIsLoading(false);
+      toast.error('Contraseña incorrecta.');
+      return { success: false, error: 'Contraseña incorrecta.' };
+    }
+
+    // ✅ Login exitoso
+    const userData = { ...localUser, ultimoAcceso: new Date().toISOString() };
+    setUsuario(userData);
+    localStorage.setItem('pricecontrol_local_user', JSON.stringify(userData));
     setIsLoading(false);
-    toast.error('Email o contraseña incorrectos.');
-    return { success: false, error: 'Email o contraseña incorrectos.' };
+    toast.success(`¡Bienvenido, ${localUser.nombre}!`);
+    return { success: true };
   }, []);
+
 
   const logout = useCallback(async () => {
     try {

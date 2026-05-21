@@ -70,6 +70,12 @@ interface MayoristasProps {
     getMejorPrecio: (productoId: string) => PrecioProveedor | null;
     formatCurrency: (value: number) => string;
     onNavigateTo?: (view: string) => void;
+    cajaActiva?: any;
+    registrarVenta?: (v: any) => Promise<any>;
+    creditosClientes?: any[];
+    addCreditoCliente?: (c: any) => Promise<void>;
+    updateCreditoCliente?: (id: string, updates: any) => Promise<void>;
+    registrarPagoCredito?: (id: string, pago: any) => Promise<void>;
 }
 
 // Clientes se manejan por props ahora
@@ -104,11 +110,60 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
-export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo }: MayoristasProps) {
+export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, registrarPagoCredito }: MayoristasProps) {
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
     const [configTemp, setConfigTemp] = useState(config);
+
+    // ── Rescate de Historial Local a BD Real ──
+    useEffect(() => {
+        const historialLocal = localStorage.getItem('ag_historial_mayoristas');
+        if (!historialLocal || !addCreditoCliente) return;
+
+        const rescued = localStorage.getItem('ag_mayoristas_rescued');
+        if (rescued) return;
+
+        try {
+            const parsed = JSON.parse(historialLocal) as HistorialMayorista[];
+            if (parsed.length === 0) return;
+
+            const rescatar = async () => {
+                let rescatados = 0;
+                for (const h of parsed) {
+                    if (h.metodoPago === 'credito') {
+                        const abonado = (h.abonos || []).reduce((acc, a) => acc + a.monto, 0);
+                        const saldo = h.total - abonado;
+                        await addCreditoCliente({
+                            clienteId: h.clienteId,
+                            clienteNombre: h.clienteNombre,
+                            monto: h.total,
+                            saldo: saldo,
+                            descripcion: 'Venta Mayorista (Rescate Histórico)',
+                            items: h.items,
+                            usuarioId: 'admin',
+                            estado: saldo <= 0 ? 'pagado' : 'pendiente',
+                            pagos: (h.abonos || []).map(a => ({
+                                id: a.id,
+                                monto: a.monto,
+                                fecha: new Date(a.fecha).toISOString(),
+                                metodoPago: a.metodoPago,
+                                registradoPor: 'admin'
+                            }))
+                        });
+                        rescatados++;
+                    }
+                }
+                if (rescatados > 0) {
+                    console.log(`[Rescate] ${rescatados} créditos mayoristas migrados a DB central.`);
+                }
+                localStorage.setItem('ag_mayoristas_rescued', 'true');
+            };
+            rescatar();
+        } catch (e) {
+            console.error('Error rescatando historial', e);
+        }
+    }, [addCreditoCliente]);
 
     // Estado de Pestañas
     const [activeTab, setActiveTab] = useState('precios');
@@ -226,7 +281,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         try { return JSON.parse(localStorage.getItem('ag_historial_mayoristas') || '[]'); } catch { return []; }
     });
 
-    const guardarEnHistorial = (items: typeof carritoPos, total: number, foto?: string, metodo?: MetodoPago) => {
+    const guardarEnHistorial = async (items: typeof carritoPos, total: number, foto?: string, metodo?: MetodoPago) => {
         if (!viendoPerfilCliente) return;
         const nuevo: HistorialMayorista = {
             id: crypto.randomUUID(),
@@ -239,6 +294,44 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             metodoPago: metodo ?? 'efectivo',
             abonos: metodo === 'credito' ? [] : undefined,
         };
+
+        // 1. Guardar en Base de Datos Centralizada
+        try {
+            if (metodo === 'credito') {
+                if (addCreditoCliente) {
+                    await addCreditoCliente({
+                        clienteId: nuevo.clienteId,
+                        clienteNombre: nuevo.clienteNombre,
+                        monto: nuevo.total,
+                        saldo: nuevo.total,
+                        descripcion: 'Venta Mayorista',
+                        items: nuevo.items,
+                        usuarioId: 'admin',
+                        estado: 'pendiente',
+                        pagos: []
+                    });
+                }
+            } else {
+                if (registrarVenta) {
+                    if (!cajaActiva) {
+                        toast.error('Atención: La venta se guardó localmente, pero NO en la base de datos central porque no hay una caja abierta.');
+                    } else {
+                        await registrarVenta({
+                            items: nuevo.items,
+                            total: nuevo.total,
+                            metodoPago: metodo ?? 'efectivo',
+                            clienteId: nuevo.clienteId,
+                            clienteNombre: nuevo.clienteNombre,
+                            tipoVenta: 'mayorista'
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.error('Error al registrar en BD central', e);
+            toast.error('Error al sincronizar con la base de datos principal');
+        }
+
         const nuevos = [nuevo, ...historialMayoristas];
         setHistorialMayoristas(nuevos);
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
@@ -274,9 +367,22 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const [abonandoId, setAbonandoId] = useState<string | null>(null);
     const [montoAbono, setMontoAbono] = useState('');
 
-    const registrarAbono = (historialId: string, metodo: MetodoPago) => {
+    const registrarAbono = async (historialId: string, metodo: MetodoPago) => {
         const monto = parseFloat(montoAbono);
         if (isNaN(monto) || monto <= 0) { toast.error('Ingresa un monto válido'); return; }
+
+        try {
+            if (registrarPagoCredito) {
+                await registrarPagoCredito(historialId, {
+                    monto,
+                    metodoPago: metodo,
+                    fecha: new Date().toISOString()
+                });
+            }
+        } catch (e) {
+            console.error('Error registrando abono en DB', e);
+        }
+
         const nuevos = historialMayoristas.map(h => {
             if (h.id !== historialId) return h;
             const abonos: Abono[] = [...(h.abonos ?? []), { id: crypto.randomUUID(), monto, fecha: Date.now(), metodoPago: metodo }];
@@ -320,10 +426,25 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const [editandoFechaHistorialId, setEditandoFechaHistorialId] = useState<string | null>(null);
     const [fechaHistorialTemp, setFechaHistorialTemp] = useState('');
 
-    const guardarFechaHistorial = (historialId: string) => {
+    const guardarFechaHistorial = async (historialId: string) => {
         if (!fechaHistorialTemp) return;
         const nuevaFecha = new Date(fechaHistorialTemp).getTime();
         if (isNaN(nuevaFecha)) { toast.error('Fecha inválida'); return; }
+
+        if (updateCreditoCliente) {
+            const esCentral = creditosClientes?.find(c => c.id === historialId);
+            if (esCentral) {
+                try {
+                    await updateCreditoCliente(historialId, { fecha: new Date(nuevaFecha).toISOString() });
+                    toast.success('Fecha actualizada');
+                    setEditandoFechaHistorialId(null);
+                    return;
+                } catch (e) {
+                    console.error('Error al actualizar fecha en central', e);
+                }
+            }
+        }
+
         const nuevos = historialMayoristas.map(h => h.id === historialId ? { ...h, fecha: nuevaFecha } : h);
         setHistorialMayoristas(nuevos);
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
@@ -531,6 +652,28 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         toast.success(`Lista de precios exportada${clienteSeleccionado ? ` para ${clienteSeleccionado.nombre}` : ''}`);
     };
 
+    // ── Consolidar Historial Local y Centralizado para la UI ──
+    const historialUnificado = useMemo(() => {
+        const localCash = historialMayoristas.filter(h => h.metodoPago !== 'credito');
+        const centralCredits = creditosClientes ? creditosClientes.map(c => ({
+            id: c.id,
+            clienteId: c.clienteId,
+            clienteNombre: c.clienteNombre,
+            fecha: new Date(c.fecha).getTime(),
+            total: c.monto,
+            items: c.items || [],
+            metodoPago: 'credito' as MetodoPago,
+            abonos: (c.pagos || []).map((p: any) => ({
+                id: p.id,
+                monto: p.monto,
+                fecha: new Date(p.fecha).getTime(),
+                metodoPago: (p.metodoPago || 'efectivo') as MetodoPago
+            })),
+            fotoFactura: undefined
+        })) : historialMayoristas.filter(h => h.metodoPago === 'credito');
+        return [...localCash, ...centralCredits].sort((a, b) => b.fecha - a.fecha);
+    }, [historialMayoristas, creditosClientes]);
+
     // ── Mini-POS del Cliente ─────────────────────────────────────────────────
     if (viendoPerfilCliente) {
         const cliente = viendoPerfilCliente;
@@ -578,9 +721,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             title="Ver historial"
                         >
                             <History className="w-4 h-4" />
-                            {historialMayoristas.filter(h => h.clienteId === cliente.id).length > 0 && (
+                            {historialUnificado.filter(h => h.clienteId === cliente.id).length > 0 && (
                                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-indigo-600 text-white text-[9px] font-black rounded-full flex items-center justify-center">
-                                    {historialMayoristas.filter(h => h.clienteId === cliente.id).length}
+                                    {historialUnificado.filter(h => h.clienteId === cliente.id).length}
                                 </span>
                             )}
                         </button>
@@ -605,7 +748,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                         {/* ── Panel de Créditos y Abonos (siempre visible) ── */}
                         {(() => {
-                            const histCliente = historialMayoristas.filter(h => h.clienteId === cliente.id);
+                            const histCliente = historialUnificado.filter(h => h.clienteId === cliente.id);
                             const creditosAll = histCliente.filter(h => h.metodoPago === 'credito');
                             const totalDeuda = creditosAll.reduce((s, h) => {
                                 const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
@@ -828,8 +971,15 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     <PlayCircle className="w-3 h-3" /> Retomar
                                                 </button>
                                                 <button
-                                                    onClick={() => cancelarTicketPendiente(ticket.id)}
+                                                    onClick={() => {
+                                                        if (editandoPendienteId === ticket.id) {
+                                                            setEditandoPendienteId(null);
+                                                        } else {
+                                                            cancelarTicketPendiente(ticket.id);
+                                                        }
+                                                    }}
                                                     className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
+                                                    title={editandoPendienteId === ticket.id ? "Cerrar edición" : "Eliminar ticket"}
                                                 >
                                                     <X className="w-3 h-3" />
                                                 </button>
@@ -996,8 +1146,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             </div>
                             <Button
                                 disabled={carritoPos.length === 0}
-                                onClick={() => {
-                                    guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
+                                onClick={async () => {
+                                    await guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
                                     toast.success(`Venta registrada para ${cliente.nombre}: ${formatCurrency(totalCarrito)}`);
                                     setCarritoPos([]);
                                     setFotoFactura(undefined);
@@ -1039,14 +1189,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         </DialogTitle>
                     </DialogHeader>
                     <div className="overflow-y-auto flex-1 space-y-3 py-2 pr-1">
-                        {historialMayoristas.filter(h => h.clienteId === cliente.id).length === 0 ? (
+                        {historialUnificado.filter(h => h.clienteId === cliente.id).length === 0 ? (
                             <div className="flex flex-col items-center py-12 text-center">
                                 <History className="w-10 h-10 text-slate-200 mb-3" />
                                 <p className="text-sm font-bold text-slate-400">Sin ventas registradas</p>
                                 <p className="text-xs text-slate-400 mt-1">Las ventas confirmadas aparecerán aquí con fecha, foto y abonos</p>
                             </div>
                         ) : (
-                            historialMayoristas.filter(h => h.clienteId === cliente.id).map(h => {
+                            historialUnificado.filter(h => h.clienteId === cliente.id).map(h => {
                                 const totalAbonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                                 const saldoPendiente = h.total - totalAbonado;
                                 const esCreditoPendiente = h.metodoPago === 'credito' && saldoPendiente > 0;

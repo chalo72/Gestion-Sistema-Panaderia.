@@ -127,10 +127,30 @@
 2. ⚠️ **Supabase inactivo/pausado** - `Database error querying schema`
 3. ⚠️ **Optimización de Activos**: Las imágenes de productos requieren Lazy Loading avanzado.
 
+## 🔄 ACTUALIZACIONES RECIENTES (2026-03-18)
+
+### ✅ Restauración de PrePedidos - Layout 3 Columnas
+**Problema**: PrePedidos tenía workflow complejo con modal dialogs
+**Solución**: Restaurado a layout simple 3-columnas:
+- **Izquierda**: Grilla de proveedores (siempre visible)
+- **Centro**: Catálogo del proveedor seleccionado (búsqueda, categorías, stock)
+- **Derecha**: Ticket/Carrito actualizado en tiempo real
+
+**Archivos Modificados**:
+- `app/src/pages/PrePedidos.tsx` - Nuevo layout, estado `showProveedorPanel`
+- Build: ✅ EXITOSO (0 errores, 20.29s)
+
+**Features**:
+- ✅ Glassmorphism en cards de proveedores
+- ✅ Alertas de stock bajo con badges animados
+- ✅ Dark mode totalmente funcional
+- ✅ Botones: Confirmar pedido + Compartir WhatsApp
+
 ### 📋 Próximas Acciones
 - [ ] Revisar NetworkTab en DevTools para identificar qué demora la carga
 - [x] Finalizar Módulo Producción (Planificación y Ejecución)
 - [x] Desarrollar Sub-pantallas: Usuarios y Roles
+- [x] ✅ Restaurar PrePedidos a workflow simple
 - [ ] Optimizar bundle size (Vite analyze)
 - [ ] Revisar/actualizar credenciales de Supabase
 - [ ] Agregar tests unitarios y E2E

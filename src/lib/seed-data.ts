@@ -8,8 +8,9 @@ import type { Usuario, Categoria, ProductoTipo } from '@/types';
 export const USUARIOS_PRUEBA: Usuario[] = [
   { id: 'owner-local-id', email: 'Chalo8321@gmail.com', nombre: 'Chalo', apellido: 'Dueño Dulce Placer', rol: 'ADMIN', activo: true, createdAt: new Date().toISOString() },
   { id: 'vendedor-1-id', email: 'lucia@dulceplacer.com', nombre: 'Lucía', apellido: 'Ventas Heladería', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() },
+  { id: 'gabriela-ventas-id', email: 'Gab@dulceplacer.com', nombre: 'Gabriela', apellido: 'Ventas', rol: 'VENDEDOR', activo: true, password: 'gabriela123', createdAt: new Date().toISOString() },
   { id: 'panadero-1-id', email: 'marcos@dulceplacer.com', nombre: 'Marcos', apellido: 'Maestro Panadero', rol: 'ADMIN', activo: true, createdAt: new Date().toISOString() },
-  { id: 'guest-local-id', email: 'invitado@dulceplacer.com', nombre: 'Invitado', apellido: 'Dulce Placer', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() },
+  { id: 'guest-local-id', email: 'invitado@dulceplacer.com', nombre: 'Invitado', apellido: 'Dulce Placer', rol: 'VENDEDOR', activo: true, createdAt: new Date().toISOString() }
 ];
 
 // Credenciales de Acceso — Se cargan desde variables de entorno

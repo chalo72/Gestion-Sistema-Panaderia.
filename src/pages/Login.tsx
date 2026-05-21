@@ -22,13 +22,19 @@ export function Login({ onLoginSuccess }: LoginProps) {
     e.preventDefault();
     setError('');
     setIsLoading(true);
-    const result = await login(email, password);
-    if (result.success) {
-      setTimeout(() => onLoginSuccess(), 100);
-    } else {
-      setError(result.error || 'Error al iniciar sesión');
+    try {
+      const result = await login(email, password);
+      if (result.success) {
+        setTimeout(() => onLoginSuccess(), 100);
+      } else {
+        setError(result.error || 'Error al iniciar sesión');
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError('Error inesperado al iniciar sesión');
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (

@@ -163,3 +163,142 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ============================================================
+-- ⭐ ANTIGRAVITY MAYORISTAS + AUDITORIA (NUEVO)
+-- ============================================================
+
+-- 10. Clients (Mayoristas y Detallistas)
+create table if not exists public.clientes (
+  id uuid default uuid_generate_v4() primary key,
+  nombre text not null,
+  identificacion text,
+  telefono text,
+  email text unique,
+  direccion text,
+  ciudad text,
+  fecha_nacimiento text,
+  tipo text check (tipo in ('mayorista', 'detal', 'trabajador')) default 'detal',
+  notas text,
+  puntos_lealtad integer default 0,
+  margen_personalizado numeric(5, 2),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+-- 11. Mayorista Tickets (Ventas pendientes sin cobrar)
+create table if not exists public.mayorista_tickets (
+  id uuid default uuid_generate_v4() primary key,
+  cliente_id uuid references public.clientes(id) on delete cascade,
+  usuario_id uuid references public.usuarios(id) on delete set null,
+  items jsonb not null default '[]'::jsonb,
+  subtotal numeric(12, 2) default 0,
+  guardado_en timestamptz default now(),
+  actualizado_en timestamptz default now()
+);
+
+-- 12. Mayorista Sales History (Ventas completadas)
+create table if not exists public.mayorista_ventas (
+  id uuid default uuid_generate_v4() primary key,
+  cliente_id uuid references public.clientes(id) on delete cascade,
+  usuario_id uuid references public.usuarios(id) on delete set null,
+  items jsonb not null default '[]'::jsonb,
+  total numeric(12, 2),
+  fecha timestamptz default now(),
+  metodo_pago text check (metodo_pago in ('efectivo', 'nequi', 'credito')) default 'efectivo',
+  foto_factura text,
+  estado text check (estado in ('completada', 'pendiente_credito')) default 'completada',
+  abonos jsonb default '[]'::jsonb
+);
+
+-- 13. Price Change Audit Log (Auditoría de cambios de precios)
+create table if not exists public.price_change_log (
+  id uuid default uuid_generate_v4() primary key,
+  producto_id uuid references public.productos(id) on delete cascade,
+  precio_anterior numeric(10, 2),
+  precio_nuevo numeric(10, 2),
+  cambio_en timestamptz default now(),
+  usuario_id uuid references public.usuarios(id) on delete set null,
+  motivo text,
+  modulo text check (modulo in ('mayorista', 'proveedores', 'manual')) default 'manual'
+);
+
+-- ============================================================
+-- INDICES PARA PERFORMANCE
+-- ============================================================
+create index if not exists idx_mayorista_tickets_cliente on public.mayorista_tickets(cliente_id);
+create index if not exists idx_mayorista_tickets_usuario on public.mayorista_tickets(usuario_id);
+create index if not exists idx_mayorista_ventas_cliente on public.mayorista_ventas(cliente_id);
+create index if not exists idx_mayorista_ventas_usuario on public.mayorista_ventas(usuario_id);
+create index if not exists idx_mayorista_ventas_fecha on public.mayorista_ventas(fecha);
+create index if not exists idx_price_change_log_producto on public.price_change_log(producto_id);
+create index if not exists idx_price_change_log_usuario on public.price_change_log(usuario_id);
+create index if not exists idx_price_change_log_fecha on public.price_change_log(cambio_en);
+create index if not exists idx_clientes_tipo on public.clientes(tipo);
+
+-- ============================================================
+-- RLS MEJORADO (Row Level Security)
+-- ============================================================
+
+-- Enable RLS en tablas nuevas
+alter table public.clientes enable row level security;
+alter table public.mayorista_tickets enable row level security;
+alter table public.mayorista_ventas enable row level security;
+alter table public.price_change_log enable row level security;
+
+-- RLS Clientes: ADMINs ven todos, VENDEDOR ven sus propios clientes
+drop policy if exists "rls_clientes_read" on public.clientes;
+create policy "rls_clientes_read" on public.clientes
+  for select using (
+    exists (select 1 from public.usuarios where id = auth.uid() and rol in ('ADMIN', 'GERENTE'))
+    OR auth.uid() = usuario_creador_id
+  );
+
+drop policy if exists "rls_clientes_insert" on public.clientes;
+create policy "rls_clientes_insert" on public.clientes
+  for insert with check (auth.role() = 'authenticated');
+
+drop policy if exists "rls_clientes_update" on public.clientes;
+create policy "rls_clientes_update" on public.clientes
+  for update using (
+    exists (select 1 from public.usuarios where id = auth.uid() and rol = 'ADMIN')
+  );
+
+-- RLS Mayorista Tickets: Solo el creador + ADMIN
+drop policy if exists "rls_mayorista_tickets_read" on public.mayorista_tickets;
+create policy "rls_mayorista_tickets_read" on public.mayorista_tickets
+  for select using (
+    usuario_id = auth.uid() 
+    OR exists (select 1 from public.usuarios where id = auth.uid() and rol = 'ADMIN')
+  );
+
+drop policy if exists "rls_mayorista_tickets_insert" on public.mayorista_tickets;
+create policy "rls_mayorista_tickets_insert" on public.mayorista_tickets
+  for insert with check (
+    usuario_id = auth.uid() OR auth.uid()::text = auth.uid()::text
+  );
+
+-- RLS Mayorista Ventas: Solo lectura para el creador + ADMIN
+drop policy if exists "rls_mayorista_ventas_read" on public.mayorista_ventas;
+create policy "rls_mayorista_ventas_read" on public.mayorista_ventas
+  for select using (
+    usuario_id = auth.uid()
+    OR exists (select 1 from public.usuarios where id = auth.uid() and rol = 'ADMIN')
+  );
+
+drop policy if exists "rls_mayorista_ventas_insert" on public.mayorista_ventas;
+create policy "rls_mayorista_ventas_insert" on public.mayorista_ventas
+  for insert with check (usuario_id = auth.uid());
+
+-- RLS Price Change Log: Solo lectura para ADMIN + COMPRADOR
+drop policy if exists "rls_price_change_log_read" on public.price_change_log;
+create policy "rls_price_change_log_read" on public.price_change_log
+  for select using (
+    exists (select 1 from public.usuarios where id = auth.uid() and rol in ('ADMIN', 'COMPRADOR'))
+  );
+
+drop policy if exists "rls_price_change_log_insert" on public.price_change_log;
+create policy "rls_price_change_log_insert" on public.price_change_log
+  for insert with check (
+    exists (select 1 from public.usuarios where id = auth.uid() and rol in ('ADMIN', 'COMPRADOR'))
+  );

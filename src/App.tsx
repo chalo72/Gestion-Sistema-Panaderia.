@@ -451,6 +451,12 @@ const App = () => {
           getMejorPrecio={getMejorPrecio} 
           formatCurrency={formatCurrency} 
           onNavigateTo={(view: any) => setCurrentView(view)} 
+          cajaActiva={cajaActiva}
+          registrarVenta={registrarVenta}
+          creditosClientes={creditosClientes}
+          addCreditoCliente={addCreditoCliente}
+          updateCreditoCliente={updateCreditoCliente}
+          registrarPagoCredito={registrarPagoCredito}
         />;
       case 'reportes':
         return (
