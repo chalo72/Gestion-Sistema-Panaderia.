@@ -25,6 +25,7 @@ import {
   PackageCheck,
   Edit3,
   Save,
+  TrendingDown,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
