@@ -274,6 +274,8 @@ export interface PrePedido {
   fechaEntregaEsperada?: string; // ISO string — cuándo llega el pedido
   fechaCreacion: string;
   fechaActualizacion: string;
+  abonos?: PagoCredito[]; // Pagos parciales a la factura
+  fotoFactura?: string; // Evidencia de la orden
 }
 
 // Tipos de moneda soportadas

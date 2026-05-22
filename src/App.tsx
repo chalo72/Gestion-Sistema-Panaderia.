@@ -543,6 +543,7 @@ const App = () => {
             getMejorPrecioByProveedor={(prod, prov) => precios.find(p => p.productoId === prod && p.proveedorId === prov)}
             getPreciosByProveedor={(id) => precios.filter(p => p.proveedorId === id)}
             formatCurrency={formatCurrency}
+            onAjustarStock={onAjustarStock}
             onGenerarSugerencias={() => Promise.resolve(0)}
           />
         );
