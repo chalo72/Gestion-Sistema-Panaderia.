@@ -31,7 +31,7 @@ interface ClienteMayorista {
     creadoEn: string;
 }
 
-type MetodoPago = 'efectivo' | 'nequi' | 'credito';
+type MetodoPago = 'efectivo' | 'nequi' | 'transferencia' | 'credito';
 
 interface Abono {
     id: string;
@@ -253,6 +253,21 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         toast.success('Ticket retomado');
     };
 
+    const retomarTicketsSeleccionados = () => {
+        const seleccionados = Array.from(ticketsSeleccionados);
+        const pendientesSel = ticketsPendientes.filter(t => seleccionados.includes(t.id));
+        if (pendientesSel.length === 0) return;
+        const todosItems = pendientesSel.flatMap(t => t.items);
+        if (carritoPos.length > 0 && !window.confirm('¿Reemplazar el ticket actual con los seleccionados?')) return;
+        setCarritoPos(todosItems);
+        // quitar los tickets retomados de persistidos
+        const restantes = ticketsPendientes.filter(t => !seleccionados.includes(t.id));
+        actualizarTicketsPersistidos(restantes);
+        // limpiar selección
+        setTicketsSeleccionados(new Set());
+        toast.success('Tickets seleccionados retomados al carrito');
+    };
+
     // Limpiar carrito: si vino de un ticket guardado, lo devuelve a pendientes
     const limpiarCarrito = () => {
         if (ticketRetomadoId && viendoPerfilCliente && carritoPos.length > 0) {
@@ -366,9 +381,15 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // Abonos en historial
     const [abonandoId, setAbonandoId] = useState<string | null>(null);
     const [montoAbono, setMontoAbono] = useState('');
+    const [ticketsSeleccionados, setTicketsSeleccionados] = useState<Set<string>>(new Set());
+    const [montoAbonoMultiple, setMontoAbonoMultiple] = useState('');
+    const [metodoAbonoMultiple, setMetodoAbonoMultiple] = useState<MetodoPago>('efectivo');
+    
+    // Categoría expandida para el estilo acordeón
+    const [categoriaExpandida, setCategoriaExpandida] = useState<string | null>(null);
 
-    const registrarAbono = async (historialId: string, metodo: MetodoPago) => {
-        const monto = parseFloat(montoAbono);
+    const registrarAbono = async (historialId: string, metodo: MetodoPago, montoEspecifico?: number) => {
+        const monto = montoEspecifico ?? parseFloat(montoAbono);
         if (isNaN(monto) || monto <= 0) { toast.error('Ingresa un monto válido'); return; }
 
         try {
@@ -393,6 +414,128 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         setAbonandoId(null);
         setMontoAbono('');
         toast.success(`Abono de ${formatCurrency(monto)} registrado`);
+    };
+
+    const procesarAbonoMultiple = async () => {
+        if (!viendoPerfilCliente) return;
+        const monto = parseFloat(montoAbonoMultiple);
+        if (isNaN(monto) || monto <= 0) {
+            toast.error('Ingresa un monto válido');
+            return;
+        }
+        const hCliente = historialUnificado.filter(h => h.clienteId === viendoPerfilCliente.id);
+
+        // construir lista unificada de seleccionados: créditos existentes y tickets pendientes
+        const seleccionIds = Array.from(ticketsSeleccionados);
+        const seleccionItems: Array<{
+            id: string;
+            tipo: 'credito' | 'pendiente';
+            fecha: number;
+            total: number;
+            abonado: number; // ya abonado
+        }> = [];
+
+        for (const id of seleccionIds) {
+            const h = hCliente.find(x => x.id === id && x.metodoPago === 'credito');
+            if (h) {
+                const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                seleccionItems.push({ id: h.id, tipo: 'credito', fecha: h.fecha, total: h.total, abonado });
+                continue;
+            }
+            const tp = ticketsPendientes.find(t => t.id === id);
+            if (tp) {
+                const totalTp = tp.items.reduce((s, it) => s + it.precio * it.cantidad, 0);
+                seleccionItems.push({ id: tp.id, tipo: 'pendiente', fecha: tp.guardadoEn, total: totalTp, abonado: 0 });
+                continue;
+            }
+        }
+
+        if (seleccionItems.length === 0) {
+            toast.error('No hay tickets seleccionados válidos');
+            return;
+        }
+
+        // ordenar por fecha (antiguos primero)
+        seleccionItems.sort((a, b) => a.fecha - b.fecha);
+
+        let abonoRestante = monto;
+        let procesados = 0;
+
+        for (const item of seleccionItems) {
+            if (abonoRestante <= 0) break;
+            const saldo = Math.max(0, item.total - item.abonado);
+            if (saldo <= 0) continue;
+
+            const aPagar = Math.min(saldo, abonoRestante);
+
+            if (item.tipo === 'credito') {
+                // historial / crédito existente
+                await registrarAbono(item.id, metodoAbonoMultiple, aPagar);
+                abonoRestante -= aPagar;
+                procesados++;
+            } else {
+                // ticket pendiente: si se paga completo -> registrar venta; si es parcial -> crear crédito con abono inicial
+                const tp = ticketsPendientes.find(t => t.id === item.id);
+                if (!tp) continue;
+
+                if (aPagar >= item.total) {
+                    // pago completo: registrar venta con el método seleccionado
+                    await guardarEnHistorial(tp.items, item.total, tp.fotoFactura, metodoAbonoMultiple as MetodoPago);
+                    // eliminar pendiente
+                    actualizarTicketsPersistidos(ticketsPendientes.filter(t => t.id !== tp.id));
+                    abonoRestante -= aPagar;
+                    procesados++;
+                } else {
+                    // pago parcial: mover a historial como crédito y registrar abono
+                    const nuevoHist: HistorialMayorista = {
+                        id: crypto.randomUUID(),
+                        clienteId: tp.clienteId,
+                        clienteNombre: tp.clienteNombre,
+                        items: tp.items,
+                        total: item.total,
+                        fecha: Date.now(),
+                        fotoFactura: tp.fotoFactura,
+                        metodoPago: 'credito',
+                        abonos: [{ id: crypto.randomUUID(), monto: aPagar, fecha: Date.now(), metodoPago: metodoAbonoMultiple as MetodoPago }]
+                    };
+                    // persistir local
+                    setHistorialMayoristas(prev => {
+                        const nuevos = [nuevoHist, ...prev];
+                        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+                        return nuevos;
+                    });
+
+                    // intentar registrar crédito en central si corresponde
+                    if (addCreditoCliente) {
+                        try {
+                            await addCreditoCliente({
+                                id: nuevoHist.id,
+                                clienteId: nuevoHist.clienteId,
+                                clienteNombre: nuevoHist.clienteNombre,
+                                monto: nuevoHist.total,
+                                saldo: Math.max(0, nuevoHist.total - aPagar),
+                                descripcion: 'Crédito generado desde ticket pendiente con abono parcial',
+                                items: nuevoHist.items.map(i => ({ productoId: i.productoId, nombre: i.nombre, cantidad: i.cantidad, precioVenta: i.precio })),
+                                usuarioId: 'admin',
+                                estado: Math.max(0, nuevoHist.total - aPagar) <= 0 ? 'pagado' : 'pendiente',
+                                pagos: [{ id: nuevoHist.abonos![0].id, monto: aPagar, fecha: new Date(nuevoHist.abonos![0].fecha).toISOString(), metodoPago: nuevoHist.abonos![0].metodoPago }]
+                            });
+                        } catch (e) {
+                            console.error('Error guardando crédito central para pendiente', e);
+                        }
+                    }
+
+                    // eliminar pendiente
+                    actualizarTicketsPersistidos(ticketsPendientes.filter(t => t.id !== tp.id));
+                    abonoRestante -= aPagar;
+                    procesados++;
+                }
+            }
+        }
+
+        toast.success(`Abono aplicado a ${procesados} ticket(s). ${abonoRestante > 0 ? `Sobró ${formatCurrency(abonoRestante)}` : ''}`);
+        setTicketsSeleccionados(new Set());
+        setMontoAbonoMultiple('');
     };
 
     // Foto adjunta a entrada del historial (después de guardar)
@@ -770,6 +913,69 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             : <span className="text-[10px] font-black text-emerald-600 uppercase">✓ Al día</span>
                                         }
                                     </div>
+                                    {ticketsSeleccionados.size > 0 && (
+                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 mt-2 animate-ag-fade-in">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-widest">{ticketsSeleccionados.size} ticket(s) seleccionados</span>
+                                                <span className="text-sm font-black tabular-nums text-indigo-700 dark:text-indigo-400">
+                                                    {formatCurrency(Array.from(ticketsSeleccionados).reduce((s, id) => {
+                                                        const h = creditosAll.find(c => c.id === id);
+                                                        if (h) {
+                                                            const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
+                                                            return s + (h.total - abonado);
+                                                        }
+                                                        const tp = ticketsPendientes.find(t => t.id === id);
+                                                        if (tp) {
+                                                            return s + tp.items.reduce((si, it) => si + it.precio * it.cantidad, 0);
+                                                        }
+                                                        return s;
+                                                    }, 0))}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2 mb-2">
+                                                <Input 
+                                                    type="number" 
+                                                    placeholder="Monto a abonar..." 
+                                                    value={montoAbonoMultiple}
+                                                    onChange={e => setMontoAbonoMultiple(e.target.value)}
+                                                    className="h-8 text-xs bg-white dark:bg-slate-800 border-indigo-200 font-bold"
+                                                />
+                                                <select 
+                                                    value={metodoAbonoMultiple}
+                                                    onChange={e => setMetodoAbonoMultiple(e.target.value as MetodoPago)}
+                                                    className="h-8 rounded-lg text-xs bg-white dark:bg-slate-800 border border-indigo-200 px-2 font-bold"
+                                                >
+                                                    <option value="efectivo">Efectivo</option>
+                                                    <option value="nequi">Nequi</option>
+                                                    <option value="transferencia">Cuenta</option>
+                                                </select>
+                                                {Array.from(ticketsSeleccionados).some(id => ticketsPendientes.find(t => t.id === id)) && (
+                                                    <Button size="sm" variant="outline" onClick={retomarTicketsSeleccionados} className="h-8 text-xs font-black uppercase tracking-widest ml-2">
+                                                        Retomar seleccionados
+                                                    </Button>
+                                                )}
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-[10px] font-bold text-indigo-600/70">
+                                                    Restante: {formatCurrency(Math.max(0, Array.from(ticketsSeleccionados).reduce((s, id) => {
+                                                        const h = creditosAll.find(c => c.id === id);
+                                                        if (h) {
+                                                            const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
+                                                            return s + (h.total - abonado);
+                                                        }
+                                                        const tp = ticketsPendientes.find(t => t.id === id);
+                                                        if (tp) {
+                                                            return s + tp.items.reduce((si, it) => si + it.precio * it.cantidad, 0);
+                                                        }
+                                                        return s;
+                                                    }, 0) - (Number(montoAbonoMultiple) || 0))) }
+                                                </p>
+                                                <Button size="sm" onClick={procesarAbonoMultiple} className="h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">
+                                                    Aplicar Abono
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    )}
                                     {creditosAll.length === 0 ? (
                                         <p className="text-[10px] text-slate-400 text-center py-2">Sin ventas a crédito registradas</p>
                                     ) : (
@@ -779,8 +985,24 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 const saldo = h.total - abonado;
                                                 const pagado = saldo <= 0;
                                                 return (
-                                                    <div key={h.id} className={`rounded-xl px-3 py-2 ${pagado ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-900'}`}>
-                                                        <div className="flex items-center justify-between gap-2">
+                                                    <div key={h.id} className={`rounded-xl px-3 py-2 flex items-center gap-3 ${pagado ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-900'}`}>
+                                                        {/* Checkbox de selección */}
+                                                        {!pagado && (
+                                                            <div className="shrink-0 flex items-center">
+                                                                <input 
+                                                                    type="checkbox"
+                                                                    checked={ticketsSeleccionados.has(h.id)}
+                                                                    onChange={(e) => {
+                                                                        const newSet = new Set(ticketsSeleccionados);
+                                                                        if (e.target.checked) newSet.add(h.id);
+                                                                        else newSet.delete(h.id);
+                                                                        setTicketsSeleccionados(newSet);
+                                                                    }}
+                                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                                                                />
+                                                            </div>
+                                                        )}
+                                                        <div className="flex-1 flex items-center justify-between gap-2">
                                                             <div>
                                                                 <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
                                                                     {new Date(h.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}
@@ -856,17 +1078,28 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         return acc;
                                     }, {} as Record<string, typeof productosPerfil>)
                                 ).map(([categoria, items]) => (
-                                    <div key={categoria}>
-                                        <div className="flex items-center gap-3 mb-4 mt-6">
-                                            <div className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
-                                              <Folder className="w-4 h-4 text-slate-500" />
-                                            </div>
-                                            <h3 className="text-xs font-black uppercase tracking-widest text-slate-900 dark:text-white">
-                                              {categoria}
-                                            </h3>
-                                            <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800" />
-                                        </div>
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+                                        <div key={categoria} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-sm transition-all">
+                                            <button
+                                                onClick={() => setCategoriaExpandida(categoriaExpandida === categoria ? null : categoria)}
+                                                className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                                                        <Folder className="w-5 h-5 text-slate-500" />
+                                                    </div>
+                                                    <div className="text-left">
+                                                        <h3 className="text-sm font-black uppercase tracking-widest text-slate-900 dark:text-white">
+                                                            {categoria}
+                                                        </h3>
+                                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">{items.length} productos</p>
+                                                    </div>
+                                                </div>
+                                                <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform ${categoriaExpandida === categoria ? 'rotate-180 text-indigo-600' : ''}`} />
+                                            </button>
+                                            
+                                            {categoriaExpandida === categoria && (
+                                                <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
                                         {items.map(d => {
                                     const enCarrito = carritoPos.find(i => i.productoId === d.producto.id);
                                     return (
@@ -924,8 +1157,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         </Card>
                                     );
                                 })}
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
-                                    </div>
                                 ))}
                             </div>
                         )}
@@ -962,7 +1197,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         Guardados ({ticketsPendientes.filter(t => t.clienteId === cliente.id).length})
                                     </p>
                                 </div>
-                                {ticketsPendientes.filter(t => t.clienteId === cliente.id).map(ticket => (
+                                    {ticketsPendientes.filter(t => t.clienteId === cliente.id).map(ticket => (
                                     <div key={ticket.id} className="border-b border-slate-50 dark:border-slate-800/50 last:border-0">
                                         {/* Fila principal */}
                                         <div className="px-4 py-2.5 flex items-center justify-between gap-3">
@@ -974,7 +1209,19 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     {new Date(ticket.guardadoEn).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(ticket.guardadoEn).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
                                             </div>
-                                            <div className="flex gap-1.5 shrink-0">
+                                            <div className="flex gap-1.5 items-center shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={ticketsSeleccionados.has(ticket.id)}
+                                                    onChange={(e) => {
+                                                        const newSet = new Set(ticketsSeleccionados);
+                                                        if (e.target.checked) newSet.add(ticket.id);
+                                                        else newSet.delete(ticket.id);
+                                                        setTicketsSeleccionados(newSet);
+                                                    }}
+                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer mr-2"
+                                                    title="Seleccionar ticket"
+                                                />
                                                 <button
                                                     onClick={() => setEditandoPendienteId(editandoPendienteId === ticket.id ? null : ticket.id)}
                                                     className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-wide transition-colors ${editandoPendienteId === ticket.id ? 'bg-slate-200 text-slate-700' : 'bg-slate-50 text-slate-500 hover:bg-slate-100'}`}
@@ -1134,19 +1381,21 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             {/* Selector de método de pago */}
                             <div>
                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Forma de pago</p>
-                                <div className="grid grid-cols-3 gap-1.5">
+                                <div className="grid grid-cols-4 gap-1.5">
                                     {([
                                         { id: 'efectivo', label: 'Efectivo', Icon: Banknote, color: 'emerald' },
                                         { id: 'nequi',    label: 'Nequi',    Icon: Smartphone, color: 'violet' },
+                                        { id: 'transferencia', label: 'Cuenta', Icon: Banknote, color: 'cyan' },
                                         { id: 'credito',  label: 'Crédito',  Icon: CreditCard,  color: 'rose' },
                                     ] as const).map(({ id, label, Icon, color }) => (
                                         <button
                                             key={id}
-                                            onClick={() => setMetodoPagoSeleccionado(id)}
+                                            onClick={() => setMetodoPagoSeleccionado(id as MetodoPago)}
                                             className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wide transition-all ${metodoPagoSeleccionado === id
                                                 ? color === 'emerald' ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-700 dark:text-emerald-400'
                                                 : color === 'violet'  ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30 dark:border-violet-700 dark:text-violet-400'
-                                                :                       'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/30 dark:border-rose-700 dark:text-rose-400'
+                                                : color === 'rose'    ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/30 dark:border-rose-700 dark:text-rose-400'
+                                                :                       'bg-cyan-50 border-cyan-300 text-cyan-700 dark:bg-cyan-950/30 dark:border-cyan-700 dark:text-cyan-400'
                                                 : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 dark:bg-slate-800/40 dark:border-slate-700'
                                             }`}
                                         >
