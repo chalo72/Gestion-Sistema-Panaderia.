@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useCan, useAuth } from '@/contexts/AuthContext';
 import {
@@ -100,7 +101,7 @@ export default function Recepciones({
     const guardarFacturaEnArchivo = async (recepcion: Recepcion, imagenBase64: string) => {
         const proveedor = getProveedorById(recepcion.proveedorId);
         const facturaArchivo: FacturaEscaneada = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             recepcionId: recepcion.id,
             proveedorId: recepcion.proveedorId,
             proveedorNombre: proveedor?.nombre || 'Sin proveedor',
@@ -277,7 +278,7 @@ export default function Recepciones({
                     }
 
                     return {
-                        id: crypto.randomUUID(),
+                        id: generateUUID(),
                         productoId: productoReal.id,
                         cantidadEsperada: prod.cantidad || 1,
                         cantidadRecibida: prod.cantidad || 1,
@@ -386,7 +387,7 @@ export default function Recepciones({
         const itemsDesdePrePedido: RecepcionItem[] = pedido.items
             .filter(item => getProductoById(item.productoId))
             .map(item => ({
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 productoId: item.productoId,
                 cantidadEsperada: item.cantidad,
                 cantidadRecibida: item.cantidad, // Pre-rellenado con lo esperado
@@ -468,7 +469,7 @@ export default function Recepciones({
         if (!producto) return;
 
         const newItem: RecepcionItem = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             productoId,
             cantidadEsperada: 0,
             cantidadRecibida: 1,

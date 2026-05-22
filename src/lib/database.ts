@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import type { DatabaseAdapter } from './dbAdapter';
 import { FirebaseAdapter } from './firebaseAdapter';
 import { IndexedDBAdapter } from './indexedDBAdapter';
@@ -408,7 +409,7 @@ class NexusDatabase implements IDatabase {
       const nuevoStock = a.tipo === 'entrada' ? stockActual + a.cantidad : Math.max(0, stockActual - a.cantidad);
       
       const item = {
-        id: invItem?.id || crypto.randomUUID(),
+        id: invItem?.id || generateUUID(),
         productoId: a.productoId,
         stockActual: nuevoStock,
         stockMinimo: invItem?.stockMinimo || 10,
@@ -417,7 +418,7 @@ class NexusDatabase implements IDatabase {
       
       await this.updateInventarioItem(item);
       await this.addMovimiento({
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         productoId: a.productoId,
         tipo: a.tipo,
         cantidad: a.cantidad,

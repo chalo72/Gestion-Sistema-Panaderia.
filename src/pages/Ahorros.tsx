@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useMemo, useState } from 'react';
 import {
     PiggyBank,
@@ -125,7 +126,7 @@ export default function Ahorros({ ventas, ahorros, gastos = [], formatCurrency }
             return;
         }
         const nueva: MetaAhorro = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             nombre: formMeta.nombre.trim(),
             monto: parseFloat(formMeta.monto),
             plazo: formMeta.plazo,

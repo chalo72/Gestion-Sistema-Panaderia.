@@ -39,6 +39,8 @@ function Configuracion(props: ConfiguracionProps) {
   const [autoAjuste, setAutoAjuste] = useState(true);
   const [notificaciones, setNotificaciones] = useState(true);
   const [presupuesto, setPresupuesto] = useState('0');
+  const [latasPorHorno, setLatasPorHorno] = useState('4');
+  const [pesoArrobaKg, setPesoArrobaKg] = useState('11.5');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
   const [migrando, setMigrando] = useState(false);
@@ -94,6 +96,8 @@ function Configuracion(props: ConfiguracionProps) {
       setPresupuesto((configuracion.presupuestoMensual || 0).toString());
       setPublicUrl(configuracion.publicUrl || '');
       setAiMode(configuracion.aiMode || 'hybrid');
+      setLatasPorHorno((configuracion.latasPorHorno || 4).toString());
+      setPesoArrobaKg((configuracion.pesoArrobaKg || 11.5).toString());
     }
   }, [configuracion]);
 
@@ -120,6 +124,8 @@ function Configuracion(props: ConfiguracionProps) {
         presupuestoMensual: parseFloat(presupuesto) || 0,
         publicUrl: publicUrl.trim(),
         aiMode: aiMode,
+        latasPorHorno: parseInt(latasPorHorno) || 4,
+        pesoArrobaKg: parseFloat(pesoArrobaKg) || 11.5,
       };
       await onUpdateConfiguracion(nuevaConfig);
 
@@ -490,6 +496,30 @@ function Configuracion(props: ConfiguracionProps) {
                         type="number"
                         value={impuesto}
                         onChange={(e) => setImpuesto(e.target.value)}
+                        className="border-primary/10 focus:border-primary/50"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="latasPorHorno" className="text-sm">Capacidad del Horno (Latas)</Label>
+                      <Input
+                        id="latasPorHorno"
+                        type="number"
+                        value={latasPorHorno}
+                        onChange={(e) => setLatasPorHorno(e.target.value)}
+                        className="border-primary/10 focus:border-primary/50"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="pesoArrobaKg" className="text-sm">Peso Arroba (Kg)</Label>
+                      <Input
+                        id="pesoArrobaKg"
+                        type="number"
+                        step="0.5"
+                        value={pesoArrobaKg}
+                        onChange={(e) => setPesoArrobaKg(e.target.value)}
                         className="border-primary/10 focus:border-primary/50"
                       />
                     </div>

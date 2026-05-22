@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect } from 'react';
 import {
   Plus,
@@ -36,6 +37,7 @@ import { PrePedidoHeader } from '@/components/prepedidos/PrePedidoHeader';
 import { PrePedidoModal } from '@/components/prepedidos/PrePedidoModal';
 import { PrePedidoAddItemModal } from '@/components/prepedidos/PrePedidoAddItemModal';
 import { ProveedorCatalogoTactico } from '@/components/prepedidos/ProveedorCatalogoTactico';
+import { ComparadorPrecios } from '@/components/prepedidos/ComparadorPrecios';
 import type { PrePedido, Producto, Proveedor, PrecioProveedor, InventarioItem, OrdenProduccion, Receta } from '@/types';
 
 // [Nexus-Volt] Speed Booster Utils
@@ -90,7 +92,7 @@ export default function PrePedidos({
   onAjustarStock,
   onGenerarSugerencias
 }: PrePedidosProps) {
-  const [activeTab, setActiveTab] = useState<'creacion' | 'gestion'>('creacion');
+  const [activeTab, setActiveTab] = useState<'creacion' | 'gestion' | 'comparador'>('creacion');
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
   const [fechaEntrega, setFechaEntrega] = useState('');
   const [filtroEstado, setFiltroEstado] = useState<'todos' | PrePedido['estado']>('todos');
@@ -193,7 +195,7 @@ export default function PrePedidos({
     if (!pedido) return;
 
     const abono = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         creditoId: pedido.id,
         monto: Number(montoAbono),
         fecha: new Date(fechaAbono).toISOString(),
@@ -334,6 +336,18 @@ export default function PrePedidos({
       case 'rechazado':   return { label: 'RECHAZADO',  color: 'bg-rose-100 text-rose-700',       icon: <AlertTriangle className="w-3 h-3" /> };
     }
   };
+
+  if (activeTab === 'comparador') {
+    return (
+      <ComparadorPrecios 
+        proveedores={proveedores} 
+        productos={productos} 
+        precios={precios} 
+        formatCurrency={formatCurrency} 
+        onVolver={() => setActiveTab('creacion')} 
+      />
+    );
+  }
 
   if (activeTab === 'gestion') {
     return (
@@ -667,9 +681,14 @@ export default function PrePedidos({
           <div className="flex-1 flex flex-col h-full overflow-hidden p-6 lg:p-8 min-h-0">
              {/* Header y Buscador estilo POS */}
              <div className="flex items-center gap-4 mb-6">
-                <Button variant="ghost" onClick={() => setActiveTab('gestion')} className="shrink-0 gap-2 font-black rounded-2xl text-slate-500 hover:bg-slate-100 px-4 h-14 bg-slate-50 border border-slate-100">
-                   <LayoutGrid className="w-5 h-5" /> HISTORIAL
-                </Button>
+                <div className="flex gap-2 shrink-0">
+                  <Button variant="ghost" onClick={() => setActiveTab('gestion')} className="gap-2 font-black rounded-2xl text-slate-500 hover:bg-slate-100 px-4 h-14 bg-slate-50 border border-slate-100">
+                     <LayoutGrid className="w-5 h-5" /> HISTORIAL
+                  </Button>
+                  <Button variant="ghost" onClick={() => setActiveTab('comparador')} className="gap-2 font-black rounded-2xl text-indigo-500 hover:bg-indigo-100 px-4 h-14 bg-indigo-50 border border-indigo-100">
+                     <TrendingDown className="w-5 h-5" /> COMPARAR PRECIOS
+                  </Button>
+                </div>
                 <div className="relative flex-1 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center px-5 h-14 border border-slate-100 dark:border-slate-700 transition-all focus-within:bg-white focus-within:shadow-md focus-within:border-indigo-200">
                    <Search className="w-5 h-5 text-slate-400" />
                    <input 

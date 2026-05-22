@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight
+    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,6 +13,7 @@ import { FormulacionesView } from '@/components/produccion/FormulacionesView';
 import { ModelosPanView } from '@/components/produccion/ModelosPanView';
 import { CalculadoraRendimiento } from '@/components/produccion/CalculadoraRendimiento';
 import { GeneradorPedidoInsumos } from '@/components/produccion/GeneradorPedidoInsumos';
+import { PlanDiarioView } from '@/components/produccion/PlanDiarioView';
 
 import type {
     Producto, OrdenProduccion, Receta, ProduccionEstado, InventarioItem, FormulacionBase, ModeloPan, Proveedor
@@ -39,6 +40,7 @@ interface ProduccionProps {
     getMejorPrecio: (productoId: string) => any;
     formatCurrency: (val: number) => string;
     onNavigateTo?: (view: string) => void;
+    configuracion: any;
 }
 
 export function Produccion({
@@ -61,7 +63,8 @@ export function Produccion({
     getProductoById,
     getMejorPrecio,
     formatCurrency,
-    onNavigateTo
+    onNavigateTo,
+    configuracion
 }: ProduccionProps) {
     const [showPlanModal, setShowPlanModal] = useState(false);
     const [activeTab, setActiveTab] = useState('ordenes');
@@ -189,10 +192,14 @@ export function Produccion({
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-6 w-full max-w-4xl mx-auto">
+                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-7 w-full max-w-5xl mx-auto">
                     <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <ClipboardList className="w-4 h-4" />
                         <span className="hidden sm:inline">Órdenes</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="plan-diario" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                        <CalendarDays className="w-4 h-4" />
+                        <span className="hidden sm:inline">Plan Diario</span>
                     </TabsTrigger>
                     <TabsTrigger value="formulaciones" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <FlaskConical className="w-4 h-4" />
@@ -335,6 +342,18 @@ export function Produccion({
                     </div>
                 ))}
                     </div>
+                </TabsContent>
+
+                {/* Tab: Plan Diario */}
+                <TabsContent value="plan-diario">
+                    <PlanDiarioView
+                        formulaciones={formulaciones}
+                        modelos={modelosPan}
+                        getProductoById={getProductoById}
+                        inventario={inventario}
+                        configuracion={configuracion}
+                        formatCurrency={formatCurrency}
+                    />
                 </TabsContent>
 
                 {/* Tab: Formulaciones (Recetas) */}

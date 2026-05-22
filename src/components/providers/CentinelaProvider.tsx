@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { db } from '@/lib/database';
 import type { DBMisionAgent, DBHallazgoAgente } from '@/lib/database';
@@ -69,7 +70,7 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // 3. Registrar Hallazgo si la IA detecta algo importante
       if (respuesta.toLowerCase().includes('hallazgo') || respuesta.toLowerCase().includes('alerta')) {
         const nuevoHallazgo: DBHallazgoAgente = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           agenteId: mision.agenteId,
           misionId: mision.id,
           tipo: 'operativo',

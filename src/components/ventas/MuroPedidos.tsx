@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState } from 'react';
 import { Users, Clock, ChefHat, Plus, Edit2, Trash2, Save, X, Unlock } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -50,7 +51,7 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
             toast.success(`Mesa ${form.numero} actualizada`);
         } else if (onAddMesa) {
             const newMesa: Mesa = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 numero: form.numero,
                 capacidad: form.capacidad,
                 estado: 'disponible',

@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useEffect, useRef } from 'react';
 import { db } from '@/lib/database';
 import { consultarAgente } from '@/constants/agentes';
@@ -164,7 +165,7 @@ export function AgentMissionDispatcher() {
                             if (criticaData.esValido) {
                                 // 4. Registrar Hallazgo Validado
                                 const nuevoHallazgo: DBHallazgoAgente = {
-                                    id: crypto.randomUUID(),
+                                    id: generateUUID(),
                                     agenteId: mision.agenteId,
                                     misionId: mision.id,
                                     tipo: hallazgoData.tipo || 'alerta',

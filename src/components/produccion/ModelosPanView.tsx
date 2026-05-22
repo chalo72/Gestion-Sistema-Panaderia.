@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo } from 'react';
 import {
   Croissant,
@@ -65,6 +66,7 @@ export function ModelosPanView({
   const [pesoUnitarioGr, setPesoUnitarioGr] = useState(80);
   const [precioVentaUnitario, setPrecioVentaUnitario] = useState(0);
   const [mermaEstimada, setMermaEstimada] = useState(5);
+  const [piezasPorLata, setPiezasPorLata] = useState(12);
 
   // Calcular valores derivados
   const formulacionSeleccionada = useMemo(() =>
@@ -106,6 +108,7 @@ export function ModelosPanView({
     setPesoUnitarioGr(80);
     setPrecioVentaUnitario(0);
     setMermaEstimada(5);
+    setPiezasPorLata(12);
     setIsDialogOpen(true);
   };
 
@@ -117,6 +120,7 @@ export function ModelosPanView({
     setPesoUnitarioGr(modelo.pesoUnitarioGr);
     setPrecioVentaUnitario(modelo.precioVentaUnitario);
     setMermaEstimada(modelo.mermaEstimada);
+    setPiezasPorLata(modelo.piezasPorLata || 12);
     setIsDialogOpen(true);
   };
 
@@ -138,7 +142,7 @@ export function ModelosPanView({
     }
 
     const modelo: ModeloPan = {
-      id: editingModelo?.id || crypto.randomUUID(),
+      id: editingModelo?.id || generateUUID(),
       nombre: nombre.trim(),
       formulacionId,
       pesoUnitarioGr,
@@ -147,6 +151,7 @@ export function ModelosPanView({
       costoUnitario,
       margenPorcentaje,
       mermaEstimada,
+      piezasPorLata,
       activo: true,
       createdAt: editingModelo?.createdAt || new Date().toISOString()
     };
@@ -248,6 +253,12 @@ export function ModelosPanView({
                     <p className="text-lg font-black text-emerald-600">{modelo.panesPorArroba}</p>
                     <p className="text-[10px] text-emerald-500/70 uppercase">Panes/Arroba</p>
                   </div>
+                </div>
+
+                {/* Piezas por Lata */}
+                <div className="flex justify-between items-center bg-muted/20 p-2 rounded-lg border border-border/50 text-sm">
+                  <span className="text-muted-foreground">Piezas por lata:</span>
+                  <span className="font-bold">{modelo.piezasPorLata || 12}</span>
                 </div>
 
                 {/* Costos y Precios */}
@@ -369,6 +380,17 @@ export function ModelosPanView({
                       className="rounded-xl"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold">Piezas por Lata</label>
+                  <Input
+                    type="number"
+                    value={piezasPorLata}
+                    onChange={(e) => setPiezasPorLata(Number(e.target.value))}
+                    className="rounded-xl"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Capacidad de la lata para este pan</p>
                 </div>
               </div>
 

@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 /**
  * useProduccionHook — Sub-hook para gestión de producción, formulaciones y modelos de pan
  * Extraído de usePriceControl.ts para reducir su tamaño
@@ -94,7 +95,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
   const addOrdenProduccion = useCallback(async (data: Omit<OrdenProduccion, 'id' | 'fechaInicio' | 'estado'>) => {
     const orden: OrdenProduccion = {
       ...data,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       fechaInicio: new Date().toISOString(),
       estado: 'planeado',
     };
@@ -182,7 +183,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
   const addFormulacion = useCallback(async (data: Omit<import('@/types').FormulacionBase, 'id'>) => {
     const formulacion: import('@/types').FormulacionBase = {
       ...data,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
     };
     setFormulaciones(prev => [...prev, formulacion]);
     toast.success('Formulación creada');
@@ -203,7 +204,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
   const addModeloPan = useCallback(async (data: Omit<import('@/types').ModeloPan, 'id'>) => {
     const modelo: import('@/types').ModeloPan = {
       ...data,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
     };
     setModelosPan(prev => [...prev, modelo]);
     toast.success('Modelo de pan creado');

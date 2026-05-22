@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 /**
  * useVentas — Sub-hook para gestión de ventas, caja, mesas y pedidos activos
  * Extraído de usePriceControl.ts para reducir su tamaño
@@ -27,7 +28,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   // --- Gestión de Caja ---
   const abrirCaja = useCallback(async (usuarioId: string, montoApertura: number) => {
     const sesion: CajaSesion = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       usuarioId,
       fechaApertura: new Date().toISOString(),
       montoApertura,
@@ -74,7 +75,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
 
     const nuevoMovimiento: MovimientoCaja = {
       ...data,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       cajaId: targetCajaId,
       usuarioId: 'admin',
       fecha: new Date().toISOString()
@@ -116,7 +117,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
 
     const venta: Venta = {
       ...data,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       fecha: new Date().toISOString(),
     };
 

@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
@@ -472,7 +473,7 @@ export function Inventario({
     const iniciarRonda = () => {
         const snapshot: Record<string, number> = {};
         inventario.forEach(item => { snapshot[item.productoId] = item.stockActual; });
-        setRondaActiva({ id: crypto.randomUUID(), numero: rondaNumero, inicio: new Date().toISOString(), snapshot });
+        setRondaActiva({ id: generateUUID(), numero: rondaNumero, inicio: new Date().toISOString(), snapshot });
         setConteoValues({});
         setTab('ronda');
         toast.success(`▶ Ronda #${rondaNumero} iniciada — puedes seguir vendiendo mientras cuentas`);

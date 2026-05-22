@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '@/lib/database';
 import type {
@@ -44,6 +45,8 @@ const defaultConfig: Configuracion = {
   mostrarUtilidadEnLista: true,
   presupuestoMensual: 0,
   aiMode: 'hybrid', // ✅ Campo requerido por la interfaz Configuracion
+  latasPorHorno: 4,
+  pesoArrobaKg: 11.5,
 };
 
 // PROTEGIDO: No modificar sin revisión. Hook principal de gestión de precios, inventario y ventas validado en producción.
@@ -166,7 +169,7 @@ export function usePriceControl() {
         );
         if (catsFaltantes.length > 0) {
           const nuevasCats = catsFaltantes.map(catName => ({
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             nombre: catName,
             color: '#6b7280', // Color neutro por defecto
             tipo: 'venta' // Por defecto venta
@@ -362,7 +365,7 @@ export function usePriceControl() {
       if (productosSinInventario.length > 0) {
         const now = new Date().toISOString();
         const nuevosItems: InventarioItem[] = productosSinInventario.map((p: any) => ({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           productoId: p.id,
           stockActual: 0,
           stockMinimo: 5,
@@ -427,7 +430,7 @@ export function usePriceControl() {
   // Funciones de Categorías
   const addCategoria = useCallback(async (nombre: string, color: string, tipo?: 'venta' | 'insumo') => {
     const nuevaCategoria: Categoria = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       nombre,
       color,
       tipo,
@@ -473,7 +476,7 @@ export function usePriceControl() {
     const now = new Date().toISOString();
     const nuevoProducto: Producto = {
       ...producto,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       createdAt: now,
       updatedAt: now,
     };
@@ -486,7 +489,7 @@ export function usePriceControl() {
     const existeEnInventario = await db.getInventarioItemByProducto(nuevoProducto.id).catch(() => null);
     if (!existeEnInventario) {
       const itemInventario: InventarioItem = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         productoId: nuevoProducto.id,
         stockActual: 0,
         stockMinimo: 5,
@@ -544,7 +547,7 @@ export function usePriceControl() {
   const addProveedor = useCallback(async (proveedor: Omit<Proveedor, 'id' | 'createdAt'>) => {
     const nuevoProveedor: Proveedor = {
       ...proveedor,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       createdAt: new Date().toISOString(),
     };
     await db.addProveedor(nuevoProveedor);
@@ -606,7 +609,7 @@ export function usePriceControl() {
 
         // Registrar en historial y PERSISTIR en IndexedDB
         const historialEntry: HistorialPrecio = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           productoId,
           proveedorId,
           precioAnterior: existingPrecio.precioCosto,
@@ -619,7 +622,7 @@ export function usePriceControl() {
         // Crear alerta si supera el umbral
         if (Math.abs(porcentajeCambio) >= configuracion.umbralAlerta) {
           const alerta: AlertaPrecio = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             productoId,
             proveedorId,
             tipo: diferencia > 0 ? 'subida' : 'bajada',
@@ -666,7 +669,7 @@ export function usePriceControl() {
     } else {
       // Crear nuevo precio
       const nuevoPrecio: PrecioProveedor = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         productoId,
         proveedorId,
         precioCosto,
@@ -706,7 +709,7 @@ export function usePriceControl() {
     const now = new Date().toISOString();
     const nuevoPrePedido: PrePedido = {
       ...data,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       fechaCreacion: now,
       fechaActualizacion: now,
     };
@@ -734,7 +737,7 @@ export function usePriceControl() {
 
     const newItem: PrePedidoItem = {
       ...item,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       subtotal: item.cantidad * item.precioUnitario,
     };
 
@@ -807,7 +810,7 @@ export function usePriceControl() {
   const addCliente = useCallback(async (cliente: Omit<Cliente, 'id' | 'createdAt'>) => {
     const nuevo: Cliente = {
       ...cliente,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       createdAt: new Date().toISOString(),
     };
     await db.addCliente(nuevo);
@@ -1010,7 +1013,7 @@ export function usePriceControl() {
           pedidosPorProveedor[proveedorId] = [];
         }
         pedidosPorProveedor[proveedorId].push({
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           productoId: item.productoId,
           proveedorId: proveedorId,
           cantidad: cantidadNecesaria,
@@ -1028,7 +1031,7 @@ export function usePriceControl() {
       if (items.length === 0) continue;
       const total = items.reduce((sum, i) => sum + i.subtotal, 0);
       const nuevoPrePedido: PrePedido = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         nombre: `Pedido Auto ${new Date().toLocaleDateString()}`,
         proveedorId, items, total,
         presupuestoMaximo: 0,

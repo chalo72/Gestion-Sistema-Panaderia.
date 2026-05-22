@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useCallback } from 'react';
 import { db } from '@/lib/database';
 import type { PrePedido, PrePedidoItem } from '@/types';
@@ -26,7 +27,7 @@ export function usePrePedidos() {
 
     const nuevoPrePedido: PrePedido = {
       ...data,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       numeroOrden: data.numeroOrden || generarNumeroOrden(prepedidos),
       fechaCreacion: now,
       fechaActualizacion: now,
@@ -55,7 +56,7 @@ export function usePrePedidos() {
 
     const newItem: PrePedidoItem = {
       ...item,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       subtotal: Math.round(item.cantidad * item.precioUnitario * 100) / 100,
     };
 

@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { Usuario, UserRole, Permission } from '@/types';
 import { ROLE_PERMISSIONS } from '@/types';
@@ -33,24 +34,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
 
-  // Gestión de Usuarios LOCAL (con preservación de datos)
   const loadUsuarios = useCallback(() => {
     try {
       const savedUsuariosStr = localStorage.getItem('pricecontrol_local_user_list');
       const savedUsuarios = savedUsuariosStr ? JSON.parse(savedUsuariosStr) : [];
 
-      // Detectar si la lista contiene únicamente usuarios de prueba (emails de ejemplo)
+      // Detectar si la lista contiene únicamente usuarios de prueba antiguos
       const testEmails = ['admin@example.com', 'gerente@example.com', 'comprador@example.com', 'vendedor@example.com'];
       const isOnlyTest = savedUsuarios.length > 0 && savedUsuarios.every((u: any) => testEmails.includes(u.email));
 
-      // Si no hay datos, la lista está vacía o sólo hay usuarios de prueba, inicializamos con los usuarios de prueba
       if (!savedUsuariosStr || savedUsuarios.length === 0 || isOnlyTest) {
         console.log('🧹 Inicializando usuarios de prueba (primer arranque o datos de prueba)');
         setUsuarios(USUARIOS_PRUEBA);
         localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(USUARIOS_PRUEBA));
       } else {
-        // Caso normal: conservamos la lista guardada por el usuario
-        setUsuarios(savedUsuarios);
+        // Fusionar usuarios oficiales que puedan faltar (para no dejar a Chalo por fuera)
+        const oficialesFaltantes = USUARIOS_PRUEBA.filter(up => !savedUsuarios.some((su: any) => su.email === up.email));
+        if (oficialesFaltantes.length > 0) {
+          console.log('🔄 Fusionando usuarios oficiales faltantes en la base local...');
+          const listMerged = [...savedUsuarios, ...oficialesFaltantes];
+          setUsuarios(listMerged);
+          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(listMerged));
+        } else {
+          setUsuarios(savedUsuarios);
+        }
       }
     } catch (e) {
       console.error('Error cargando usuarios locales:', e);
@@ -109,11 +116,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const localUserListStr = localStorage.getItem('pricecontrol_local_user_list');
     const localUserList: Usuario[] = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
 
-    // Buscar usuario por email (insensible a mayúsculas)
-    const localUser = localUserList.find(u => (u.email || '').toLowerCase() === emailLower);
+    // Buscar usuario por email (insensible a mayúsculas y sin espacios adicionales)
+    const localUser = localUserList.find(u => (u.email || '').toLowerCase().trim() === emailLower);
 
     if (!localUser) {
       setIsLoading(false);
+      console.warn(`[Login] Correo no encontrado: "${emailLower}". Usuarios disponibles:`, localUserList.map(u => u.email));
       toast.error('No existe un usuario con ese correo.');
       return { success: false, error: 'Correo no registrado.' };
     }
@@ -124,15 +132,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return { success: false, error: 'Usuario inactivo.' };
     }
 
-    // Verificar contraseña:
-    // - Si el usuario tiene una contraseña asignada → debe coincidir exactamente
-    // - Si NO tiene contraseña asignada → puede entrar con cualquier contraseña (acceso abierto)
+    // Verificar contraseña (quitamos los espacios al inicio/final por si acaso en el input)
+    const passwordClean = password.trim();
     const passwordOk = localUser.password
-      ? password === localUser.password
+      ? passwordClean === localUser.password.trim()
       : true;
 
     if (!passwordOk) {
       setIsLoading(false);
+      console.warn(`[Login] Contraseña incorrecta para: "${emailLower}"`);
       toast.error('Contraseña incorrecta.');
       return { success: false, error: 'Contraseña incorrecta.' };
     }
@@ -206,7 +214,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasAllPermissions = useCallback((perms: Permission[]): boolean => perms.every(p => permissions.includes(p)), [permissions]);
 
   const addUsuario = useCallback(async (userData: Omit<Usuario, 'id' | 'createdAt'>): Promise<boolean> => {
-    const nuevo: Usuario = { ...userData, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    const nuevo: Usuario = { ...userData, id: generateUUID(), createdAt: new Date().toISOString() };
     const newList = [...usuarios, nuevo];
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));

@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
@@ -270,7 +271,7 @@ export function ProveedorForm({
 
     const itemData: ProductoCatalogo = {
       ...prodActual,
-      uid: editingUid || crypto.randomUUID(),
+      uid: editingUid || generateUUID(),
       precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
       costoUnitario: Math.round(costUnit / 100) * 100,
       precioVenta: Math.round(sellPrice / 100) * 100,
@@ -342,7 +343,7 @@ export function ProveedorForm({
               const costoUnit = Math.round(p.precioCosto / cantEmb / 100) * 100;
               const precioVentaUnit = Math.round(costoUnit * (1 + margenOCR / 100) / 100) * 100;
               return {
-                uid: crypto.randomUUID(),
+                uid: generateUUID(),
                 productoId: '',
                 nombre: p.nombre,
                 categoria: catSug !== 'General' ? catSug : '',

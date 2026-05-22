@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo } from 'react';
 import {
   FlaskConical,
@@ -140,7 +141,7 @@ export function FormulacionesView({
     setNombre(`${formulacion.nombre} (Copia)`);
     setDescripcion(formulacion.descripcion || '');
     setCategoria(formulacion.categoria);
-    setIngredientes(formulacion.ingredientes.map(ing => ({ ...ing, id: crypto.randomUUID() })));
+    setIngredientes(formulacion.ingredientes.map(ing => ({ ...ing, id: generateUUID() })));
     setTiempoFermentacion(formulacion.tiempoFermentacion || 0);
     setTiempoHorneado(formulacion.tiempoHorneado || 0);
     setTemperaturaHorno(formulacion.temperaturaHorno || 180);
@@ -151,7 +152,7 @@ export function FormulacionesView({
   // Agregar ingrediente
   const handleAddIngredient = () => {
     setIngredientes([...ingredientes, {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       formulacionId: editingFormulacion?.id || '',
       productoId: '',
       cantidadPorArroba: 0,
@@ -214,7 +215,7 @@ export function FormulacionesView({
     const costoTotal = calcularCostoTotal();
 
     const formulacion: FormulacionBase = {
-      id: editingFormulacion?.id || crypto.randomUUID(),
+      id: editingFormulacion?.id || generateUUID(),
       nombre: nombre.trim(),
       descripcion: descripcion.trim(),
       categoria,

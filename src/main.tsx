@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
@@ -10,6 +11,24 @@ import { NexusDiagnostics } from '@/lib/nexus-diagnostics'
 
 // Exponer herramientas de diagnóstico Nexus
 NexusDiagnostics.expose();
+
+// [Polyfill Crítico para Celulares / Red Local]
+// Safari/Chrome en iOS/Android deshabilitan generateUUID() cuando se accede por HTTP (no HTTPS).
+// Esto causa que la app se quede cargando en dispositivos móviles en red local.
+if (typeof window !== 'undefined') {
+  if (!window.crypto) {
+    (window as any).crypto = {};
+  }
+  if (!window.crypto.randomUUID) {
+    (window.crypto as any).randomUUID = function() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0;
+        const v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
+  }
+}
 
 // Antigravity Type-Safety Shield - Blindaje de Tipos
 (function () {

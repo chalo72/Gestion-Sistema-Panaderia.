@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect } from 'react';
 import { 
   Users, UserPlus, Search, Phone, Mail, MapPin, 
@@ -107,7 +108,7 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
 
     try {
       const payload: Cliente = {
-        id: editando?.id || crypto.randomUUID(),
+        id: editando?.id || generateUUID(),
         nombre: formData.nombre,
         identificacion: formData.identificacion || '',
         telefono: formData.telefono || '',

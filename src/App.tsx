@@ -378,6 +378,7 @@ const App = () => {
             getMejorPrecio={getMejorPrecio}
             formatCurrency={formatCurrency}
             onNavigateTo={(view: any) => setCurrentView(view)}
+            configuracion={configuracion}
           />
         );
       case 'recetas':
@@ -635,11 +636,11 @@ const App = () => {
 
       <main className={cn(
         "transition-all duration-300",
-        user ? (isSidebarCollapsed ? "pl-20" : "pl-64") : "pl-0"
+        user ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-64") : "pl-0"
       )}>
         {/* Header Superior (Solo si hay usuario) */}
         {user && (
-          <header className="sticky top-0 z-40 w-full h-16 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-8 flex items-center justify-between">
+          <header className="sticky top-0 z-40 w-full h-16 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 pl-16 pr-4 md:px-8 flex items-center justify-between">
             <div className="flex items-center gap-4">
                {/* Breadcrumbs dinámicos */}
                <div className="flex items-center gap-2">
@@ -680,7 +681,7 @@ const App = () => {
           </header>
         )}
 
-        <div className="p-8">
+        <div className="p-4 md:p-8">
           <PageTransition viewKey={currentView}>
             {renderView()}
           </PageTransition>
@@ -688,7 +689,7 @@ const App = () => {
 
         {/* Footer Táctico */}
         {user && (
-          <footer className="h-10 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-8 flex items-center justify-between text-[9px] text-slate-400 uppercase tracking-widest font-black shrink-0">
+          <footer className="min-h-10 py-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 md:px-8 flex flex-col md:flex-row items-center justify-between gap-2 text-[9px] text-slate-400 uppercase tracking-widest font-black shrink-0">
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-1.5">
                 <Database className="w-3 h-3" />

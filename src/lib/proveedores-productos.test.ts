@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 /**
  * PROTEGIDO: Tests de regresión — Gestión de Proveedores y Productos
  * 
@@ -230,8 +231,8 @@ describe('Eliminación correcta de productos y proveedores', () => {
 // ============================================================
 describe('Agregar productos — Validación de datos', () => {
   it('nuevo producto genera ID único con crypto.randomUUID', () => {
-    const id1 = crypto.randomUUID();
-    const id2 = crypto.randomUUID();
+    const id1 = generateUUID();
+    const id2 = generateUUID();
     expect(id1).not.toBe(id2);
     // UUID v4 format
     expect(id1).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
@@ -240,7 +241,7 @@ describe('Agregar productos — Validación de datos', () => {
   it('nuevo producto tiene timestamps automáticos', () => {
     const now = new Date().toISOString();
     const nuevoProducto = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       nombre: 'Test',
       categoria: 'Panes',
       precioVenta: 1000,

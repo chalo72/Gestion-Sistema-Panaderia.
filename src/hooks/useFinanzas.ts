@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 /**
  * useFinanzas — Sub-hook para gestión de gastos, créditos y trabajadores
  * Extraído de usePriceControl.ts para reducir su tamaño
@@ -27,7 +28,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
 
   // --- Gastos ---
   const addGasto = useCallback(async (g: Omit<Gasto, 'id'>) => {
-    const newG = { ...g, id: crypto.randomUUID() };
+    const newG = { ...g, id: generateUUID() };
     await db.addGasto(newG as any);
     setGastos(prev => [newG as Gasto, ...prev]);
   }, []);
@@ -72,7 +73,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
 
   // --- Créditos Clientes ---
   const addCreditoCliente = useCallback(async (c: Omit<CreditoCliente, 'id' | 'createdAt'>) => {
-    const nuevo: CreditoCliente = { ...c, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    const nuevo: CreditoCliente = { ...c, id: generateUUID(), createdAt: new Date().toISOString() };
     await db.addCreditoCliente(nuevo);
     setCreditosClientes(prev => [nuevo, ...prev]);
   }, []);
@@ -94,7 +95,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
     const credito = creditosClientes.find(c => c.id === creditoId);
     if (!credito) return;
     if (pago.monto <= 0) return;
-    const nuevoPago: PagoCredito = { ...pago, id: crypto.randomUUID(), creditoId };
+    const nuevoPago: PagoCredito = { ...pago, id: generateUUID(), creditoId };
     const nuevoSaldo = Math.max(0, credito.saldo - pago.monto);
     const updated: CreditoCliente = {
       ...credito,
@@ -108,7 +109,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
 
   // --- Créditos Trabajadores ---
   const addCreditoTrabajador = useCallback(async (c: Omit<CreditoTrabajador, 'id' | 'createdAt'>) => {
-    const nuevo: CreditoTrabajador = { ...c, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    const nuevo: CreditoTrabajador = { ...c, id: generateUUID(), createdAt: new Date().toISOString() };
     await db.addCreditoTrabajador(nuevo);
     setCreditosTrabajadores(prev => [nuevo, ...prev]);
     // Descontar del inventario cada producto tomado
@@ -136,7 +137,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
     const credito = creditosTrabajadores.find(c => c.id === creditoId);
     if (!credito) return;
     if (pago.monto <= 0) return;
-    const nuevoPago: PagoCredito = { ...pago, id: crypto.randomUUID(), creditoId };
+    const nuevoPago: PagoCredito = { ...pago, id: generateUUID(), creditoId };
     const nuevoSaldo = credito.saldo - pago.monto;
     const nuevoEstado = nuevoSaldo <= 0 ? (credito.descontarDeSalario ? 'descontado' : 'pagado') : credito.estado;
     const updated: CreditoTrabajador = {
@@ -151,7 +152,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
 
   // --- Trabajadores ---
   const addTrabajador = useCallback(async (t: Omit<Trabajador, 'id' | 'createdAt'>) => {
-    const nuevo: Trabajador = { ...t, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    const nuevo: Trabajador = { ...t, id: generateUUID(), createdAt: new Date().toISOString() };
     await db.addTrabajador(nuevo);
     setTrabajadores(prev => [nuevo, ...prev]);
   }, []);

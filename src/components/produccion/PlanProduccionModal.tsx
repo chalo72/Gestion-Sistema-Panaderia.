@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo } from 'react';
 import {
     Dialog,
@@ -134,7 +135,7 @@ export function PlanProduccionModal({
                 lote: lote || `L-${Date.now().toString().slice(-6)}`,
                 notas: notas,
                 costoEstimadoTotal: statsProduccion?.costoEstimado || 0,
-                usuarioId: crypto.randomUUID(),
+                usuarioId: generateUUID(),
                 // Datos adicionales del sistema Maestro
                 formulacionId: formulacion?.id,
                 modeloPanId: modeloPan?.id,

@@ -178,7 +178,6 @@ export function Login({ onLoginSuccess }: LoginProps) {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  required
                   className="w-full bg-white/[0.06] border-white/10 text-white placeholder:text-slate-600
                              rounded-xl h-12 px-4 pr-12 text-base
                              focus:border-[#ff007f]/60 focus:bg-white/[0.09]

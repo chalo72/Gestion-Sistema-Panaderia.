@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
     Plus,
@@ -358,7 +359,7 @@ export function Ventas(props: VentasProps) {
         if (mesa.estado === 'disponible') {
             // Crear pedido nuevo para la mesa
             const nuevoPedido: PedidoActivo = {
-                id: crypto.randomUUID(),
+                id: generateUUID(),
                 mesaId: mesa.id,
                 items: [],
                 total: 0,

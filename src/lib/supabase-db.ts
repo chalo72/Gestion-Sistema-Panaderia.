@@ -384,7 +384,9 @@ export class SupabaseDatabase implements IDatabase {
             mostrarUtilidadEnLista: data.mostrar_utilidad_en_lista ?? true,
             categorias: data.categorias || [],
             unidades: data.unidades || data.metadata?.unidades || [],
-            destinos: data.destinos || data.metadata?.destinos || []
+            destinos: data.destinos || data.metadata?.destinos || [],
+            latasPorHorno: data.metadata?.latasPorHorno,
+            pesoArrobaKg: data.metadata?.pesoArrobaKg
         };
     }
 
@@ -408,7 +410,9 @@ export class SupabaseDatabase implements IDatabase {
             metadata: {
               ...(config as any).metadata,
               unidades: (config as any).unidades,
-              destinos: (config as any).destinos
+              destinos: (config as any).destinos,
+              latasPorHorno: config.latasPorHorno,
+              pesoArrobaKg: config.pesoArrobaKg
             }
         };
         const { error } = await supabase.from('configuracion').upsert(dbConfig);

@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo } from 'react';
 import { 
     Plus, Search, Edit2, Trash2, ChevronRight, Layers, ChefHat,
@@ -128,7 +129,7 @@ const Recetas: React.FC<RecetasProps> = ({
 
     const handleAddIngredient = () => {
         setRecipeIngredients([...recipeIngredients, {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             productoId: '',
             cantidad: 0,
             unidad: 'gr',
@@ -178,7 +179,7 @@ const Recetas: React.FC<RecetasProps> = ({
 
         const total = calculateTotalCost();
         const nuevaReceta: Receta = {
-            id: editingReceta?.id || crypto.randomUUID(),
+            id: editingReceta?.id || generateUUID(),
             productoId: selectedProductoId,
             ingredientes: recipeIngredients as IngredienteReceta[],
             porcionesResultantes: porciones,

@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useCallback } from 'react';
 import { db } from '@/lib/database';
 import type {
@@ -48,7 +49,7 @@ export function useCatalogo(deps: {
     const now = new Date().toISOString();
     const nuevoProducto: Producto = {
       ...producto,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       createdAt: now,
       updatedAt: now,
     };
@@ -60,7 +61,7 @@ export function useCatalogo(deps: {
       const existeEnInventario = await db.getInventarioItemByProducto(nuevoProducto.id).catch(() => null);
       if (!existeEnInventario) {
         const itemInventario: InventarioItem = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           productoId: nuevoProducto.id,
           stockActual: 0,
           stockMinimo: 5,
@@ -107,7 +108,7 @@ export function useCatalogo(deps: {
   const addProveedor = useCallback(async (proveedor: Omit<Proveedor, 'id' | 'createdAt'>) => {
     const nuevoProveedor: Proveedor = {
       ...proveedor,
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       createdAt: new Date().toISOString(),
     };
     await db.addProveedor(nuevoProveedor);
@@ -158,7 +159,7 @@ export function useCatalogo(deps: {
         const porcentajeCambio = existingPrecio.precioCosto > 0 ? (diferencia / existingPrecio.precioCosto) * 100 : 0;
 
         const historialEntry: HistorialPrecio = {
-          id: crypto.randomUUID(),
+          id: generateUUID(),
           productoId,
           proveedorId,
           precioAnterior: existingPrecio.precioCosto,
@@ -170,7 +171,7 @@ export function useCatalogo(deps: {
 
         if (Math.abs(porcentajeCambio) >= configuracion.umbralAlerta) {
           const alerta: AlertaPrecio = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             productoId,
             proveedorId,
             tipo: diferencia > 0 ? 'subida' : 'bajada',
@@ -200,7 +201,7 @@ export function useCatalogo(deps: {
       setPrecios(prev => prev.map(p => p.id === existingPrecio!.id ? updatedPrecio : p));
     } else {
       const nuevoPrecio: PrecioProveedor = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         productoId,
         proveedorId,
         precioCosto,
@@ -263,7 +264,7 @@ export function useCatalogo(deps: {
   // ─── CATEGORÍAS ───────────────────────────────────────────────────
   const addCategoria = useCallback(async (nombre: string, color: string) => {
     const nuevaCategoria: Categoria = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       nombre,
       color,
     };

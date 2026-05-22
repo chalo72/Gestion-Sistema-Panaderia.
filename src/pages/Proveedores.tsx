@@ -28,6 +28,7 @@ import {
   Zap,
   ShieldCheck,
   TrendingUp,
+  TrendingDown,
   CheckCircle2,
   Filter,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, PrecioProveedor, ProductoTipo, Categoria } from '@/types';
 import { ProveedorForm, type ProductoCatalogo } from '@/components/proveedores/ProveedorForm';
 import { AnalisisInteligente } from '@/components/proveedores/AnalisisInteligente';
+import { ComparadorPrecios } from '@/components/prepedidos/ComparadorPrecios';
 
 /* ── Tipos para la vista ── */
 type TipoEmbalaje =
@@ -162,6 +164,7 @@ export function Proveedores({
   const [editingProveedor, setEditingProveedor] = useState<Proveedor | null>(null);
   const [orden, setOrden] = useState<OrdenTipo>('nombre');
   const [vistaActual] = useState<VistasTipo>('lista');
+  const [activeView, setActiveView] = useState<'lista' | 'comparador'>('lista');
   const [soloActivos, setSoloActivos] = useState(false);
   const [filtroRubro, setFiltroRubro] = useState('');
   const [tabDetalle, setTabDetalle] = useState<TabDetalle>('contacto');
@@ -446,6 +449,20 @@ export function Proveedores({
     return { calidad, cobertura, margenPromedio };
   };
 
+  // ── Render ─────────────────────────────────────────────────────────────────
+  
+  if (activeView === 'comparador') {
+    return (
+      <ComparadorPrecios 
+        proveedores={proveedores} 
+        productos={_productos} 
+        precios={_precios} 
+        formatCurrency={formatCurrency} 
+        onVolver={() => setActiveView('lista')} 
+      />
+    );
+  }
+
   return (
     <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
 
@@ -478,6 +495,13 @@ export function Proveedores({
           >
             <Download className="w-4 h-4" />
             CSV
+          </Button>
+          <Button
+            onClick={() => setActiveView('comparador')}
+            className="h-10 px-4 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 shadow-none border-none rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
+          >
+            <TrendingDown className="w-4 h-4" />
+            Comparar Precios
           </Button>
            {check('CREAR_PROVEEDORES') && (
             <Button

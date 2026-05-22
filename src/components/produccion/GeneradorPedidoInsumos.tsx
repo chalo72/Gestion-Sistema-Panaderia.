@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo } from 'react';
 import {
   ShoppingCart,
@@ -93,7 +94,7 @@ export function GeneradorPedidoInsumos({
     setPlanificacion([
       ...planificacion,
       {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         tipo: 'formulacion',
         formulacionId: formulaciones[0]?.id || '',
         arrobas: 1

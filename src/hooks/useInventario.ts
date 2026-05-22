@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 /**
  * useInventario — Sub-hook para gestión de inventario, movimientos y recepciones
  * Extraído de usePriceControl.ts para reducir su tamaño
@@ -31,7 +32,7 @@ export function useInventario({ productos }: UseInventarioParams) {
 
       // 1. Actualizar/Crear ítem de inventario
       const item: InventarioItem = {
-        id: dbItem?.id || crypto.randomUUID(),
+        id: dbItem?.id || generateUUID(),
         productoId,
         stockActual: nuevoStock,
         stockMinimo: dbItem?.stockMinimo || 10,
@@ -53,7 +54,7 @@ export function useInventario({ productos }: UseInventarioParams) {
         } catch { return 'sistema'; }
       })();
       const movimiento: MovimientoInventario = {
-        id: crypto.randomUUID(),
+        id: generateUUID(),
         productoId,
         tipo: tipo === 'entrada' ? 'entrada' : 'salida',
         cantidad,

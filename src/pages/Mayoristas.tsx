@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
     Store, Users, TrendingUp, DollarSign, Package, AlertTriangle,
@@ -5,7 +6,7 @@ import {
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
     Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon,
-    Smartphone, CreditCard, PlusCircle, ChevronRight, Folder
+    Smartphone, CreditCard, PlusCircle, ChevronRight, Folder, Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -115,6 +116,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
     const [configTemp, setConfigTemp] = useState(config);
+    const [panelView, setPanelView] = useState<'ticket' | 'cuenta'>('ticket');
+    const [facturasSeleccionadas, setFacturasSeleccionadas] = useState<Set<string>>(new Set());
 
     // ── Rescate de Historial Local a BD Real ──
     useEffect(() => {
@@ -231,7 +234,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const guardarTicketPendiente = () => {
         if (!viendoPerfilCliente || carritoPos.length === 0) return;
         const nuevo: TicketPendiente = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             clienteId: viendoPerfilCliente.id,
             clienteNombre: viendoPerfilCliente.nombre,
             items: [...carritoPos],
@@ -299,7 +302,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const guardarEnHistorial = async (items: typeof carritoPos, total: number, foto?: string, metodo?: MetodoPago) => {
         if (!viendoPerfilCliente) return;
         const nuevo: HistorialMayorista = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             clienteId: viendoPerfilCliente.id,
             clienteNombre: viendoPerfilCliente.nombre,
             items: [...items],
@@ -406,7 +409,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
         const nuevos = historialMayoristas.map(h => {
             if (h.id !== historialId) return h;
-            const abonos: Abono[] = [...(h.abonos ?? []), { id: crypto.randomUUID(), monto, fecha: Date.now(), metodoPago: metodo }];
+            const abonos: Abono[] = [...(h.abonos ?? []), { id: generateUUID(), monto, fecha: Date.now(), metodoPago: metodo }];
             return { ...h, abonos };
         });
         setHistorialMayoristas(nuevos);
@@ -488,7 +491,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 } else {
                     // pago parcial: mover a historial como crédito y registrar abono
                     const nuevoHist: HistorialMayorista = {
-                        id: crypto.randomUUID(),
+                        id: generateUUID(),
                         clienteId: tp.clienteId,
                         clienteNombre: tp.clienteNombre,
                         items: tp.items,
@@ -496,7 +499,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         fecha: Date.now(),
                         fotoFactura: tp.fotoFactura,
                         metodoPago: 'credito',
-                        abonos: [{ id: crypto.randomUUID(), monto: aPagar, fecha: Date.now(), metodoPago: metodoAbonoMultiple as MetodoPago }]
+                        abonos: [{ id: generateUUID(), monto: aPagar, fecha: Date.now(), metodoPago: metodoAbonoMultiple as MetodoPago }]
                     };
                     // persistir local
                     setHistorialMayoristas(prev => {
@@ -1166,10 +1169,29 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         )}
                     </div>
 
-                    {/* ── PANEL DERECHO: Ticket ── */}
-                    <div className="w-full lg:w-[360px] bg-white dark:bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-100 dark:border-slate-800 flex flex-col shadow-2xl h-full overflow-hidden">
-                        {/* Ticket header */}
-                        {/* Ticket header estio Venta Rápida */}
+                    {/* ── PANEL DERECHO: Ticket / Créditos ── */}
+                    <div className="w-full lg:w-[360px] bg-slate-50 dark:bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden shrink-0">
+                        {/* TABS DEL PANEL DERECHO */}
+                        <div className="flex bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
+                            <button
+                                onClick={() => setPanelView('ticket')}
+                                className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all
+                                    ${panelView === 'ticket' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                                🛒 TICKET
+                            </button>
+                            <button
+                                onClick={() => setPanelView('cuenta')}
+                                className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all
+                                    ${panelView === 'cuenta' ? 'bg-rose-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+                            >
+                                💰 CUENTA
+                            </button>
+                        </div>
+
+                        {panelView === 'ticket' ? (
+                            <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-white dark:bg-slate-900 shadow-2xl">
+                                {/* Ticket header estio Venta Rápida */}
                         <div className="bg-[#1a1c2e] p-5 text-white shadow-lg z-20 flex flex-col gap-4">
                              <div className="flex items-center gap-3">
                                 <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
@@ -1190,7 +1212,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                         {/* Tickets pendientes de este cliente */}
                         {ticketsPendientes.filter(t => t.clienteId === cliente.id).length > 0 && (
-                            <div className="border-b border-slate-100 dark:border-slate-800">
+                            <div className="border-b border-slate-100 dark:border-slate-800 shrink-0">
                                 <div className="px-5 py-2 bg-amber-50 dark:bg-amber-950/20 flex items-center gap-1.5">
                                     <Clock className="w-3 h-3 text-amber-600" />
                                     <p className="text-[9px] font-black uppercase tracking-widest text-amber-600">
@@ -1385,7 +1407,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     {([
                                         { id: 'efectivo', label: 'Efectivo', Icon: Banknote, color: 'emerald' },
                                         { id: 'nequi',    label: 'Nequi',    Icon: Smartphone, color: 'violet' },
-                                        { id: 'transferencia', label: 'Cuenta', Icon: Banknote, color: 'cyan' },
+                                        { id: 'transferencia', label: 'Cuenta', Icon: Building2, color: 'blue' },
                                         { id: 'credito',  label: 'Crédito',  Icon: CreditCard,  color: 'rose' },
                                     ] as const).map(({ id, label, Icon, color }) => (
                                         <button
@@ -1394,8 +1416,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wide transition-all ${metodoPagoSeleccionado === id
                                                 ? color === 'emerald' ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-700 dark:text-emerald-400'
                                                 : color === 'violet'  ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30 dark:border-violet-700 dark:text-violet-400'
-                                                : color === 'rose'    ? 'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/30 dark:border-rose-700 dark:text-rose-400'
-                                                :                       'bg-cyan-50 border-cyan-300 text-cyan-700 dark:bg-cyan-950/30 dark:border-cyan-700 dark:text-cyan-400'
+                                                : color === 'blue'    ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400'
+                                                :                       'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/30 dark:border-rose-700 dark:text-rose-400'
                                                 : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 dark:bg-slate-800/40 dark:border-slate-700'
                                             }`}
                                         >
@@ -1422,14 +1444,16 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 }}
                                 className={`w-full h-12 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg transition-colors ${
                                     metodoPagoSeleccionado === 'nequi'   ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-500/20' :
+                                    metodoPagoSeleccionado === 'transferencia' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' :
                                     metodoPagoSeleccionado === 'credito' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' :
                                     'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20'
                                 }`}
                             >
                                 {metodoPagoSeleccionado === 'efectivo' && <Banknote className="w-4 h-4" />}
                                 {metodoPagoSeleccionado === 'nequi'    && <Smartphone className="w-4 h-4" />}
+                                {metodoPagoSeleccionado === 'transferencia' && <Building2 className="w-4 h-4" />}
                                 {metodoPagoSeleccionado === 'credito'  && <CreditCard className="w-4 h-4" />}
-                                {metodoPagoSeleccionado === 'credito' ? 'Registrar a Crédito' : `Confirmar — ${metodoPagoSeleccionado === 'nequi' ? 'Nequi' : 'Efectivo'}`}
+                                {metodoPagoSeleccionado === 'credito' ? 'Registrar a Crédito' : `Confirmar — ${metodoPagoSeleccionado === 'nequi' ? 'Nequi' : metodoPagoSeleccionado === 'transferencia' ? 'Cuenta' : 'Efectivo'}`}
                             </Button>
                             {carritoPos.length > 0 && (
                                 <Button
@@ -1442,6 +1466,158 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 </Button>
                             )}
                         </div>
+                            </div>
+                        ) : (
+                            /* ═══ VISTA CUENTA: Facturas + Abonos ═══ */
+                            <div className="flex-1 flex flex-col min-h-0 overflow-hidden bg-slate-50 dark:bg-slate-950">
+                                <ScrollArea className="flex-1">
+                                    <div className="p-4 space-y-3">
+                                        {(() => {
+                                            const histProv = historialUnificado.filter(h => h.clienteId === cliente.id);
+                                            if (histProv.length === 0) return (
+                                                <div className="flex flex-col items-center justify-center py-16 opacity-40">
+                                                    <Receipt className="w-12 h-12 text-slate-300 mb-3" />
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 text-center">Sin facturas registradas</p>
+                                                    <p className="text-[9px] text-slate-400 mt-1">Registra ventas para verlas aquí</p>
+                                                </div>
+                                            );
+
+                                            const selAll = histProv.every(h => facturasSeleccionadas.has(h.id));
+                                            const toggleAll = () => {
+                                                if (selAll) setFacturasSeleccionadas(new Set());
+                                                else setFacturasSeleccionadas(new Set(histProv.map(h => h.id)));
+                                            };
+                                            const toggleOne = (id: string) => {
+                                                setFacturasSeleccionadas(prev => {
+                                                    const next = new Set(prev);
+                                                    if (next.has(id)) next.delete(id); else next.add(id);
+                                                    return next;
+                                                });
+                                            };
+
+                                            return (
+                                                <>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <button onClick={toggleAll} className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selAll ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 hover:border-indigo-400 bg-white'}`}>
+                                                                {selAll && <Check className="w-3 h-3" />}
+                                                            </button>
+                                                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Seleccionar todas ({histProv.length})</span>
+                                                        </div>
+                                                        <Button onClick={() => setVerHistorial(true)} variant="outline" className="h-7 text-[9px] uppercase font-black px-2 py-0 border-indigo-200 text-indigo-600">
+                                                            Modo Edición Avanzada
+                                                        </Button>
+                                                    </div>
+
+                                                    {histProv.map(h => {
+                                                        const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                                        const saldo = h.total - abonado;
+                                                        const checked = facturasSeleccionadas.has(h.id);
+                                                        const metodoBadge = {
+                                                            efectivo: { label: 'Efectivo', cls: 'bg-emerald-100 text-emerald-700' },
+                                                            nequi:    { label: 'Nequi',    cls: 'bg-violet-100 text-violet-700' },
+                                                            credito:  { label: 'Crédito',  cls: 'bg-rose-100 text-rose-700' },
+                                                            transferencia: { label: 'Cuenta', cls: 'bg-blue-100 text-blue-700' }
+                                                        }[h.metodoPago ?? 'efectivo'] || { label: 'Otro', cls: 'bg-slate-100 text-slate-700' };
+
+                                                        return (
+                                                            <div key={h.id} className={`rounded-xl border p-3 space-y-2 transition-all ${checked ? 'border-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900'}`}>
+                                                                <div className="flex items-start gap-2">
+                                                                    <button onClick={() => toggleOne(h.id)} className={`mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${checked ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-slate-300 hover:border-indigo-400 bg-white'}`}>
+                                                                        {checked && <Check className="w-3 h-3" />}
+                                                                    </button>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-1 mb-0.5">
+                                                                          <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                                                                              {new Date(h.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                                          </p>
+                                                                        </div>
+                                                                        <p className="text-[11px] font-black uppercase text-indigo-600 truncate">{h.items.length} productos</p>
+                                                                        <div className="mt-1">
+                                                                          <span className={`inline-block text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${metodoBadge.cls}`}>
+                                                                            {metodoBadge.label}
+                                                                          </span>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right shrink-0">
+                                                                        <p className="text-sm font-black text-indigo-600 tabular-nums">{formatCurrency(h.total)}</p>
+                                                                        {abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">Abonado: {formatCurrency(abonado)}</p>}
+                                                                        {saldo > 0 && <p className="text-[9px] text-rose-600 font-bold">Debe: {formatCurrency(saldo)}</p>}
+                                                                        {saldo <= 0 && abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">✓ Pagado</p>}
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Abonos */}
+                                                                {(h.abonos ?? []).length > 0 && (
+                                                                    <div className="pl-7 space-y-0.5">
+                                                                        {(h.abonos ?? []).map(a => (
+                                                                            <div key={a.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 rounded p-1">
+                                                                                <span className="text-[8px] text-slate-400">{new Date(a.fecha).toLocaleDateString('es-CO')}</span>
+                                                                                <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300">{formatCurrency(a.monto)} <span className="uppercase text-[8px] opacity-60">({a.metodoPago})</span></span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Botón de abono */}
+                                                                {saldo > 0 && (
+                                                                    <div className="pl-7 mt-1">
+                                                                        {abonandoId === h.id ? (
+                                                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 p-2 rounded-lg border border-indigo-100 dark:border-indigo-800 space-y-2 mt-2">
+                                                                                <div className="flex gap-2">
+                                                                                    <input type="number" placeholder="Monto" value={montoAbono} onChange={e => setMontoAbono(e.target.value)} className="h-7 text-xs bg-white rounded-md px-2 border border-indigo-200 outline-none flex-1" autoFocus />
+                                                                                </div>
+                                                                                <div className="grid grid-cols-2 gap-1.5">
+                                                                                    <Button size="sm" onClick={() => registrarAbono(h.id, 'efectivo')} className="h-7 text-[9px] bg-emerald-100 hover:bg-emerald-200 text-emerald-700 shadow-none border-none">Efectivo</Button>
+                                                                                    <Button size="sm" onClick={() => registrarAbono(h.id, 'nequi')} className="h-7 text-[9px] bg-violet-100 hover:bg-violet-200 text-violet-700 shadow-none border-none">Nequi</Button>
+                                                                                    <Button size="sm" onClick={() => registrarAbono(h.id, 'transferencia')} className="h-7 text-[9px] bg-blue-100 hover:bg-blue-200 text-blue-700 shadow-none border-none">Cuenta</Button>
+                                                                                    <Button size="sm" onClick={() => { setAbonandoId(null); setMontoAbono(''); }} variant="outline" className="h-7 text-[9px] text-slate-500 shadow-none">Cancelar</Button>
+                                                                                </div>
+                                                                            </div>
+                                                                        ) : (
+                                                                            <button onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }} className="text-[9px] font-black uppercase text-indigo-600 hover:text-indigo-700 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-1 rounded w-full flex justify-center items-center gap-1 transition-colors">
+                                                                                <Plus className="w-3 h-3" /> Abonar a esta factura
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                </ScrollArea>
+                                
+                                {/* FOOTER TOTALES SELECCIONADOS */}
+                                <div className="p-4 bg-[#1a1c2e] text-white shrink-0 shadow-[0_-10px_30px_rgba(0,0,0,0.1)] z-20">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Seleccionado ({facturasSeleccionadas.size})</span>
+                                        <span className="text-sm font-black tabular-nums">{(() => {
+                                            const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id));
+                                            return formatCurrency(sel.reduce((s, h) => s + h.total, 0));
+                                        })()}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400/70">Abonado</span>
+                                        <span className="text-sm font-black tabular-nums text-emerald-400">{(() => {
+                                            const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id));
+                                            return formatCurrency(sel.reduce((s, h) => s + (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0), 0));
+                                        })()}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center pt-2 border-t border-white/10 mt-1">
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-rose-400/70">Saldo Pendiente</span>
+                                        <span className="text-xl font-black tabular-nums text-rose-400">{(() => {
+                                            const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id));
+                                            const tot = sel.reduce((s, h) => s + h.total, 0);
+                                            const ab = sel.reduce((s, h) => s + (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0), 0);
+                                            return formatCurrency(tot - ab);
+                                        })()}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 

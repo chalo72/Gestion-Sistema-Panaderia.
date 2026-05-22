@@ -1,3 +1,4 @@
+import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect } from 'react';
 import {
     Search, Bell, History, PlusCircle, Monitor, Shield,
@@ -897,7 +898,7 @@ export function ControlCaja({
         monto: number; motivo: string;
     }) => {
         const nuevo: PrestamoEntreCajas = {
-            id: crypto.randomUUID(),
+            id: generateUUID(),
             ...params,
             estado: 'pendiente',
             fechaPrestamo: new Date().toISOString(),

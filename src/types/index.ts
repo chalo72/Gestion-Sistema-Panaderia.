@@ -122,6 +122,7 @@ export interface ModeloPan {
   costoUnitario: number;       // Calculado desde formulación
   margenPorcentaje: number;    // Margen de ganancia
   mermaEstimada: number;       // % de pérdida estimado en formado/horneado
+  piezasPorLata?: number;      // NUEVO: Cuántos panes caben en una lata
   imagen?: string;
   activo: boolean;
   createdAt: string;
@@ -321,6 +322,8 @@ export interface Configuracion {
   destinos?: string[];
   carpetasClientes?: string[];  // NUEVO: Nombres de carpetas/categorías para los créditos de clientes
   aiMode?: 'local' | 'hybrid' | 'off'; // MODO DE IA: Local, Híbrido o Apagado (Kill Switch)
+  latasPorHorno?: number;       // NUEVO: Capacidad del horno
+  pesoArrobaKg?: number;        // NUEVO: Peso de la arroba configurable
 }
 
 export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes';
