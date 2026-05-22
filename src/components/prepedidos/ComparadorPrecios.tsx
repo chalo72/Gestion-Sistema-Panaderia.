@@ -100,6 +100,11 @@ export function ComparadorPrecios({
   
   const [searchProv, setSearchProv] = useState('');
 
+  // Función para mostrar valores unitarios exactos sin el redondeo agresivo a la centena de formatCurrency
+  const formatExact = (val: number) => {
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(val);
+  };
+
   const provFiltrados = useMemo(() => 
     proveedores.filter(p => (p?.nombre || '').toLowerCase().includes(searchProv.toLowerCase()))
   , [proveedores, searchProv]);
@@ -295,7 +300,7 @@ export function ComparadorPrecios({
                                               {pp.tipoEmbalaje || 'PACA'} (x{cantPack})
                                             </span>
                                             <span className={`text-[9px] font-black tracking-widest ${isMin && !isOnlyOption ? 'text-emerald-600/80' : 'text-indigo-500/70'}`}>
-                                              P.U: {formatCurrency(Math.round(unitCost))}
+                                              P.U: {formatExact(Math.round(unitCost))}
                                             </span>
                                           </div>
                                         ) : (
@@ -313,7 +318,7 @@ export function ComparadorPrecios({
                                             </div>
                                             {maxDiffUnit > 0 && (
                                               <p className="text-[10px] font-bold text-emerald-700/90 dark:text-emerald-300/90 leading-snug">
-                                                Ahorras <span className="font-black text-emerald-800 dark:text-emerald-200">{formatCurrency(Math.round(maxDiffUnit))}</span> por unidad.
+                                                Ahorras <span className="font-black text-emerald-800 dark:text-emerald-200">{formatExact(Math.round(maxDiffUnit))}</span> por unidad.
                                                 {cantPack > 1 && (
                                                   <>
                                                     <br/>
@@ -331,7 +336,7 @@ export function ComparadorPrecios({
                                               <TrendingDown className="w-3 h-3 rotate-180" /> Opción costosa
                                             </div>
                                             <p className="text-[10px] font-bold text-rose-600/90 dark:text-rose-300/90 leading-snug">
-                                              Pagas <span className="font-black text-rose-700 dark:text-rose-200">{formatCurrency(Math.round(diffFromMinUnit))}</span> de más por unidad.
+                                              Pagas <span className="font-black text-rose-700 dark:text-rose-200">{formatExact(Math.round(diffFromMinUnit))}</span> de más por unidad.
                                               {cantPack > 1 && (
                                                 <>
                                                   <br/>
