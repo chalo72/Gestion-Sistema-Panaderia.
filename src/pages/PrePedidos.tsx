@@ -455,7 +455,10 @@ export default function PrePedidos({
                       {/* Numero de orden + estado */}
                       <div className="flex items-start justify-between">
                         <div>
-                          <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">{p.numeroOrden || '—'}</span>
+                          <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1">
+                            <Calendar className="w-3 h-3" />
+                            {p.numeroOrden || 'ORD'} • {new Date(p.fechaCreacion || Date.now()).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
                           <h3 className="font-black text-sm uppercase tracking-tight text-slate-900 dark:text-white mt-0.5">{p.nombre}</h3>
                           <p className="text-[10px] text-slate-400 font-bold mt-0.5">{proveedor?.nombre || 'Sin proveedor'}</p>
                         </div>
@@ -547,8 +550,8 @@ export default function PrePedidos({
                       <h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white tracking-tight">{verDetallePedido.nombre}</h2>
                       <Badge className="bg-indigo-100 text-indigo-700 border-none px-3 font-bold uppercase tracking-widest">{verDetallePedido.estado}</Badge>
                    </div>
-                   <p className="text-sm font-bold text-slate-400 mt-1 uppercase tracking-widest">
-                      {getProveedorById(verDetallePedido.proveedorId)?.nombre} • ORDEN {verDetallePedido.numeroOrden || '#000'}
+                   <p className="text-sm font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-2">
+                      {getProveedorById(verDetallePedido.proveedorId)?.nombre} • ORDEN {verDetallePedido.numeroOrden || '#000'} • {new Date(verDetallePedido.fechaCreacion || Date.now()).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                    </p>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
