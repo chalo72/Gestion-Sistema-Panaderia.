@@ -433,7 +433,7 @@ export default function PrePedidos({
                 const cfg = estadoConfig(p.estado);
                 const proveedor = getProveedorById(p.proveedorId);
                 return (
-                  <Card key={p.id} onClick={() => { setVerDetallePedido(p); setActiveCentralView('catalogo'); }} className="cursor-pointer rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm hover:shadow-md transition-all">
+                  <Card key={p.id} onClick={() => { setVerDetallePedido(p); setActiveTab('creacion'); }} className="cursor-pointer rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm hover:shadow-md transition-all">
                     {/* Franja de color por estado */}
                     <div className={`h-1.5 w-full ${p.estado === 'recibido' ? 'bg-emerald-500' : p.estado === 'enviado' ? 'bg-amber-500' : p.estado === 'confirmado' ? 'bg-indigo-500' : p.estado === 'rechazado' ? 'bg-rose-500' : 'bg-slate-300'}`} />
                     <div className="p-5 space-y-4">
