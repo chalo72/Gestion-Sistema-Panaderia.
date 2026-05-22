@@ -14,7 +14,7 @@ import type { DatabaseAdapter } from './dbAdapter';
  */
 
 const DB_NAME = 'dulce-placer-db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 /** Colecciones conocidas — cada una se convierte en un Object Store de IndexedDB */
 const COLLECTIONS = [

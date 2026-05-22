@@ -2104,11 +2104,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     {editandoPrecioId === d.producto.id ? (
                                                         <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                                                             <input
-                                                                type="number"
+                                                                type="text"
                                                                 value={tempPrecio}
                                                                 onChange={e => setTempPrecio(e.target.value)}
                                                                 onKeyDown={e => {
-                                                                    if (e.key === 'Enter') { const v = parseFloat(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }
+                                                                    if (e.key === 'Enter') { procesarInputPrecio(tempPrecio, d.pvp, d.producto.id); }
                                                                     if (e.key === 'Escape') setEditandoPrecioId(null);
                                                                 }}
                                                                 autoFocus
