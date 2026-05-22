@@ -211,6 +211,22 @@ export default function Productos({
 
     return (
         <div className="space-y-6 pb-12">
+            <div className="flex justify-between items-center bg-red-100 p-2 rounded-lg">
+                <span className="text-red-700 font-bold text-xs">Si los botones no funcionan, presiona aquí 👉</span>
+                <Button 
+                    onClick={() => {
+                        if ('serviceWorker' in navigator) {
+                            navigator.serviceWorker.getRegistrations().then(registrations => {
+                                for(let registration of registrations) { registration.unregister(); }
+                            });
+                        }
+                        window.location.href = window.location.href + '?t=' + new Date().getTime();
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white font-black text-xs h-8"
+                >
+                    MODO DIOS: REPARAR APP
+                </Button>
+            </div>
             <ProductHeader vistaActual={vistaActual} setVistaActual={setVistaActual}
                 onManageCategories={() => setIsCategoriaDialogOpen(true)}
                 onAddProduct={() => { resetForm(); setIsDialogOpen(true); }}
