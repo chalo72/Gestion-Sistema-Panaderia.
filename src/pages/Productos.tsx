@@ -71,7 +71,7 @@ export default function Productos({
         // [Nexus-Volt] Heladería Smart Fields
         useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
         // [Nexus-Volt] Stock Fields
-        stockActual: '', stockMinimo: '5',
+        stockActual: '', stockMinimo: '5', descuentoMayorista: ''
     });
     const [nuevaCategoria, setNuevaCategoria] = useState({ nombre: '', color: COLORES_PRESET[0], tipo: 'venta' as 'venta' | 'insumo' });
 
@@ -151,34 +151,39 @@ export default function Productos({
     };
 
     const handleEdit = (producto: Producto) => {
-        setEditingProducto(producto);
-        const mp = getMejorPrecio(producto.id);
-        const itemInv = inventario.find(i => i.productoId === producto.id);
+        try {
+            setEditingProducto(producto);
+            const mp = getMejorPrecio(producto.id);
+            const itemInv = inventario.find(i => i.productoId === producto.id);
 
-        // Normalizar categoría: buscar coincidencia exacta primero, luego insensible a mayúsculas
-        const catGuardada = producto.categoria || '';
-        const catMatch = categorias.find(c => c.nombre === catGuardada)
-            || categorias.find(c => c.nombre.toLowerCase().trim() === catGuardada.toLowerCase().trim());
-        const categoriaFinal = catMatch ? catMatch.nombre : catGuardada;
-        
-        setFormData({
-            nombre: producto.nombre,
-            categoria: categoriaFinal,
-            descripcion: producto.descripcion || '',
-            precioVenta: producto.precioVenta.toString(),
-            margenUtilidad: producto.margenUtilidad.toString(),
-            imagen: producto.imagen || '',
-            proveedorId: mp?.proveedorId || '',
-            precioCosto: mp?.precioCosto.toString() || '',
-            notasPrecio: mp?.notas || '',
-            tipo: producto.tipo || 'elaborado',
-            unidadMedida: (producto as any).unidadMedida || '',
-            useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
-            stockActual: itemInv?.stockActual.toString() || '0',
-            stockMinimo: itemInv?.stockMinimo.toString() || '5',
-            descuentoMayorista: producto.descuentoMayorista?.toString() || ''
-        });
-        setIsDialogOpen(true);
+            // Normalizar categoría: buscar coincidencia exacta primero, luego insensible a mayúsculas
+            const catGuardada = producto.categoria || '';
+            const catMatch = categorias.find(c => c.nombre === catGuardada)
+                || categorias.find(c => c.nombre.toLowerCase().trim() === catGuardada.toLowerCase().trim());
+            const categoriaFinal = catMatch ? catMatch.nombre : catGuardada;
+            
+            setFormData({
+                nombre: producto.nombre,
+                categoria: categoriaFinal,
+                descripcion: producto.descripcion || '',
+                precioVenta: producto.precioVenta.toString(),
+                margenUtilidad: producto.margenUtilidad.toString(),
+                imagen: producto.imagen || '',
+                proveedorId: mp?.proveedorId || '',
+                precioCosto: mp?.precioCosto.toString() || '',
+                notasPrecio: mp?.notas || '',
+                tipo: producto.tipo || 'elaborado',
+                unidadMedida: (producto as any).unidadMedida || '',
+                useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
+                stockActual: itemInv?.stockActual?.toString() || '0',
+                stockMinimo: itemInv?.stockMinimo?.toString() || '5',
+                descuentoMayorista: producto.descuentoMayorista?.toString() || ''
+            });
+            setIsDialogOpen(true);
+        } catch (error: any) {
+            console.error(error);
+            toast.error('Error al editar: ' + error.message);
+        }
     };
 
     const handleAddInsumo = () => {
