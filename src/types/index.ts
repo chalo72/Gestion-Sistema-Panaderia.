@@ -20,6 +20,7 @@ export interface Producto {
   imagen?: string;
   createdAt: string;
   updatedAt?: string; // PROTEGIDO: Corregido para compatibilidad con DBProducto (opcional en DB)
+  descuentoMayorista?: number; // Descuento porcentual específico para venta mayorista
 }
 
 export interface IngredienteReceta {

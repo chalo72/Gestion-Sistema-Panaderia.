@@ -504,6 +504,39 @@ export function ProductFormModal({
                                     </div>
                                 </div>
                             </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                {/* Descuento Mayorista */}
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-indigo-500 uppercase tracking-wide flex items-center gap-1">
+                                        <Store className="w-3 h-3" /> Descuento Mayorista
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            type="number" min="0" max="100" step="0.1"
+                                            value={formData.descuentoMayorista || ''}
+                                            onChange={e => setFormData({ ...formData, descuentoMayorista: e.target.value })}
+                                            className="h-12 pr-9 text-base font-bold rounded-xl border-indigo-200 dark:border-indigo-800/40 bg-white dark:bg-slate-900 focus:border-indigo-400 text-indigo-700 dark:text-indigo-400"
+                                            placeholder="Ej: 10"
+                                        />
+                                        <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
+                                    </div>
+                                </div>
+
+                                {/* Preview de Precio Mayorista */}
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-indigo-500 uppercase tracking-wide">
+                                        Precio Mayorista Final
+                                    </Label>
+                                    <div className="h-12 flex items-center px-4 rounded-xl border border-dashed border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20">
+                                        <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">
+                                            {formatCurrency(
+                                                (parseFloat(formData.precioVenta) || 0) * (1 - ((parseFloat(formData.descuentoMayorista) || 0) / 100))
+                                            )}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
 
                             {/* Panel de rentabilidad */}
                             {costoReal > 0 && (

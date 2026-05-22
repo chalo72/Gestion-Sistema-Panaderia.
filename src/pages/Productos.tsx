@@ -113,7 +113,8 @@ export default function Productos({
             unidadMedida: formData.unidadMedida || 'unidad', 
             ...(costo > 0 && { costoBase: costo }),
             stockActual: stockActualNum,
-            stockMinimo: stockMinimoNum
+            stockMinimo: stockMinimoNum,
+            descuentoMayorista: formData.descuentoMayorista === '' ? undefined : parseFloat(formData.descuentoMayorista) || 0
         };
 
         try {
@@ -144,7 +145,7 @@ export default function Productos({
             nombre: '', categoria: '', descripcion: '', precioVenta: '', margenUtilidad: '30',
             proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '', tipo: 'elaborado', unidadMedida: '',
             useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
-            stockActual: '', stockMinimo: '5',
+            stockActual: '', stockMinimo: '5', descuentoMayorista: ''
         });
         setEditingProducto(null);
     };
@@ -175,6 +176,7 @@ export default function Productos({
             useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
             stockActual: itemInv?.stockActual.toString() || '0',
             stockMinimo: itemInv?.stockMinimo.toString() || '5',
+            descuentoMayorista: producto.descuentoMayorista?.toString() || ''
         });
         setIsDialogOpen(true);
     };
