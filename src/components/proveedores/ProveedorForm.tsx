@@ -1080,7 +1080,7 @@ export function ProveedorForm({
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                          {catalogoItems.map((item) => (
+                          {[...catalogoItems].sort((a, b) => a.nombre.localeCompare(b.nombre)).map((item) => (
                             <TableRow 
                               key={item.uid} 
                               item={item} 

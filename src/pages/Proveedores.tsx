@@ -628,7 +628,11 @@ export function Proveedores({
               const activo       = (prov as any).activo !== false;
               const rubro        = (prov as any).rubro as string | undefined;
               const notas        = (prov as any).notas as string | undefined;
-              const insumos      = getPreciosByProveedor(prov.id);
+              const insumos      = getPreciosByProveedor(prov.id).sort((a, b) => {
+                const nombreA = getProductoById(a.productoId)?.nombre || '';
+                const nombreB = getProductoById(b.productoId)?.nombre || '';
+                return nombreA.localeCompare(nombreB);
+              });
               const totalInsumos = insumos.filter(i => i.destino !== 'venta').length;
               const totalVenta   = insumos.filter(i => i.destino === 'venta').length;
               const isSel        = selectedProvId === prov.id;

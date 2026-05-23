@@ -14,6 +14,13 @@ import { ModelosPanView } from '@/components/produccion/ModelosPanView';
 import { CalculadoraRendimiento } from '@/components/produccion/CalculadoraRendimiento';
 import { GeneradorPedidoInsumos } from '@/components/produccion/GeneradorPedidoInsumos';
 import { PlanDiarioView } from '@/components/produccion/PlanDiarioView';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from '@/components/ui/dialog';
 
 import type {
     Producto, OrdenProduccion, Receta, ProduccionEstado, InventarioItem, FormulacionBase, ModeloPan, Proveedor
@@ -68,51 +75,27 @@ export function Produccion({
 }: ProduccionProps) {
     const [showPlanModal, setShowPlanModal] = useState(false);
     const [activeTab, setActiveTab] = useState('ordenes');
+    
+    // Estado para el Asistente Paso a Paso
+    const [ordenPasoAPaso, setOrdenPasoAPaso] = useState<OrdenProduccion | null>(null);
 
-    const guiasProduccion = [
-        {
-            nombre: 'Pan de Queso Tradicional',
-            dificultad: 'Media',
-            tiempo: '45 min',
-            horno: '180°C',
-            instrucciones: [
-                'Mezclar la harina con el queso rallado hasta homogeneizar.',
-                'Añadir huevos uno a uno manteniendo el amasado suave.',
-                'Formar bolitas de 40g (usar báscula de precisión).',
-                'Hornear hasta que el dorado sea uniforme en la base.'
-            ],
-            color: 'text-amber-500',
-            bg: 'bg-amber-500/10'
-        },
-        {
-            nombre: 'Bolsa x6 (Mojicones)',
-            dificultad: 'Alta',
-            tiempo: '120 min',
-            horno: '170°C',
-            instrucciones: [
-                'Activar la levadura en agua tibia por 10 minutos.',
-                'Primer leudado: 60 minutos en zona sin corrientes de aire.',
-                'División manual: piezas exactas para que pesen 350g por bolsa.',
-                'Barnizar con huevo para el brillo característico antes de hornear.'
-            ],
-            color: 'text-orange-500',
-            bg: 'bg-orange-500/10'
-        },
-        {
-            nombre: 'Pan de Sal (Aliñado)',
-            dificultad: 'Baja',
-            tiempo: '60 min',
-            horno: '190°C',
-            instrucciones: [
-                'Incorporar la manteca al final del proceso de amasado.',
-                'Hacer cortes transversales profundos para permitir la expansión.',
-                'Vaporizar el horno al inicio para una corteza crujiente.',
-                'Dejar enfriar en rejilla 15 minutos antes de empacar.'
-            ],
-            color: 'text-emerald-500',
-            bg: 'bg-emerald-500/10'
-        }
-    ];
+    // Guías Dinámicas a partir de Formulaciones reales
+    const guiasDinamicas = formulaciones.filter(f => f.instrucciones && f.instrucciones.length > 5).map(f => {
+        const bgColors = ['bg-amber-500/10', 'bg-violet-500/10', 'bg-emerald-500/10', 'bg-blue-500/10', 'bg-pink-500/10'];
+        const textColors = ['text-amber-500', 'text-violet-500', 'text-emerald-500', 'text-blue-500', 'text-pink-500'];
+        const index = f.nombre.length % 5;
+        
+        return {
+            id: f.id,
+            nombre: f.nombre,
+            dificultad: 'Estándar', // Podría ser dinámico si agregamos un campo dificultad a la formulación
+            tiempo: f.tiempoFermentacion ? `${f.tiempoFermentacion} min` : 'N/A',
+            horno: f.temperaturaHorno ? `${f.temperaturaHorno}°C` : '180°C',
+            instrucciones: f.instrucciones?.split('\n').filter(i => i.trim().length > 0) || [],
+            color: textColors[index],
+            bg: bgColors[index]
+        };
+    });
 
     // Filtrar órdenes por estado
     const columns: { title: string; estado: ProduccionEstado; icon: any; color: string }[] = [
@@ -138,6 +121,57 @@ export function Produccion({
     const handleIniciarOrden = async (id: string) => {
         await updateOrdenProduccion(id, { estado: 'en_proceso' });
         toast.info('Orden iniciada. ¡A hornear!');
+    };
+
+    const handleRevertirOrden = async (id: string) => {
+        await updateOrdenProduccion(id, { estado: 'planeado' });
+        toast.warning('Orden devuelta a Planeado.');
+    };
+
+    const handleLanzarPlan = async (planItems: any[]) => {
+        try {
+            for (const item of planItems) {
+                if (!item.modeloId || !item.formulacionId) continue;
+                
+                const modelo = modelosPan.find(m => m.id === item.modeloId);
+                const formulacion = formulaciones.find(f => f.id === item.formulacionId);
+                
+                if (!modelo || !formulacion) continue;
+                
+                // Asegurarse de que el productoId existe en las recetas si el backend de finalizarProduccion
+                // de app.tsx aún asume que hay una "receta" por producto (legado). 
+                // En Produccion, el producto a generar es usualmente referenciado, pero aquí usaremos el nombre del modelo
+                // Si la lógica antigua de finalizarProduccion necesita receta, creamos una orden "dummy" temporalmente o la enlazamos
+                // Para esto, buscaremos un producto que corresponda a este modelo, o simplemente registramos
+                
+                // Aquí deberíamos buscar el producto que corresponde a este modelo, o pedirlo.
+                // Como workaround temporal para que funcione el kanban:
+                // El modeloPan tiene un nombre pero no un productoId directamente en la interfaz. 
+                // Asumimos que se busca por nombre en los productos "elaborados".
+                const prodElaborado = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo === 'elaborado') || productos.find(p => p.tipo === 'elaborado');
+                
+                if (!prodElaborado) {
+                    toast.error(`No hay un producto "elaborado" que coincida con ${modelo.nombre}`);
+                    continue;
+                }
+
+                await addOrdenProduccion({
+                    productoId: prodElaborado.id, // Producto real
+                    cantidadPlaneada: item.panes,
+                    cantidadCompletada: 0,
+                    usuarioId: 'sistema', // o usuario actual
+                    costoEstimadoTotal: formulacion.costoTotalArroba * item.arrobas,
+                    formulacionId: formulacion.id,
+                    modeloPanId: modelo.id,
+                    arrobasUsadas: item.arrobas,
+                    notas: `Plan Diario: ${item.arrobas} arrobas de ${formulacion.nombre}`
+                });
+            }
+            toast.success('¡Plan lanzado a producción exitosamente!');
+            setActiveTab('ordenes');
+        } catch (error) {
+            toast.error('Error al lanzar el plan.');
+        }
     };
 
     return (
@@ -258,7 +292,7 @@ export function Produccion({
                                             <div className="flex justify-between items-start gap-4">
                                                 <div className="space-y-1">
                                                     <CardTitle className="text-sm font-black text-slate-800 dark:text-slate-100 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors leading-snug uppercase tracking-tight">
-                                                        {producto?.nombre || 'Producto Desconocido'}
+                                                        {orden.modeloPanId ? modelosPan.find(m => m.id === orden.modeloPanId)?.nombre : (producto?.nombre || 'Producto Desconocido')}
                                                     </CardTitle>
                                                     <p className="text-[10px] font-black text-slate-400 flex items-center gap-1.5 uppercase tracking-[0.1em]">
                                                         {orden.estado === 'planeado' ? <ClipboardList className="w-3 h-3" /> : <Clock className="w-3 h-3 text-amber-500 animate-spin-slow" />}
@@ -296,6 +330,17 @@ export function Produccion({
                                                     <div className="h-2 w-full bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden shadow-inner border border-slate-200/10">
                                                         <div className="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400 w-2/3 rounded-full shadow-[0_0_15px_rgba(251,191,36,0.5)] animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
                                                     </div>
+                                                    
+                                                    {orden.formulacionId && (
+                                                        <Button 
+                                                            variant="outline" 
+                                                            className="w-full mt-2 text-[10px] font-bold uppercase tracking-widest border-amber-200 dark:border-amber-900/50 text-amber-600 dark:text-amber-500 bg-amber-50/50 dark:bg-amber-950/20 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                                                            onClick={() => setOrdenPasoAPaso(orden)}
+                                                        >
+                                                            <ChefHat className="w-3 h-3 mr-2" />
+                                                            Asistente Paso a Paso
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             )}
 
@@ -309,12 +354,21 @@ export function Produccion({
                                                     </Button>
                                                 )}
                                                 {orden.estado === 'en_proceso' && (
-                                                    <Button
-                                                        className="w-full text-[10px] font-black uppercase tracking-widest h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-500/25 transition-all"
-                                                        onClick={() => handleCompletarOrden(orden)}
-                                                    >
-                                                        <CheckCircle2 className="w-4 h-4 mr-2" /> Finalizar Producción
-                                                    </Button>
+                                                    <div className="flex flex-col gap-2">
+                                                        <Button
+                                                            className="w-full text-[10px] font-black uppercase tracking-widest h-10 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-lg shadow-emerald-500/25 transition-all"
+                                                            onClick={() => handleCompletarOrden(orden)}
+                                                        >
+                                                            <CheckCircle2 className="w-4 h-4 mr-2" /> Finalizar Producción
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            className="w-full text-[9px] font-bold uppercase tracking-widest h-8 text-slate-400 hover:text-slate-600 border-dashed"
+                                                            onClick={() => handleRevertirOrden(orden.id)}
+                                                        >
+                                                            Revertir a Planeado
+                                                        </Button>
+                                                    </div>
                                                 )}
                                                 {orden.estado === 'completado' && (
                                                     <div className="flex items-center justify-center gap-2 text-emerald-500 py-2">
@@ -353,6 +407,7 @@ export function Produccion({
                         inventario={inventario}
                         configuracion={configuracion}
                         formatCurrency={formatCurrency}
+                        onLanzarPlan={handleLanzarPlan}
                     />
                 </TabsContent>
 
@@ -385,7 +440,7 @@ export function Produccion({
                 {/* Tab: Guías de Elaboración (Instructivos) */}
                 <TabsContent value="guias" className="animate-ag-fade-in">
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {guiasProduccion.map((guia, idx) => (
+                        {guiasDinamicas.map((guia, idx) => (
                             <Card key={idx} className="border-none shadow-xl bg-white dark:bg-slate-900/50 overflow-hidden group">
                                 <div className={cn("h-2 w-full", guia.bg.replace('/10', ''))}></div>
                                 <CardHeader className="pb-2">
@@ -424,6 +479,13 @@ export function Produccion({
                                 </CardContent>
                             </Card>
                         ))}
+                        {guiasDinamicas.length === 0 && (
+                            <div className="col-span-full flex flex-col items-center justify-center p-12 opacity-50">
+                                <Package className="w-12 h-12 mb-4" />
+                                <p className="text-sm font-bold uppercase tracking-widest">No hay guías dinámicas</p>
+                                <p className="text-xs text-muted-foreground mt-2">Ve a la pestaña "Recetas" y añade instrucciones a tus formulaciones para verlas aquí.</p>
+                            </div>
+                        )}
                     </div>
                 </TabsContent>
 
@@ -466,6 +528,70 @@ export function Produccion({
                 inventario={inventario}
                 onConfirm={addOrdenProduccion}
             />
+
+            {/* Asistente Paso a Paso Modal */}
+            <Dialog open={!!ordenPasoAPaso} onOpenChange={(open) => !open && setOrdenPasoAPaso(null)}>
+                <DialogContent className="max-w-md rounded-[2rem] p-0 overflow-hidden border-0 bg-slate-50 dark:bg-slate-900 shadow-2xl">
+                    <div className="h-2 w-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500" />
+                    
+                    {ordenPasoAPaso && (() => {
+                        const formulacion = formulaciones.find(f => f.id === ordenPasoAPaso.formulacionId);
+                        const modelo = modelosPan.find(m => m.id === ordenPasoAPaso.modeloPanId);
+                        const pasos = formulacion?.instrucciones?.split('\n').filter(i => i.trim().length > 0) || [];
+                        
+                        return (
+                            <div className="p-6">
+                                <DialogHeader className="mb-6 text-center">
+                                    <div className="w-16 h-16 mx-auto bg-amber-100 dark:bg-amber-900/30 text-amber-500 rounded-full flex items-center justify-center mb-4">
+                                        <ChefHat className="w-8 h-8" />
+                                    </div>
+                                    <DialogTitle className="text-xl font-black uppercase tracking-tight text-slate-800 dark:text-slate-100">
+                                        Asistente del Panadero
+                                    </DialogTitle>
+                                    <DialogDescription className="text-xs uppercase tracking-widest font-bold text-slate-400 mt-2">
+                                        Lote: {ordenPasoAPaso.lote?.slice(-4) || 'N/A'} • {modelo?.nombre || 'Producto'}
+                                    </DialogDescription>
+                                </DialogHeader>
+
+                                <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                                    {pasos.length > 0 ? pasos.map((paso, idx) => (
+                                        <div key={idx} className="flex gap-4 p-4 rounded-2xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 shadow-sm group hover:border-amber-300 transition-colors">
+                                            <div className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 font-black text-xs flex items-center justify-center shrink-0">
+                                                {idx + 1}
+                                            </div>
+                                            <p className="text-sm font-medium text-slate-600 dark:text-slate-300 leading-relaxed pt-1">
+                                                {paso}
+                                            </p>
+                                        </div>
+                                    )) : (
+                                        <div className="text-center py-8">
+                                            <p className="text-muted-foreground text-sm font-medium">Esta receta no tiene instrucciones paso a paso registradas.</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 grid grid-cols-2 gap-4 text-center">
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Horno</p>
+                                        <p className="text-lg font-black text-slate-700 dark:text-slate-200">{formulacion?.temperaturaHorno || '180'}°C</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Tiempo</p>
+                                        <p className="text-lg font-black text-slate-700 dark:text-slate-200">{formulacion?.tiempoHorneado || '45'} min</p>
+                                    </div>
+                                </div>
+
+                                <Button 
+                                    className="w-full mt-6 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 rounded-xl font-black uppercase tracking-widest text-xs h-12"
+                                    onClick={() => setOrdenPasoAPaso(null)}
+                                >
+                                    Cerrar Asistente
+                                </Button>
+                            </div>
+                        );
+                    })()}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

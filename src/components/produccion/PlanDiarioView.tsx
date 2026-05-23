@@ -34,6 +34,7 @@ interface PlanDiarioViewProps {
   inventario: InventarioItem[];
   configuracion: Configuracion;
   formatCurrency: (value: number) => string;
+  onLanzarPlan?: (planItems: any[]) => void;
 }
 
 interface PlanItem {
@@ -49,7 +50,8 @@ export function PlanDiarioView({
   getProductoById,
   inventario,
   configuracion,
-  formatCurrency
+  formatCurrency,
+  onLanzarPlan
 }: PlanDiarioViewProps) {
   const [items, setItems] = useState<PlanItem[]>([]);
   const ARROBA_KG = configuracion.pesoArrobaKg || 11.5;
@@ -172,6 +174,14 @@ export function PlanDiarioView({
           <p className="text-muted-foreground">Planifica las arrobas a procesar y obtén latas y horneadas exactas.</p>
         </div>
         <div className="flex gap-2">
+          {items.length > 0 && onLanzarPlan && (
+            <Button 
+              onClick={() => onLanzarPlan(resultados.rows)} 
+              className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 animate-pulse"
+            >
+              🚀 Lanzar a Producción
+            </Button>
+          )}
           <Button onClick={handlePrint} variant="outline" className="gap-2 rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50">
             <Printer className="w-4 h-4" />
             Imprimir Plan

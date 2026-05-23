@@ -116,15 +116,17 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     const orden = produccion.find(o => o.id === id);
     if (!orden || orden.estado === 'completado') return;
 
-    // 1. Obtener receta
+    // 1. Obtener receta o formulación
     const receta = recetas.find(r => r.productoId === orden.productoId);
-    if (!receta) {
-      toast.error('No hay receta definida para este producto. Configura la receta antes de finalizar la producción.');
-      return; // No continuar: sin receta no se pueden descontar insumos ni cargar producto terminado
+    const formulacion = orden.formulacionId ? formulaciones.find(f => f.id === orden.formulacionId) : null;
+    const modelo = orden.modeloPanId ? modelosPan.find(m => m.id === orden.modeloPanId) : null;
+
+    if (!receta && !formulacion) {
+      toast.error('No hay receta ni formulación definida para esta orden. Configura la receta antes de finalizar.');
+      return;
     }
 
     // 2. Preparar ajustes de stock (Batch)
-    const modelo = orden.modeloPanId ? modelosPan.find(m => m.id === orden.modeloPanId) : null;
     const mermaFactor = modelo?.mermaEstimada ? 1 + (modelo.mermaEstimada / 100) : 1;
     const mermaKgEstimado = modelo?.mermaEstimada
       ? Math.round(((mermaFactor - 1) * cantidadCompletada) * 100) / 100
@@ -140,16 +142,34 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     const ajustes: any[] = [];
 
     // A. Descontar ingredientes
-    for (const ingrediente of receta.ingredientes) {
-      const cantidadBase = (ingrediente.cantidad / receta.porcionesResultantes) * cantidadCompletada;
-      const cantidadConMerma = Math.round(cantidadBase * mermaFactor * 1000) / 1000;
-      ajustes.push({
-        productoId: ingrediente.productoId,
-        cantidad: cantidadConMerma,
-        tipo: 'salida',
-        motivo: `Producción Lote: ${orden.lote || 'N/A'} (merma ${modelo?.mermaEstimada ?? 0}%)`,
-        usuario: usuarioActual
-      });
+    if (formulacion && modelo) {
+        // LÓGICA NUEVA: Basado en arrobasUsadas y formulacion (Plan Diario)
+        // Usar las arrobas planeadas que están en la orden
+        const arrobasCalculadas = orden.arrobasUsadas || (cantidadCompletada / modelo.panesPorArroba);
+        for (const ingrediente of formulacion.ingredientes) {
+            // cantidad total = cantidad por arroba * arrobas calculadas
+            const cantidadTotal = ingrediente.cantidadPorArroba * arrobasCalculadas;
+            ajustes.push({
+                productoId: ingrediente.productoId,
+                cantidad: cantidadTotal,
+                tipo: 'salida',
+                motivo: `Producción (Formulación) Lote: ${orden.lote || 'N/A'}`,
+                usuario: usuarioActual
+            });
+        }
+    } else if (receta) {
+        // LÓGICA ANTIGUA (Legacy): Basada en receta simple
+        for (const ingrediente of receta.ingredientes) {
+          const cantidadBase = (ingrediente.cantidad / receta.porcionesResultantes) * cantidadCompletada;
+          const cantidadConMerma = Math.round(cantidadBase * mermaFactor * 1000) / 1000;
+          ajustes.push({
+            productoId: ingrediente.productoId,
+            cantidad: cantidadConMerma,
+            tipo: 'salida',
+            motivo: `Producción Lote: ${orden.lote || 'N/A'} (merma ${modelo?.mermaEstimada ?? 0}%)`,
+            usuario: usuarioActual
+          });
+        }
     }
 
     // B. Cargar producto terminado
