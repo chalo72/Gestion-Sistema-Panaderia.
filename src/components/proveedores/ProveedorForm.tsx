@@ -59,7 +59,17 @@ function CurrencyInput({
   }, [value, isFocused]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawStr = e.target.value.replace(/\D/g, '');
+    let rawInput = e.target.value;
+
+    // Detectar si el usuario pegó un valor con centavos exactos (ej: 114.285,71 o 114285.71)
+    // Buscamos un separador (, o .) seguido de exactamente 1 o 2 dígitos al final.
+    const hasDecimals = /[.,]\d{1,2}$/.test(rawInput);
+    if (hasDecimals) {
+      // Removemos los decimales y su separador para quedarnos solo con la parte entera (redondeando hacia abajo)
+      rawInput = rawInput.replace(/[.,]\d{1,2}$/, '');
+    }
+
+    const rawStr = rawInput.replace(/\D/g, '');
     const num = parseInt(rawStr, 10);
 
     if (rawStr === '') {
