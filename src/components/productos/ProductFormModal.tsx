@@ -91,6 +91,11 @@ export function ProductFormModal({
     const imagenUrl      = formData.imagen?.trim();
     const mostrarPreview = imagenUrl && imagenUrl.startsWith('http') && !imgError;
 
+    // Analisis IA Mayorista
+    const descMayorista = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
+    const precioMayoristaFinal = pvpManual > 0 ? pvpManual * (1 - descMayorista / 100) : 0;
+    const margenMayoristaFinal = costoReal > 0 && precioMayoristaFinal > 0 ? ((precioMayoristaFinal - costoReal) / costoReal) * 100 : 0;
+
     const handleCrearCategoria = async () => {
         if (!miniNombre.trim() || !onAddCategoria) return;
         setGuardandoCat(true);
@@ -558,14 +563,61 @@ export function ProductFormModal({
                                     </Label>
                                     <div className="h-12 flex items-center px-4 rounded-xl border border-dashed border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20">
                                         <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">
-                                            {formatCurrency(
-                                                (parseFloat(String(formData.precioVenta).replace(',', '.')) || 0) * 
-                                                (1 - ((parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0) / 100))
-                                            )}
+                                            {formatCurrency(precioMayoristaFinal)}
                                         </span>
                                     </div>
                                 </div>
                             </div>
+
+                            {/* AGENTE IA: Análisis de Descuento Mayorista */}
+                            {descMayorista > 0 && (
+                                <div className="p-4 rounded-xl border border-indigo-100 dark:border-indigo-800/40 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-900 shadow-sm relative overflow-hidden">
+                                    <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+                                    <div className="flex items-start gap-3 relative z-10">
+                                        <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5 shadow-sm border border-indigo-200/50">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                                        </div>
+                                        <div className="space-y-3 flex-1">
+                                            <div>
+                                                <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 mb-0.5">Agente IA de Ventas</h4>
+                                                <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                                    Análisis de tu Descuento Mayorista
+                                                </p>
+                                            </div>
+                                            
+                                            {precioMayoristaFinal < costoReal ? (
+                                                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-lg">
+                                                    <p className="text-xs font-bold text-red-700 dark:text-red-400 flex items-start gap-1.5">
+                                                        <span className="text-base leading-none">🚨</span> 
+                                                        ¡ADVERTENCIA CRÍTICA! Estás vendiendo por debajo de tu costo de producción ({formatCurrency(costoReal)}). ¡Estás perdiendo dinero en cada unidad vendida a los mayoristas!
+                                                    </p>
+                                                </div>
+                                            ) : margenMayoristaFinal < 15 ? (
+                                                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30 rounded-lg">
+                                                    <p className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                                                        <span className="text-base leading-none">⚠️</span> 
+                                                        Cuidado: Tu margen de ganancia es muy bajo ({margenMayoristaFinal.toFixed(1)}%). Estás en el límite y un pequeño aumento en los insumos te hará perder dinero.
+                                                    </p>
+                                                </div>
+                                            ) : (
+                                                <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30 rounded-lg">
+                                                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-start gap-1.5">
+                                                        <span className="text-base leading-none">✅</span> 
+                                                        ¡Excelente! Tienes un margen mayorista sano del {margenMayoristaFinal.toFixed(1)}%. Este descuento es sostenible para tu panadería.
+                                                    </p>
+                                                </div>
+                                            )}
+
+                                            <div className="pt-2 border-t border-indigo-100 dark:border-indigo-800/30">
+                                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-relaxed flex items-start gap-1.5">
+                                                    <span className="text-base leading-none opacity-80">💡</span> 
+                                                    <span><strong>Sugerencia (Estándar Colombia):</strong> Lo ideal es ofrecer a los revendedores/mayoristas un descuento de entre <strong>10% y 25%</strong> sobre el precio al público, asegurándote de que tu margen final nunca baje del 20% para que ambos negocios ganen y estén contentos.</span>
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Panel de rentabilidad */}
                             {costoReal > 0 && (
@@ -717,3 +769,4 @@ export function ProductFormModal({
         </Dialog>
     );
 }
+
