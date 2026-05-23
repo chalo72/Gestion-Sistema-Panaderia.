@@ -11,7 +11,9 @@ import {
   Cpu,
   Layers,
   Database,
-  History
+  History,
+  Mic,
+  MicOff
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { analizarFacturaForense, sugerirCategoria, type ResultadoOCR } from '@/lib/ocr-service';
@@ -145,6 +147,10 @@ export function ProveedorForm({
   const [ocrProgress, setOcrProgress] = useState(0);
   const [ocrResult, setOcrResult] = useState<ResultadoOCR | null>(null);
   const [isCategoriaIA, setIsCategoriaIA] = useState(false);
+
+  // ── ESTADO PARA EL ASISTENTE DE VOZ ──
+  const [isListening, setIsListening] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState('');
 
   const fileInputUploadRef = useRef<HTMLInputElement>(null);
   const fileInputCameraRef = useRef<HTMLInputElement>(null);
@@ -289,6 +295,111 @@ export function ProveedorForm({
     setProdActual(PROD_INIT);
     setEditingUid(null);
     setBuscarProd('');
+  };
+
+  // ── MOTOR DE RECONOCIMIENTO DE VOZ ──
+  const startVoiceRecognition = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      toast.error('Tu navegador no soporta el reconocimiento de voz nativo. Usa Chrome, Edge o Safari actualizados.');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    setIsListening(true);
+    setVoiceFeedback('Escuchando... Habla ahora.');
+    toast.info('🎙️ Asistente de voz activado. Puedes dictar el producto.');
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript.toLowerCase();
+      setVoiceFeedback(`Escuchado: "${transcript}"`);
+      parseVoiceCommand(transcript);
+    };
+
+    recognition.onerror = (event: any) => {
+      setIsListening(false);
+      setVoiceFeedback('Error al escuchar. Intenta de nuevo.');
+      toast.error('No se pudo capturar la voz correctamente.');
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      setTimeout(() => setVoiceFeedback(''), 5000);
+    };
+
+    recognition.start();
+  };
+
+  const parseVoiceCommand = (text: string) => {
+    const cleanText = text.replace(/uno/g, '1').replace(/dos/g, '2').replace(/tres/g, '3')
+                          .replace(/cuatro/g, '4').replace(/cinco/g, '5')
+                          .replace(/mil/g, '000').replace(/ /g, ' '); 
+                          
+    let newProd = { ...prodActual };
+    let shouldAdd = false;
+
+    if (text.includes('agregar') || text.includes('añadir') || text.includes('guarda')) {
+      shouldAdd = true;
+    }
+
+    // Extraer Producto: busca la palabra "producto" y toma hasta la siguiente palabra clave
+    const matchProd = text.match(/producto\s+(.*?)(?:\s+categor[ií]a|\s+empaque|\s+unidad|\s+paca|\s+bulto|\s+caja|\s+cantidad|\s+uso|\s+destino|\s+valor|\s+precio|\s+agregar|\s+añadir|$)/i);
+    if (matchProd && matchProd[1]) {
+      newProd.nombre = matchProd[1].trim();
+      setBuscarProd(newProd.nombre);
+    }
+
+    // Extraer Categoría
+    const matchCat = text.match(/categor[ií]a\s+(.*?)(?:\s+empaque|\s+unidad|\s+paca|\s+bulto|\s+caja|\s+cantidad|\s+uso|\s+destino|\s+valor|\s+precio|\s+agregar|\s+añadir|$)/i);
+    if (matchCat && matchCat[1]) {
+       const catDictada = matchCat[1].trim().toLowerCase();
+       const catMatch = CATS_INSUMO.find(c => c.toLowerCase().includes(catDictada)) || CATS_VENTA.find(c => c.toLowerCase().includes(catDictada));
+       if (catMatch) newProd.categoria = catMatch;
+    }
+
+    // Extraer Empaque (buscando la palabra clave directamente)
+    const empaquesPosibles = EMBALAJES.map(e => e.value);
+    for (const emp of empaquesPosibles) {
+       if (text.includes(emp)) {
+         newProd.tipoEmbalaje = emp;
+         break;
+       }
+    }
+
+    // Extraer Cantidad
+    const matchCant = cleanText.match(/cantidad\s+(\d+)/i);
+    if (matchCant && matchCant[1]) {
+      newProd.cantidadEmbalaje = parseInt(matchCant[1], 10);
+    }
+
+    // Extraer Destino / Uso
+    if (text.includes('uso insumo') || text.includes('destino insumo')) {
+      newProd.destino = 'insumo';
+    } else if (text.includes('uso venta') || text.includes('destino venta')) {
+      newProd.destino = 'venta';
+    }
+
+    // Extraer Valor
+    const matchValor = cleanText.match(/(?:valor|precio)(?:.*?)\s+(\d+[\d\.]*)/i);
+    if (matchValor && matchValor[1]) {
+      const valNum = parseInt(matchValor[1].replace(/\./g, ''), 10);
+      if (!isNaN(valNum)) {
+         newProd.precioCosto = valNum;
+      }
+    }
+
+    setProdActual(newProd);
+    toast.success('🎙️ Voz procesada y campos llenados.');
+
+    if (shouldAdd) {
+       setTimeout(() => {
+          document.getElementById('btn-add-catalogo')?.click();
+       }, 500);
+    }
   };
 
   // --- AGENTE FORENSE v3.0 — Identificación campo por campo ---
@@ -674,6 +785,20 @@ export function ProveedorForm({
                         <Button
                           type="button"
                           variant="outline"
+                          onClick={startVoiceRecognition}
+                          className={cn(
+                            "h-8 rounded-full border-dashed text-[9px] font-black uppercase tracking-widest px-3 flex items-center gap-1.5 transition-all shadow-sm",
+                            isListening 
+                              ? "border-rose-400 text-rose-600 bg-rose-50 dark:border-rose-800 dark:text-rose-400 dark:bg-rose-950/20 animate-pulse" 
+                              : "border-indigo-300 text-indigo-600 bg-indigo-50/50 hover:bg-white dark:border-indigo-800 dark:text-indigo-400 dark:bg-indigo-950/20 dark:hover:bg-indigo-900/40"
+                          )}
+                        >
+                          {isListening ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                          {isListening ? 'Escuchando...' : 'Dictar'}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
                           onClick={() => fileInputUploadRef.current?.click()}
                           className="h-8 rounded-full border-dashed border-indigo-300 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20 hover:bg-white dark:hover:bg-indigo-900/40 text-[9px] font-black uppercase tracking-widest px-3 flex items-center gap-1.5 transition-all"
                         >
@@ -707,9 +832,14 @@ export function ProveedorForm({
                         className="hidden"
                       />
                     </div>
-                    <Badge variant="outline" className="rounded-full bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-400 uppercase font-black text-[9px] px-3 py-1">
-                      {catalogoItems.length} Registrados
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge variant="outline" className="rounded-full bg-indigo-50 text-indigo-600 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-400 uppercase font-black text-[9px] px-3 py-1">
+                        {catalogoItems.length} Registrados
+                      </Badge>
+                      {voiceFeedback && (
+                        <span className="text-[10px] font-bold text-slate-500 animate-ag-fade-in">{voiceFeedback}</span>
+                      )}
+                    </div>
                 </div>
                 
                 <Card className="rounded-2xl md:rounded-[2rem] border-2 border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/20 dark:bg-slate-900/20 shadow-none overflow-visible">
@@ -972,6 +1102,7 @@ export function ProveedorForm({
                       {/* FILA 3: ACCIÓN */}
                       <div className="pt-2 flex justify-end border-t border-indigo-100/50 dark:border-indigo-900/20">
                           <Button 
+                            id="btn-add-catalogo"
                             type="button" 
                             onClick={addProductoCatalogo} 
                             className={cn(
