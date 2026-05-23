@@ -3,7 +3,7 @@ import {
     Plus, Minus, Edit2, X, DollarSign, Store, Info,
     ShoppingCart, Warehouse, Check, Percent,
     Package, ImageIcon, Tag, TrendingUp, ChefHat,
-    AlertCircle, CheckCircle2
+    AlertCircle, CheckCircle2, ChevronDown
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -55,6 +55,7 @@ export function ProductFormModal({
 
     // Estado mini-formulario de nueva categoría inline
     const [showNueva,    setShowNueva]    = useState(false);
+    const [showAnalisisIA, setShowAnalisisIA] = useState(true);
     const [miniNombre,   setMiniNombre]   = useState('');
     const [miniColor,    setMiniColor]    = useState(COLORES_RAPIDOS[0]);
     const [guardandoCat, setGuardandoCat] = useState(false);
@@ -769,4 +770,7 @@ export function ProductFormModal({
         </Dialog>
     );
 }
+
+
+
 
