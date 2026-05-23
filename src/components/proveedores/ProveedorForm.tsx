@@ -28,6 +28,68 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, Categoria } from '@/types';
+import { formatCurrency } from '@/lib/utils';
+
+/* ── COMPONENTE DE MONEDA MEJORADO ── */
+function CurrencyInput({ 
+  value, 
+  onChange, 
+  placeholder, 
+  className,
+  icon: Icon
+}: { 
+  value: number; 
+  onChange: (val: number) => void; 
+  placeholder?: string; 
+  className?: string;
+  icon?: any;
+}) {
+  const [localStr, setLocalStr] = useState('');
+  const [isFocused, setIsFocused] = useState(false);
+
+  // Sincronizar desde afuera solo si no está enfocado o si cambió drásticamente
+  useEffect(() => {
+    if (!isFocused) {
+      if (value > 0) {
+        setLocalStr(formatCurrency(value).replace('$', '').trim());
+      } else {
+        setLocalStr('');
+      }
+    }
+  }, [value, isFocused]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawStr = e.target.value.replace(/\D/g, '');
+    const num = parseInt(rawStr, 10);
+
+    if (rawStr === '') {
+      setLocalStr('');
+      onChange(0);
+      return;
+    }
+
+    if (!isNaN(num)) {
+      setLocalStr(formatCurrency(num).replace('$', '').trim());
+      onChange(num);
+    }
+  };
+
+  return (
+    <div className="relative group/cost flex-1 min-w-0">
+      {Icon && <Icon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-indigo-400 z-10 pointer-events-none" />}
+      <span className={cn("absolute top-1/2 -translate-y-1/2 text-slate-500 font-black z-10 pointer-events-none text-xs", Icon ? "left-8" : "left-3")}>$</span>
+      <Input
+        type="text"
+        value={localStr}
+        onChange={handleChange}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        placeholder={placeholder}
+        className={cn(className, Icon ? "pl-11" : "pl-6")}
+      />
+    </div>
+  );
+}
 
 /* ── Tipos y Constantes ── */
 type TipoEmbalaje =
@@ -1103,21 +1165,18 @@ export function ProveedorForm({
                         {/* Valor Paca (2 Cols) */}
                         <div className="md:col-span-2 space-y-2">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Valor Paca *</Label>
-                          <div className="relative group/cost">
-                              <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-indigo-400" />
-                              <Input
-                                  type="text"
-                                  value={prodActual.precioCosto ? formatCurrency(prodActual.precioCosto).replace('$', '').trim() : ''}
-                                  onChange={e => {
-                                    const raw = e.target.value.replace(/\D/g, '');
-                                    const val = parseInt(raw, 10) || 0;
+                          <div className="relative group/cost flex">
+                              <CurrencyInput
+                                  value={prodActual.precioCosto || 0}
+                                  onChange={(val) => {
                                     setProdActual(prev => ({
                                       ...prev,
                                       precioCosto: val
                                     }));
                                   }}
+                                  icon={Tag}
                                   className={cn(
-                                    "h-12 pl-8 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all",
+                                    "h-12 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all w-full",
                                     "border-indigo-100 dark:border-indigo-900/40 text-blue-600 focus:ring-4 focus:ring-indigo-500/10"
                                   )}
                                   placeholder="0"
@@ -1128,20 +1187,17 @@ export function ProveedorForm({
                         {/* Costo Unitario (2 Cols) - AHORA EDITABLE */}
                         <div className="md:col-span-2 space-y-2">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-blue-500 ml-1">Costo Unitario</Label>
-                          <div className="relative group">
-                              <Input 
-                                type="text"
-                                value={costUnit > 0 ? formatCurrency(Math.round(costUnit / 100) * 100).replace('$', '').trim() : ''}
-                                onChange={e => {
-                                  const raw = e.target.value.replace(/\D/g, '');
-                                  const val = parseInt(raw, 10) || 0;
+                          <div className="relative group flex">
+                              <CurrencyInput
+                                value={costUnit > 0 ? Math.round(costUnit / 100) * 100 : 0}
+                                onChange={(val) => {
                                   // [Nexus-Volt] Si cambia el unitario, recalculamos el total de la paca (precioCosto)
                                   setProdActual(prev => ({ 
                                     ...prev, 
                                     precioCosto: val * (prev.cantidadEmbalaje || 1) 
                                   }));
                                 }}
-                                className="h-12 px-4 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                className="h-12 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all w-full"
                                 placeholder="0"
                               />
                           </div>
@@ -1169,23 +1225,18 @@ export function ProveedorForm({
                         <div className="md:col-span-2 space-y-2">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Venta Final</Label>
                           <div className="relative group flex gap-1">
-                            <div className="relative flex-1 min-w-0">
-                              <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
-                              <Input 
-                                type="text"
-                                value={sellPrice > 0 ? formatCurrency(Math.round(sellPrice / 100) * 100).replace('$', '').trim() : ''}
-                                onChange={(e) => {
-                                  const raw = e.target.value.replace(/\D/g, '');
-                                  const newPrice = parseInt(raw, 10) || 0;
+                            <CurrencyInput
+                                value={sellPrice > 0 ? Math.round(sellPrice / 100) * 100 : 0}
+                                onChange={(newPrice) => {
                                   if (costUnit > 0) {
                                     const newMargin = ((newPrice / costUnit) - 1) * 100;
                                     setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargin) }));
                                   }
                                 }}
-                                className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10"
+                                icon={ShoppingCart}
+                                className="h-12 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10 w-full"
                                 placeholder="0"
-                              />
-                            </div>
+                            />
                             {editingUid && (
                                 <Button
                                   type="button"
