@@ -78,7 +78,7 @@ const Recetas: React.FC<RecetasProps> = ({
 
     // Filtrar productos elaborados que ya tienen o no tienen receta
     const productosElaborados = useMemo(() =>
-        productos.filter(p => p.tipo === 'elaborado'),
+        productos.filter(p => p.tipo !== 'ingrediente'),
         [productos]);
 
     const ingredientesDisponibles = useMemo(() =>

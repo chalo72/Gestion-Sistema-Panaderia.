@@ -616,8 +616,7 @@ export function Proveedores({
             <p className="max-w-xs text-[10px] font-bold uppercase tracking-widest mt-3 opacity-50">
               {searchTerm || filtroRubro ? 'Sin resultados para ese filtro.' : 'Registra tu primer proveedor.'}
             </p>
-            {proveedores.length === 0 && (
-            )}
+              {/* Removed the empty condition */}
           </div>
         ) : (
           /* ── VISTA GRID / LISTA — un solo map unificado ── */

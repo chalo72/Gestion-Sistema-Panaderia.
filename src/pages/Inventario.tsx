@@ -61,7 +61,7 @@ function PreciosStockTab({ productos, inventario, categorias, formatCurrency }: 
     const catsUnicas = useMemo(() => Array.from(new Set(productos.map(p => p.categoria).filter(Boolean))), [productos]);
 
     const filas = useMemo(() => {
-        let lista = productos.filter(p => p.tipo === 'elaborado')
+        let lista = productos.filter(p => p.tipo !== 'ingrediente')
             .map(p => ({ ...p, stock: stockMap.get(p.id) ?? 0 }))
             .filter(p => {
                 const q = busqueda.toLowerCase();

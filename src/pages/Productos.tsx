@@ -82,12 +82,12 @@ export default function Productos({
         return productos.filter(p => {
             const matchSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || p.categoria.toLowerCase().includes(searchTerm.toLowerCase());
             const matchCat = filtroCategoria === 'Todos' || p.categoria === filtroCategoria;
-            const matchTipo = filtroTipo === 'todos' || p.tipo === filtroTipo;
+            const matchTipo = filtroTipo === 'todos' || (p.tipo || 'elaborado') === filtroTipo;
             return matchSearch && matchCat && matchTipo;
         });
     }, [productos, searchTerm, filtroCategoria, filtroTipo]);
 
-    const countVenta = productos.filter(p => p.tipo === 'elaborado').length;
+    const countVenta = productos.filter(p => p.tipo !== 'ingrediente').length;
     const countInsumo = productos.filter(p => p.tipo === 'ingrediente').length;
 
     const handleSubmit = async (e: React.FormEvent) => {

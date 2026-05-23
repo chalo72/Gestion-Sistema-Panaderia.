@@ -631,7 +631,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             .filter(p => !busqueda || p.nombre.toLowerCase().includes(busqueda.toLowerCase()))
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
-                const costo = calcularCosto(p, mejorPrecio);
+                let costo = calcularCosto(p, mejorPrecio);
+                if (costo <= 0) costo = p.precioVenta / 1.30;
                 if (costo <= 0) return null;
 
                 // Precio mínimo al que la panadería puede vender sin perder

@@ -148,7 +148,7 @@ export function Produccion({
                 // Como workaround temporal para que funcione el kanban:
                 // El modeloPan tiene un nombre pero no un productoId directamente en la interfaz. 
                 // Asumimos que se busca por nombre en los productos "elaborados".
-                const prodElaborado = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo === 'elaborado') || productos.find(p => p.tipo === 'elaborado');
+                const prodElaborado = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente') || productos.find(p => p.tipo !== 'ingrediente');
                 
                 if (!prodElaborado) {
                     toast.error(`No hay un producto "elaborado" que coincida con ${modelo.nombre}`);
@@ -521,7 +521,7 @@ export function Produccion({
             <PlanProduccionModal
                 isOpen={showPlanModal}
                 onClose={() => setShowPlanModal(false)}
-                productos={productos.filter(p => p.tipo === 'elaborado')}
+                productos={productos.filter(p => p.tipo !== 'ingrediente')}
                 recetas={recetas}
                 formulaciones={formulaciones}
                 modelos={modelosPan}
