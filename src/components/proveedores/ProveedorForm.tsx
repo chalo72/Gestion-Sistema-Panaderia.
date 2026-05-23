@@ -1106,24 +1106,22 @@ export function ProveedorForm({
                           <div className="relative group/cost">
                               <Tag className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-indigo-400" />
                               <Input
-                                  type="number"
-                                  value={prodActual.precioCosto || ''}
+                                  type="text"
+                                  value={prodActual.precioCosto ? formatCurrency(prodActual.precioCosto).replace('$', '').trim() : ''}
                                   onChange={e => {
-                                    const val = parseFloat(e.target.value) || 0;
+                                    const raw = e.target.value.replace(/\D/g, '');
+                                    const val = parseInt(raw, 10) || 0;
                                     setProdActual(prev => ({
                                       ...prev,
                                       precioCosto: val
                                     }));
                                   }}
                                   className={cn(
-                                    "h-12 pl-8 pr-20 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all",
+                                    "h-12 pl-8 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all",
                                     "border-indigo-100 dark:border-indigo-900/40 text-blue-600 focus:ring-4 focus:ring-indigo-500/10"
                                   )}
                                   placeholder="0"
                               />
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-slate-400 bg-white dark:bg-slate-950 pl-1">
-                                {formatCurrency(prodActual.precioCosto || 0)}
-                              </div>
                           </div>
                         </div>
 
@@ -1132,22 +1130,20 @@ export function ProveedorForm({
                           <Label className="text-[10px] font-black uppercase tracking-widest text-blue-500 ml-1">Costo Unitario</Label>
                           <div className="relative group">
                               <Input 
-                                type="number"
-                                value={costUnit > 0 ? Math.round(costUnit / 100) * 100 : ''}
+                                type="text"
+                                value={costUnit > 0 ? formatCurrency(Math.round(costUnit / 100) * 100).replace('$', '').trim() : ''}
                                 onChange={e => {
-                                  const val = parseFloat(e.target.value) || 0;
+                                  const raw = e.target.value.replace(/\D/g, '');
+                                  const val = parseInt(raw, 10) || 0;
                                   // [Nexus-Volt] Si cambia el unitario, recalculamos el total de la paca (precioCosto)
                                   setProdActual(prev => ({ 
                                     ...prev, 
                                     precioCosto: val * (prev.cantidadEmbalaje || 1) 
                                   }));
                                 }}
-                                className="h-12 px-4 pr-20 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                className="h-12 px-4 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all"
                                 placeholder="0"
                               />
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-slate-500 bg-blue-50/80 dark:bg-blue-900/80 pl-1 rounded">
-                                {formatCurrency(costUnit > 0 ? Math.round(costUnit / 100) * 100 : 0)}
-                              </div>
                           </div>
                         </div>
 
@@ -1176,21 +1172,19 @@ export function ProveedorForm({
                             <div className="relative flex-1 min-w-0">
                               <ShoppingCart className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
                               <Input 
-                                type="number"
-                                value={sellPrice > 0 ? Math.round(sellPrice / 100) * 100 : ''}
+                                type="text"
+                                value={sellPrice > 0 ? formatCurrency(Math.round(sellPrice / 100) * 100).replace('$', '').trim() : ''}
                                 onChange={(e) => {
-                                  const newPrice = parseFloat(e.target.value) || 0;
+                                  const raw = e.target.value.replace(/\D/g, '');
+                                  const newPrice = parseInt(raw, 10) || 0;
                                   if (costUnit > 0) {
                                     const newMargin = ((newPrice / costUnit) - 1) * 100;
                                     setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargin) }));
                                   }
                                 }}
-                                className="h-12 pl-9 pr-20 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10"
+                                className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10"
                                 placeholder="0"
                               />
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-slate-400 bg-white dark:bg-slate-950 pl-1">
-                                {formatCurrency(sellPrice > 0 ? Math.round(sellPrice / 100) * 100 : 0)}
-                              </div>
                             </div>
                             {editingUid && (
                                 <Button
