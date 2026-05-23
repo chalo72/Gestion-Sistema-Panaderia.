@@ -638,7 +638,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const precioMinPanaderia = costo; // sin margen = break-even
 
                 // Precio mayorista: usa override manual si existe, sino calcula con margen
-                let precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);\n                if ((p).descuentoMayorista !== undefined && (p).descuentoMayorista > 0) {\n                    precioMayoristaAuto = p.precioVenta * (1 - (p).descuentoMayorista / 100);\n                }
+                let precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);
+                if ((p as any).descuentoMayorista !== undefined && (p as any).descuentoMayorista > 0) {
+                    precioMayoristaAuto = p.precioVenta * (1 - (p as any).descuentoMayorista / 100);
+                }
                 const precioMayorista = preciosOverride[p.id] ?? precioMayoristaAuto;
                 const tieneOverride = preciosOverride[p.id] !== undefined;
 
