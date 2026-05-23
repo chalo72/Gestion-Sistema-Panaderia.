@@ -879,6 +879,7 @@ export function usePriceControl() {
       return new Intl.NumberFormat(monedaConfig.locale, {
         style: 'currency',
         currency: monedaConfig.code,
+        minimumFractionDigits: 0,
         maximumFractionDigits: 0,
       }).format(numValue);
     } catch (error) {
