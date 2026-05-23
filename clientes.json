@@ -1,0 +1,23 @@
+{
+  "documents": [
+    {
+      "name": "projects/app-fuxionfitgym/databases/(default)/documents/clientes/51a50070-8f88-40e4-8a55-0da682349a1c",
+      "fields": {
+        "tipo": {
+          "stringValue": "mayorista"
+        },
+        "nombre": {
+          "stringValue": "Sra arbolete"
+        },
+        "id": {
+          "stringValue": "51a50070-8f88-40e4-8a55-0da682349a1c"
+        },
+        "createdAt": {
+          "stringValue": "2026-05-20T01:47:23.580Z"
+        }
+      },
+      "createTime": "2026-05-20T01:47:23.709100Z",
+      "updateTime": "2026-05-20T01:47:23.709100Z"
+    }
+  ]
+}

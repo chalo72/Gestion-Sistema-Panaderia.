@@ -3,6 +3,7 @@ import type { DatabaseAdapter } from './dbAdapter';
 import { FirebaseAdapter } from './firebaseAdapter';
 import { IndexedDBAdapter } from './indexedDBAdapter';
 import { SupabaseDatabase } from './supabase-db';
+import { RESCUE_DATA } from './rescue';
 
 // Definición de la interfaz IDatabase que la app espera
 export interface IDatabase {
@@ -431,8 +432,28 @@ class NexusDatabase implements IDatabase {
 
   // Sincronización Bidireccional
   async syncCloudToLocal() {
+    let cloudExito = false;
     if (firebaseAdapter) {
-      await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
+      try {
+        await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
+        cloudExito = true;
+      } catch (error) {
+        console.error('❌ [NEXUS] Falla al conectar con Firebase. Usando BUNDLE DE RESCATE LOCAL.', error);
+      }
+    }
+    
+    const checkProductos = await localAdapter.getCollection('productos');
+    
+    if (!cloudExito || !checkProductos || checkProductos.length === 0) {
+      console.warn('⚠️ [NEXUS] Base de datos vacía o falla de nube. Inyectando RESCUE_DATA hardcodeado al IndexedDB...');
+      for (const [colName, items] of Object.entries(RESCUE_DATA)) {
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            await localAdapter.setDocument(colName, item.id, item);
+          }
+        }
+      }
+      console.log('✅ [NEXUS] Rescate Físico Terminado.');
     }
   }
 
