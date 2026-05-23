@@ -248,19 +248,29 @@ async function hydratarDesdeNube(
 class NexusDatabase implements IDatabase {
   constructor(private adapter: DatabaseAdapter) {}
 
+  private async _delete(collection: string, id: string) {
+    if (firebaseAdapter) {
+      firebaseAdapter.deleteDocument(collection, id).catch(() => {});
+    }
+    if (collection !== 'tombstones') {
+      await this.addTombstone(collection, id).catch(() => {});
+    }
+    return this.adapter.deleteDocument(collection, id);
+  }
+
   async init() { await this.adapter.init(); }
 
   // Productos
   async getAllProductos() { return this.adapter.getCollection('productos'); }
   async addProducto(p: any) { return this.adapter.setDocument('productos', p.id, p); }
   async updateProducto(p: any) { return this.adapter.setDocument('productos', p.id, p); }
-  async deleteProducto(id: string) { return this.adapter.deleteDocument('productos', id); }
+  async deleteProducto(id: string) { return this._delete('productos', id); }
 
   // Proveedores
   async getAllProveedores() { return this.adapter.getCollection('proveedores'); }
   async addProveedor(p: any) { return this.adapter.setDocument('proveedores', p.id, p); }
   async updateProveedor(p: any) { return this.adapter.setDocument('proveedores', p.id, p); }
-  async deleteProveedor(id: string) { return this.adapter.deleteDocument('proveedores', id); }
+  async deleteProveedor(id: string) { return this._delete('proveedores', id); }
 
   // Precios
   async getAllPrecios() { return this.adapter.getCollection('precios'); }
@@ -270,7 +280,7 @@ class NexusDatabase implements IDatabase {
   }
   async addPrecio(p: any) { return this.adapter.setDocument('precios', p.id, p); }
   async updatePrecio(p: any) { return this.adapter.setDocument('precios', p.id, p); }
-  async deletePrecio(id: string) { return this.adapter.deleteDocument('precios', id); }
+  async deletePrecio(id: string) { return this._delete('precios', id); }
 
   // Lápidas (Tombstones para sincronización)
   async getTombstones(table: string) {
@@ -283,7 +293,7 @@ class NexusDatabase implements IDatabase {
     });
   }
   async removeTombstone(table: string, id: string) {
-    return this.adapter.deleteDocument('tombstones', `${table}:${id}`);
+    return this._delete('tombstones', `${table}:${id}`);
   }
 
   // Configuración
@@ -312,13 +322,13 @@ class NexusDatabase implements IDatabase {
   async getAllPrePedidos() { return this.adapter.getCollection('pre_pedidos'); }
   async addPrePedido(p: any) { return this.adapter.setDocument('pre_pedidos', p.id, p); }
   async updatePrePedido(p: any) { return this.adapter.setDocument('pre_pedidos', p.id, p); }
-  async deletePrePedido(id: string) { return this.adapter.deleteDocument('pre_pedidos', id); }
+  async deletePrePedido(id: string) { return this._delete('pre_pedidos', id); }
   async getAllAlertas() { return this.adapter.getCollection('alertas'); }
   async addAlerta(a: any) { return this.adapter.setDocument('alertas', a.id, a); }
   async updateAlerta(a: any) { return this.adapter.setDocument('alertas', a.id, a); }
   async clearAllAlertas() {
     const alertas = await this.adapter.getCollection<any>('alertas');
-    for (const a of alertas) await this.adapter.deleteDocument('alertas', a.id);
+    for (const a of alertas) await this._delete('alertas', a.id);
   }
   async addHistorial(e: any) { return this.adapter.setDocument('historial', e.id, e); }
   async getAllInventario() { return this.adapter.getCollection('inventario'); }
@@ -343,18 +353,18 @@ class NexusDatabase implements IDatabase {
   async getAllRecetas() { return this.adapter.getCollection('recetas'); }
   async addReceta(r: any) { return this.adapter.setDocument('recetas', r.id, r); }
   async updateReceta(r: any) { return this.adapter.setDocument('recetas', r.id, r); }
-  async deleteReceta(id: string) { return this.adapter.deleteDocument('recetas', id); }
+  async deleteReceta(id: string) { return this._delete('recetas', id); }
 
   // Producción & Formulaciones
   async getAllFormulaciones() { return this.adapter.getCollection('formulaciones'); }
   async addFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
   async updateFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
-  async deleteFormulacion(id: string) { return this.adapter.deleteDocument('formulaciones', id); }
+  async deleteFormulacion(id: string) { return this._delete('formulaciones', id); }
 
   async getAllModelosPan() { return this.adapter.getCollection('modelosPan'); }
   async addModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
   async updateModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
-  async deleteModeloPan(id: string) { return this.adapter.deleteDocument('modelosPan', id); }
+  async deleteModeloPan(id: string) { return this._delete('modelosPan', id); }
 
   async getAllOrdenesProduccion() { return this.adapter.getCollection('produccion'); }
   async addOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
@@ -377,32 +387,32 @@ class NexusDatabase implements IDatabase {
   async getAllClientes() { return this.adapter.getCollection('clientes'); }
   async addCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
   async updateCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
-  async deleteCliente(id: string) { return this.adapter.deleteDocument('clientes', id); }
+  async deleteCliente(id: string) { return this._delete('clientes', id); }
 
   // Finanzas
 
   // Finanzas
   async addGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
   async updateGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
-  async deleteGasto(id: string) { return this.adapter.deleteDocument('gastos', id); }
+  async deleteGasto(id: string) { return this._delete('gastos', id); }
 
   async addCreditoCliente(c: any) { return this.adapter.setDocument('creditos_clientes', c.id, c); }
   async updateCreditoCliente(c: any) { return this.adapter.setDocument('creditos_clientes', c.id, c); }
-  async deleteCreditoCliente(id: string) { return this.adapter.deleteDocument('creditos_clientes', id); }
+  async deleteCreditoCliente(id: string) { return this._delete('creditos_clientes', id); }
 
   async addCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
   async updateCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
-  async deleteCreditoTrabajador(id: string) { return this.adapter.deleteDocument('creditos_trabajadores', id); }
+  async deleteCreditoTrabajador(id: string) { return this._delete('creditos_trabajadores', id); }
 
   async addTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
   async updateTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
-  async deleteTrabajador(id: string) { return this.adapter.deleteDocument('trabajadores', id); }
+  async deleteTrabajador(id: string) { return this._delete('trabajadores', id); }
 
   // Movimientos e Inventario
   async addMovimiento(m: any) { return this.adapter.setDocument('movimientos', m.id, m); }
   async addRecepcion(r: any) { return this.adapter.setDocument('recepciones', r.id, r); }
   async updateRecepcion(r: any) { return this.adapter.setDocument('recepciones', r.id, r); }
-  async deleteRecepcion(id: string) { return this.adapter.deleteDocument('recepciones', id); }
+  async deleteRecepcion(id: string) { return this._delete('recepciones', id); }
 
   // Operaciones Atómicas (Simuladas por ahora)
   async batchAjustarStock(ajustes: any[]) {
