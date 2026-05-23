@@ -517,8 +517,31 @@ export function usePriceControl() {
     const updatedProducto = { ...producto, ...updates, updatedAt: new Date().toISOString() };
     await db.updateProducto(updatedProducto);
     setProductos(prev => prev.map(p => p.id === id ? updatedProducto : p));
+
+    // Sincronizar stock con InventarioItem si se proporcionó
+    if (updates.stockActual !== undefined || updates.stockMinimo !== undefined) {
+      let invItem = await db.getInventarioItemByProducto(id).catch(() => null);
+      if (invItem) {
+        if (updates.stockActual !== undefined) invItem.stockActual = updates.stockActual;
+        if (updates.stockMinimo !== undefined) invItem.stockMinimo = updates.stockMinimo;
+        await db.updateInventarioItem(invItem);
+        inventarioHook.setInventario(prev => prev.map(i => i.id === invItem.id ? invItem : i));
+      } else {
+        const newItem: InventarioItem = {
+          id: generateUUID(),
+          productoId: id,
+          stockActual: updates.stockActual ?? 0,
+          stockMinimo: updates.stockMinimo ?? 5,
+          ubicacion: 'Almacén General',
+          ultimoMovimiento: new Date().toISOString(),
+        };
+        await db.updateInventarioItem(newItem);
+        inventarioHook.setInventario(prev => [...prev, newItem]);
+      }
+    }
+
     triggerBackup(`update_producto:${updatedProducto.nombre}`);
-  }, [productos]);
+  }, [productos, inventarioHook]);
 
   // PROTEGIDO: Capa 2 — Guard defensivo: tombstone se crea SIEMPRE, sin importar errores parciales
   const deleteProducto = useCallback(async (id: string) => {

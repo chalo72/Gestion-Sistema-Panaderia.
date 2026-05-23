@@ -627,7 +627,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // ── Cálculo de precios por producto ──────────────────────────────────────
     const tablaDatos = useMemo(() => {
         return productos
-            .filter(p => p.tipo === 'elaborado' || p.costoBase)
+            .filter(p => {
+                const catLower = (p.categoria || '').toLowerCase().trim();
+                return !catLower.startsWith('ins:') && !catLower.startsWith('insumos') && p.precioVenta > 0;
+            })
             .filter(p => !busqueda || p.nombre.toLowerCase().includes(busqueda.toLowerCase()))
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
@@ -829,8 +832,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         const cliente = viendoPerfilCliente;
         const tConf = TIPO_CONFIG[cliente.tipo] || TIPO_CONFIG.mayorista;
         const productosPerfil = tablaDatos
-            .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()))
-            .filter(d => d.viabilidad !== 'inviable');
+            .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()));
 
         return (
             <div className="min-h-screen flex flex-col gap-0 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
