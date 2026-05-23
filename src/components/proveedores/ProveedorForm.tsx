@@ -259,12 +259,15 @@ export function ProveedorForm({
     return costUnit * (1 + Number(prodActual.margenVenta) / 100);
   }, [costUnit, prodActual.margenVenta]);
 
-  const filtradosBusqueda = useMemo(() =>
-    buscarProd.length >= 1
-      ? productosExistentes.filter(p => p.nombre.toLowerCase().includes(buscarProd.toLowerCase())).slice(0, 5)
-      : [],
-    [productosExistentes, buscarProd]
-  );
+  const filtradosBusqueda = useMemo(() => {
+    let base = productosExistentes;
+    if (buscarProd.length >= 1) {
+      base = base.filter(p => p.nombre.toLowerCase().includes(buscarProd.toLowerCase()));
+    }
+    return base
+      .sort((a, b) => a.nombre.localeCompare(b.nombre))
+      .slice(0, 100);
+  }, [productosExistentes, buscarProd]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -937,11 +940,12 @@ export function ProveedorForm({
                                 setShowDropdown(true);
                                 setIsCategoriaIA(false); 
                               }}
+                              onFocus={() => setShowDropdown(true)}
                               placeholder="Nombre del producto..."
                               className="h-12 pl-11 rounded-xl bg-white dark:bg-slate-950 border-indigo-100 dark:border-indigo-900/40 text-sm font-bold focus:ring-4 focus:ring-indigo-500/10 text-foreground"
                             />
                             {showDropdown && filtradosBusqueda.length > 0 && (
-                              <div className="absolute z-[100] w-full mt-2 bg-white dark:bg-slate-950 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden py-1">
+                              <div className="absolute z-[100] w-full mt-2 bg-white dark:bg-slate-950 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-y-auto max-h-60 py-1 scrollbar-thin scrollbar-thumb-slate-300">
                                 {filtradosBusqueda.map(p => (
                                   <button
                                     key={p.id} type="button"
