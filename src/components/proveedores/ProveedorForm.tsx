@@ -152,6 +152,17 @@ export function ProveedorForm({
   const [isListening, setIsListening] = useState(false);
   const [voiceFeedback, setVoiceFeedback] = useState('');
   const recognitionRef = useRef<any>(null);
+  const isListeningRef = useRef(false);
+
+  // Limpiar micrófono al desmontar
+  useEffect(() => {
+    return () => {
+      isListeningRef.current = false;
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch(e){}
+      }
+    };
+  }, []);
 
   const fileInputUploadRef = useRef<HTMLInputElement>(null);
   const fileInputCameraRef = useRef<HTMLInputElement>(null);
@@ -298,10 +309,11 @@ export function ProveedorForm({
     setBuscarProd('');
   };
 
-  // ── MOTOR DE RECONOCIMIENTO DE VOZ ──
+  // ── MOTOR DE RECONOCIMIENTO DE VOZ (MODO ARMAGEDÓN / BLINDADO) ──
   const toggleVoiceRecognition = () => {
-    if (isListening && recognitionRef.current) {
-       recognitionRef.current.stop();
+    if (isListeningRef.current && recognitionRef.current) {
+       isListeningRef.current = false;
+       try { recognitionRef.current.stop(); } catch(e){}
        setIsListening(false);
        setVoiceFeedback('Micrófono apagado.');
        return;
@@ -315,43 +327,54 @@ export function ProveedorForm({
 
     const recognition = new SpeechRecognition();
     recognition.lang = 'es-ES';
-    recognition.continuous = true; // Escucha continua
+    // El modo continuous = true falla con "network" en muchos móviles/Edge. 
+    // Usamos false y lo reiniciamos manualmente en onend (bucle infinito controlado).
+    recognition.continuous = false; 
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
 
+    isListeningRef.current = true;
     setIsListening(true);
     setVoiceFeedback('Escuchando continuamente... Dale una orden.');
-    toast.info('🎙️ Asistente activado en modo continuo.');
+    toast.info('🎙️ Asistente activado en modo seguro.');
 
     recognition.onresult = (event: any) => {
-      // Tomamos el último fragmento escuchado
-      const current = event.resultIndex;
-      const transcript = event.results[current][0].transcript.toLowerCase();
+      // Tomamos el resultado (al no ser continuous, siempre es índice 0)
+      const transcript = event.results[0][0].transcript.toLowerCase();
       setVoiceFeedback(`💬 "${transcript}"`);
       parseVoiceCommand(transcript);
     };
 
     recognition.onerror = (event: any) => {
       if (event.error === 'no-speech') {
-         // Silencio prolongado, podemos ignorarlo para que siga escuchando, 
-         // pero la API nativa lo detiene. Lo reiniciaremos en onend si sigue activo.
          setVoiceFeedback('Silencio detectado...');
+      } else if (event.error === 'network') {
+         setVoiceFeedback('Pérdida de red. Reconectando...');
+         // Network a veces requiere un tiempo antes de reconectar
       } else {
          console.error('Voz Error:', event.error);
-         setIsListening(false);
-         setVoiceFeedback('Error o micrófono bloqueado.');
-         toast.error(`Error de voz: ${event.error}`);
+         if (event.error === 'not-allowed' || event.error === 'audio-capture') {
+            isListeningRef.current = false;
+            setIsListening(false);
+            setVoiceFeedback('Micrófono bloqueado o en uso.');
+            toast.error(`Asegúrate de dar permisos de micrófono.`);
+         }
       }
     };
 
     recognition.onend = () => {
-      // Si se apagó por silencio pero el usuario no ha tocado el botón, lo reactivamos (modo siempre alerta)
-      // Para evitar loops infinitos, usaremos un set timeout corto y validaremos un ref si es necesario.
-      // Pero por ahora simplemente lo apagaremos para evitar problemas de recursión no deseada.
-      // Es más seguro requerir que el usuario lo vuelva a presionar si se desconectó.
-      setIsListening(false);
-      setTimeout(() => setVoiceFeedback('Modo escucha finalizado.'), 1000);
+      if (isListeningRef.current) {
+         // Auto-reinicio para simular escucha continua a prueba de fallos
+         setTimeout(() => {
+            if (isListeningRef.current && recognitionRef.current) {
+               try { recognitionRef.current.start(); } catch(e) { }
+            }
+         }, 250);
+      } else {
+         setIsListening(false);
+         setTimeout(() => setVoiceFeedback('Modo escucha finalizado.'), 1000);
+      }
     };
 
     try {
