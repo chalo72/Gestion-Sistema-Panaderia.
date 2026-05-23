@@ -638,7 +638,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const precioMinPanaderia = costo; // sin margen = break-even
 
                 // Precio mayorista: usa override manual si existe, sino calcula con margen
-                const precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);
+                let precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);\n                if ((p).descuentoMayorista !== undefined && (p).descuentoMayorista > 0) {\n                    precioMayoristaAuto = p.precioVenta * (1 - (p).descuentoMayorista / 100);\n                }
                 const precioMayorista = preciosOverride[p.id] ?? precioMayoristaAuto;
                 const tieneOverride = preciosOverride[p.id] !== undefined;
 
@@ -1124,6 +1124,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                    <h4 className="font-black text-[11px] uppercase tracking-tight text-[#1a1c2e] dark:text-slate-200 leading-snug line-clamp-2 mb-2 pr-4 break-words">
                                                        {d.producto.nombre}
                                                    </h4>
+                                                   {d.producto.descripcion && (
+                                                       <p className="text-[9px] font-medium text-slate-500 dark:text-slate-400 line-clamp-2 leading-tight mb-2">
+                                                           {d.producto.descripcion}
+                                                       </p>
+                                                   )}
                                                 </div>
                                                 <div className="flex flex-col gap-1.5 mt-auto">
                                                    <div className="flex items-end justify-between">
@@ -2417,3 +2422,4 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         </div>
     );
 }
+
