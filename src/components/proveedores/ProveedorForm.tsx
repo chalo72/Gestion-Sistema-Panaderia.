@@ -360,16 +360,20 @@ export function ProveedorForm({
       if (event.error === 'no-speech') {
          // ignorar
       } else if (event.error === 'network') {
-         console.warn('Network error de voz. Reintentando con backoff...');
          isListeningRef.current = false;
          setIsListening(false);
-         setVoiceFeedback('Red de voz caída. Usa Chrome/Edge.');
+         setVoiceFeedback('Error de red (Bloqueo de navegador).');
+         toast.error(
+            'El navegador bloqueó la conexión de voz. Si usas Brave o tienes bloqueadores de anuncios, desactívalos. O revisa que Windows permita usar el micrófono.', 
+            { duration: 8000 }
+         );
       } else {
          console.error('Voz Error:', event.error);
          if (event.error === 'not-allowed' || event.error === 'audio-capture') {
             isListeningRef.current = false;
             setIsListening(false);
             setVoiceFeedback('Micrófono bloqueado.');
+            toast.error('Permiso denegado. Dale acceso al micrófono en la barra de direcciones 🔒.', { duration: 6000 });
          }
       }
     };
@@ -384,7 +388,7 @@ export function ProveedorForm({
          }, 500);
       } else {
          setIsListening(false);
-         setTimeout(() => setVoiceFeedback('Modo escucha finalizado.'), 1000);
+         // No sobreescribir el feedback de error si acabamos de lanzar un error
       }
     };
 
