@@ -236,10 +236,40 @@ export class IndexedDBAdapter implements DatabaseAdapter {
    * @param items - Array de documentos de la nube
    */
   async hydrateFromCloud<T extends { id: string }>(collection: string, items: T[]): Promise<void> {
-    for (const item of items) {
-      await this.setDocument(collection, item.id, item);
-    }
-    console.log(`☁️→🏠 [IndexedDB]: Hidratado '${collection}' con ${items.length} items de la nube.`);
+    if (!items || items.length === 0) return;
+    
+    return new Promise((resolve, reject) => {
+      const db = this.getDB();
+      if (!db.objectStoreNames.contains(collection)) {
+        console.warn(`⚠️ [IndexedDB]: Colección '${collection}' no existe. No se hidrató.`);
+        resolve();
+        return;
+      }
+
+      const tx = db.transaction(collection, 'readwrite');
+      const store = tx.objectStore(collection);
+      
+      let errorOccurred = false;
+      
+      for (const item of items) {
+        const request = store.put({ ...(item as any), id: item.id });
+        request.onerror = (e) => {
+          errorOccurred = true;
+          console.error(`❌ [IndexedDB]: Error al hidratar en '${collection}' id='${item.id}'`, (e.target as any).error);
+        };
+      }
+
+      tx.oncomplete = () => {
+        if (!errorOccurred) {
+          console.log(`☁️→🏠 [IndexedDB]: Hidratado '${collection}' con ${items.length} items de la nube en una sola transacción.`);
+        }
+        resolve();
+      };
+
+      tx.onerror = () => {
+        reject(tx.error);
+      };
+    });
   }
 
   /**
