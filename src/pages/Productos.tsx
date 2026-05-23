@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useCan } from '@/contexts/AuthContext';
 import {
     Package, Plus, Search, Edit2, Trash2, ChevronDown, ChevronUp,
-    DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse
+    DollarSign, Info, Store, ChefHat, Building2, ShoppingCart, Warehouse, Database
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
