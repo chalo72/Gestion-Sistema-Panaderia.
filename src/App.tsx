@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { 
   LogOut, 
   Sun, 
@@ -18,35 +18,35 @@ import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/layout/PageTransition';
 import type { ViewType } from '@/types';
 
-// Páginas
-import Dashboard from '@/pages/Dashboard';
-import Productos from '@/pages/Productos';
-import { Ventas } from '@/pages/Ventas';
-import Inventario from '@/pages/Inventario';
-import PrePedidos from '@/pages/PrePedidos';
-import Recepciones from '@/pages/Recepciones';
-import { Alertas } from '@/pages/Alertas';
-import { Produccion } from '@/pages/Produccion';
-import Recetas from '@/pages/Recetas';
-import Configuracion from '@/pages/Configuracion';
-import { Usuarios } from '@/pages/Usuarios';
-import RoleManager from '@/pages/RoleManager';
-import { ControlCaja } from '@/pages/ControlCaja';
-import Ahorros from '@/pages/Ahorros';
-import CreditosClientes from '@/pages/CreditosClientes';
-import { Login } from '@/pages/Login';
-import AgentesIA from '@/pages/AgentesIA';
-import HistorialVentas from '@/pages/HistorialVentas';
-import Oficina from '@/pages/Oficina';
-import Trabajadores from '@/pages/Trabajadores';
-import Gastos from '@/pages/Gastos';
-import Proveedores from '@/pages/Proveedores';
-import Mayoristas from '@/pages/Mayoristas';
-import Reportes from '@/pages/Reportes';
-import Precios from '@/pages/Precios';
-import CargaMasiva from '@/pages/CargaMasiva';
-import ListaPreciosProvincial from '@/pages/ListaPreciosProvincial';
-import Clientes from '@/pages/Clientes';
+// Páginas (Code Splitting con React.lazy para carga ultrarrápida)
+const Dashboard = lazy(() => import('@/pages/Dashboard'));
+const Productos = lazy(() => import('@/pages/Productos'));
+const Ventas = lazy(() => import('@/pages/Ventas').then(m => ({ default: m.Ventas })));
+const Inventario = lazy(() => import('@/pages/Inventario'));
+const PrePedidos = lazy(() => import('@/pages/PrePedidos'));
+const Recepciones = lazy(() => import('@/pages/Recepciones'));
+const Alertas = lazy(() => import('@/pages/Alertas').then(m => ({ default: m.Alertas })));
+const Produccion = lazy(() => import('@/pages/Produccion').then(m => ({ default: m.Produccion })));
+const Recetas = lazy(() => import('@/pages/Recetas'));
+const Configuracion = lazy(() => import('@/pages/Configuracion'));
+const Usuarios = lazy(() => import('@/pages/Usuarios').then(m => ({ default: m.Usuarios })));
+const RoleManager = lazy(() => import('@/pages/RoleManager'));
+const ControlCaja = lazy(() => import('@/pages/ControlCaja').then(m => ({ default: m.ControlCaja })));
+const Ahorros = lazy(() => import('@/pages/Ahorros'));
+const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
+const Login = lazy(() => import('@/pages/Login').then(m => ({ default: m.Login })));
+const AgentesIA = lazy(() => import('@/pages/AgentesIA'));
+const HistorialVentas = lazy(() => import('@/pages/HistorialVentas'));
+const Oficina = lazy(() => import('@/pages/Oficina'));
+const Trabajadores = lazy(() => import('@/pages/Trabajadores'));
+const Gastos = lazy(() => import('@/pages/Gastos'));
+const Proveedores = lazy(() => import('@/pages/Proveedores'));
+const Mayoristas = lazy(() => import('@/pages/Mayoristas'));
+const Reportes = lazy(() => import('@/pages/Reportes'));
+const Precios = lazy(() => import('@/pages/Precios'));
+const CargaMasiva = lazy(() => import('@/pages/CargaMasiva'));
+const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial'));
+const Clientes = lazy(() => import('@/pages/Clientes'));
 
 const App = () => {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -683,7 +683,13 @@ const App = () => {
 
         <div className="p-4 md:p-8">
           <PageTransition viewKey={currentView}>
-            {renderView()}
+            <Suspense fallback={
+              <div className="flex w-full h-[60vh] items-center justify-center">
+                <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-indigo-600 animate-spin" />
+              </div>
+            }>
+              {renderView()}
+            </Suspense>
           </PageTransition>
         </div>
 
