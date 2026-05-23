@@ -1138,9 +1138,15 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                       <p className="text-xl font-black text-slate-900 dark:text-white tabular-nums leading-none tracking-tighter">
                                                         {formatCurrency(d.precioMayorista)}
                                                       </p>
-                                                      <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
-                                                        +{formatCurrency(d.gananciaPanaderiaPorUnidad)}
-                                                      </span>
+                                                      {(d.producto as any).descuentoMayorista > 0 ? (
+                                                          <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100">
+                                                            -{(d.producto as any).descuentoMayorista}%
+                                                          </span>
+                                                      ) : (
+                                                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200">
+                                                            Sin Desc.
+                                                          </span>
+                                                      )}
                                                    </div>
                                                    {enCarrito ? (
                                                       <div className="flex items-center justify-between bg-indigo-600 rounded-xl px-2 py-1.5 mt-2 shadow-inner" onClick={e => e.stopPropagation()}>
@@ -2425,4 +2431,5 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         </div>
     );
 }
+
 
