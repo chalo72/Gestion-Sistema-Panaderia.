@@ -309,7 +309,7 @@ export function ProveedorForm({
     setBuscarProd('');
   };
 
-  // ── MOTOR DE RECONOCIMIENTO DE VOZ (MODO ARMAGEDÓN / BLINDADO) ──
+  // ── MOTOR DE RECONOCIMIENTO DE VOZ (MODO DIOS ULTRA) ──
   const toggleVoiceRecognition = () => {
     if (isListeningRef.current && recognitionRef.current) {
        isListeningRef.current = false;
@@ -326,51 +326,62 @@ export function ProveedorForm({
     }
 
     const recognition = new SpeechRecognition();
-    recognition.lang = 'es-ES';
-    // El modo continuous = true falla con "network" en muchos móviles/Edge. 
-    // Usamos false y lo reiniciamos manualmente en onend (bucle infinito controlado).
-    recognition.continuous = false; 
-    recognition.interimResults = false;
+    recognition.lang = 'es-CO'; // Optimizado para acentos locales (Colombia)
+    recognition.continuous = true; // Escucha continua nativa
+    recognition.interimResults = true; // Procesamiento en tiempo real
     recognition.maxAlternatives = 1;
     recognitionRef.current = recognition;
 
     isListeningRef.current = true;
     setIsListening(true);
-    setVoiceFeedback('Escuchando continuamente... Dale una orden.');
-    toast.info('🎙️ Asistente activado en modo seguro.');
+    setVoiceFeedback('Escuchando (Modo Dios)...');
+    toast.info('🎙️ Asistente activado.');
 
     recognition.onresult = (event: any) => {
-      // Tomamos el resultado (al no ser continuous, siempre es índice 0)
-      const transcript = event.results[0][0].transcript.toLowerCase();
-      setVoiceFeedback(`💬 "${transcript}"`);
-      parseVoiceCommand(transcript);
+      let finalTranscript = '';
+      let interimTranscript = '';
+
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+
+      const currentText = (finalTranscript || interimTranscript).toLowerCase().trim();
+      if (currentText) {
+         setVoiceFeedback(`💬 "${currentText}"`);
+         parseVoiceCommand(currentText);
+      }
     };
 
     recognition.onerror = (event: any) => {
       if (event.error === 'no-speech') {
-         setVoiceFeedback('Silencio detectado...');
+         // ignorar
       } else if (event.error === 'network') {
-         setVoiceFeedback('Pérdida de red. Reconectando...');
-         // Network a veces requiere un tiempo antes de reconectar
+         console.warn('Network error de voz. Reintentando con backoff...');
+         isListeningRef.current = false;
+         setIsListening(false);
+         setVoiceFeedback('Red de voz caída. Usa Chrome/Edge.');
       } else {
          console.error('Voz Error:', event.error);
          if (event.error === 'not-allowed' || event.error === 'audio-capture') {
             isListeningRef.current = false;
             setIsListening(false);
-            setVoiceFeedback('Micrófono bloqueado o en uso.');
-            toast.error(`Asegúrate de dar permisos de micrófono.`);
+            setVoiceFeedback('Micrófono bloqueado.');
          }
       }
     };
 
     recognition.onend = () => {
       if (isListeningRef.current) {
-         // Auto-reinicio para simular escucha continua a prueba de fallos
+         // Auto-reinicio suave si se cortó por la API nativa (Chrome la corta a los 60s)
          setTimeout(() => {
             if (isListeningRef.current && recognitionRef.current) {
                try { recognitionRef.current.start(); } catch(e) { }
             }
-         }, 250);
+         }, 500);
       } else {
          setIsListening(false);
          setTimeout(() => setVoiceFeedback('Modo escucha finalizado.'), 1000);
@@ -394,50 +405,54 @@ export function ProveedorForm({
     let shouldAdd = false;
     let nombreDetectado = '';
 
-    if (cleanText.match(/(?:añade|agrega|guarda)/i)) {
+    if (cleanText.match(/(?:añade|agrega|guarda|registrar|guardar)/i)) {
       shouldAdd = true;
     }
 
     setProdActual((prev) => {
       let newProd = { ...prev };
 
-      // 1. Comando: "escribe en producto X", "producto X"
-      // Lookahead para detenerse en la próxima palabra clave
-      const matchProd = cleanText.match(/(?:escrib[ea]mos el producto|escrib[ea] en producto|escrib[ea]|producto)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+?)(?=\s+(?:en categor[ií]a|categor[ií]a|selecciona|en unidad|unidad|empaque|pack|tarro|bulto|pon|cantidad|en el uso|uso|destino|pon el valor|valor|precio|añade|agrega|guarda)|$)/i);
+      // 1. Comando Nombre (Ultra Flexible)
+      // "escribe el nombre del producto harina", "producto harina", "insumo harina", "escribe harina"
+      const matchProd = cleanText.match(/(?:nombre del producto|escrib[ea] el nombre del producto|escrib[ea] en producto|escrib[ea]|producto|insumo)[:\s]+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+?)(?=\s+(?:en categor[ií]a|categor[ií]a|unidad|empaque|pack|tarro|bulto|caja|bolsa|cantidad|uso|destino|valor|precio|costo|añade|agrega|guarda|registrar)|$)/i);
       if (matchProd && matchProd[1]) {
-        newProd.nombre = matchProd[1].trim();
-        nombreDetectado = newProd.nombre;
+        // Ignorar si el "nombre" capturado es muy corto o es una palabra clave
+        const isStopWord = ['harinas', 'lacteos', 'grasas'].includes(matchProd[1].trim());
+        if (matchProd[1].trim().length > 1 && !isStopWord) {
+           newProd.nombre = matchProd[1].trim();
+           nombreDetectado = newProd.nombre;
+        }
       }
 
-      // 2. Comando: "selecciona en categoría Y"
-      const matchCat = cleanText.match(/(?:en categor[ií]a selecciona|selecciona en categor[ií]a|categor[ií]a)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+?)(?=\s+(?:en producto|producto|escribe|en unidad|unidad|empaque|pack|tarro|bulto|pon|cantidad|en el uso|uso|destino|pon el valor|valor|precio|añade|agrega|guarda)|$)/i);
+      // 2. Comando Categoría
+      const matchCat = cleanText.match(/(?:selecciona en categor[ií]a|categor[ií]a|en categor[ií]a)[:\s]+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+?)(?=\s+(?:nombre|producto|escribe|unidad|empaque|pack|tarro|bulto|caja|bolsa|cantidad|uso|destino|valor|precio|costo|añade|agrega|guarda)|$)/i);
       if (matchCat && matchCat[1]) {
          const catDictada = matchCat[1].trim().toLowerCase();
          const catMatch = CATS_INSUMO.find(c => c.toLowerCase().includes(catDictada)) || CATS_VENTA.find(c => c.toLowerCase().includes(catDictada));
          if (catMatch) newProd.categoria = catMatch;
       }
 
-      // 3. Comando: "selecciona tarro", "unidad pack selecciona"
-      const empaquesPosibles = EMBALAJES.map(e => e.value);
+      // 3. Comando Empaque (buscando valores específicos sueltos o detrás de palabras clave)
+      const empaquesPosibles = EMBALAJES.map(e => e.value); // caja, paca, bulto, tarro, unidad, bolsa, bloque
       for (const emp of empaquesPosibles) {
-         if (cleanText.match(new RegExp(`(?:unidad|pack|empaque|selecciona).*?${emp}`, 'i')) || cleanText.includes(emp)) {
+         if (cleanText.match(new RegExp(`(?:unidad pack|unidad|pack|empaque|selecciona)[:\s]+${emp}`, 'i')) || cleanText.includes(emp)) {
            newProd.tipoEmbalaje = emp;
            break;
          }
       }
 
-      // 4. Comando: "cantidad W" o "pon X unidades"
-      const matchCant = cleanText.match(/(?:cantidad|pon|con)\s+(\d+)/i);
+      // 4. Comando Cantidad
+      const matchCant = cleanText.match(/(?:cantidad|pon|con)[:\s]+(\d+)/i);
       if (matchCant && matchCant[1]) {
         newProd.cantidadEmbalaje = parseInt(matchCant[1], 10);
       }
 
-      // 5. Comando: "destino insumo", "cámbialo a venta"
-      if (cleanText.match(/(?:d[eé]jalo en|c[áa]mbialo a|destino|uso)\s+insumo/i) || cleanText.includes('insumo')) newProd.destino = 'insumo';
-      if (cleanText.match(/(?:d[eé]jalo en|c[áa]mbialo a|destino|uso)\s+venta/i) || cleanText.includes('venta')) newProd.destino = 'venta';
+      // 5. Comando Destino / Uso
+      if (cleanText.match(/(?:uso destino|destino|uso|d[eé]jalo en|c[áa]mbialo a)[:\s]+insumo/i) || cleanText.includes('insumo')) newProd.destino = 'insumo';
+      if (cleanText.match(/(?:uso destino|destino|uso|d[eé]jalo en|c[áa]mbialo a)[:\s]+venta/i) || cleanText.includes('venta')) newProd.destino = 'venta';
 
-      // 6. Comando: "valor pon V", "precio V"
-      const matchValor = cleanText.match(/(?:pon el valor de paca|pon el valor|valor de paca|valor|precio)\s+(\d+[\d\.]*)/i);
+      // 6. Comando Precio / Costo
+      const matchValor = cleanText.match(/(?:valor paca|costo|valor|precio)[:\s]+(\d+[\d\.]*)/i);
       if (matchValor && matchValor[1]) {
         const valNum = parseInt(matchValor[1].replace(/\./g, ''), 10);
         if (!isNaN(valNum)) newProd.precioCosto = valNum;
@@ -446,7 +461,7 @@ export function ProveedorForm({
       return newProd;
     });
 
-    // Actualizar el estado del UI visual separado del estado lógico para evitar colisiones
+    // Actualizar el estado del UI visual separado del estado lógico
     if (nombreDetectado) {
        setTimeout(() => setBuscarProd(nombreDetectado), 50);
     }
