@@ -42,6 +42,8 @@ export interface IDatabase {
   syncLocalToCloud(): Promise<void>;
   clearAll(): Promise<void>;
   rescueFromSupabase(): Promise<void>;
+  exportDatabaseToJson(): Promise<void>;
+  importDatabaseFromJson(jsonData: any): Promise<void>;
 
   // Métodos Delegados
   getAllVentas(): Promise<any[]>;
@@ -478,8 +480,41 @@ class NexusDatabase implements IDatabase {
     console.log('✅ [NEXUS]: Base de datos local limpia.');
   }
 
+  async exportDatabaseToJson(): Promise<void> {
+    console.log('📦 [NEXUS]: Generando backup completo...');
+    const backup: Record<string, any[]> = {};
+    for (const col of COLECCIONES_PRINCIPALES) {
+      backup[col] = await localAdapter.getCollection(col);
+    }
+    const jsonString = JSON.stringify(backup, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `backup_full_nexus_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    console.log('✅ [NEXUS]: Backup descargado.');
+  }
+
+  async importDatabaseFromJson(jsonData: any): Promise<void> {
+    console.log('📥 [NEXUS]: Restaurando backup completo desde JSON...');
+    for (const [colName, items] of Object.entries(jsonData)) {
+      if (COLECCIONES_PRINCIPALES.includes(colName) && Array.isArray(items)) {
+        console.log(`Restaurando coleccion: ${colName} con ${items.length} items`);
+        await localAdapter.hydrateFromCloud(colName, items);
+      }
+    }
+    console.log('✅ [NEXUS]: Restauración local completada, sincronizando con la nube...');
+    await this.syncLocalToCloud();
+  }
+
   async rescueFromSupabase() {
     console.log('🚨 [NEXUS]: Iniciando Protocolo Armagedón — Rescate desde Supabase...');
+    await this.exportDatabaseToJson(); // CAPA 1: Backup Automático antes del rescate
+    
     const legacyDB = new SupabaseDatabase();
     
     // Lista de rescate extendida

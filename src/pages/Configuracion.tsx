@@ -853,15 +853,15 @@ function Configuracion(props: ConfiguracionProps) {
 
         </div>
 
-        {/* ── MIGRACIÓN DE BASE DE DATOS ── */}
+        {/* ── COPIAS DE SEGURIDAD Y MIGRACIÓN ── */}
         <Card className="border-blue-200 dark:border-blue-800">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
               <Download className="w-5 h-5" />
-              Migración de Base de Datos
+              Copias de Seguridad (Backups)
             </CardTitle>
             <CardDescription>
-              Exporta todos los datos e impórtalos en otra instancia (ej: pasar de :4173 a :5173)
+              Guarda un respaldo total de todos los productos y configuraciones en tu dispositivo. (Haz esto frecuentemente)
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col sm:flex-row gap-3">

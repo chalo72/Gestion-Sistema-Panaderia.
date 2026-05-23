@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/layout/PageTransition';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import type { ViewType } from '@/types';
 
 // Páginas
@@ -682,9 +683,11 @@ const App = () => {
         )}
 
         <div className="p-4 md:p-8">
-          <PageTransition viewKey={currentView}>
-            {renderView()}
-          </PageTransition>
+          <ErrorBoundary moduleName={currentView}>
+            <PageTransition viewKey={currentView}>
+              {renderView()}
+            </PageTransition>
+          </ErrorBoundary>
         </div>
 
         {/* Footer Táctico */}
