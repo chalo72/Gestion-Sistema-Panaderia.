@@ -617,24 +617,6 @@ export function Proveedores({
               {searchTerm || filtroRubro ? 'Sin resultados para ese filtro.' : 'Registra tu primer proveedor.'}
             </p>
             {proveedores.length === 0 && (
-              <div className="max-w-xs mx-auto mt-8 animate-ag-pulse-glow">
-                <button 
-                    onClick={() => {
-                        toast.loading('Sincronizando con la bóveda en la nube...');
-                        db.syncCloudToLocal().then(() => {
-                            toast.success('¡Tus datos han sido rescatados!');
-                            setTimeout(() => window.location.reload(), 1500);
-                        }).catch((e: any) => toast.error('Error de red al rescatar: ' + e.message));
-                    }}
-                    className="w-full flex items-center justify-center gap-2 p-4 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-100 transition-colors shadow-lg font-bold hover:scale-105"
-                >
-                    <Database className="w-5 h-5 text-indigo-500" />
-                    <div className="text-left leading-tight">
-                        <span className="block text-sm">¿Desapareció tu info?</span>
-                        <span className="block text-xs opacity-80 font-normal">Clic para Rescatar de la Nube</span>
-                    </div>
-                </button>
-              </div>
             )}
           </div>
         ) : (
