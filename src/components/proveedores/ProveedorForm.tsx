@@ -385,57 +385,59 @@ export function ProveedorForm({
   };
 
   const parseVoiceCommand = (text: string) => {
-    const cleanText = text.replace(/uno/g, '1').replace(/dos/g, '2').replace(/tres/g, '3')
+    const cleanText = text.toLowerCase()
+                          .replace(/uno/g, '1').replace(/dos/g, '2').replace(/tres/g, '3')
                           .replace(/cuatro/g, '4').replace(/cinco/g, '5')
-                          .replace(/mil/g, '000')
-                          .replace(/cincuenta/g, '50')
+                          .replace(/mil/g, '000').replace(/cincuenta/g, '50')
                           .replace(/cien/g, '100');
                           
     let shouldAdd = false;
+    let nombreDetectado = '';
 
-    if (text.includes('añade a catálogo') || text.includes('agregar') || text.includes('añadir') || text.includes('guarda')) {
+    if (cleanText.match(/(?:añade|agrega|guarda)/i)) {
       shouldAdd = true;
     }
 
     setProdActual((prev) => {
       let newProd = { ...prev };
 
-      // 1. Comando: "escribe (en) producto X"
-      const matchProd = cleanText.match(/(?:escribe\s+en\s+producto|escribe\s+producto|producto)\s+(.*?)(?:\s+en\s+categor[ií]a|\s+categor[ií]a|\s+empaque|\s+unidad|\s+uso|\s+destino|\s+valor|\s+precio|\s+añade|$)/i);
+      // 1. Comando: "escribe en producto X", "producto X"
+      // Lookahead para detenerse en la próxima palabra clave
+      const matchProd = cleanText.match(/(?:escrib[ea]mos el producto|escrib[ea] en producto|escrib[ea]|producto)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+?)(?=\s+(?:en categor[ií]a|categor[ií]a|selecciona|en unidad|unidad|empaque|pack|tarro|bulto|pon|cantidad|en el uso|uso|destino|pon el valor|valor|precio|añade|agrega|guarda)|$)/i);
       if (matchProd && matchProd[1]) {
         newProd.nombre = matchProd[1].trim();
-        setBuscarProd(newProd.nombre); // Actualiza la UI del buscador
+        nombreDetectado = newProd.nombre;
       }
 
-      // 2. Comando: "selecciona (en) categoría Y"
-      const matchCat = cleanText.match(/(?:selecciona\s+en\s+categor[ií]a|en\s+categor[ií]a\s+selecciona|categor[ií]a)\s+(.*?)(?:\s+empaque|\s+unidad|\s+uso|\s+destino|\s+valor|\s+precio|\s+añade|$)/i);
+      // 2. Comando: "selecciona en categoría Y"
+      const matchCat = cleanText.match(/(?:en categor[ií]a selecciona|selecciona en categor[ií]a|categor[ií]a)\s+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+?)(?=\s+(?:en producto|producto|escribe|en unidad|unidad|empaque|pack|tarro|bulto|pon|cantidad|en el uso|uso|destino|pon el valor|valor|precio|añade|agrega|guarda)|$)/i);
       if (matchCat && matchCat[1]) {
          const catDictada = matchCat[1].trim().toLowerCase();
          const catMatch = CATS_INSUMO.find(c => c.toLowerCase().includes(catDictada)) || CATS_VENTA.find(c => c.toLowerCase().includes(catDictada));
          if (catMatch) newProd.categoria = catMatch;
       }
 
-      // 3. Comando: "selecciona (en) unidad/empaque/pack Z"
+      // 3. Comando: "selecciona tarro", "unidad pack selecciona"
       const empaquesPosibles = EMBALAJES.map(e => e.value);
       for (const emp of empaquesPosibles) {
-         if (cleanText.includes(`selecciona ${emp}`) || cleanText.includes(`empaque ${emp}`) || cleanText.includes(`pack ${emp}`)) {
+         if (cleanText.match(new RegExp(`(?:unidad|pack|empaque|selecciona).*?${emp}`, 'i')) || cleanText.includes(emp)) {
            newProd.tipoEmbalaje = emp;
            break;
          }
       }
 
       // 4. Comando: "cantidad W" o "pon X unidades"
-      const matchCant = cleanText.match(/(?:cantidad|pon)\s+(\d+)/i);
+      const matchCant = cleanText.match(/(?:cantidad|pon|con)\s+(\d+)/i);
       if (matchCant && matchCant[1]) {
         newProd.cantidadEmbalaje = parseInt(matchCant[1], 10);
       }
 
       // 5. Comando: "destino insumo", "cámbialo a venta"
-      if (cleanText.includes('insumo')) newProd.destino = 'insumo';
-      if (cleanText.includes('venta')) newProd.destino = 'venta';
+      if (cleanText.match(/(?:d[eé]jalo en|c[áa]mbialo a|destino|uso)\s+insumo/i) || cleanText.includes('insumo')) newProd.destino = 'insumo';
+      if (cleanText.match(/(?:d[eé]jalo en|c[áa]mbialo a|destino|uso)\s+venta/i) || cleanText.includes('venta')) newProd.destino = 'venta';
 
       // 6. Comando: "valor pon V", "precio V"
-      const matchValor = cleanText.match(/(?:valor|precio)(?:.*?)\s+(\d+[\d\.]*)/i);
+      const matchValor = cleanText.match(/(?:pon el valor de paca|pon el valor|valor de paca|valor|precio)\s+(\d+[\d\.]*)/i);
       if (matchValor && matchValor[1]) {
         const valNum = parseInt(matchValor[1].replace(/\./g, ''), 10);
         if (!isNaN(valNum)) newProd.precioCosto = valNum;
@@ -443,6 +445,11 @@ export function ProveedorForm({
 
       return newProd;
     });
+
+    // Actualizar el estado del UI visual separado del estado lógico para evitar colisiones
+    if (nombreDetectado) {
+       setTimeout(() => setBuscarProd(nombreDetectado), 50);
+    }
 
     if (shouldAdd) {
        toast.success('🎙️ Orden de añadir detectada');
