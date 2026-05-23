@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-    Plus, Edit2, X, DollarSign, Store, Info,
+    Plus, Minus, Edit2, X, DollarSign, Store, Info,
     ShoppingCart, Warehouse, Check, Percent,
     Package, ImageIcon, Tag, TrendingUp, ChefHat,
     AlertCircle, CheckCircle2
@@ -511,7 +511,19 @@ export function ProductFormModal({
                                     <Label className="text-xs font-semibold text-indigo-500 uppercase tracking-wide flex items-center gap-1">
                                         <Store className="w-3 h-3" /> Descuento Mayorista
                                     </Label>
-                                    <div className="relative">
+                                    <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl border border-indigo-200 dark:border-indigo-800/40 focus-within:border-indigo-400 overflow-hidden">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                const current = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
+                                                const newValue = Math.max(0, current - 1);
+                                                setFormData({ ...formData, descuentoMayorista: newValue.toString() });
+                                            }}
+                                            className="w-12 h-12 flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors"
+                                        >
+                                            <Minus className="w-4 h-4" />
+                                        </button>
                                         <Input
                                             type="text" inputMode="decimal"
                                             value={formData.descuentoMayorista || ''}
@@ -521,10 +533,21 @@ export function ProductFormModal({
                                                     setFormData({ ...formData, descuentoMayorista: val });
                                                 }
                                             }}
-                                            className="h-12 pr-9 text-base font-bold rounded-xl border-indigo-200 dark:border-indigo-800/40 bg-white dark:bg-slate-900 focus:border-indigo-400 text-indigo-700 dark:text-indigo-400"
-                                            placeholder="Ej: 10"
+                                            className="flex-1 h-12 text-center text-base font-bold border-0 focus-visible:ring-0 bg-transparent text-indigo-700 dark:text-indigo-400"
+                                            placeholder="0"
                                         />
-                                        <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400" />
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                const current = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
+                                                const newValue = Math.min(100, current + 1);
+                                                setFormData({ ...formData, descuentoMayorista: newValue.toString() });
+                                            }}
+                                            className="w-12 h-12 flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
                                     </div>
                                 </div>
 
