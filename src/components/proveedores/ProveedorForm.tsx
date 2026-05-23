@@ -184,13 +184,62 @@ export function ProveedorForm({
     } catch { /* localStorage lleno — ignorar */ }
   }, [catalogoItems, formData, isOpen, draftKey]);
 
-  // Detectar borrador al abrir
+  // Inicialización y recuperación de borrador al abrir
   useEffect(() => {
     if (isOpen) {
+      let draftRestored = false;
       const raw = localStorage.getItem(draftKey);
-      setHayBorrador(!!raw);
+      
+      if (raw) {
+        try {
+          const { formData: fd, catalogoItems: ci, timestamp } = JSON.parse(raw);
+          const esReciente = Date.now() - (timestamp || 0) < 86400000; // 24h
+          const esMasGrande = ci.length > (initialCatalogo?.length || 0);
+          
+          if (esReciente || esMasGrande) {
+            setFormData(fd);
+            setCatalogoItems(ci);
+            toast.info('Se recuperó automáticamente tu trabajo sin guardar');
+            draftRestored = true;
+          }
+        } catch (e) {
+          localStorage.removeItem(draftKey);
+        }
+      }
+      
+      setHayBorrador(!draftRestored && !!raw);
+
+      // Si no se restauró un borrador, inicializar con los datos por defecto
+      if (!draftRestored) {
+        if (editingProveedor) {
+          setFormData({
+            nombre: editingProveedor.nombre,
+            contacto: editingProveedor.contacto || '',
+            telefono: editingProveedor.telefono || '',
+            email: editingProveedor.email || '',
+            direccion: editingProveedor.direccion || '',
+            ubicacion: editingProveedor.ubicacion || '',
+            imagen: editingProveedor.imagen || '',
+            calificacion: editingProveedor.calificacion || 5,
+            activo: (editingProveedor as any).activo !== false,
+            rubro: (editingProveedor as any).rubro || '',
+            notas: (editingProveedor as any).notas || '',
+          });
+          setCatalogoItems(initialCatalogo || []);
+        } else {
+          setFormData({
+            nombre: '', contacto: '', telefono: '', email: '',
+            direccion: '', ubicacion: '', imagen: '', calificacion: 5,
+            activo: true, rubro: '', notas: '',
+          });
+          setCatalogoItems([]);
+        }
+      }
+    } else {
+      setEditingUid(null);
     }
-  }, [isOpen, draftKey]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, editingProveedor]);
 
   const restaurarBorrador = () => {
     try {
@@ -212,36 +261,6 @@ export function ProveedorForm({
   };
 
   const limpiarBorrador = () => localStorage.removeItem(draftKey);
-
-  // Inicializar formulario al abrir/editar
-  useEffect(() => {
-    if (isOpen) {
-      if (editingProveedor) {
-        setFormData({
-          nombre: editingProveedor.nombre,
-          contacto: editingProveedor.contacto || '',
-          telefono: editingProveedor.telefono || '',
-          email: editingProveedor.email || '',
-          direccion: editingProveedor.direccion || '',
-          ubicacion: editingProveedor.ubicacion || '',
-          imagen: editingProveedor.imagen || '',
-          calificacion: editingProveedor.calificacion || 5,
-          activo: (editingProveedor as any).activo !== false,
-          rubro: (editingProveedor as any).rubro || '',
-          notas: (editingProveedor as any).notas || '',
-        });
-        setCatalogoItems(initialCatalogo || []);
-      } else {
-        setFormData({
-          nombre: '', contacto: '', telefono: '', email: '',
-          direccion: '', ubicacion: '', imagen: '', calificacion: 5,
-          activo: true, rubro: '', notas: '',
-        });
-        setCatalogoItems([]);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, editingProveedor]);
   // NOTA: initialCatalogo se excluye de las deps a propósito.
   // El catálogo solo se inicializa al ABRIR el formulario (isOpen cambia a true).
   // Si initialCatalogo estuviera en las deps, cualquier re-render del padre con
@@ -1097,11 +1116,14 @@ export function ProveedorForm({
                                     }));
                                   }}
                                   className={cn(
-                                    "h-12 pl-8 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all",
+                                    "h-12 pl-8 pr-20 rounded-xl bg-white dark:bg-slate-950 font-black text-xs transition-all",
                                     "border-indigo-100 dark:border-indigo-900/40 text-blue-600 focus:ring-4 focus:ring-indigo-500/10"
                                   )}
                                   placeholder="0"
                               />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-slate-400 bg-white dark:bg-slate-950 pl-1">
+                                {formatCurrency(prodActual.precioCosto || 0)}
+                              </div>
                           </div>
                         </div>
 
@@ -1120,9 +1142,12 @@ export function ProveedorForm({
                                     precioCosto: val * (prev.cantidadEmbalaje || 1) 
                                   }));
                                 }}
-                                className="h-12 px-4 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                className="h-12 px-4 pr-20 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all"
                                 placeholder="0"
                               />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-slate-500 bg-blue-50/80 dark:bg-blue-900/80 pl-1 rounded">
+                                {formatCurrency(costUnit > 0 ? Math.round(costUnit / 100) * 100 : 0)}
+                              </div>
                           </div>
                         </div>
 
@@ -1160,9 +1185,12 @@ export function ProveedorForm({
                                     setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargin) }));
                                   }
                                 }}
-                                className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10"
+                                className="h-12 pl-9 pr-20 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10"
                                 placeholder="0"
                               />
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[10px] font-black text-slate-400 bg-white dark:bg-slate-950 pl-1">
+                                {formatCurrency(sellPrice > 0 ? Math.round(sellPrice / 100) * 100 : 0)}
+                              </div>
                             </div>
                             {editingUid && (
                                 <Button
