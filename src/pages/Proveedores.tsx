@@ -609,12 +609,32 @@ export function Proveedores({
       {/* ── Contenido: Cuadrícula con desplegable por tarjeta ── */}
       <div className="flex-1 overflow-y-auto scrollbar-hide pb-10">
         {filtrados.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-32 opacity-30 text-center">
-            <Building2 className="w-24 h-24 mb-6 text-blue-500 animate-ag-float" />
-            <h3 className="text-xl font-black uppercase tracking-[0.3em]">Directorio Vacío</h3>
-            <p className="max-w-xs text-[10px] font-bold uppercase tracking-widest mt-3">
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Building2 className="w-24 h-24 mb-6 text-blue-500 opacity-50 animate-ag-float" />
+            <h3 className="text-xl font-black uppercase tracking-[0.3em] opacity-50">Directorio Vacío</h3>
+            <p className="max-w-xs text-[10px] font-bold uppercase tracking-widest mt-3 opacity-50">
               {searchTerm || filtroRubro ? 'Sin resultados para ese filtro.' : 'Registra tu primer proveedor.'}
             </p>
+            {proveedores.length === 0 && (
+              <div className="max-w-xs mx-auto mt-8 animate-ag-pulse-glow">
+                <button 
+                    onClick={() => {
+                        toast.loading('Sincronizando con la bóveda en la nube...');
+                        db.syncCloudToLocal().then(() => {
+                            toast.success('¡Tus datos han sido rescatados!');
+                            setTimeout(() => window.location.reload(), 1500);
+                        }).catch((e: any) => toast.error('Error de red al rescatar: ' + e.message));
+                    }}
+                    className="w-full flex items-center justify-center gap-2 p-4 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-xl hover:bg-indigo-100 transition-colors shadow-lg font-bold hover:scale-105"
+                >
+                    <Database className="w-5 h-5 text-indigo-500" />
+                    <div className="text-left leading-tight">
+                        <span className="block text-sm">¿Desapareció tu info?</span>
+                        <span className="block text-xs opacity-80 font-normal">Clic para Rescatar de la Nube</span>
+                    </div>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           /* ── VISTA GRID / LISTA — un solo map unificado ── */
