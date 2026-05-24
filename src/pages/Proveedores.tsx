@@ -441,9 +441,11 @@ export function Proveedores({
       const margenes = insumos.map(pr => {
         const prod = getProductoById(pr.productoId);
         if (!prod) return 0;
-        const costo = Number(pr.precioCosto || 0);
+        // Usar costo UNITARIO (no el precio del pack) para comparar vs precioVenta unitario
+        const cantEmbalaje = Number((pr as any).cantidadEmbalaje || 1) || 1;
+        const costoUnit = Number(pr.precioCosto || 0) / cantEmbalaje;
         const venta = Number(prod.precioVenta || 0);
-        return costo > 0 ? ((venta - costo) / costo) * 100 : 0;
+        return costoUnit > 0 ? ((venta - costoUnit) / costoUnit) * 100 : 0;
       });
       margenPromedio = margenes.length > 0 ? Math.round(margenes.reduce((s, m) => s + m, 0) / margenes.length) : 0;
     }

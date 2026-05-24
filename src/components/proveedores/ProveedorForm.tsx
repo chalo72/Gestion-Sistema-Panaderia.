@@ -264,8 +264,8 @@ export function ProveedorForm({
       
       if (raw) {
         try {
-          const { formData: fd, catalogoItems: ci, timestamp } = JSON.parse(raw);
-          const esReciente = Date.now() - (timestamp || 0) < 86400000; // 24h
+          const { formData: fd, catalogoItems: ci, savedAt } = JSON.parse(raw);
+          const esReciente = savedAt ? (Date.now() - new Date(savedAt).getTime()) < 86400000 : false; // 24h
           const esMasGrande = ci.length > (initialCatalogo?.length || 0);
           
           if (esReciente || esMasGrande) {
