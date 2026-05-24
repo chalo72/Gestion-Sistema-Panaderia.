@@ -645,6 +645,12 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // Edición de ítems en entrada del historial (crédito)
     const [editandoHistorialId, setEditandoHistorialId] = useState<string | null>(null);
+    const [busquedaEditTicket, setBusquedaEditTicket] = useState('');
+
+    const persistirHistorial = (nuevos: HistorialMayorista[]) => {
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+    };
 
     const actualizarItemEnHistorial = (historialId: string, productoId: string, delta: number) => {
         const nuevos = historialMayoristas.map(h => {
@@ -655,8 +661,33 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
             return { ...h, items, total };
         }).filter(h => h.items.length > 0);
-        setHistorialMayoristas(nuevos);
-        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        persistirHistorial(nuevos);
+    };
+
+    const agregarProductoAHistorial = async (historialId: string, productoId: string, nombre: string, precio: number) => {
+        // Actualizar local
+        const nuevos = historialMayoristas.map(h => {
+            if (h.id !== historialId) return h;
+            const existe = h.items.find(i => i.productoId === productoId);
+            const items = existe
+                ? h.items.map(i => i.productoId === productoId ? { ...i, cantidad: i.cantidad + 1 } : i)
+                : [...h.items, { productoId, nombre, precio, cantidad: 1 }];
+            const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0);
+            return { ...h, items, total };
+        });
+        persistirHistorial(nuevos);
+        // Sincronizar central si es crédito
+        if (updateCreditoCliente) {
+            const esCentral = creditosClientes?.find(c => c.id === historialId);
+            if (esCentral) {
+                const ticketActualizado = nuevos.find(h => h.id === historialId);
+                if (ticketActualizado) {
+                    try { await updateCreditoCliente(historialId, { items: ticketActualizado.items, monto: ticketActualizado.total }); }
+                    catch (e) { console.error('Error actualizando ticket central', e); }
+                }
+            }
+        }
+        toast.success(`${nombre} agregado al ticket`);
     };
 
     // Override local de fechas para reflejar cambios inmediatamente sin esperar re-render del padre
@@ -830,6 +861,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             });
     }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, preciosOverride]);
 
+    // Mismo cálculo pero SIN filtro de busqueda — usado en catálogo de perfil cliente
+    // para que la búsqueda principal no oculte productos en el mini-POS
+    const tablaDatosTodos = useMemo(() => {
+        return productos
+            .map(p => {
+                const mejorPrecio = getMejorPrecio(p.id);
+                let costo = calcularCosto(p, mejorPrecio);
+                if (costo <= 0 && p.precioVenta > 0) costo = p.precioVenta / 1.30;
+                const precioMinPanaderia = costo;
+                let precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);
+                if ((p as any).descuentoMayorista !== undefined && (p as any).descuentoMayorista > 0) {
+                    precioMayoristaAuto = p.precioVenta * (1 - (p as any).descuentoMayorista / 100);
+                }
+                const precioMayorista = preciosOverride[p.id] ?? precioMayoristaAuto;
+                const tieneOverride = preciosOverride[p.id] !== undefined;
+                const precioReventa = precioMayorista * (1 + margenRevendedorEfectivo / 100);
+                const pvp = p.precioVenta;
+                const margenPanaderiaReal = costo > 0 ? ((precioMayorista - costo) / costo) * 100 : 0;
+                const margenRevendedorReal = precioMayorista > 0 ? ((precioReventa - precioMayorista) / precioMayorista) * 100 : 0;
+                const gananciaPanaderiaPorUnidad = precioMayorista - costo;
+                const gananciRevendedorPorUnidad = precioReventa - precioMayorista;
+                const reventaMenorQuePVP = precioReventa <= pvp * 1.05;
+                const panaderiaGana = precioMayorista > costo * 1.05;
+                const revendedorGana = gananciRevendedorPorUnidad > 0;
+                let viabilidad: 'excelente' | 'viable' | 'ajustado' | 'inviable';
+                if (panaderiaGana && revendedorGana && reventaMenorQuePVP) viabilidad = 'excelente';
+                else if (panaderiaGana && revendedorGana) viabilidad = 'viable';
+                else if (panaderiaGana) viabilidad = 'ajustado';
+                else viabilidad = 'inviable';
+                const descuentoMonto = pvp - precioMayorista;
+                const descuentoPct = pvp > 0 ? (descuentoMonto / pvp) * 100 : 0;
+                return { producto: p, costo, precioMinPanaderia, precioMayoristaAuto, precioMayorista, tieneOverride, precioReventa, pvp, margenPanaderiaReal, margenRevendedorReal, gananciaPanaderiaPorUnidad, gananciRevendedorPorUnidad, reventaMenorQuePVP, panaderiaGana, revendedorGana, viabilidad, descuentoMonto, descuentoPct };
+            })
+            .sort((a, b) => {
+                const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
+                return orden[a.viabilidad] - orden[b.viabilidad];
+            });
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride]);
+
     // Stats del resumen
     const stats = useMemo(() => {
         const total = tablaDatos.length;
@@ -963,7 +1033,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     if (viendoPerfilCliente) {
         const cliente = viendoPerfilCliente;
         const tConf = TIPO_CONFIG[cliente.tipo] || TIPO_CONFIG.mayorista;
-        const productosPerfil = tablaDatos
+        const productosPerfil = tablaDatosTodos
             .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()));
 
         return (
@@ -2125,10 +2195,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     className={`text-[9px] font-black uppercase tracking-wide flex items-center gap-1 transition-colors ${editandoHistorialId === h.id ? 'text-indigo-600' : 'text-slate-400 hover:text-indigo-500'}`}
                                                 >
                                                     <Pencil className="w-2.5 h-2.5" />
-                                                    {editandoHistorialId === h.id ? 'Listo' : 'Editar cantidades'}
+                                                    {editandoHistorialId === h.id ? 'Listo' : 'Editar ticket'}
                                                 </button>
                                                 <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 tabular-nums">Total: {formatCurrency(h.total)}</span>
                                             </div>
+
+                                            {/* Buscador para agregar productos al ticket */}
+                                            {editandoHistorialId === h.id && (
+                                                <div className="mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800 space-y-2">
+                                                    <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 flex items-center gap-1"><Plus className="w-3 h-3" />Agregar producto al ticket</p>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Buscar producto..."
+                                                        value={busquedaEditTicket}
+                                                        onChange={e => setBusquedaEditTicket(e.target.value)}
+                                                        className="w-full h-8 rounded-lg border border-indigo-200 bg-white dark:bg-slate-800 px-3 text-xs outline-none focus:border-indigo-400"
+                                                    />
+                                                    {busquedaEditTicket.length >= 2 && (
+                                                        <div className="max-h-36 overflow-y-auto space-y-1">
+                                                            {tablaDatosTodos
+                                                                .filter(d => d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase()))
+                                                                .slice(0, 8)
+                                                                .map(d => (
+                                                                    <button
+                                                                        key={d.producto.id}
+                                                                        onClick={() => { agregarProductoAHistorial(h.id, d.producto.id, d.producto.nombre, d.precioMayorista); setBusquedaEditTicket(''); }}
+                                                                        className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left"
+                                                                    >
+                                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{d.producto.nombre}</span>
+                                                                        <span className="text-[10px] font-black text-indigo-600 shrink-0 ml-2">{formatCurrency(d.precioMayorista)}</span>
+                                                                    </button>
+                                                                ))
+                                                            }
+                                                            {tablaDatosTodos.filter(d => d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).length === 0 && (
+                                                                <p className="text-[10px] text-slate-400 text-center py-2">Sin resultados</p>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Abonos registrados */}
