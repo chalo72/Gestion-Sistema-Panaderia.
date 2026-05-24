@@ -472,6 +472,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         toast.success('Nota guardada');
     };
 
+    // Fichas del historial del cliente: créditos pendientes / tickets pagados
+    const [perfilTab, setPerfilTab] = useState<'creditos' | 'pagados'>('creditos');
+
     const registrarAbono = async (historialId: string, metodo: MetodoPago, montoEspecifico?: number) => {
         const monto = montoEspecifico ?? parseFloat(montoAbono);
         if (isNaN(monto) || monto <= 0) return toast.error('Monto inválido');
@@ -1045,6 +1048,35 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         return [...localCash, ...centralCredits].sort((a, b) => b.fecha - a.fecha);
     }, [historialMayoristas, creditosClientes, dateOverrides]);
 
+    // Confirmar pago completo de un ticket de crédito (registra abono por el saldo restante)
+    const marcarComoPagado = async (historialId: string, metodo: MetodoPago) => {
+        const h = historialUnificado.find(x => x.id === historialId);
+        if (!h) return;
+        const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+        const saldo = h.total - abonado;
+        if (saldo <= 0) { toast.info('Ticket ya está pagado'); return; }
+        await registrarAbono(historialId, metodo, saldo);
+        toast.success(`✓ Pagado · ${formatCurrency(saldo)} vía ${metodo}`);
+        setPerfilTab('pagados');
+    };
+
+    // Confirmar pago de todos los créditos pendientes del cliente activo
+    const marcarTodosPagados = async (metodo: MetodoPago) => {
+        if (!viendoPerfilCliente) return;
+        const pendientes = historialUnificado.filter(h => {
+            if (h.clienteId !== viendoPerfilCliente.id || h.metodoPago !== 'credito') return false;
+            const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+            return h.total - ab > 0;
+        });
+        if (pendientes.length === 0) { toast.info('No hay créditos pendientes'); return; }
+        for (const h of pendientes) {
+            const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+            await registrarAbono(h.id, metodo, h.total - ab);
+        }
+        toast.success(`✓ ${pendientes.length} ticket(s) marcados como pagados`);
+        setPerfilTab('pagados');
+    };
+
     // ── Mini-POS del Cliente ─────────────────────────────────────────────────
     if (viendoPerfilCliente) {
         const cliente = viendoPerfilCliente;
@@ -1116,276 +1148,327 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             />
                         </div>
 
-                        {/* ── Panel de Créditos y Abonos (siempre visible) ── */}
+                        {/* ── Panel Historial Cliente: Fichas Créditos / Pagados ── */}
                         {(() => {
                             const histCliente = historialUnificado.filter(h => h.clienteId === cliente.id);
-                            const creditosAll = histCliente.filter(h => h.metodoPago === 'credito');
-                            const totalDeuda = creditosAll.reduce((s, h) => {
-                                const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
-                                const saldo = h.total - abonado;
-                                return s + (saldo > 0 ? saldo : 0);
+                            const creditosPendientes = histCliente.filter(h => {
+                                if (h.metodoPago !== 'credito') return false;
+                                const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                return h.total - ab > 0;
+                            });
+                            const ticketsPagados = histCliente.filter(h => {
+                                if (h.metodoPago !== 'credito') return true;
+                                const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                return h.total - ab <= 0;
+                            });
+                            const totalDeuda = creditosPendientes.reduce((s, h) => {
+                                const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
+                                return s + (h.total - ab);
                             }, 0);
                             const hasPendientes = totalDeuda > 0;
                             return (
-                                <div className={`rounded-2xl border p-4 space-y-2 ${hasPendientes ? 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800' : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700'}`}>
-                                    <div className="flex items-center justify-between">
+                                <div className={`rounded-2xl border overflow-hidden shadow-sm ${hasPendientes ? 'border-rose-200 dark:border-rose-800' : 'border-slate-200 dark:border-slate-700'}`}>
+                                    {/* Header resumen */}
+                                    <div className={`px-4 py-3 flex items-center justify-between ${hasPendientes ? 'bg-rose-50 dark:bg-rose-950/20' : 'bg-emerald-50 dark:bg-emerald-950/10'}`}>
                                         <div className="flex items-center gap-2">
-                                            <Banknote className={`w-4 h-4 ${hasPendientes ? 'text-rose-600' : 'text-slate-400'}`} />
-                                            <p className={`text-xs font-black uppercase tracking-widest ${hasPendientes ? 'text-rose-700 dark:text-rose-400' : 'text-slate-500'}`}>
-                                                Créditos {creditosAll.length > 0 ? `(${creditosAll.length})` : ''}
+                                            <Banknote className={`w-4 h-4 ${hasPendientes ? 'text-rose-600' : 'text-emerald-500'}`} />
+                                            <p className={`text-xs font-black uppercase tracking-widest ${hasPendientes ? 'text-rose-700 dark:text-rose-400' : 'text-emerald-600'}`}>
+                                                Cuenta del Cliente
                                             </p>
                                         </div>
                                         {hasPendientes
-                                            ? <p className="text-base font-black text-rose-600 tabular-nums">Debe: {formatCurrency(totalDeuda)}</p>
+                                            ? <p className="text-sm font-black text-rose-600 tabular-nums">Debe: {formatCurrency(totalDeuda)}</p>
                                             : <span className="text-[10px] font-black text-emerald-600 uppercase">✓ Al día</span>
                                         }
                                     </div>
-                                    {ticketsSeleccionados.size > 0 && (
-                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 mt-2 animate-ag-fade-in">
-                                            <div className="flex justify-between items-center mb-2">
-                                                <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-widest">{ticketsSeleccionados.size} ticket(s) seleccionados</span>
-                                                <span className="text-sm font-black tabular-nums text-indigo-700 dark:text-indigo-400">
-                                                    {formatCurrency(Array.from(ticketsSeleccionados).reduce((s, id) => {
-                                                        const h = creditosAll.find(c => c.id === id);
-                                                        if (h) {
-                                                            const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
-                                                            return s + (h.total - abonado);
-                                                        }
-                                                        const tp = ticketsPendientes.find(t => t.id === id);
-                                                        if (tp) {
-                                                            return s + tp.items.reduce((si, it) => si + it.precio * it.cantidad, 0);
-                                                        }
-                                                        return s;
-                                                    }, 0))}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-2 mb-2">
-                                                <Input 
-                                                    type="number" 
-                                                    placeholder="Monto a abonar..." 
-                                                    value={montoAbonoMultiple}
-                                                    onChange={e => setMontoAbonoMultiple(e.target.value)}
-                                                    className="h-8 text-xs bg-white dark:bg-slate-800 border-indigo-200 font-bold"
-                                                />
-                                                <select 
-                                                    value={metodoAbonoMultiple}
-                                                    onChange={e => setMetodoAbonoMultiple(e.target.value as MetodoPago)}
-                                                    className="h-8 rounded-lg text-xs bg-white dark:bg-slate-800 border border-indigo-200 px-2 font-bold"
-                                                >
-                                                    <option value="efectivo">Efectivo</option>
-                                                    <option value="nequi">Nequi</option>
-                                                    <option value="transferencia">Cuenta</option>
-                                                </select>
-                                                {Array.from(ticketsSeleccionados).some(id => ticketsPendientes.find(t => t.id === id)) && (
-                                                    <Button size="sm" variant="outline" onClick={retomarTicketsSeleccionados} className="h-8 text-xs font-black uppercase tracking-widest ml-2">
-                                                        Retomar seleccionados
-                                                    </Button>
+
+                                    {/* Tabs Créditos / Pagados */}
+                                    <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+                                        <button
+                                            onClick={() => setPerfilTab('creditos')}
+                                            className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest transition-colors border-b-2 flex items-center justify-center gap-1 ${perfilTab === 'creditos' ? 'border-rose-500 text-rose-600 bg-rose-50/50 dark:bg-rose-950/10' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            Créditos
+                                            {creditosPendientes.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-white text-[8px] leading-none">{creditosPendientes.length}</span>}
+                                        </button>
+                                        <button
+                                            onClick={() => setPerfilTab('pagados')}
+                                            className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest transition-colors border-b-2 flex items-center justify-center gap-1 ${perfilTab === 'pagados' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/50 dark:bg-emerald-950/10' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                        >
+                                            Pagados
+                                            {ticketsPagados.length > 0 && <span className="px-1.5 py-0.5 rounded-full bg-emerald-500 text-white text-[8px] leading-none">{ticketsPagados.length}</span>}
+                                        </button>
+                                    </div>
+
+                                    <div className="bg-white dark:bg-slate-900 p-2 space-y-2">
+                                        {perfilTab === 'creditos' ? (
+                                            <>
+                                                {/* Botones pagar todo */}
+                                                {creditosPendientes.length > 0 && (
+                                                    <div className="flex gap-1 pb-1 border-b border-slate-100 dark:border-slate-800">
+                                                        {(['efectivo','nequi','transferencia'] as MetodoPago[]).map(m => (
+                                                            <button key={m} onClick={() => marcarTodosPagados(m)}
+                                                                className={`flex-1 h-7 rounded-xl text-[8px] font-black uppercase flex items-center justify-center gap-0.5 ${m==='efectivo'?'bg-emerald-100 text-emerald-700 hover:bg-emerald-200':m==='nequi'?'bg-violet-100 text-violet-700 hover:bg-violet-200':'bg-blue-100 text-blue-700 hover:bg-blue-200'}`}>
+                                                                <CheckCircle2 className="w-2.5 h-2.5"/>Todo · {m==='transferencia'?'Cta':m==='efectivo'?'Efec':'Neq'}
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 )}
-                                            </div>
-                                            <div className="flex items-center justify-between">
-                                                <p className="text-[10px] font-bold text-indigo-600/70">
-                                                    Restante: {formatCurrency(Math.max(0, Array.from(ticketsSeleccionados).reduce((s, id) => {
-                                                        const h = creditosAll.find(c => c.id === id);
-                                                        if (h) {
-                                                            const abonado = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
-                                                            return s + (h.total - abonado);
-                                                        }
-                                                        const tp = ticketsPendientes.find(t => t.id === id);
-                                                        if (tp) {
-                                                            return s + tp.items.reduce((si, it) => si + it.precio * it.cantidad, 0);
-                                                        }
-                                                        return s;
-                                                    }, 0) - (Number(montoAbonoMultiple) || 0))) }
-                                                </p>
-                                                <Button size="sm" onClick={procesarAbonoMultiple} className="h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">
-                                                    Aplicar Abono
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
-                                    {creditosAll.length === 0 ? (
-                                        <p className="text-[10px] text-slate-400 text-center py-4">Sin ventas a crédito registradas</p>
-                                    ) : (
-                                        <div className="space-y-2">
-                                            {creditosAll.map(h => {
-                                                const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
-                                                const saldo = h.total - abonado;
-                                                const pagado = saldo <= 0;
-                                                const expanded = expandedCreditos.has(h.id);
-                                                const clienteObj = allClientes.find(c => c.id === h.clienteId);
-                                                const metodoBadgeCls: Record<string,string> = { efectivo:'bg-emerald-100 text-emerald-700', nequi:'bg-violet-100 text-violet-700', transferencia:'bg-blue-100 text-blue-700', credito:'bg-rose-100 text-rose-700' };
-                                                return (
-                                                    <div key={h.id} className={`rounded-2xl overflow-hidden shadow-sm border transition-all duration-200 ${pagado ? 'border-emerald-200 dark:border-emerald-800' : 'border-indigo-200 dark:border-indigo-800'}`}>
 
-                                                        {/* ── Cabecera: siempre visible ── */}
-                                                        <button
-                                                            className={`w-full text-left px-3 py-2.5 flex items-center gap-2 ${pagado ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100/60' : 'bg-gradient-to-r from-indigo-50 to-white dark:from-indigo-900/20 dark:to-slate-900 hover:from-indigo-100/70'} transition-colors`}
-                                                            onClick={() => toggleCreditoExpand(h.id)}
-                                                        >
-                                                            {!pagado && (
-                                                                <input type="checkbox" checked={ticketsSeleccionados.has(h.id)} onClick={e => e.stopPropagation()}
-                                                                    onChange={(e) => { const s = new Set(ticketsSeleccionados); e.target.checked ? s.add(h.id) : s.delete(h.id); setTicketsSeleccionados(s); }}
-                                                                    className="w-3.5 h-3.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shrink-0"
-                                                                />
-                                                            )}
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-1.5 flex-wrap">
-                                                                    <span className="text-[11px] font-black text-slate-800 dark:text-white">
-                                                                        {(() => { const d = new Date(h.fecha); return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
-                                                                    </span>
-                                                                    {pagado
-                                                                        ? <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">✓ Pagado</span>
-                                                                        : <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Debe {formatCurrency(saldo)}</span>
-                                                                    }
-                                                                </div>
-                                                                {/* Mini preview productos */}
-                                                                <p className="text-[9px] text-slate-500 truncate mt-0.5">
-                                                                    {h.items.slice(0,3).map(i=>`${i.nombre}×${i.cantidad}`).join(' · ')}{h.items.length>3?` +${h.items.length-3} más`:''}
-                                                                </p>
-                                                            </div>
-                                                            <div className="text-right shrink-0">
-                                                                <p className="text-[12px] font-black text-indigo-700 dark:text-indigo-400 tabular-nums">{formatCurrency(h.total)}</p>
-                                                                {abonado>0 && <p className="text-[9px] text-emerald-600 tabular-nums">+{formatCurrency(abonado)}</p>}
-                                                            </div>
-                                                            <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
-                                                        </button>
+                                                {/* Abono múltiple a seleccionados */}
+                                                {ticketsSeleccionados.size > 0 && (
+                                                    <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 animate-ag-fade-in">
+                                                        <div className="flex justify-between items-center mb-2">
+                                                            <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-widest">{ticketsSeleccionados.size} seleccionados</span>
+                                                            <span className="text-sm font-black tabular-nums text-indigo-700 dark:text-indigo-400">
+                                                                {formatCurrency(Array.from(ticketsSeleccionados).reduce((s, id) => {
+                                                                    const h = creditosPendientes.find(c => c.id === id);
+                                                                    if (h) { const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0); return s + (h.total - ab); }
+                                                                    return s;
+                                                                }, 0))}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <Input type="number" placeholder="Monto..." value={montoAbonoMultiple} onChange={e => setMontoAbonoMultiple(e.target.value)} className="h-8 text-xs bg-white dark:bg-slate-800 border-indigo-200 font-bold"/>
+                                                            <select value={metodoAbonoMultiple} onChange={e => setMetodoAbonoMultiple(e.target.value as MetodoPago)} className="h-8 rounded-lg text-xs bg-white dark:bg-slate-800 border border-indigo-200 px-2 font-bold">
+                                                                <option value="efectivo">Efectivo</option>
+                                                                <option value="nequi">Nequi</option>
+                                                                <option value="transferencia">Cuenta</option>
+                                                            </select>
+                                                        </div>
+                                                        <Button size="sm" onClick={procesarAbonoMultiple} className="w-full h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">Aplicar Abono</Button>
+                                                    </div>
+                                                )}
 
-                                                        {/* ── Detalle expandible ── */}
-                                                        {expanded && (
-                                                            <div className="bg-white dark:bg-slate-900 px-3 pb-3 pt-2 space-y-2.5 border-t border-slate-100 dark:border-slate-800">
-
-                                                                {/* Foto miniatura + fecha editable */}
-                                                                <div className="flex items-start gap-2">
-                                                                    {h.fotoFactura ? (
-                                                                        <button onClick={() => window.open(h.fotoFactura,'_blank')} className="shrink-0 w-14 h-14 rounded-xl overflow-hidden border border-indigo-100 shadow-sm hover:opacity-90 transition-opacity">
-                                                                            <img src={h.fotoFactura} alt="Factura" className="w-full h-full object-cover"/>
-                                                                        </button>
-                                                                    ) : (
-                                                                        <label className="shrink-0 w-14 h-14 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-0.5 cursor-pointer hover:border-indigo-300 transition-colors bg-slate-50 dark:bg-slate-800">
-                                                                            <Camera className="w-4 h-4 text-slate-300"/>
-                                                                            <span className="text-[7px] font-black uppercase text-slate-300">Foto</span>
-                                                                            <input type="file" accept="image/*" className="hidden" onChange={e=>subirFotoHistorial(h.id,e)}/>
-                                                                        </label>
-                                                                    )}
-                                                                    <div className="flex-1 min-w-0 space-y-1">
-                                                                        {/* Fecha */}
-                                                                        {editandoFechaHistorialId===h.id ? (
-                                                                            <div className="flex items-center gap-1">
-                                                                                <Input type="date" value={fechaHistorialTemp} onChange={e=>setFechaHistorialTemp(e.target.value)} className="h-6 text-[10px] bg-white dark:bg-slate-800 flex-1"/>
-                                                                                <button onClick={()=>guardarFechaHistorial(h.id)} className="text-emerald-600"><CheckCircle2 className="w-3.5 h-3.5"/></button>
-                                                                                <button onClick={()=>setEditandoFechaHistorialId(null)} className="text-rose-500"><X className="w-3.5 h-3.5"/></button>
+                                                {creditosPendientes.length === 0 ? (
+                                                    <div className="py-8 flex flex-col items-center gap-2 opacity-50">
+                                                        <CheckCircle2 className="w-8 h-8 text-emerald-500"/>
+                                                        <p className="text-[10px] text-slate-400 font-black uppercase">Sin créditos pendientes</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {creditosPendientes.map(h => {
+                                                            const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                                            const saldo = h.total - abonado;
+                                                            const expanded = expandedCreditos.has(h.id);
+                                                            const clienteObj = allClientes.find(c => c.id === h.clienteId);
+                                                            const metodoBadgeCls: Record<string,string> = { efectivo:'bg-emerald-100 text-emerald-700', nequi:'bg-violet-100 text-violet-700', transferencia:'bg-blue-100 text-blue-700', credito:'bg-rose-100 text-rose-700' };
+                                                            return (
+                                                                <div key={h.id} className="rounded-2xl overflow-hidden shadow-sm border border-indigo-200 dark:border-indigo-800 transition-all duration-200">
+                                                                    {/* Cabecera */}
+                                                                    <button className="w-full text-left px-3 py-2.5 flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white dark:from-indigo-900/20 dark:to-slate-900 hover:from-indigo-100/70 transition-colors" onClick={() => toggleCreditoExpand(h.id)}>
+                                                                        <input type="checkbox" checked={ticketsSeleccionados.has(h.id)} onClick={e => e.stopPropagation()}
+                                                                            onChange={(e) => { const s = new Set(ticketsSeleccionados); e.target.checked ? s.add(h.id) : s.delete(h.id); setTicketsSeleccionados(s); }}
+                                                                            className="w-3.5 h-3.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shrink-0"
+                                                                        />
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                <span className="text-[11px] font-black text-slate-800 dark:text-white">
+                                                                                    {(() => { const d = new Date(h.fecha); return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
+                                                                                </span>
+                                                                                <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Debe {formatCurrency(saldo)}</span>
                                                                             </div>
-                                                                        ) : (
-                                                                            <button onClick={()=>{const d=new Date(h.fecha);const s=isNaN(d.getTime())?new Date():d;setEditandoFechaHistorialId(h.id);const yy=s.getFullYear(),mo=String(s.getMonth()+1).padStart(2,'0'),dd=String(s.getDate()).padStart(2,'0');setFechaHistorialTemp(`${yy}-${mo}-${dd}`);}} className="flex items-center gap-1 text-[9px] text-indigo-500 hover:text-indigo-700">
-                                                                                <Edit2 className="w-2.5 h-2.5"/>{(() => { const d=new Date(h.fecha); return isNaN(d.getTime())?'Sin Fecha':d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
-                                                                            </button>
-                                                                        )}
-                                                                        {/* Items */}
-                                                                        <div className="space-y-0.5">
-                                                                            {h.items.map(item=>(
-                                                                                <div key={item.productoId} className="flex items-center justify-between text-[9px]">
-                                                                                    <span className="text-slate-600 dark:text-slate-400 truncate">{item.nombre}</span>
-                                                                                    <span className="shrink-0 ml-1 font-black text-slate-700 dark:text-slate-300">×{item.cantidad} <span className="text-indigo-600">{formatCurrency(item.precio*item.cantidad)}</span></span>
-                                                                                </div>
-                                                                            ))}
+                                                                            {/* Desglose Compra / Abonado */}
+                                                                            <div className="flex gap-2 mt-0.5">
+                                                                                <span className="text-[8px] text-slate-500">Compra: <b className="text-slate-700 dark:text-slate-300">{formatCurrency(h.total)}</b></span>
+                                                                                {abonado > 0 && <span className="text-[8px] text-emerald-600">Abonado: <b>{formatCurrency(abonado)}</b></span>}
+                                                                            </div>
+                                                                            <p className="text-[9px] text-slate-500 truncate mt-0.5">
+                                                                                {h.items.slice(0,3).map(i=>`${i.nombre}×${i.cantidad}`).join(' · ')}{h.items.length>3?` +${h.items.length-3} más`:''}
+                                                                            </p>
                                                                         </div>
-                                                                        {h.fotoFactura && (
-                                                                            <label className="inline-flex items-center gap-1 text-[8px] text-slate-400 hover:text-indigo-500 cursor-pointer mt-0.5">
-                                                                                <Camera className="w-2.5 h-2.5"/>Cambiar foto
-                                                                                <input type="file" accept="image/*" className="hidden" onChange={e=>subirFotoHistorial(h.id,e)}/>
-                                                                            </label>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
+                                                                        <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
+                                                                    </button>
 
-                                                                {/* Abonos */}
-                                                                {(h.abonos??[]).length>0 && (
-                                                                    <div className="space-y-1">
-                                                                        <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Abonos recibidos</p>
-                                                                        {(h.abonos??[]).map((a,idx)=>(
-                                                                            <div key={a.id||idx}>
-                                                                                {editandoAbonoInfo?.histId===h.id&&(editandoAbonoInfo.abonoId===a.id||editandoAbonoInfo.idx===idx) ? (
-                                                                                    <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/20 p-1.5 rounded-lg">
-                                                                                        <input type="number" value={editandoAbonoInfo.monto} onChange={e=>setEditandoAbonoInfo(p=>p?{...p,monto:e.target.value}:null)} className="w-16 h-6 text-[10px] rounded border border-indigo-200 bg-white px-1.5 outline-none" autoFocus/>
-                                                                                        <select value={editandoAbonoInfo.metodo} onChange={e=>setEditandoAbonoInfo(p=>p?{...p,metodo:e.target.value as MetodoPago}:null)} className="h-6 text-[9px] rounded border border-indigo-200 bg-white px-1 outline-none">
-                                                                                            <option value="efectivo">Efectivo</option><option value="nequi">Nequi</option><option value="transferencia">Cuenta</option><option value="credito">Crédito</option>
-                                                                                        </select>
-                                                                                        <button onClick={editarAbono} className="w-5 h-5 rounded bg-emerald-500 text-white flex items-center justify-center"><Check className="w-2.5 h-2.5"/></button>
-                                                                                        <button onClick={()=>setEditandoAbonoInfo(null)} className="w-5 h-5 rounded bg-slate-200 text-slate-600 flex items-center justify-center"><X className="w-2.5 h-2.5"/></button>
+                                                                    {/* Detalle expandible */}
+                                                                    {expanded && (
+                                                                        <div className="bg-white dark:bg-slate-900 px-3 pb-3 pt-2 space-y-2.5 border-t border-slate-100 dark:border-slate-800">
+                                                                            {/* Foto + items + fecha */}
+                                                                            <div className="flex items-start gap-2">
+                                                                                {h.fotoFactura ? (
+                                                                                    <button onClick={() => window.open(h.fotoFactura,'_blank')} className="shrink-0 w-14 h-14 rounded-xl overflow-hidden border border-indigo-100 shadow-sm hover:opacity-90 transition-opacity">
+                                                                                        <img src={h.fotoFactura} alt="Factura" className="w-full h-full object-cover"/>
+                                                                                    </button>
+                                                                                ) : (
+                                                                                    <label className="shrink-0 w-14 h-14 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-0.5 cursor-pointer hover:border-indigo-300 transition-colors bg-slate-50 dark:bg-slate-800">
+                                                                                        <Camera className="w-4 h-4 text-slate-300"/>
+                                                                                        <span className="text-[7px] font-black uppercase text-slate-300">Foto</span>
+                                                                                        <input type="file" accept="image/*" className="hidden" onChange={e=>subirFotoHistorial(h.id,e)}/>
+                                                                                    </label>
+                                                                                )}
+                                                                                <div className="flex-1 min-w-0 space-y-1">
+                                                                                    {editandoFechaHistorialId===h.id ? (
+                                                                                        <div className="flex items-center gap-1">
+                                                                                            <Input type="date" value={fechaHistorialTemp} onChange={e=>setFechaHistorialTemp(e.target.value)} className="h-6 text-[10px] bg-white dark:bg-slate-800 flex-1"/>
+                                                                                            <button onClick={()=>guardarFechaHistorial(h.id)} className="text-emerald-600"><CheckCircle2 className="w-3.5 h-3.5"/></button>
+                                                                                            <button onClick={()=>setEditandoFechaHistorialId(null)} className="text-rose-500"><X className="w-3.5 h-3.5"/></button>
+                                                                                        </div>
+                                                                                    ) : (
+                                                                                        <button onClick={()=>{const d=new Date(h.fecha);const s=isNaN(d.getTime())?new Date():d;setEditandoFechaHistorialId(h.id);const yy=s.getFullYear(),mo=String(s.getMonth()+1).padStart(2,'0'),dd=String(s.getDate()).padStart(2,'0');setFechaHistorialTemp(`${yy}-${mo}-${dd}`);}} className="flex items-center gap-1 text-[9px] text-indigo-500 hover:text-indigo-700">
+                                                                                            <Edit2 className="w-2.5 h-2.5"/>{(() => { const d=new Date(h.fecha); return isNaN(d.getTime())?'Sin Fecha':d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
+                                                                                        </button>
+                                                                                    )}
+                                                                                    <div className="space-y-0.5">
+                                                                                        {h.items.map(item=>(
+                                                                                            <div key={item.productoId} className="flex items-center justify-between text-[9px]">
+                                                                                                <span className="text-slate-600 dark:text-slate-400 truncate">{item.nombre}</span>
+                                                                                                <span className="shrink-0 ml-1 font-black text-slate-700 dark:text-slate-300">×{item.cantidad} <span className="text-indigo-600">{formatCurrency(item.precio*item.cantidad)}</span></span>
+                                                                                            </div>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                    {h.fotoFactura && (
+                                                                                        <label className="inline-flex items-center gap-1 text-[8px] text-slate-400 hover:text-indigo-500 cursor-pointer mt-0.5">
+                                                                                            <Camera className="w-2.5 h-2.5"/>Cambiar foto
+                                                                                            <input type="file" accept="image/*" className="hidden" onChange={e=>subirFotoHistorial(h.id,e)}/>
+                                                                                        </label>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Abonos recibidos */}
+                                                                            {(h.abonos??[]).length>0 && (
+                                                                                <div className="space-y-1">
+                                                                                    <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Abonos recibidos</p>
+                                                                                    {(h.abonos??[]).map((a,idx)=>(
+                                                                                        <div key={a.id||idx}>
+                                                                                            {editandoAbonoInfo?.histId===h.id&&(editandoAbonoInfo.abonoId===a.id||editandoAbonoInfo.idx===idx) ? (
+                                                                                                <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/20 p-1.5 rounded-lg">
+                                                                                                    <input type="number" value={editandoAbonoInfo.monto} onChange={e=>setEditandoAbonoInfo(p=>p?{...p,monto:e.target.value}:null)} className="w-16 h-6 text-[10px] rounded border border-indigo-200 bg-white px-1.5 outline-none" autoFocus/>
+                                                                                                    <select value={editandoAbonoInfo.metodo} onChange={e=>setEditandoAbonoInfo(p=>p?{...p,metodo:e.target.value as MetodoPago}:null)} className="h-6 text-[9px] rounded border border-indigo-200 bg-white px-1 outline-none">
+                                                                                                        <option value="efectivo">Efectivo</option><option value="nequi">Nequi</option><option value="transferencia">Cuenta</option><option value="credito">Crédito</option>
+                                                                                                    </select>
+                                                                                                    <button onClick={editarAbono} className="w-5 h-5 rounded bg-emerald-500 text-white flex items-center justify-center"><Check className="w-2.5 h-2.5"/></button>
+                                                                                                    <button onClick={()=>setEditandoAbonoInfo(null)} className="w-5 h-5 rounded bg-slate-200 text-slate-600 flex items-center justify-center"><X className="w-2.5 h-2.5"/></button>
+                                                                                                </div>
+                                                                                            ) : (
+                                                                                                <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg">
+                                                                                                    <div className="flex items-center gap-1.5">
+                                                                                                        <span className={`text-[7px] font-black uppercase px-1 py-0.5 rounded-sm ${metodoBadgeCls[a.metodoPago]??'bg-slate-100 text-slate-600'}`}>{a.metodoPago}</span>
+                                                                                                        <span className="text-[8px] text-slate-500">{new Date(a.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'short'})}</span>
+                                                                                                        <span className="text-[10px] font-black text-emerald-700">+{formatCurrency(a.monto)}</span>
+                                                                                                    </div>
+                                                                                                    <div className="flex items-center gap-0.5">
+                                                                                                        <button onClick={e=>{e.stopPropagation();setEditandoAbonoInfo({histId:h.id,abonoId:a.id,idx,monto:String(a.monto),metodo:a.metodoPago});}} className="w-4 h-4 rounded bg-indigo-50 text-indigo-500 hover:bg-indigo-100 flex items-center justify-center"><Edit2 className="w-2 h-2"/></button>
+                                                                                                        <button onClick={e=>{e.stopPropagation();eliminarAbono(h.id,a.id,idx);}} className="w-4 h-4 rounded bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center"><Trash2 className="w-2 h-2"/></button>
+                                                                                                    </div>
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+
+                                                                            {/* Form abono compacto */}
+                                                                            {abonandoId===h.id ? (
+                                                                                <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-2 space-y-1.5">
+                                                                                    <div className="flex items-center gap-1.5">
+                                                                                        <input type="number" value={montoAbono} onChange={e=>setMontoAbono(e.target.value)} placeholder="Monto" autoFocus className="flex-1 h-7 rounded-lg border border-indigo-200 bg-white dark:bg-slate-800 px-2 text-xs outline-none focus:border-indigo-400"/>
+                                                                                        <button onClick={()=>{setAbonandoId(null);setMontoAbono('');}} className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-500 flex items-center justify-center hover:bg-slate-300"><X className="w-3 h-3"/></button>
+                                                                                    </div>
+                                                                                    <div className="flex gap-1">
+                                                                                        <button onClick={()=>registrarAbono(h.id,'efectivo')} className="flex-1 h-7 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black hover:bg-emerald-200">Efectivo</button>
+                                                                                        <button onClick={()=>registrarAbono(h.id,'nequi')} className="flex-1 h-7 rounded-lg bg-violet-100 text-violet-700 text-[9px] font-black hover:bg-violet-200">Nequi</button>
+                                                                                        <button onClick={()=>registrarAbono(h.id,'transferencia')} className="flex-1 h-7 rounded-lg bg-blue-100 text-blue-700 text-[9px] font-black hover:bg-blue-200">Cuenta</button>
+                                                                                        <button onClick={()=>registrarAbono(h.id,'credito')} className="flex-1 h-7 rounded-lg bg-rose-100 text-rose-700 text-[9px] font-black hover:bg-rose-200">Cred.</button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <button onClick={()=>{setAbonandoId(h.id);setMontoAbono('');}} className="w-full h-7 rounded-xl bg-indigo-600 text-white text-[9px] font-black uppercase hover:bg-indigo-700 flex items-center justify-center gap-1">
+                                                                                    <Plus className="w-3 h-3"/> Registrar abono
+                                                                                </button>
+                                                                            )}
+
+                                                                            {/* Confirmar pago completo */}
+                                                                            <div>
+                                                                                <p className="text-[7px] font-black uppercase tracking-widest text-slate-400 mb-1">Confirmar pago completo · saldo {formatCurrency(saldo)}</p>
+                                                                                <div className="flex gap-1">
+                                                                                    <button onClick={()=>marcarComoPagado(h.id,'efectivo')} className="flex-1 h-7 rounded-lg bg-emerald-500 text-white text-[8px] font-black hover:bg-emerald-600 flex items-center justify-center gap-0.5"><CheckCircle2 className="w-3 h-3"/>Efectivo</button>
+                                                                                    <button onClick={()=>marcarComoPagado(h.id,'nequi')} className="flex-1 h-7 rounded-lg bg-violet-500 text-white text-[8px] font-black hover:bg-violet-600 flex items-center justify-center gap-0.5"><CheckCircle2 className="w-3 h-3"/>Nequi</button>
+                                                                                    <button onClick={()=>marcarComoPagado(h.id,'transferencia')} className="flex-1 h-7 rounded-lg bg-blue-500 text-white text-[8px] font-black hover:bg-blue-600 flex items-center justify-center gap-0.5"><CheckCircle2 className="w-3 h-3"/>Cuenta</button>
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* WA + Nota + Eliminar */}
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                {clienteObj && (
+                                                                                    <button onClick={()=>enviarWhatsApp(clienteObj,saldo,creditosPendientes.filter(t=>t.clienteId===h.clienteId))}
+                                                                                        title={mensajesWA[clienteObj.id]?`Último: ${new Date(mensajesWA[clienteObj.id]).toLocaleDateString('es-CO')}`:'Cobro por WhatsApp'}
+                                                                                        className="flex-1 h-7 rounded-xl bg-[#25D366] text-white text-[9px] font-black uppercase hover:bg-[#1da851] flex items-center justify-center gap-1">
+                                                                                        <MessageCircle className="w-3 h-3"/>WA
+                                                                                    </button>
+                                                                                )}
+                                                                                {editandoNotaClienteId===h.id ? (
+                                                                                    <div className="flex-1 flex items-center gap-1">
+                                                                                        <input value={notaTemp} onChange={e=>setNotaTemp(e.target.value)} placeholder="Nota..." autoFocus className="flex-1 h-7 rounded-lg border border-indigo-200 bg-white px-2 text-[9px] outline-none"/>
+                                                                                        <button onClick={()=>guardarNotaCliente(h.id,notaTemp)} className="w-6 h-6 rounded bg-emerald-500 text-white flex items-center justify-center"><Check className="w-3 h-3"/></button>
+                                                                                        <button onClick={()=>setEditandoNotaClienteId(null)} className="w-6 h-6 rounded bg-slate-200 text-slate-600 flex items-center justify-center"><X className="w-3 h-3"/></button>
                                                                                     </div>
                                                                                 ) : (
-                                                                                    <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg">
-                                                                                        <div className="flex items-center gap-1.5">
-                                                                                            <span className={`text-[7px] font-black uppercase px-1 py-0.5 rounded-sm ${metodoBadgeCls[a.metodoPago]??'bg-slate-100 text-slate-600'}`}>{a.metodoPago}</span>
-                                                                                            <span className="text-[8px] text-slate-500">{new Date(a.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'short'})}</span>
-                                                                                            <span className="text-[10px] font-black text-emerald-700">+{formatCurrency(a.monto)}</span>
-                                                                                        </div>
-                                                                                        <div className="flex items-center gap-0.5">
-                                                                                            <button onClick={e=>{e.stopPropagation();setEditandoAbonoInfo({histId:h.id,abonoId:a.id,idx,monto:String(a.monto),metodo:a.metodoPago});}} className="w-4 h-4 rounded bg-indigo-50 text-indigo-500 hover:bg-indigo-100 flex items-center justify-center"><Edit2 className="w-2 h-2"/></button>
-                                                                                            <button onClick={e=>{e.stopPropagation();eliminarAbono(h.id,a.id,idx);}} className="w-4 h-4 rounded bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center"><Trash2 className="w-2 h-2"/></button>
-                                                                                        </div>
-                                                                                    </div>
+                                                                                    <button onClick={()=>{setEditandoNotaClienteId(h.id);setNotaTemp(notasClientes[h.id]||'');}} className="flex-1 h-7 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[9px] font-black hover:bg-slate-200 flex items-center justify-center gap-1 truncate">
+                                                                                        <StickyNote className="w-3 h-3 shrink-0"/><span className="truncate">{notasClientes[h.id]||'Nota'}</span>
+                                                                                    </button>
                                                                                 )}
-                                                                            </div>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-
-                                                                {/* Form abono compacto */}
-                                                                {!pagado && (
-                                                                    abonandoId===h.id ? (
-                                                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-2 space-y-1.5">
-                                                                            <div className="flex items-center gap-1.5">
-                                                                                <input type="number" value={montoAbono} onChange={e=>setMontoAbono(e.target.value)} placeholder="Monto" autoFocus
-                                                                                    className="flex-1 h-7 rounded-lg border border-indigo-200 bg-white dark:bg-slate-800 px-2 text-xs outline-none focus:border-indigo-400"/>
-                                                                                <button onClick={()=>{setAbonandoId(null);setMontoAbono('');}} className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-500 flex items-center justify-center hover:bg-slate-300"><X className="w-3 h-3"/></button>
-                                                                            </div>
-                                                                            <div className="flex gap-1">
-                                                                                <button onClick={()=>registrarAbono(h.id,'efectivo')} className="flex-1 h-7 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black hover:bg-emerald-200">Efectivo</button>
-                                                                                <button onClick={()=>registrarAbono(h.id,'nequi')} className="flex-1 h-7 rounded-lg bg-violet-100 text-violet-700 text-[9px] font-black hover:bg-violet-200">Nequi</button>
-                                                                                <button onClick={()=>registrarAbono(h.id,'transferencia')} className="flex-1 h-7 rounded-lg bg-blue-100 text-blue-700 text-[9px] font-black hover:bg-blue-200">Cuenta</button>
-                                                                                <button onClick={()=>registrarAbono(h.id,'credito')} className="flex-1 h-7 rounded-lg bg-rose-100 text-rose-700 text-[9px] font-black hover:bg-rose-200">Cred.</button>
+                                                                                <button onClick={()=>eliminarHistorial(h.id)} className="w-7 h-7 rounded-xl border border-dashed border-red-300 text-red-500 hover:bg-red-50 flex items-center justify-center" title="Eliminar ticket">
+                                                                                    <Trash2 className="w-3 h-3"/>
+                                                                                </button>
                                                                             </div>
                                                                         </div>
-                                                                    ) : (
-                                                                        <button onClick={()=>{setAbonandoId(h.id);setMontoAbono('');}} className="w-full h-7 rounded-xl bg-indigo-600 text-white text-[9px] font-black uppercase hover:bg-indigo-700 flex items-center justify-center gap-1">
-                                                                            <Plus className="w-3 h-3"/> Registrar abono
-                                                                        </button>
-                                                                    )
-                                                                )}
-
-                                                                {/* Acciones: WA + nota + eliminar */}
-                                                                <div className="flex items-center gap-1.5">
-                                                                    {clienteObj && !pagado && (
-                                                                        <button onClick={()=>enviarWhatsApp(clienteObj,saldo,creditosAll.filter(t=>t.clienteId===h.clienteId&&(t.total-(t.abonos??[]).reduce((s,a)=>s+a.monto,0))>0))}
-                                                                            title={mensajesWA[clienteObj.id]?`Último: ${new Date(mensajesWA[clienteObj.id]).toLocaleDateString('es-CO')}`:'Cobro por WhatsApp'}
-                                                                            className="flex-1 h-7 rounded-xl bg-[#25D366] text-white text-[9px] font-black uppercase hover:bg-[#1da851] flex items-center justify-center gap-1">
-                                                                            <MessageCircle className="w-3 h-3"/>WA
-                                                                        </button>
                                                                     )}
-                                                                    {editandoNotaClienteId===h.id ? (
-                                                                        <div className="flex-1 flex items-center gap-1">
-                                                                            <input value={notaTemp} onChange={e=>setNotaTemp(e.target.value)} placeholder="Nota..." autoFocus className="flex-1 h-7 rounded-lg border border-indigo-200 bg-white px-2 text-[9px] outline-none"/>
-                                                                            <button onClick={()=>guardarNotaCliente(h.id,notaTemp)} className="w-6 h-6 rounded bg-emerald-500 text-white flex items-center justify-center"><Check className="w-3 h-3"/></button>
-                                                                            <button onClick={()=>setEditandoNotaClienteId(null)} className="w-6 h-6 rounded bg-slate-200 text-slate-600 flex items-center justify-center"><X className="w-3 h-3"/></button>
-                                                                        </div>
-                                                                    ) : (
-                                                                        <button onClick={()=>{setEditandoNotaClienteId(h.id);setNotaTemp(notasClientes[h.id]||'');}} className="flex-1 h-7 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[9px] font-black hover:bg-slate-200 flex items-center justify-center gap-1 truncate">
-                                                                            <StickyNote className="w-3 h-3 shrink-0"/><span className="truncate">{notasClientes[h.id]||'Nota'}</span>
-                                                                        </button>
-                                                                    )}
-                                                                    <button onClick={()=>eliminarHistorial(h.id)} className="w-7 h-7 rounded-xl border border-dashed border-red-300 text-red-500 hover:bg-red-50 flex items-center justify-center" title="Eliminar ticket">
-                                                                        <Trash2 className="w-3 h-3"/>
-                                                                    </button>
                                                                 </div>
-
-                                                            </div>
-                                                        )}
+                                                            );
+                                                        })}
                                                     </div>
-                                                );
-                                            })}
-                                        </div>
-                                    )}
+                                                )}
+                                            </>
+                                        ) : (
+                                            /* ── Ficha: Pagados ── */
+                                            <>
+                                                {ticketsPagados.length === 0 ? (
+                                                    <div className="py-8 flex flex-col items-center gap-2 opacity-50">
+                                                        <Receipt className="w-8 h-8 text-slate-300"/>
+                                                        <p className="text-[10px] text-slate-400 font-black uppercase">Sin tickets pagados aún</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {ticketsPagados.map(h => {
+                                                            const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                                            const metodoLabel: Record<string,string> = { efectivo:'Efectivo', nequi:'Nequi', transferencia:'Cuenta', credito:'Crédito' };
+                                                            const metodoCls: Record<string,string> = { efectivo:'bg-emerald-100 text-emerald-700', nequi:'bg-violet-100 text-violet-700', transferencia:'bg-blue-100 text-blue-700', credito:'bg-indigo-100 text-indigo-700' };
+                                                            return (
+                                                                <div key={h.id} className="rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/30 dark:bg-emerald-950/10 p-3 flex items-center justify-between gap-2">
+                                                                    <div className="min-w-0">
+                                                                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                                                                            <span className="text-[11px] font-black text-slate-700 dark:text-slate-200">
+                                                                                {(() => { const d=new Date(h.fecha); return isNaN(d.getTime())?'Sin fecha':d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
+                                                                            </span>
+                                                                            <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">✓ Pagado</span>
+                                                                            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${metodoCls[h.metodoPago??'efectivo']??'bg-slate-100 text-slate-600'}`}>
+                                                                                {metodoLabel[h.metodoPago??'efectivo']??h.metodoPago}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="text-[9px] text-slate-500 truncate">
+                                                                            {h.items.slice(0,3).map(i=>`${i.nombre}×${i.cantidad}`).join(' · ')}{h.items.length>3?` +${h.items.length-3} más`:''}
+                                                                        </p>
+                                                                        {h.metodoPago === 'credito' && abonado > 0 && (
+                                                                            <p className="text-[8px] text-emerald-600 mt-0.5">Abonado: {formatCurrency(abonado)}</p>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="text-right shrink-0">
+                                                                        <p className="text-[12px] font-black text-slate-700 dark:text-slate-200 tabular-nums">{formatCurrency(h.total)}</p>
+                                                                        {h.fotoFactura && (
+                                                                            <button onClick={()=>window.open(h.fotoFactura,'_blank')} className="mt-1 w-8 h-8 rounded-lg overflow-hidden border border-emerald-200 hover:opacity-80 block ml-auto">
+                                                                                <img src={h.fotoFactura} alt="Foto" className="w-full h-full object-cover"/>
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             );
                         })()}
@@ -2044,6 +2127,37 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             return formatCurrency(tot - ab);
                                         })()}</span>
                                     </div>
+                                    {/* Confirmar pago de créditos seleccionados */}
+                                    {facturasSeleccionadas.size > 0 && (() => {
+                                        const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id) && p.metodoPago === 'credito');
+                                        const saldoTotal = sel.reduce((s, h) => { const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0); return s + Math.max(0, h.total - ab); }, 0);
+                                        if (sel.length === 0 || saldoTotal <= 0) return null;
+                                        const confirmarPago = async (metodo: MetodoPago) => {
+                                            for (const h of sel) {
+                                                const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                                const sd = h.total - ab;
+                                                if (sd > 0) await registrarAbono(h.id, metodo, sd);
+                                            }
+                                            setFacturasSeleccionadas(new Set());
+                                            toast.success(`✓ ${sel.length} crédito(s) confirmados como pagados`);
+                                        };
+                                        return (
+                                            <div className="mt-2 pt-2 border-t border-white/10 space-y-1.5">
+                                                <p className="text-[8px] font-black uppercase tracking-widest text-white/60">Confirmar pago · {sel.length} crédito(s) · {formatCurrency(saldoTotal)}</p>
+                                                <div className="flex gap-1.5">
+                                                    <button onClick={() => confirmarPago('efectivo')} className="flex-1 h-8 rounded-xl bg-emerald-500 text-white text-[8px] font-black uppercase hover:bg-emerald-600 flex items-center justify-center gap-1">
+                                                        <CheckCircle2 className="w-3 h-3"/>Efectivo
+                                                    </button>
+                                                    <button onClick={() => confirmarPago('nequi')} className="flex-1 h-8 rounded-xl bg-violet-500 text-white text-[8px] font-black uppercase hover:bg-violet-600 flex items-center justify-center gap-1">
+                                                        <CheckCircle2 className="w-3 h-3"/>Nequi
+                                                    </button>
+                                                    <button onClick={() => confirmarPago('transferencia')} className="flex-1 h-8 rounded-xl bg-blue-500 text-white text-[8px] font-black uppercase hover:bg-blue-600 flex items-center justify-center gap-1">
+                                                        <CheckCircle2 className="w-3 h-3"/>Cuenta
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
                         )}
