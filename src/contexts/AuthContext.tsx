@@ -2,7 +2,7 @@ import { generateUUID } from '@/lib/safe-utils';
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import type { Usuario, UserRole, Permission } from '@/types';
 import { ROLE_PERMISSIONS } from '@/types';
-import { USUARIOS_PRUEBA } from '@/lib/seed-data';
+import { USUARIOS_PRUEBA, EMAILS_USUARIOS_LEGACY } from '@/lib/seed-data';
 import { supabase } from '@/lib/supabase';
 import { firestore } from '@/lib/firebase';
 import { collection, getDocs, doc as fbDoc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -53,14 +53,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // 1. Carga instantánea desde localStorage
       const savedStr = localStorage.getItem('pricecontrol_local_user_list');
-      const savedLocales: Usuario[] = savedStr ? JSON.parse(savedStr) : [];
-      const testEmails = ['admin@example.com', 'gerente@example.com', 'comprador@example.com', 'vendedor@example.com'];
-      const isOnlyTest = savedLocales.length > 0 && savedLocales.every((u: any) => testEmails.includes(u.email));
-      let baseList: Usuario[] = (!savedStr || savedLocales.length === 0 || isOnlyTest)
-        ? [...USUARIOS_PRUEBA]
-        : [...savedLocales];
+      let savedLocales: Usuario[] = [];
+      try {
+        savedLocales = savedStr ? JSON.parse(savedStr) : [];
+      } catch { savedLocales = []; }
 
-      // Asegurar que los usuarios oficiales siempre estén presentes
+      // Limpiar usuarios legacy/prueba que no deben estar en el sistema real
+      const legacyEmails = new Set(EMAILS_USUARIOS_LEGACY.map(e => e.toLowerCase()));
+      let baseList: Usuario[] = savedLocales.filter(
+        (u: Usuario) => !legacyEmails.has((u.email || '').toLowerCase())
+      );
+
+      // Si después de limpiar no quedan usuarios reales, usar la lista base mínima
+      if (baseList.length === 0) baseList = [...USUARIOS_PRUEBA];
+
+      // Asegurar que los usuarios base siempre estén presentes
       USUARIOS_PRUEBA.forEach(up => {
         if (!baseList.some(u => u.email.toLowerCase() === up.email.toLowerCase())) baseList.push(up);
       });
@@ -72,22 +79,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (firestore) {
         try {
           const snapshot = await getDocs(collection(firestore, 'usuarios_sistema'));
-          const cloudUsers: Usuario[] = snapshot.docs.map(d => d.data() as Usuario);
+          // Filtrar usuarios legacy de la nube también
+          const cloudUsers: Usuario[] = snapshot.docs
+            .map(d => d.data() as Usuario)
+            .filter(u => !legacyEmails.has((u.email || '').toLowerCase()));
 
           // Mezcla: nube gana por email, local agrega los que no están en nube
           const mergedMap = new Map<string, Usuario>();
           baseList.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
           cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
-          // Los usuarios oficiales siempre presentes
+          // Los usuarios base siempre presentes
           USUARIOS_PRUEBA.forEach(up => {
             if (!mergedMap.has(up.email.toLowerCase())) mergedMap.set(up.email.toLowerCase(), up);
           });
           const merged = Array.from(mergedMap.values());
 
           // Migración: subir a Firestore los usuarios locales que no están en nube
-          const cloudEmails = new Set(cloudUsers.map(u => u.email.toLowerCase()));
+          const cloudEmailsAll = new Set(snapshot.docs.map(d => (d.data().email || '').toLowerCase()));
           const toMigrate = baseList.filter(u =>
-            !cloudEmails.has(u.email.toLowerCase()) && !testEmails.includes(u.email)
+            !cloudEmailsAll.has(u.email.toLowerCase()) && !legacyEmails.has(u.email.toLowerCase())
           );
           for (const u of toMigrate) {
             await setDoc(fbDoc(firestore, 'usuarios_sistema', u.id), toFirestoreDoc(u));
