@@ -6,7 +6,8 @@ import {
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
     Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon,
-    Smartphone, CreditCard, PlusCircle, ChevronRight, Folder, Building2, Edit2
+    Smartphone, CreditCard, PlusCircle, ChevronRight, Folder, Building2, Edit2,
+    MessageCircle, StickyNote, Send, ChevronLeft, Star
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -392,6 +393,85 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // Categoría expandida para el estilo acordeón
     const [categoriaExpandida, setCategoriaExpandida] = useState<string | null>(null);
 
+    // Acordeón de tickets de crédito en panel izquierdo
+    const [expandedCreditos, setExpandedCreditos] = useState<Set<string>>(new Set());
+    const toggleCreditoExpand = (id: string) => setExpandedCreditos(prev => {
+        const s = new Set(prev);
+        s.has(id) ? s.delete(id) : s.add(id);
+        return s;
+    });
+
+    // Edición inline de abono existente
+    const [editandoAbonoInfo, setEditandoAbonoInfo] = useState<{
+        histId: string; abonoId?: string; idx: number; monto: string; metodo: MetodoPago;
+    } | null>(null);
+
+    const editarAbono = async () => {
+        if (!editandoAbonoInfo) return;
+        const { histId, abonoId, idx, monto: montoStr, metodo } = editandoAbonoInfo;
+        const monto = parseFloat(montoStr);
+        if (isNaN(monto) || monto <= 0) return toast.error('Monto inválido');
+        if (updateCreditoCliente) {
+            const esCentral = creditosClientes?.find(c => c.id === histId);
+            if (esCentral) {
+                try {
+                    const nuevosPagos = (esCentral.pagos || []).map((p: any, i: number) =>
+                        (abonoId ? p.id === abonoId : i === idx) ? { ...p, monto, metodoPago: metodo } : p
+                    );
+                    await updateCreditoCliente(histId, { pagos: nuevosPagos });
+                } catch (e) { console.error('Error editando abono central', e); }
+            }
+        }
+        const nuevos = historialMayoristas.map(h => {
+            if (h.id !== histId) return h;
+            const abonos = (h.abonos || []).map((a, i) =>
+                (abonoId ? a.id === abonoId : i === idx) ? { ...a, monto, metodoPago: metodo } : a
+            );
+            return { ...h, abonos };
+        });
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        setEditandoAbonoInfo(null);
+        toast.success('Abono actualizado');
+    };
+
+    // WhatsApp cobro
+    const [mensajesWA, setMensajesWA] = useState<Record<string, number>>(() => {
+        try { return JSON.parse(localStorage.getItem('ag_mensajes_wa') || '{}'); } catch { return {}; }
+    });
+    const enviarWhatsApp = (cliente: Cliente, saldo: number, tickets: typeof historialMayoristas) => {
+        const tel = (cliente as any).telefono?.replace(/\D/g, '') || '';
+        const detalles = tickets
+            .map(h => {
+                const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                const sd = h.total - ab;
+                return sd > 0 ? `· ${new Date(h.fecha).toLocaleDateString('es-CO')} — $${sd.toFixed(0)}` : null;
+            })
+            .filter(Boolean)
+            .join('\n');
+        const msg = `Hola ${cliente.nombre}, te recordamos que tienes un saldo pendiente de *$${saldo.toFixed(0)}* con Dulce Placer.\n${detalles}\n\nGracias por tu preferencia 🥐`;
+        const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+        window.open(url, '_blank');
+        const now = Date.now();
+        const nuevo = { ...mensajesWA, [cliente.id]: now };
+        setMensajesWA(nuevo);
+        localStorage.setItem('ag_mensajes_wa', JSON.stringify(nuevo));
+    };
+
+    // Notas por cliente
+    const [notasClientes, setNotasClientes] = useState<Record<string, string>>(() => {
+        try { return JSON.parse(localStorage.getItem('ag_notas_clientes') || '{}'); } catch { return {}; }
+    });
+    const [editandoNotaClienteId, setEditandoNotaClienteId] = useState<string | null>(null);
+    const [notaTemp, setNotaTemp] = useState('');
+    const guardarNotaCliente = (clienteId: string, nota: string) => {
+        const nuevo = { ...notasClientes, [clienteId]: nota };
+        setNotasClientes(nuevo);
+        localStorage.setItem('ag_notas_clientes', JSON.stringify(nuevo));
+        setEditandoNotaClienteId(null);
+        toast.success('Nota guardada');
+    };
+
     const registrarAbono = async (historialId: string, metodo: MetodoPago, montoEspecifico?: number) => {
         const monto = montoEspecifico ?? parseFloat(montoAbono);
         if (isNaN(monto) || monto <= 0) return toast.error('Monto inválido');
@@ -744,12 +824,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 };
             })
             .filter((d): d is NonNullable<typeof d> => d !== null)
-            .filter(d => !soloViables || d.viabilidad !== 'inviable')
             .sort((a, b) => {
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, soloViables, preciosOverride]);
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, preciosOverride]);
 
     // Stats del resumen
     const stats = useMemo(() => {
@@ -1041,17 +1120,19 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     {creditosAll.length === 0 ? (
                                         <p className="text-[10px] text-slate-400 text-center py-2">Sin ventas a crédito registradas</p>
                                     ) : (
-                                        <div className="space-y-1.5">
+                                        <div className="space-y-2">
                                             {creditosAll.map(h => {
                                                 const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                                                 const saldo = h.total - abonado;
                                                 const pagado = saldo <= 0;
+                                                const expanded = expandedCreditos.has(h.id);
+                                                const clienteObj = allClientes.find(c => c.id === h.clienteId);
                                                 return (
-                                                    <div key={h.id} className={`rounded-xl px-3 py-2 flex items-center gap-3 ${pagado ? 'bg-emerald-50 dark:bg-emerald-900/20' : 'bg-white dark:bg-slate-900'}`}>
-                                                        {/* Checkbox de selección */}
-                                                        {!pagado && (
-                                                            <div className="shrink-0 flex items-center">
-                                                                <input 
+                                                    <div key={h.id} className={`rounded-2xl border overflow-hidden shadow-sm transition-all ${pagado ? 'border-emerald-200 bg-emerald-50/50 dark:bg-emerald-900/10' : 'border-indigo-100 bg-white dark:bg-slate-900 dark:border-slate-700'}`}>
+                                                        {/* ── Cabecera siempre visible ── */}
+                                                        <div className="flex items-center gap-2 px-3 py-2.5">
+                                                            {!pagado && (
+                                                                <input
                                                                     type="checkbox"
                                                                     checked={ticketsSeleccionados.has(h.id)}
                                                                     onChange={(e) => {
@@ -1060,112 +1141,194 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                         else newSet.delete(h.id);
                                                                         setTicketsSeleccionados(newSet);
                                                                     }}
-                                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer"
+                                                                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shrink-0"
                                                                 />
-                                                            </div>
-                                                        )}
-                                                        <div className="flex-1 flex flex-col gap-1">
-                                                            <div className="flex items-start justify-between">
-                                                                <div>
+                                                            )}
+                                                            <button className="flex-1 flex items-center gap-2 text-left" onClick={() => toggleCreditoExpand(h.id)}>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-[11px] font-black text-slate-800 dark:text-white truncate">
+                                                                        {(() => {
+                                                                            const d = new Date(h.fecha);
+                                                                            return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+                                                                        })()}
+                                                                        <span className="ml-1.5 text-[10px] font-medium text-slate-400">· {h.items.length} prod.</span>
+                                                                    </p>
+                                                                    <p className="text-[10px] font-bold text-slate-500">{formatCurrency(h.total)}</p>
+                                                                </div>
+                                                                {pagado ? (
+                                                                    <span className="shrink-0 text-[9px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full uppercase">✓ Pagado</span>
+                                                                ) : (
+                                                                    <span className="shrink-0 text-[9px] font-black text-rose-600 bg-rose-100 px-2 py-0.5 rounded-full">Debe {formatCurrency(saldo)}</span>
+                                                                )}
+                                                                <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform duration-200 ${expanded ? 'rotate-180 text-indigo-500' : ''}`} />
+                                                            </button>
+                                                        </div>
+
+                                                        {/* ── Detalle expandible ── */}
+                                                        {expanded && (
+                                                            <div className="border-t border-slate-100 dark:border-slate-700 px-3 pt-2 pb-3 space-y-3">
+
+                                                                {/* Fecha editable */}
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Fecha</span>
                                                                     {editandoFechaHistorialId === h.id ? (
                                                                         <div className="flex items-center gap-1">
                                                                             <Input type="date" value={fechaHistorialTemp} onChange={e => setFechaHistorialTemp(e.target.value)} className="h-6 w-32 text-[10px] bg-white dark:bg-slate-900" />
-                                                                            <button onClick={() => guardarFechaHistorial(h.id)} className="text-emerald-600 hover:text-emerald-700"><CheckCircle2 className="w-3 h-3" /></button>
-                                                                            <button onClick={() => setEditandoFechaHistorialId(null)} className="text-rose-600 hover:text-rose-700"><X className="w-3 h-3" /></button>
+                                                                            <button onClick={() => guardarFechaHistorial(h.id)} className="text-emerald-600 hover:text-emerald-700"><CheckCircle2 className="w-3.5 h-3.5" /></button>
+                                                                            <button onClick={() => setEditandoFechaHistorialId(null)} className="text-rose-500 hover:text-rose-700"><X className="w-3.5 h-3.5" /></button>
                                                                         </div>
                                                                     ) : (
-                                                                        <div className="flex items-center gap-1 group/date cursor-pointer">
-                                                                            <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
-                                                                                {(() => {
-                                                                                    const d = new Date(h.fecha);
-                                                                                    return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
-                                                                                })()}
-                                                                            </p>
-                                                                            <button onClick={() => { 
-                                                                                const d = new Date(h.fecha);
-                                                                                const safeDate = isNaN(d.getTime()) ? new Date() : d;
-                                                                                setEditandoFechaHistorialId(h.id);
-                                                                                const yy = safeDate.getFullYear(), mo = String(safeDate.getMonth()+1).padStart(2,'0'), dd = String(safeDate.getDate()).padStart(2,'0');
-                                                                                setFechaHistorialTemp(`${yy}-${mo}-${dd}`);
-                                                                            }} className="text-indigo-600 hover:text-indigo-800 p-1">
-                                                                                <Edit2 className="w-3 h-3" />
-                                                                            </button>
-                                                                        </div>
+                                                                        <button onClick={() => {
+                                                                            const d = new Date(h.fecha);
+                                                                            const safeDate = isNaN(d.getTime()) ? new Date() : d;
+                                                                            setEditandoFechaHistorialId(h.id);
+                                                                            const yy = safeDate.getFullYear(), mo = String(safeDate.getMonth()+1).padStart(2,'0'), dd = String(safeDate.getDate()).padStart(2,'0');
+                                                                            setFechaHistorialTemp(`${yy}-${mo}-${dd}`);
+                                                                        }} className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 hover:text-indigo-800">
+                                                                            <Edit2 className="w-3 h-3" />
+                                                                            {(() => { const d = new Date(h.fecha); return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }); })()}
+                                                                        </button>
                                                                     )}
-                                                                    <p className="text-[9px] text-slate-400">{h.items.length} prod. · Total: {formatCurrency(h.total)}</p>
-                                                                    {abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">Abonado: {formatCurrency(abonado)}</p>}
-                                                                    {/* Lista de abonos individuales */}
-                                                                    {(h.abonos ?? []).length > 0 && (
-                                                                        <div className="mt-1 space-y-0.5">
-                                                                            {(h.abonos ?? []).map((a, idx) => (
-                                                                                <div key={a.id || idx} className="text-[9px] text-slate-600 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-1 rounded">
-                                                                                    <span>· {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} — <strong className="text-emerald-600">{formatCurrency(a.monto)}</strong> ({a.metodoPago})</span>
-                                                                                    <button onClick={(e) => { e.stopPropagation(); eliminarAbono(h.id, a.id, idx); }} className="text-rose-500 hover:text-rose-700 p-1 rounded-sm bg-rose-50 hover:bg-rose-100" title="Eliminar este abono">
-                                                                                        <Trash2 className="w-3 h-3" />
-                                                                                    </button>
-                                                                                </div>
-                                                                            ))}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-
-                                                                <div className="flex flex-col items-end gap-1">
-                                                                    <div className="flex items-center gap-1">
+                                                                    {/* Foto */}
+                                                                    <div className="ml-auto flex items-center gap-1">
                                                                         {h.fotoFactura && (
-                                                                            <button onClick={() => window.open(h.fotoFactura, '_blank')} className="w-6 h-6 rounded flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100" title="Ver foto">
+                                                                            <button onClick={() => window.open(h.fotoFactura, '_blank')} className="w-6 h-6 rounded-lg flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100" title="Ver foto">
                                                                                 <ImageIcon className="w-3 h-3" />
                                                                             </button>
                                                                         )}
-                                                                        <label className="w-6 h-6 rounded flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-slate-200 cursor-pointer" title="Subir evidencia">
+                                                                        <label className="w-6 h-6 rounded-lg flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-slate-200 cursor-pointer" title="Subir evidencia">
                                                                             <Camera className="w-3 h-3" />
                                                                             <input type="file" accept="image/*" className="hidden" onChange={(e) => subirFotoHistorial(h.id, e)} />
                                                                         </label>
                                                                     </div>
                                                                 </div>
-                                                            </div>
 
-                                                            <div className="flex items-center gap-2 shrink-0 mt-1">
-                                                                {pagado ? (
-                                                                    <span className="text-[9px] font-black text-emerald-600 uppercase">✓ Pagado</span>
-                                                                ) : (
-                                                                    <>
-                                                                        <p className="text-sm font-black text-rose-600 tabular-nums">Debe: {formatCurrency(saldo)}</p>
+                                                                {/* Abonos */}
+                                                                {(h.abonos ?? []).length > 0 && (
+                                                                    <div className="space-y-1">
+                                                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Abonos</p>
+                                                                        {(h.abonos ?? []).map((a, idx) => (
+                                                                            <div key={a.id || idx}>
+                                                                                {editandoAbonoInfo?.histId === h.id && (editandoAbonoInfo.abonoId === a.id || editandoAbonoInfo.idx === idx) ? (
+                                                                                    <div className="flex items-center gap-1 bg-indigo-50 dark:bg-indigo-900/20 p-1.5 rounded-lg">
+                                                                                        <input
+                                                                                            type="number"
+                                                                                            value={editandoAbonoInfo.monto}
+                                                                                            onChange={e => setEditandoAbonoInfo(prev => prev ? { ...prev, monto: e.target.value } : null)}
+                                                                                            className="w-20 h-6 text-[10px] rounded border border-indigo-200 bg-white px-1.5 outline-none"
+                                                                                            autoFocus
+                                                                                        />
+                                                                                        <select
+                                                                                            value={editandoAbonoInfo.metodo}
+                                                                                            onChange={e => setEditandoAbonoInfo(prev => prev ? { ...prev, metodo: e.target.value as MetodoPago } : null)}
+                                                                                            className="h-6 text-[9px] rounded border border-indigo-200 bg-white px-1 outline-none"
+                                                                                        >
+                                                                                            <option value="efectivo">Efectivo</option>
+                                                                                            <option value="nequi">Nequi</option>
+                                                                                            <option value="transferencia">Cuenta</option>
+                                                                                            <option value="credito">Crédito</option>
+                                                                                        </select>
+                                                                                        <button onClick={editarAbono} className="w-6 h-6 rounded bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600"><Check className="w-3 h-3" /></button>
+                                                                                        <button onClick={() => setEditandoAbonoInfo(null)} className="w-6 h-6 rounded bg-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-300"><X className="w-3 h-3" /></button>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 px-2 py-1 rounded-lg">
+                                                                                        <div className="flex items-center gap-1.5">
+                                                                                            <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-sm ${{ efectivo: 'bg-emerald-100 text-emerald-700', nequi: 'bg-violet-100 text-violet-700', transferencia: 'bg-blue-100 text-blue-700', credito: 'bg-rose-100 text-rose-700' }[a.metodoPago] ?? 'bg-slate-100 text-slate-600'}`}>{a.metodoPago}</span>
+                                                                                            <span className="text-[9px] text-slate-500">{new Date(a.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}</span>
+                                                                                            <span className="text-[10px] font-black text-emerald-600">+{formatCurrency(a.monto)}</span>
+                                                                                        </div>
+                                                                                        <div className="flex items-center gap-0.5">
+                                                                                            <button onClick={(e) => { e.stopPropagation(); setEditandoAbonoInfo({ histId: h.id, abonoId: a.id, idx, monto: String(a.monto), metodo: a.metodoPago }); }} className="w-5 h-5 rounded flex items-center justify-center bg-indigo-50 text-indigo-500 hover:bg-indigo-100" title="Editar abono">
+                                                                                                <Edit2 className="w-2.5 h-2.5" />
+                                                                                            </button>
+                                                                                            <button onClick={(e) => { e.stopPropagation(); eliminarAbono(h.id, a.id, idx); }} className="w-5 h-5 rounded flex items-center justify-center bg-rose-50 text-rose-500 hover:bg-rose-100" title="Eliminar abono">
+                                                                                                <Trash2 className="w-2.5 h-2.5" />
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Agregar abono */}
+                                                                {!pagado && (
+                                                                    <div>
                                                                         {abonandoId === h.id ? (
-                                                                            <div className="flex items-center gap-1">
+                                                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-2 space-y-2">
                                                                                 <Input
                                                                                     type="number"
                                                                                     value={montoAbono}
                                                                                     onChange={e => setMontoAbono(e.target.value)}
-                                                                                    placeholder="Monto"
-                                                                                    className="w-20 h-7 text-xs rounded-lg bg-white dark:bg-slate-900 border-slate-300"
+                                                                                    placeholder="Monto del abono"
+                                                                                    className="h-8 text-sm bg-white dark:bg-slate-900"
                                                                                     autoFocus
                                                                                 />
-                                                                                <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-7 px-2 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black hover:bg-emerald-200">✓ Efvo</button>
-                                                                                <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-7 px-2 rounded-lg bg-violet-100 text-violet-700 text-[9px] font-black hover:bg-violet-200">Nequi</button>
-                                                                                <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center hover:bg-slate-200">
-                                                                                    <X className="w-3 h-3 text-slate-500" />
-                                                                                </button>
+                                                                                <div className="grid grid-cols-2 gap-1.5">
+                                                                                    <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-8 rounded-lg bg-emerald-100 text-emerald-700 text-[10px] font-black hover:bg-emerald-200 flex items-center justify-center gap-1"><Banknote className="w-3 h-3" />Efectivo</button>
+                                                                                    <button onClick={() => registrarAbono(h.id, 'nequi')} className="h-8 rounded-lg bg-violet-100 text-violet-700 text-[10px] font-black hover:bg-violet-200 flex items-center justify-center gap-1"><Smartphone className="w-3 h-3" />Nequi</button>
+                                                                                    <button onClick={() => registrarAbono(h.id, 'transferencia')} className="h-8 rounded-lg bg-blue-100 text-blue-700 text-[10px] font-black hover:bg-blue-200 flex items-center justify-center gap-1"><CreditCard className="w-3 h-3" />Cuenta</button>
+                                                                                    <button onClick={() => registrarAbono(h.id, 'credito')} className="h-8 rounded-lg bg-rose-100 text-rose-700 text-[10px] font-black hover:bg-rose-200 flex items-center justify-center gap-1"><Receipt className="w-3 h-3" />Crédito</button>
+                                                                                </div>
+                                                                                <button onClick={() => { setAbonandoId(null); setMontoAbono(''); }} className="w-full h-7 rounded-lg bg-slate-100 text-slate-500 text-[9px] font-black uppercase hover:bg-slate-200">Cancelar</button>
                                                                             </div>
                                                                         ) : (
-                                                                            <button
-                                                                                onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }}
-                                                                                className="h-7 px-3 rounded-xl bg-rose-100 text-rose-700 text-[9px] font-black uppercase hover:bg-rose-200 transition-colors"
-                                                                            >
-                                                                                + Abono
+                                                                            <button onClick={() => { setAbonandoId(h.id); setMontoAbono(''); }} className="w-full h-8 rounded-xl bg-indigo-600 text-white text-[10px] font-black uppercase hover:bg-indigo-700 transition-colors flex items-center justify-center gap-1.5">
+                                                                                <Plus className="w-3.5 h-3.5" /> Agregar abono
                                                                             </button>
                                                                         )}
-                                                                    </>
+                                                                    </div>
                                                                 )}
+
+                                                                {/* WhatsApp cobro + nota */}
+                                                                <div className="flex items-center gap-2">
+                                                                    {clienteObj && !pagado && (
+                                                                        <button
+                                                                            onClick={() => enviarWhatsApp(clienteObj, saldo, creditosAll.filter(t => t.clienteId === h.clienteId && (t.total - (t.abonos ?? []).reduce((s,a)=>s+a.monto,0)) > 0))}
+                                                                            className="flex-1 h-8 rounded-xl bg-[#25D366] text-white text-[10px] font-black uppercase hover:bg-[#1da851] transition-colors flex items-center justify-center gap-1.5"
+                                                                            title={mensajesWA[clienteObj.id] ? `Último: ${new Date(mensajesWA[clienteObj.id]).toLocaleDateString('es-CO')}` : 'Enviar cobro por WhatsApp'}
+                                                                        >
+                                                                            <MessageCircle className="w-3.5 h-3.5" />
+                                                                            WhatsApp
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => eliminarHistorial(h.id)}
+                                                                        className="flex-1 h-8 rounded-xl border border-dashed border-red-300 text-red-500 hover:bg-red-50 text-[10px] font-black uppercase transition-colors flex items-center justify-center gap-1.5"
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                                                                    </button>
+                                                                </div>
+
+                                                                {/* Nota del ticket/cliente */}
+                                                                <div>
+                                                                    {editandoNotaClienteId === h.id ? (
+                                                                        <div className="flex items-start gap-1">
+                                                                            <textarea
+                                                                                value={notaTemp}
+                                                                                onChange={e => setNotaTemp(e.target.value)}
+                                                                                rows={2}
+                                                                                placeholder="Agrega una nota..."
+                                                                                className="flex-1 text-[10px] rounded-lg border border-indigo-200 bg-white dark:bg-slate-900 p-1.5 outline-none resize-none"
+                                                                                autoFocus
+                                                                            />
+                                                                            <div className="flex flex-col gap-1">
+                                                                                <button onClick={() => guardarNotaCliente(h.id, notaTemp)} className="w-6 h-6 rounded bg-emerald-500 text-white flex items-center justify-center hover:bg-emerald-600"><Check className="w-3 h-3" /></button>
+                                                                                <button onClick={() => setEditandoNotaClienteId(null)} className="w-6 h-6 rounded bg-slate-200 text-slate-600 flex items-center justify-center hover:bg-slate-300"><X className="w-3 h-3" /></button>
+                                                                            </div>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button onClick={() => { setEditandoNotaClienteId(h.id); setNotaTemp(notasClientes[h.id] || ''); }} className="w-full flex items-center gap-1.5 text-[9px] text-slate-400 hover:text-indigo-600 py-1 transition-colors">
+                                                                            <StickyNote className="w-3 h-3 shrink-0" />
+                                                                            <span className="truncate">{notasClientes[h.id] || 'Agregar nota...'}</span>
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+
                                                             </div>
-                                                            {/* Botón eliminar ticket — separado y etiquetado, no confundible con los abonos */}
-                                                            <button
-                                                                onClick={() => eliminarHistorial(h.id)}
-                                                                className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-red-300 text-red-500 hover:bg-red-50 text-[9px] font-black uppercase tracking-widest transition-colors"
-                                                                title="Eliminar este ticket completo"
-                                                            >
-                                                                <Trash2 className="w-3 h-3" /> Eliminar ticket completo
-                                                            </button>
-                                                        </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
@@ -1717,16 +1880,49 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                         {new Date(a.fecha).toLocaleDateString('es-CO')}
                                                                                     </span>
                                                                                 </div>
-                                                                                <div className="flex items-center gap-2">
+                                                                                <div className="flex items-center gap-1.5">
                                                                                     <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">
                                                                                         +{formatCurrency(a.monto)}
                                                                                     </span>
+                                                                                    <button onClick={(e) => { e.stopPropagation(); setEditandoAbonoInfo({ histId: h.id, abonoId: a.id, idx, monto: String(a.monto), metodo: a.metodoPago }); }} className="text-indigo-500 hover:text-indigo-700 p-1 rounded-sm bg-indigo-50 hover:bg-indigo-100 transition-all" title="Editar abono">
+                                                                                        <Edit2 className="w-3 h-3" />
+                                                                                    </button>
                                                                                     <button onClick={(e) => { e.stopPropagation(); eliminarAbono(h.id, a.id, idx); }} className="text-rose-500 hover:text-rose-700 p-1 rounded-sm bg-rose-100/50 hover:bg-rose-200 transition-all" title="Eliminar abono">
                                                                                         <Trash2 className="w-3.5 h-3.5" />
                                                                                     </button>
                                                                                 </div>
                                                                             </div>
                                                                         )})}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Modal editar abono (en tab CUENTA) */}
+                                                                {editandoAbonoInfo?.histId === h.id && (
+                                                                    <div className="pl-7 mt-1 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl p-2 space-y-1.5">
+                                                                        <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600">Editar abono</p>
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <input
+                                                                                type="number"
+                                                                                value={editandoAbonoInfo.monto}
+                                                                                onChange={e => setEditandoAbonoInfo(prev => prev ? { ...prev, monto: e.target.value } : null)}
+                                                                                className="flex-1 h-7 text-xs rounded-lg border border-indigo-200 bg-white px-2 outline-none"
+                                                                                autoFocus
+                                                                            />
+                                                                            <select
+                                                                                value={editandoAbonoInfo.metodo}
+                                                                                onChange={e => setEditandoAbonoInfo(prev => prev ? { ...prev, metodo: e.target.value as MetodoPago } : null)}
+                                                                                className="h-7 text-[9px] rounded-lg border border-indigo-200 bg-white px-1 outline-none"
+                                                                            >
+                                                                                <option value="efectivo">Efectivo</option>
+                                                                                <option value="nequi">Nequi</option>
+                                                                                <option value="transferencia">Cuenta</option>
+                                                                                <option value="credito">Crédito</option>
+                                                                            </select>
+                                                                        </div>
+                                                                        <div className="flex gap-1.5">
+                                                                            <button onClick={editarAbono} className="flex-1 h-7 rounded-lg bg-emerald-500 text-white text-[9px] font-black hover:bg-emerald-600 flex items-center justify-center gap-1"><Check className="w-3 h-3" />Guardar</button>
+                                                                            <button onClick={() => setEditandoAbonoInfo(null)} className="flex-1 h-7 rounded-lg bg-slate-200 text-slate-600 text-[9px] font-black hover:bg-slate-300 flex items-center justify-center gap-1"><X className="w-3 h-3" />Cancelar</button>
+                                                                        </div>
                                                                     </div>
                                                                 )}
 
@@ -1742,7 +1938,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                     <Button size="sm" onClick={() => registrarAbono(h.id, 'efectivo')} className="h-7 text-[9px] bg-emerald-100 hover:bg-emerald-200 text-emerald-700 shadow-none border-none">Efectivo</Button>
                                                                                     <Button size="sm" onClick={() => registrarAbono(h.id, 'nequi')} className="h-7 text-[9px] bg-violet-100 hover:bg-violet-200 text-violet-700 shadow-none border-none">Nequi</Button>
                                                                                     <Button size="sm" onClick={() => registrarAbono(h.id, 'transferencia')} className="h-7 text-[9px] bg-blue-100 hover:bg-blue-200 text-blue-700 shadow-none border-none">Cuenta</Button>
-                                                                                    <Button size="sm" onClick={() => { setAbonandoId(null); setMontoAbono(''); }} variant="outline" className="h-7 text-[9px] text-slate-500 shadow-none">Cancelar</Button>
+                                                                                    <Button size="sm" onClick={() => registrarAbono(h.id, 'credito')} className="h-7 text-[9px] bg-rose-100 hover:bg-rose-200 text-rose-700 shadow-none border-none">Crédito</Button>
+                                                                                    <Button size="sm" onClick={() => { setAbonandoId(null); setMontoAbono(''); }} variant="outline" className="h-7 text-[9px] text-slate-500 shadow-none col-span-2">Cancelar</Button>
                                                                                 </div>
                                                                             </div>
                                                                         ) : (
@@ -2253,7 +2450,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             {(() => {
                                 // Agrupar por categoría manteniendo el orden
                                 const grupos: Record<string, typeof tablaDatos> = {};
-                                tablaDatos.forEach(d => {
+                                tablaDatos.filter(d => !soloViables || d.viabilidad !== 'inviable').forEach(d => {
                                     const cat = d.producto.categoria || 'Sin categoría';
                                     if (!grupos[cat]) grupos[cat] = [];
                                     grupos[cat].push(d);
