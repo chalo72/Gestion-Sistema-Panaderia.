@@ -11,12 +11,11 @@ export const USUARIOS_PRUEBA: Usuario[] = [
   { id: 'dilia-vendedor-id', email: 'dilia@dulceplacer.com', nombre: 'Dilia', apellido: 'Dulce Placer', rol: 'VENDEDOR', activo: true, password: 'dilia2026', createdAt: new Date().toISOString() },
 ];
 
-// Emails de usuarios de prueba que deben eliminarse del sistema si existen (limpieza de datos legacy)
+// Emails de usuarios de prueba genéricos que deben eliminarse (SOLO los claramente falsos)
 export const EMAILS_USUARIOS_LEGACY = [
   'lucia@dulceplacer.com',
   'marcos@dulceplacer.com',
   'invitado@dulceplacer.com',
-  'gab@dulceplacer.com',
   'admin@example.com',
   'gerente@example.com',
   'comprador@example.com',

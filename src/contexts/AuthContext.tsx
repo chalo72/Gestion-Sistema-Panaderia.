@@ -58,16 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         savedLocales = savedStr ? JSON.parse(savedStr) : [];
       } catch { savedLocales = []; }
 
-      // Limpiar usuarios legacy/prueba que no deben estar en el sistema real
+      // Eliminar solo usuarios genéricos de prueba, conservar TODOS los usuarios reales del negocio
       const legacyEmails = new Set(EMAILS_USUARIOS_LEGACY.map(e => e.toLowerCase()));
       let baseList: Usuario[] = savedLocales.filter(
         (u: Usuario) => !legacyEmails.has((u.email || '').toLowerCase())
       );
 
-      // Si después de limpiar no quedan usuarios reales, usar la lista base mínima
+      // Si no quedó nada (localStorage vacío o primer uso), partir de la lista base mínima
       if (baseList.length === 0) baseList = [...USUARIOS_PRUEBA];
 
-      // Asegurar que los usuarios base siempre estén presentes
+      // Asegurar que los usuarios base siempre estén presentes (sin duplicar)
       USUARIOS_PRUEBA.forEach(up => {
         if (!baseList.some(u => u.email.toLowerCase() === up.email.toLowerCase())) baseList.push(up);
       });
@@ -94,16 +94,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           const merged = Array.from(mergedMap.values());
 
-          // Migración: subir a Firestore los usuarios locales que no están en nube
+          // Migración resiliente: cada usuario se intenta individualmente, sin abortar en error
           const cloudEmailsAll = new Set(snapshot.docs.map(d => (d.data().email || '').toLowerCase()));
           const toMigrate = baseList.filter(u =>
             !cloudEmailsAll.has(u.email.toLowerCase()) && !legacyEmails.has(u.email.toLowerCase())
           );
+          let migrados = 0;
           for (const u of toMigrate) {
-            await setDoc(fbDoc(firestore, 'usuarios_sistema', u.id), toFirestoreDoc(u));
+            try {
+              await setDoc(fbDoc(firestore, 'usuarios_sistema', u.id), toFirestoreDoc(u));
+              migrados++;
+            } catch {
+              // Si falla un usuario, continuar con el siguiente
+            }
           }
-          if (toMigrate.length > 0) console.log(`☁️ [Auth] ${toMigrate.length} usuario(s) migrado(s) a la nube.`);
+          if (migrados > 0) console.log(`☁️ [Auth] ${migrados} usuario(s) migrado(s) a la nube.`);
 
+          // Siempre actualizar la UI con la lista fusionada, aunque la migración haya fallado parcialmente
           setUsuarios(merged);
           localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(merged));
           console.log(`✅ [Auth] ${merged.length} usuarios disponibles (local + nube).`);
