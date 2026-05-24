@@ -691,13 +691,24 @@ export function ProveedorForm({
   };
 
   const handleEditItem = (item: ProductoCatalogo) => {
-    // Buscar categoría con coincidencia exacta primero, luego insensible a mayúsculas/espacios
-    const listaValida = item.destino === 'venta' ? CATS_VENTA : CATS_INSUMO;
+    // Verificar si la categoría existe en la lista del destino declarado
+    const listaDestino = item.destino === 'venta' ? CATS_VENTA : CATS_INSUMO;
+    const listaOpuesta = item.destino === 'venta' ? CATS_INSUMO : CATS_VENTA;
     const catNorm = (item.categoria || '').toLowerCase().trim();
-    const catMatch = listaValida.find(c => c === item.categoria)
-        || listaValida.find(c => c.toLowerCase().trim() === catNorm);
-    const categoriaValida = catMatch || item.categoria || '';
-    setProdActual({ ...item, categoria: categoriaValida });
+
+    const enListaDestino = listaDestino.find(c => c === item.categoria || c.toLowerCase().trim() === catNorm);
+    const enListaOpuesta = !enListaDestino && listaOpuesta.find(c => c === item.categoria || c.toLowerCase().trim() === catNorm);
+
+    // Si la categoría está en la lista OPUESTA al destino declarado, corregir el destino
+    const destinoCorregido: 'venta' | 'insumo' = enListaOpuesta
+      ? (item.destino === 'venta' ? 'insumo' : 'venta')
+      : item.destino;
+
+    const categoriaValida = enListaDestino || enListaOpuesta
+      ? item.categoria
+      : (destinoCorregido === 'venta' ? CATS_VENTA[0] : CATS_INSUMO[0]);
+
+    setProdActual({ ...item, destino: destinoCorregido, categoria: categoriaValida || '' });
     setBuscarProd(item.nombre);
     setEditingUid(item.uid);
     toast.info(`Editando: ${item.nombre}`);
@@ -1055,7 +1066,10 @@ export function ProveedorForm({
                       <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
                         {/* Buscador de Producto (7 Cols) */}
                         <div className="md:col-span-7 space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Producto / Insumo *</Label>
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">
+                            Producto / Insumo *
+                            <span className="ml-2 text-[9px] font-bold normal-case text-slate-400 tracking-normal">— busca y selecciona para auto-completar todos los datos</span>
+                          </Label>
                           <div className="relative group">
                             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-400 group-focus-within:text-indigo-600" />
                             <Input
@@ -1072,23 +1086,50 @@ export function ProveedorForm({
                             />
                             {showDropdown && filtradosBusqueda.length > 0 && (
                               <div className="absolute z-[100] w-full mt-2 bg-white dark:bg-slate-950 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-y-auto max-h-60 py-1 scrollbar-thin scrollbar-thumb-slate-300">
-                                {filtradosBusqueda.map(p => (
-                                  <button
-                                    key={p.id} type="button"
-                                    onClick={() => {
-                                      setProdActual(prev => ({ ...prev, productoId: p.id, nombre: p.nombre, categoria: p.categoria, margenVenta: p.margenUtilidad || 30, destino: p.tipo === 'ingrediente' ? 'insumo' : 'venta' }));
-                                      setBuscarProd(p.nombre); setShowDropdown(false);
-                                      setIsCategoriaIA(false);
-                                    }}
-                                    className="w-full px-4 py-3 flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/20 text-left transition-colors"
-                                  >
-                                    <div>
-                                      <p className="text-xs font-black text-slate-800 dark:text-white uppercase">{p.nombre}</p>
-                                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{p.categoria}</p>
-                                    </div>
-                                    <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 font-black text-[9px] uppercase">Usar</Badge>
-                                  </button>
-                                ))}
+                                {filtradosBusqueda.map(p => {
+                                  const pCostoBase = (p as any).costoBase as number || 0;
+                                  const pDestino: 'insumo' | 'venta' = p.tipo === 'ingrediente' ? 'insumo' : 'venta';
+                                  return (
+                                    <button
+                                      key={p.id} type="button"
+                                      onClick={() => {
+                                        setProdActual(prev => {
+                                          const cantActual = prev.cantidadEmbalaje || 1;
+                                          return {
+                                            ...prev,
+                                            productoId: p.id,
+                                            nombre: p.nombre,
+                                            categoria: p.categoria,
+                                            margenVenta: p.margenUtilidad || 30,
+                                            destino: pDestino,
+                                            // Pre-cargar precio de costo desde costoBase si está disponible
+                                            ...(pCostoBase > 0 && {
+                                              precioCosto: Math.round(pCostoBase * cantActual / 100) * 100,
+                                            }),
+                                          };
+                                        });
+                                        setBuscarProd(p.nombre);
+                                        setShowDropdown(false);
+                                        setIsCategoriaIA(false);
+                                      }}
+                                      className="w-full px-4 py-2.5 flex items-center justify-between hover:bg-blue-50 dark:hover:bg-blue-900/20 text-left transition-colors border-b border-slate-50 dark:border-slate-800/50 last:border-0"
+                                    >
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-xs font-black text-slate-800 dark:text-white uppercase truncate">{p.nombre}</p>
+                                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{p.categoria}</p>
+                                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${pDestino === 'insumo' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                            {pDestino === 'insumo' ? '🏭 Insumo' : '🛒 Venta'}
+                                          </span>
+                                          {pCostoBase > 0 && (
+                                            <span className="text-[9px] font-black text-indigo-500">~{formatCurrency(pCostoBase)}/u</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <Badge className="bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300 font-black text-[9px] uppercase shrink-0 ml-2">Usar</Badge>
+                                    </button>
+                                  );
+                                })}
                               </div>
                             )}
                           </div>

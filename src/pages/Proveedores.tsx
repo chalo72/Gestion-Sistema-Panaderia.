@@ -408,7 +408,8 @@ export function Proveedores({
         margenVenta: prod?.margenUtilidad || 30,
         cantidadEmbalaje: precio.cantidadEmbalaje || 1,
         tipoEmbalaje: (precio.tipoEmbalaje as any) || 'unidad',
-        destino: precio.destino || 'insumo',
+        // Fallback inteligente: primero el campo guardado, luego el tipo del producto
+        destino: precio.destino || (prod?.tipo === 'elaborado' ? 'venta' : 'insumo'),
         notas: precio.notas || '',
         costoUnitario: precio.cantidadEmbalaje ? Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100 : precio.precioCosto,
         precioVenta: Math.round((prod?.precioVenta || 0) / 100) * 100,
