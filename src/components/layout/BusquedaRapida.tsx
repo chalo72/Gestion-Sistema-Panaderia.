@@ -124,42 +124,42 @@ export function BusquedaRapida({
 
       {/* Modal de búsqueda */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden p-0 gap-0">
-          <DialogHeader className="p-4 border-b">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden p-0 gap-0 bg-white dark:bg-slate-900">
+          <DialogHeader className="p-4 border-b border-slate-200 dark:border-slate-700">
             <div className="flex items-center gap-3">
-              <Search className="w-5 h-5 text-gray-400" />
+              <Search className="w-5 h-5 text-slate-400" />
               <Input
                 placeholder="Buscar producto por nombre, categoría o descripción..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 border-0 focus-visible:ring-0 text-lg"
+                className="flex-1 border-0 focus-visible:ring-0 text-lg bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400"
                 autoFocus
               />
               {searchTerm && (
                 <button
                   onClick={() => setSearchTerm('')}
-                  className="p-1 hover:bg-gray-100 rounded"
+                  className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded"
                 >
-                  <X className="w-5 h-5 text-gray-400" />
+                  <X className="w-5 h-5 text-slate-400" />
                 </button>
               )}
-              <kbd className="px-2 py-1 text-xs bg-gray-100 rounded text-gray-500">ESC</kbd>
+              <kbd className="px-2 py-1 text-xs bg-slate-100 dark:bg-slate-800 rounded text-slate-500 dark:text-slate-400">ESC</kbd>
             </div>
           </DialogHeader>
 
           <div className="overflow-y-auto max-h-[60vh]">
             {searchTerm.trim() === '' ? (
-              <div className="p-8 text-center text-gray-500">
-                <Search className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                <p className="text-lg font-medium">Busca productos rápidamente</p>
+              <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+                <Search className="w-16 h-16 mx-auto mb-4 text-slate-300 dark:text-slate-600" />
+                <p className="text-lg font-medium text-slate-700 dark:text-slate-200">Busca productos rápidamente</p>
                 <p className="text-sm mt-2">Escribe el nombre, categoría o descripción</p>
                 <div className="mt-6 flex justify-center gap-4 text-sm">
-                  <div className="flex items-center gap-2 text-gray-600">
+                  <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                     <Package className="w-4 h-4" />
                     <span>{productos.length} productos</span>
                   </div>
                   {canVerProveedores && (
-                    <div className="flex items-center gap-2 text-gray-600">
+                    <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                       <Store className="w-4 h-4" />
                       <span>{proveedores.length} proveedores</span>
                     </div>
@@ -167,13 +167,13 @@ export function BusquedaRapida({
                 </div>
               </div>
             ) : resultados.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                <p>No se encontraron productos</p>
+              <div className="p-8 text-center text-slate-500 dark:text-slate-400">
+                <Package className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-600" />
+                <p className="text-slate-700 dark:text-slate-200">No se encontraron productos</p>
                 <p className="text-sm mt-1">Intenta con otra búsqueda</p>
               </div>
             ) : (
-              <div className="divide-y">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {resultados.map((producto) => {
                   const stats = getProductoStats(producto);
                   const todosPrecios = getPreciosByProducto(producto.id);
@@ -181,7 +181,7 @@ export function BusquedaRapida({
                   return (
                     <div
                       key={producto.id}
-                      className="px-4 py-3 hover:bg-gray-50 transition-colors"
+                      className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
                     >
                       {/* Fila principal: foto + nombre + precio venta */}
                       <div className="flex items-center gap-3">
@@ -192,12 +192,12 @@ export function BusquedaRapida({
                             className="w-10 h-10 rounded-lg object-cover shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-                            <Package className="w-5 h-5 text-gray-400" />
+                          <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                            <Package className="w-5 h-5 text-slate-400" />
                           </div>
                         )}
-                        <h3 className="font-semibold text-sm flex-1 min-w-0 text-gray-800">{producto.nombre}</h3>
-                        <span className="font-bold text-emerald-600 text-base whitespace-nowrap shrink-0">
+                        <h3 className="font-bold text-sm flex-1 min-w-0 text-slate-900 dark:text-white">{producto.nombre}</h3>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400 text-base whitespace-nowrap shrink-0">
                           {formatCurrency(producto.precioVenta)}
                         </span>
                       </div>
