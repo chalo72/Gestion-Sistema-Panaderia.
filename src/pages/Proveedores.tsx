@@ -334,7 +334,7 @@ export function Proveedores({
                 nombre: item.nombre,
                 categoria: item.categoria || 'Otro',
                 descripcion: descripcionGenerada,
-                precioVenta: Number(item.precioVenta) || 0,
+                precioVenta: Math.round((Number(item.precioVenta) || 0) / 100) * 100,
                 margenUtilidad: Number(item.margenVenta) || 30,
                 tipo,
                 costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
@@ -363,7 +363,7 @@ export function Proveedores({
                 tipo,
                 costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
                 margenUtilidad: Number(item.margenVenta) || 30,
-                precioVenta: Number(item.precioVenta) || 0,
+                precioVenta: Math.round((Number(item.precioVenta) || 0) / 100) * 100,
                 updatedAt: new Date().toISOString()
               });
 

@@ -660,7 +660,8 @@ export function usePriceControl() {
           setAlertas(prev => [alerta, ...prev]);
         }
 
-        // SINCRONIZACIÓN: Ajustar precio de venta automáticamente (subidas Y bajadas)
+        // SINCRONIZACIÓN: Actualizar costoBase (NUNCA precioVenta — el precio de venta lo gestiona el usuario)
+        // PROTECCIÓN-PRECIO-001: precioVenta NO se recalcula automáticamente para preservar precios manuales
         if (configuracion.ajusteAutomatico) {
           let producto = productos.find(p => p.id === productoId);
           if (!producto) {
@@ -668,10 +669,8 @@ export function usePriceControl() {
             producto = allP.find(px => px.id === productoId);
           }
           if (producto) {
-            // Redondear costo unitario a 2 decimales
             const costoUnitario = Math.round((safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1)) * 100) / 100;
-            const nuevoPrecioVenta = Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100;
-            await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
+            await updateProducto(productoId, { costoBase: costoUnitario });
           }
         }
       }
@@ -705,7 +704,8 @@ export function usePriceControl() {
       await db.addPrecio(nuevoPrecio);
       setPrecios(prev => [...prev, nuevoPrecio]);
 
-      // SINCRONIZACIÓN: Calcular precio de venta para nuevos precios (siempre si ajuste automático)
+      // SINCRONIZACIÓN: Registrar costoBase para nuevo precio (NUNCA precioVenta — lo gestiona el usuario)
+      // PROTECCIÓN-PRECIO-002: precioVenta NO se toca al crear precio nuevo para preservar precios manuales
       if (configuracion.ajusteAutomatico) {
         let producto = productos.find(p => p.id === productoId);
         if (!producto) {
@@ -713,10 +713,8 @@ export function usePriceControl() {
           producto = allP.find(px => px.id === productoId);
         }
         if (producto) {
-          // Redondear costo unitario a 2 decimales
           const costoUnitario = Math.round((safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1)) * 100) / 100;
-          const nuevoPrecioVenta = Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100;
-          await updateProducto(productoId, { precioVenta: nuevoPrecioVenta, costoBase: costoUnitario });
+          await updateProducto(productoId, { costoBase: costoUnitario });
         }
       }
     }
@@ -979,21 +977,18 @@ export function usePriceControl() {
             return { ...p, costoBase: nuevoCosto, updatedAt: new Date().toISOString() };
           }
         } else if (p.tipo === 'ingrediente') {
+          // PROTECCIÓN-PRECIO-003: Solo actualiza costoBase (costo por unidad real).
+          // precioVenta NUNCA se recalcula automáticamente — es responsabilidad exclusiva del usuario.
+          // Bug anterior: usaba precioCosto del pack como costoBase → precio de venta inflado ×cantidadEmbalaje.
           const mejorPrecio = getMejorPrecio(p.id);
           if (mejorPrecio) {
-            const nuevoCosto = mejorPrecio.precioCosto;
-            const margen = p.margenUtilidad || 0;
-            const nuevoPrecioVenta = margen > 0 ? Math.round(nuevoCosto * (1 + margen / 100) / 100) * 100 : p.precioVenta;
-            const costoDistinto  = Math.abs((p.costoBase || 0) - nuevoCosto) > 0.01;
-            const ventaDistinto  = margen > 0 && Math.abs((p.precioVenta || 0) - nuevoPrecioVenta) > 0.01;
-            if (costoDistinto || ventaDistinto) {
+            const costoUnitario = Math.round(
+              (mejorPrecio.precioCosto / (mejorPrecio.cantidadEmbalaje || 1)) * 100
+            ) / 100;
+            const costoDistinto = Math.abs((p.costoBase || 0) - costoUnitario) > 0.01;
+            if (costoDistinto) {
               huboCambio = true;
-              return {
-                ...p,
-                costoBase: nuevoCosto,
-                ...(margen > 0 ? { precioVenta: nuevoPrecioVenta } : {}),
-                updatedAt: new Date().toISOString(),
-              };
+              return { ...p, costoBase: costoUnitario, updatedAt: new Date().toISOString() };
             }
           }
         }
