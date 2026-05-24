@@ -25,7 +25,7 @@ export function Login({ onLoginSuccess }: LoginProps) {
     try {
       const result = await login(email, password);
       if (result.success) {
-        setTimeout(() => onLoginSuccess(), 100);
+        onLoginSuccess();
       } else {
         setError(result.error || 'Error al iniciar sesión');
       }

@@ -1,5 +1,5 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,8 +12,20 @@ const firebaseConfig = {
 
 // App nombrada para evitar colisión con la app default de database.ts
 const APP_NAME = 'dulce-placer-auth';
-const app = getApps().some(a => a.name === APP_NAME)
-  ? getApp(APP_NAME)
-  : initializeApp(firebaseConfig, APP_NAME);
 
-export const firestore = getFirestore(app);
+let firestoreInstance: Firestore | null = null;
+
+try {
+  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+    console.warn('[Firebase] Variables de entorno no configuradas — modo offline activo');
+  } else {
+    const app: FirebaseApp = getApps().some(a => a.name === APP_NAME)
+      ? getApp(APP_NAME)
+      : initializeApp(firebaseConfig, APP_NAME);
+    firestoreInstance = getFirestore(app);
+  }
+} catch (e) {
+  console.warn('[Firebase] No se pudo inicializar — el sistema funcionará en modo local:', e);
+}
+
+export const firestore = firestoreInstance;

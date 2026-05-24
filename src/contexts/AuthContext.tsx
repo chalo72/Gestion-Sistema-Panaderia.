@@ -68,36 +68,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUsuarios(baseList);
       localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(baseList));
 
-      // 2. Sincronizar con Firebase Firestore (nube — en segundo plano)
-      try {
-        const snapshot = await getDocs(collection(firestore, 'usuarios_sistema'));
-        const cloudUsers: Usuario[] = snapshot.docs.map(d => d.data() as Usuario);
+      // 2. Sincronizar con Firebase Firestore (nube — en segundo plano, solo si disponible)
+      if (firestore) {
+        try {
+          const snapshot = await getDocs(collection(firestore, 'usuarios_sistema'));
+          const cloudUsers: Usuario[] = snapshot.docs.map(d => d.data() as Usuario);
 
-        // Mezcla: nube gana por email, local agrega los que no están en nube
-        const mergedMap = new Map<string, Usuario>();
-        baseList.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
-        cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
-        // Los usuarios oficiales siempre presentes
-        USUARIOS_PRUEBA.forEach(up => {
-          if (!mergedMap.has(up.email.toLowerCase())) mergedMap.set(up.email.toLowerCase(), up);
-        });
-        const merged = Array.from(mergedMap.values());
+          // Mezcla: nube gana por email, local agrega los que no están en nube
+          const mergedMap = new Map<string, Usuario>();
+          baseList.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
+          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
+          // Los usuarios oficiales siempre presentes
+          USUARIOS_PRUEBA.forEach(up => {
+            if (!mergedMap.has(up.email.toLowerCase())) mergedMap.set(up.email.toLowerCase(), up);
+          });
+          const merged = Array.from(mergedMap.values());
 
-        // Migración: subir a Firestore los usuarios locales que no están en nube
-        const cloudEmails = new Set(cloudUsers.map(u => u.email.toLowerCase()));
-        const toMigrate = baseList.filter(u =>
-          !cloudEmails.has(u.email.toLowerCase()) && !testEmails.includes(u.email)
-        );
-        for (const u of toMigrate) {
-          await setDoc(fbDoc(firestore, 'usuarios_sistema', u.id), toFirestoreDoc(u));
+          // Migración: subir a Firestore los usuarios locales que no están en nube
+          const cloudEmails = new Set(cloudUsers.map(u => u.email.toLowerCase()));
+          const toMigrate = baseList.filter(u =>
+            !cloudEmails.has(u.email.toLowerCase()) && !testEmails.includes(u.email)
+          );
+          for (const u of toMigrate) {
+            await setDoc(fbDoc(firestore, 'usuarios_sistema', u.id), toFirestoreDoc(u));
+          }
+          if (toMigrate.length > 0) console.log(`☁️ [Auth] ${toMigrate.length} usuario(s) migrado(s) a la nube.`);
+
+          setUsuarios(merged);
+          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(merged));
+          console.log(`✅ [Auth] ${merged.length} usuarios disponibles (local + nube).`);
+        } catch (cloudErr) {
+          console.warn('⚠️ [Auth] Firestore no disponible, modo local activo:', cloudErr);
         }
-        if (toMigrate.length > 0) console.log(`☁️ [Auth] ${toMigrate.length} usuario(s) migrado(s) a la nube.`);
-
-        setUsuarios(merged);
-        localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(merged));
-        console.log(`✅ [Auth] ${merged.length} usuarios disponibles (local + nube).`);
-      } catch (cloudErr) {
-        console.warn('⚠️ [Auth] Firestore no disponible, modo local activo:', cloudErr);
       }
     } catch (e) {
       console.error('❌ Error cargando usuarios:', e);
@@ -148,13 +150,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(async (email: string, password: string): Promise<{ success: boolean; error?: string }> => {
     setIsLoading(true);
-    await new Promise(resolve => setTimeout(resolve, 400));
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     const emailLower = email.toLowerCase().trim();
 
-    // Cargar lista de usuarios desde localStorage (o usar los de prueba si no hay)
-    const localUserListStr = localStorage.getItem('pricecontrol_local_user_list');
-    const localUserList: Usuario[] = localUserListStr ? JSON.parse(localUserListStr) : USUARIOS_PRUEBA;
+    // Cargar lista de usuarios — triple fallback para máxima resiliencia
+    let localUserList: Usuario[] = [...USUARIOS_PRUEBA];
+    try {
+      const localUserListStr = localStorage.getItem('pricecontrol_local_user_list');
+      if (localUserListStr) {
+        const parsed: Usuario[] = JSON.parse(localUserListStr);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          localUserList = parsed;
+          // Asegurar que siempre estén los usuarios oficiales
+          USUARIOS_PRUEBA.forEach(up => {
+            if (!localUserList.some(u => u.email.toLowerCase() === up.email.toLowerCase())) {
+              localUserList.push(up);
+            }
+          });
+        }
+      }
+    } catch {
+      console.warn('[Login] localStorage corrupto — usando lista base segura');
+      localUserList = [...USUARIOS_PRUEBA];
+    }
 
     // Buscar usuario por email (insensible a mayúsculas y sin espacios adicionales)
     const localUser = localUserList.find(u => (u.email || '').toLowerCase().trim() === emailLower);
@@ -258,11 +277,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = [...usuarios, nuevo];
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
-    try {
-      await setDoc(fbDoc(firestore, 'usuarios_sistema', nuevo.id), toFirestoreDoc(nuevo));
-      console.log(`☁️ [Auth] Usuario "${nuevo.email}" guardado en la nube.`);
-    } catch (e) {
-      console.warn('⚠️ [Auth] No se pudo guardar en nube (guardado localmente):', e);
+    if (firestore) {
+      try {
+        await setDoc(fbDoc(firestore, 'usuarios_sistema', nuevo.id), toFirestoreDoc(nuevo));
+        console.log(`☁️ [Auth] Usuario "${nuevo.email}" guardado en la nube.`);
+      } catch (e) {
+        console.warn('⚠️ [Auth] No se pudo guardar en nube (guardado localmente):', e);
+      }
     }
     toast.success('Usuario guardado');
     return true;
@@ -277,11 +298,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUsuario(updatedMe);
       localStorage.setItem('pricecontrol_local_user', JSON.stringify(updatedMe));
     }
-    try {
-      const updated = newList.find(u => u.id === id);
-      if (updated) await setDoc(fbDoc(firestore, 'usuarios_sistema', id), toFirestoreDoc(updated));
-    } catch (e) {
-      console.warn('⚠️ [Auth] No se pudo actualizar en nube:', e);
+    if (firestore) {
+      try {
+        const updated = newList.find(u => u.id === id);
+        if (updated) await setDoc(fbDoc(firestore, 'usuarios_sistema', id), toFirestoreDoc(updated));
+      } catch (e) {
+        console.warn('⚠️ [Auth] No se pudo actualizar en nube:', e);
+      }
     }
     return true;
   }, [usuarios, usuario]);
@@ -294,10 +317,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = usuarios.filter(u => u.id !== id);
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
-    try {
-      await deleteDoc(fbDoc(firestore, 'usuarios_sistema', id));
-    } catch (e) {
-      console.warn('⚠️ [Auth] No se pudo eliminar de nube:', e);
+    if (firestore) {
+      try {
+        await deleteDoc(fbDoc(firestore, 'usuarios_sistema', id));
+      } catch (e) {
+        console.warn('⚠️ [Auth] No se pudo eliminar de nube:', e);
+      }
     }
     return true;
   }, [usuarios, usuario]);

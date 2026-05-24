@@ -201,6 +201,8 @@ const App = () => {
   }
 
   const renderView = () => {
+    // Si hay usuario activo pero la vista es login → redirigir inmediatamente al dashboard
+    if (user && currentView === 'login') return null;
     if (!user && currentView !== 'login') return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
 
     switch (currentView) {
