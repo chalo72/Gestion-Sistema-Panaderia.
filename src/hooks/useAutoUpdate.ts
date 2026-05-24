@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
-const CHECK_INTERVAL  = 20_000; // Verifica cada 20 segundos
+const CHECK_INTERVAL  = 60 * 60 * 1000; // Verifica cada 1 hora (evitar bucle de recarga)
 const STORAGE_KEY     = 'nexus_build_ts'; // Unificado con index.html para evitar doble recarga
 const RELOAD_DELAY_MS = 5_000;  // 5 segundos de aviso antes de recargar
 

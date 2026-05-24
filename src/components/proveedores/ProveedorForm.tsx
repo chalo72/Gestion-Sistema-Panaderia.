@@ -493,8 +493,20 @@ export function ProveedorForm({
     }
   };
 
+  const limpiarNombreProducto = (nombreRaw: string) => {
+    let limpio = nombreRaw.trim().toLowerCase();
+    // Expresión regular para quitar frases de relleno (stop words) al inicio
+    const stopwordsRegex = /^(?:el nombre del producto es|el producto es|es un|es una|es|que se llama|llamado|llamada|de)\s+/gi;
+    limpio = limpio.replace(stopwordsRegex, '');
+    limpio = limpio.replace(/^[,.:;!?'"]+/, '').trim();
+    return limpio.replace(/\b\w/g, l => l.toUpperCase()); // Capitalizar cada palabra
+  };
+
   const parseVoiceCommand = (text: string) => {
-    const cleanText = text.toLowerCase()
+    const rawText = text.toLowerCase();
+    if ((window as any).isAddingVoiceCommand) return;
+
+    const cleanText = rawText
                           .replace(/uno/g, '1').replace(/dos/g, '2').replace(/tres/g, '3')
                           .replace(/cuatro/g, '4').replace(/cinco/g, '5')
                           .replace(/mil/g, '000').replace(/cincuenta/g, '50')
@@ -510,64 +522,87 @@ export function ProveedorForm({
     setProdActual((prev) => {
       let newProd = { ...prev };
 
-      // 1. Comando Nombre (Ultra Flexible)
-      // "escribe el nombre del producto harina", "producto harina", "insumo harina", "escribe harina"
-      const matchProd = cleanText.match(/(?:nombre del producto|escrib[ea] el nombre del producto|escrib[ea] en producto|escrib[ea]|producto|insumo)[:\s]+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+?)(?=\s+(?:en categor[ií]a|categor[ií]a|unidad|empaque|pack|tarro|bulto|caja|bolsa|cantidad|uso|destino|valor|precio|costo|añade|agrega|guarda|registrar)|$)/i);
+      // 1. Comando Nombre (Mejorado NLP)
+      const matchProd = cleanText.match(/(?:nombre del producto|escrib[ea] el nombre del producto|escrib[ea] en producto|escrib[ea]|producto|insumo|el producto es)[:\s]+([a-zA-ZáéíóúÁÉÍÓÚñÑ0-9\s]+?)(?=\s+(?:en categor[ií]a|categor[ií]a|unidad|empaque|pack|tarro|bulto|caja|bolsa|cantidad|uso|destino|valor|precio|costo|añade|agrega|guarda|registrar)|$)/i);
       if (matchProd && matchProd[1]) {
-        // Ignorar si el "nombre" capturado es muy corto o es una palabra clave
-        const isStopWord = ['harinas', 'lacteos', 'grasas'].includes(matchProd[1].trim());
-        if (matchProd[1].trim().length > 1 && !isStopWord) {
-           newProd.nombre = matchProd[1].trim();
+        let nombreProcesado = limpiarNombreProducto(matchProd[1]);
+        const isStopWord = ['Harinas', 'Lacteos', 'Grasas'].includes(nombreProcesado);
+        if (nombreProcesado.length > 1 && !isStopWord) {
+           newProd.nombre = nombreProcesado;
            nombreDetectado = newProd.nombre;
         }
       }
 
-      // 2. Comando Categoría
+      // 2. Comando Categoría (Búsqueda difusa)
       const matchCat = cleanText.match(/(?:selecciona en categor[ií]a|categor[ií]a|en categor[ií]a)[:\s]+([a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+?)(?=\s+(?:nombre|producto|escribe|unidad|empaque|pack|tarro|bulto|caja|bolsa|cantidad|uso|destino|valor|precio|costo|añade|agrega|guarda)|$)/i);
       if (matchCat && matchCat[1]) {
          const catDictada = matchCat[1].trim().toLowerCase();
-         const catMatch = CATS_INSUMO.find(c => c.toLowerCase().includes(catDictada)) || CATS_VENTA.find(c => c.toLowerCase().includes(catDictada));
+         // Buscar primera coincidencia parcial en la lista unificada
+         const catMatch = [...CATS_INSUMO, ...CATS_VENTA].find(c => c.toLowerCase().includes(catDictada) || catDictada.includes(c.toLowerCase()));
          if (catMatch) newProd.categoria = catMatch;
       }
 
-      // 3. Comando Empaque (buscando valores específicos sueltos o detrás de palabras clave)
-      const empaquesPosibles = EMBALAJES.map(e => e.value); // caja, paca, bulto, tarro, unidad, bolsa, bloque
+      // 3. Comando Empaque
+      const empaquesPosibles = EMBALAJES.map(e => e.value);
       for (const emp of empaquesPosibles) {
-         if (cleanText.match(new RegExp(`(?:unidad pack|unidad|pack|empaque|selecciona)[:\s]+${emp}`, 'i')) || cleanText.includes(emp)) {
+         if (cleanText.match(new RegExp(`(?:unidad pack|unidad|pack|empaque|selecciona)[:\\s]+${emp}`, 'i')) || cleanText.includes(emp)) {
            newProd.tipoEmbalaje = emp;
            break;
          }
       }
 
-      // 4. Comando Cantidad
-      const matchCant = cleanText.match(/(?:cantidad|pon|con)[:\s]+(\d+)/i);
+      // 4. Comando Cantidad (arreglado para "unidad 1", "unidad pack 2")
+      const matchCant = cleanText.match(/(?:cantidad|pon|con|unidad pack|unidad|paquete|pack)[:\s]+(\d+)/i);
       if (matchCant && matchCant[1]) {
         newProd.cantidadEmbalaje = parseInt(matchCant[1], 10);
       }
 
       // 5. Comando Destino / Uso
-      if (cleanText.match(/(?:uso destino|destino|uso|d[eé]jalo en|c[áa]mbialo a)[:\s]+insumo/i) || cleanText.includes('insumo')) newProd.destino = 'insumo';
-      if (cleanText.match(/(?:uso destino|destino|uso|d[eé]jalo en|c[áa]mbialo a)[:\s]+venta/i) || cleanText.includes('venta')) newProd.destino = 'venta';
+      if (cleanText.match(/(?:uso destino|destino|uso|d[eé]jalo en|c[áa]mbialo a)[:\s]+insumo/i) || cleanText.includes('insumo') || cleanText.includes('juez sumo') || cleanText.includes('sumo')) newProd.destino = 'insumo';
+      if (cleanText.match(/(?:uso destino|destino|uso|d[eé]jalo en|c[áa]mbialo a)[:\s]+venta/i) || cleanText.includes('venta') || cleanText.match(/productos? para ver/i)) newProd.destino = 'venta';
 
-      // 6. Comando Precio / Costo
-      const matchValor = cleanText.match(/(?:valor paca|costo|valor|precio)[:\s]+(\d+[\d\.]*)/i);
-      if (matchValor && matchValor[1]) {
-        const valNum = parseInt(matchValor[1].replace(/\./g, ''), 10);
-        if (!isNaN(valNum)) newProd.precioCosto = valNum;
+      // 6. Comando Precio / Costo (Tomar siempre el último número dictado o re-escrito)
+      const regexValor = /(?:valor paca|costo|valor|precio)(?:.*?)(?:es\s+|de\s+|a\s+|en\s+)?(\d+[\d\.]*)/gi;
+      let matchValor;
+      let ultimoValorStr = null;
+      while ((matchValor = regexValor.exec(cleanText)) !== null) {
+          ultimoValorStr = matchValor[1];
+      }
+      
+      // Intentar forzar valor si se dice un número alto y no había otra cosa (ej "56000")
+      if (!ultimoValorStr) {
+         const matchSuelto = cleanText.match(/(?:corrige|corregir|pon|a)\s+(\d{3,}[\d\.]*)/i);
+         if (matchSuelto && matchSuelto[1]) ultimoValorStr = matchSuelto[1];
+      }
+
+      if (ultimoValorStr) {
+        const valNum = parseInt(ultimoValorStr.replace(/\./g, ''), 10);
+        if (!isNaN(valNum) && valNum > 0) newProd.precioCosto = valNum;
       }
 
       return newProd;
     });
 
-    // Actualizar el estado del UI visual separado del estado lógico
     if (nombreDetectado) {
        setTimeout(() => setBuscarProd(nombreDetectado), 50);
     }
 
     if (shouldAdd) {
+       // Bloquear comandos adicionales por 3 segundos para evitar multiclics
+       (window as any).isAddingVoiceCommand = true;
        toast.success('🎙️ Orden de añadir detectada');
        setTimeout(() => {
           document.getElementById('btn-add-catalogo')?.click();
+          // Limpiar el micrófono internamente reiniciándolo
+          if (recognitionRef.current && isListeningRef.current) {
+             try { recognitionRef.current.stop(); } catch(e){}
+             setTimeout(() => {
+                 if (isListeningRef.current) {
+                    try { recognitionRef.current.start(); } catch(e){}
+                 }
+             }, 800);
+          }
+          (window as any).isAddingVoiceCommand = false;
        }, 800);
     }
   };

@@ -6,7 +6,7 @@ import {
     Download, Pencil, Check, X, Phone, FileText, BarChart3, Info,
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
     Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon,
-    Smartphone, CreditCard, PlusCircle, ChevronRight, Folder, Building2
+    Smartphone, CreditCard, PlusCircle, ChevronRight, Folder, Building2, Edit2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -76,6 +76,7 @@ interface MayoristasProps {
     creditosClientes?: any[];
     addCreditoCliente?: (c: any) => Promise<void>;
     updateCreditoCliente?: (id: string, updates: any) => Promise<void>;
+    deleteCreditoCliente?: (id: string) => Promise<void>;
     registrarPagoCredito?: (id: string, pago: any) => Promise<void>;
 }
 
@@ -111,7 +112,7 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
-export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, registrarPagoCredito }: MayoristasProps) {
+export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -393,18 +394,23 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     const registrarAbono = async (historialId: string, metodo: MetodoPago, montoEspecifico?: number) => {
         const monto = montoEspecifico ?? parseFloat(montoAbono);
-        if (isNaN(monto) || monto <= 0) { toast.error('Ingresa un monto válido'); return; }
+        if (isNaN(monto) || monto <= 0) return toast.error('Monto inválido');
 
-        try {
-            if (registrarPagoCredito) {
-                await registrarPagoCredito(historialId, {
-                    monto,
-                    metodoPago: metodo,
-                    fecha: new Date().toISOString()
-                });
+        // Respaldo en central (nube)
+        if (registrarPagoCredito) {
+            const esCentral = creditosClientes?.find(c => c.id === historialId);
+            if (esCentral) {
+                try {
+                    await registrarPagoCredito(historialId, {
+                        id: generateUUID(),
+                        monto,
+                        fecha: new Date().toISOString(),
+                        metodoPago: metodo
+                    });
+                } catch (e) {
+                    console.error('Error registrando abono en DB', e);
+                }
             }
-        } catch (e) {
-            console.error('Error registrando abono en DB', e);
         }
 
         const nuevos = historialMayoristas.map(h => {
@@ -414,9 +420,38 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         });
         setHistorialMayoristas(nuevos);
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        
         setAbonandoId(null);
         setMontoAbono('');
         toast.success(`Abono de ${formatCurrency(monto)} registrado`);
+    };
+
+    const eliminarAbono = async (historialId: string, abonoId: string | undefined, abonoIndex: number) => {
+        if (!confirm('¿Seguro que quieres eliminar este abono?')) return;
+
+        // Respaldo en central (nube)
+        if (updateCreditoCliente) {
+            const esCentral = creditosClientes?.find(c => c.id === historialId);
+            if (esCentral) {
+                try {
+                    // Si tiene ID, lo filtramos por ID, si no, intentamos por índice (aunque en BD central siempre deberían tener ID ahora)
+                    const nuevosPagos = (esCentral.pagos || []).filter((p: any, idx: number) => abonoId ? p.id !== abonoId : idx !== abonoIndex);
+                    await updateCreditoCliente(historialId, { pagos: nuevosPagos });
+                } catch (e) {
+                    console.error('Error eliminando abono en DB central', e);
+                }
+            }
+        }
+
+        // Actualización local
+        const nuevos = historialMayoristas.map(h => {
+            if (h.id !== historialId) return h;
+            const abonos = (h.abonos || []).filter((a, idx) => abonoId ? a.id !== abonoId : idx !== abonoIndex);
+            return { ...h, abonos };
+        });
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        toast.success('Abono eliminado con éxito');
     };
 
     const procesarAbonoMultiple = async () => {
@@ -426,64 +461,44 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             toast.error('Ingresa un monto válido');
             return;
         }
-        const hCliente = historialUnificado.filter(h => h.clienteId === viendoPerfilCliente.id);
 
-        // construir lista unificada de seleccionados: créditos existentes y tickets pendientes
-        const seleccionIds = Array.from(ticketsSeleccionados);
-        const seleccionItems: Array<{
-            id: string;
-            tipo: 'credito' | 'pendiente';
-            fecha: number;
-            total: number;
-            abonado: number; // ya abonado
-        }> = [];
+        // Buscar tickets con saldo pendiente del cliente actual
+        const tickets = historialMayoristas
+            .filter(h => h.clienteId === viendoPerfilCliente.id && h.metodoPago === 'credito')
+            .sort((a, b) => a.fecha - b.fecha); // Pagar los más antiguos primero
 
-        for (const id of seleccionIds) {
-            const h = hCliente.find(x => x.id === id && x.metodoPago === 'credito');
-            if (h) {
-                const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
-                seleccionItems.push({ id: h.id, tipo: 'credito', fecha: h.fecha, total: h.total, abonado });
-                continue;
-            }
-            const tp = ticketsPendientes.find(t => t.id === id);
-            if (tp) {
-                const totalTp = tp.items.reduce((s, it) => s + it.precio * it.cantidad, 0);
-                seleccionItems.push({ id: tp.id, tipo: 'pendiente', fecha: tp.guardadoEn, total: totalTp, abonado: 0 });
-                continue;
-            }
-        }
-
-        if (seleccionItems.length === 0) {
-            toast.error('No hay tickets seleccionados válidos');
-            return;
-        }
-
-        // ordenar por fecha (antiguos primero)
-        seleccionItems.sort((a, b) => a.fecha - b.fecha);
-
-        let abonoRestante = monto;
         let procesados = 0;
+        let abonoRestante = monto;
 
-        for (const item of seleccionItems) {
+        for (const item of tickets) {
             if (abonoRestante <= 0) break;
-            const saldo = Math.max(0, item.total - item.abonado);
+            const abonado = (item.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+            const saldo = item.total - abonado;
             if (saldo <= 0) continue;
 
             const aPagar = Math.min(saldo, abonoRestante);
-
-            if (item.tipo === 'credito') {
-                // historial / crédito existente
+            if (aPagar > 0) {
                 await registrarAbono(item.id, metodoAbonoMultiple, aPagar);
                 abonoRestante -= aPagar;
                 procesados++;
-            } else {
-                // ticket pendiente: si se paga completo -> registrar venta; si es parcial -> crear crédito con abono inicial
-                const tp = ticketsPendientes.find(t => t.id === item.id);
-                if (!tp) continue;
+            }
+        }
 
-                if (aPagar >= item.total) {
-                    // pago completo: registrar venta con el método seleccionado
-                    await guardarEnHistorial(tp.items, item.total, tp.fotoFactura, metodoAbonoMultiple as MetodoPago);
+        // Si es abono para prepedidos / tickets pendientes
+        const ticketsPendientesCliente = ticketsPendientes.filter(t => t.clienteId === viendoPerfilCliente.id);
+        for (const tp of ticketsPendientesCliente) {
+            if (abonoRestante <= 0) break;
+            const saldo = tp.items.reduce((s, it) => s + it.precio * it.cantidad, 0);
+            if (saldo <= 0) continue;
+
+            const aPagar = Math.min(saldo, abonoRestante);
+            if (aPagar > 0) {
+                // ticket pendiente: si se paga completo -> registrar venta; si es parcial -> crear crédito con abono inicial
+                if (aPagar >= saldo) {
+                    // pago completo: registrar y eliminar de pendientes
+                    await registrarVenta({ items: tp.items, total: saldo, metodoPago: metodoAbonoMultiple as MetodoPago, notas: 'Ticket pendiente pagado', cliente: viendoPerfilCliente.nombre });
+                    await guardarEnHistorial(tp.items, saldo, tp.fotoFactura, metodoAbonoMultiple as MetodoPago);
+                    
                     // eliminar pendiente
                     actualizarTicketsPersistidos(ticketsPendientes.filter(t => t.id !== tp.id));
                     abonoRestante -= aPagar;
@@ -492,39 +507,30 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     // pago parcial: mover a historial como crédito y registrar abono
                     const nuevoHist: HistorialMayorista = {
                         id: generateUUID(),
-                        clienteId: tp.clienteId,
-                        clienteNombre: tp.clienteNombre,
+                        clienteId: viendoPerfilCliente.id,
+                        clienteNombre: viendoPerfilCliente.nombre,
                         items: tp.items,
-                        total: item.total,
+                        total: saldo,
                         fecha: Date.now(),
                         fotoFactura: tp.fotoFactura,
                         metodoPago: 'credito',
                         abonos: [{ id: generateUUID(), monto: aPagar, fecha: Date.now(), metodoPago: metodoAbonoMultiple as MetodoPago }]
                     };
-                    // persistir local
-                    setHistorialMayoristas(prev => {
-                        const nuevos = [nuevoHist, ...prev];
-                        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
-                        return nuevos;
-                    });
-
-                    // intentar registrar crédito en central si corresponde
+                    setHistorialMayoristas(prev => [nuevoHist, ...prev]);
+                    
+                    // Conectar con finanzas globales
                     if (addCreditoCliente) {
                         try {
                             await addCreditoCliente({
-                                id: nuevoHist.id,
-                                clienteId: nuevoHist.clienteId,
-                                clienteNombre: nuevoHist.clienteNombre,
-                                monto: nuevoHist.total,
-                                saldo: Math.max(0, nuevoHist.total - aPagar),
+                                clienteId: viendoPerfilCliente.id,
+                                clienteNombre: viendoPerfilCliente.nombre,
+                                monto: saldo,
                                 descripcion: 'Crédito generado desde ticket pendiente con abono parcial',
-                                items: nuevoHist.items.map(i => ({ productoId: i.productoId, nombre: i.nombre, cantidad: i.cantidad, precioVenta: i.precio })),
-                                usuarioId: 'admin',
-                                estado: Math.max(0, nuevoHist.total - aPagar) <= 0 ? 'pagado' : 'pendiente',
+                                items: tp.items.map(i => ({ productoId: i.productoId, nombre: i.nombre, cantidad: i.cantidad, precioUnitario: i.precio, subtotal: i.cantidad * i.precio })),
                                 pagos: [{ id: nuevoHist.abonos![0].id, monto: aPagar, fecha: new Date(nuevoHist.abonos![0].fecha).toISOString(), metodoPago: nuevoHist.abonos![0].metodoPago }]
-                            });
+                            } as any);
                         } catch (e) {
-                            console.error('Error guardando crédito central para pendiente', e);
+                            console.error('Error registrando crédito global', e);
                         }
                     }
 
@@ -534,6 +540,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     procesados++;
                 }
             }
+        }
+
+        if (procesados === 0) {
+            toast.info('No hay deudas pendientes para abonar');
+            return;
         }
 
         toast.success(`Abono aplicado a ${procesados} ticket(s). ${abonoRestante > 0 ? `Sobró ${formatCurrency(abonoRestante)}` : ''}`);
@@ -568,13 +579,20 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
     };
 
+    // Override local de fechas para reflejar cambios inmediatamente sin esperar re-render del padre
+    const [dateOverrides, setDateOverrides] = useState<Record<string, number>>({});
+
     // Cambiar fecha de una entrada del historial
     const [editandoFechaHistorialId, setEditandoFechaHistorialId] = useState<string | null>(null);
     const [fechaHistorialTemp, setFechaHistorialTemp] = useState('');
 
     const guardarFechaHistorial = async (historialId: string) => {
         if (!fechaHistorialTemp) return;
-        const nuevaFecha = new Date(fechaHistorialTemp).getTime();
+        
+        // Evitar desplazamiento de zona horaria al parsear "YYYY-MM-DD" creando la fecha local al mediodía
+        const [y, m, d] = fechaHistorialTemp.split('-');
+        const nuevaFecha = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0).getTime();
+        
         if (isNaN(nuevaFecha)) { toast.error('Fecha inválida'); return; }
 
         if (updateCreditoCliente) {
@@ -582,9 +600,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             if (esCentral) {
                 try {
                     await updateCreditoCliente(historialId, { fecha: new Date(nuevaFecha).toISOString() });
-                    toast.success('Fecha actualizada');
-                    setEditandoFechaHistorialId(null);
-                    return;
                 } catch (e) {
                     console.error('Error al actualizar fecha en central', e);
                 }
@@ -594,8 +609,37 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         const nuevos = historialMayoristas.map(h => h.id === historialId ? { ...h, fecha: nuevaFecha } : h);
         setHistorialMayoristas(nuevos);
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        // Override local para reflejar el cambio inmediatamente en la UI (sin esperar re-render del padre)
+        setDateOverrides(prev => ({ ...prev, [historialId]: nuevaFecha }));
         setEditandoFechaHistorialId(null);
         toast.success('Fecha actualizada');
+    };
+
+    const eliminarHistorial = async (historialId: string) => {
+        if (!confirm('¿Seguro que quieres eliminar este registro?')) return;
+        const esCentral = creditosClientes?.find(c => c.id === historialId);
+        if (esCentral) {
+            if (deleteCreditoCliente) {
+                try { await deleteCreditoCliente(historialId); }
+                catch (e) { console.error('Error al eliminar crédito central', e); toast.error('Error al eliminar de la base de datos'); return; }
+            } else {
+                toast.error('No se puede eliminar este registro del servidor');
+                return;
+            }
+        }
+        const nuevos = historialMayoristas.filter(h => h.id !== historialId);
+        setHistorialMayoristas(nuevos);
+        localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        toast.success('Registro eliminado');
+    };
+
+    const subirFotoHistorial = (historialId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => adjuntarFotoHistorial(historialId, ev.target?.result as string);
+        reader.readAsDataURL(file);
+        e.target.value = '';
     };
 
     // ── Overrides de precio mayorista por producto ───────────────────────────
@@ -628,15 +672,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const tablaDatos = useMemo(() => {
         return productos
             .filter(p => {
-                const catLower = (p.categoria || '').toLowerCase().trim();
-                return !catLower.startsWith('ins:') && !catLower.startsWith('insumos') && p.precioVenta > 0;
+                // 🔥 No ocultaremos NADA en Mayorista. 
+                // Permite ver insumos (si venden insumos al por mayor) y productos sin precio.
+                return true;
             })
             .filter(p => !busqueda || p.nombre.toLowerCase().includes(busqueda.toLowerCase()))
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
                 let costo = calcularCosto(p, mejorPrecio);
-                if (costo <= 0) costo = p.precioVenta / 1.30;
-                if (costo <= 0) return null;
+                if (costo <= 0 && p.precioVenta > 0) costo = p.precioVenta / 1.30;
+                
+                // Aunque no se pueda calcular costo, no ocultaremos el producto
+                // Para que el usuario lo vea y pueda fijarle precio manualmente
 
                 // Precio mínimo al que la panadería puede vender sin perder
                 const precioMinPanaderia = costo; // sin margen = break-even
@@ -807,12 +854,15 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // ── Consolidar Historial Local y Centralizado para la UI ──
     const historialUnificado = useMemo(() => {
-        const localCash = historialMayoristas.filter(h => h.metodoPago !== 'credito');
+        const localCash = historialMayoristas.filter(h => h.metodoPago !== 'credito').map(h => ({
+            ...h,
+            fecha: dateOverrides[h.id] ?? h.fecha,
+        }));
         const centralCredits = creditosClientes ? creditosClientes.map(c => ({
             id: c.id,
             clienteId: c.clienteId,
             clienteNombre: c.clienteNombre,
-            fecha: new Date(c.fecha).getTime(),
+            fecha: dateOverrides[c.id] ?? new Date(c.fecha).getTime(),
             total: c.monto,
             items: c.items || [],
             metodoPago: 'credito' as MetodoPago,
@@ -823,9 +873,12 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 metodoPago: (p.metodoPago || 'efectivo') as MetodoPago
             })),
             fotoFactura: undefined
-        })) : historialMayoristas.filter(h => h.metodoPago === 'credito');
+        })) : historialMayoristas.filter(h => h.metodoPago === 'credito').map(h => ({
+            ...h,
+            fecha: dateOverrides[h.id] ?? h.fecha,
+        }));
         return [...localCash, ...centralCredits].sort((a, b) => b.fecha - a.fecha);
-    }, [historialMayoristas, creditosClientes]);
+    }, [historialMayoristas, creditosClientes, dateOverrides]);
 
     // ── Mini-POS del Cliente ─────────────────────────────────────────────────
     if (viendoPerfilCliente) {
@@ -1011,25 +1064,69 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 />
                                                             </div>
                                                         )}
-                                                        <div className="flex-1 flex items-center justify-between gap-2">
-                                                            <div>
-                                                                <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
-                                                                    {new Date(h.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                                </p>
-                                                                <p className="text-[9px] text-slate-400">{h.items.length} prod. · Total: {formatCurrency(h.total)}</p>
-                                                                {abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">Abonado: {formatCurrency(abonado)}</p>}
-                                                                {/* Lista de abonos individuales */}
-                                                                {(h.abonos ?? []).length > 0 && (
-                                                                    <div className="mt-1 space-y-0.5">
-                                                                        {(h.abonos ?? []).map(a => (
-                                                                            <p key={a.id} className="text-[8px] text-slate-400">
-                                                                                · {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} — {formatCurrency(a.monto)} ({a.metodoPago})
+                                                        <div className="flex-1 flex flex-col gap-1">
+                                                            <div className="flex items-start justify-between">
+                                                                <div>
+                                                                    {editandoFechaHistorialId === h.id ? (
+                                                                        <div className="flex items-center gap-1">
+                                                                            <Input type="date" value={fechaHistorialTemp} onChange={e => setFechaHistorialTemp(e.target.value)} className="h-6 w-32 text-[10px] bg-white dark:bg-slate-900" />
+                                                                            <button onClick={() => guardarFechaHistorial(h.id)} className="text-emerald-600 hover:text-emerald-700"><CheckCircle2 className="w-3 h-3" /></button>
+                                                                            <button onClick={() => setEditandoFechaHistorialId(null)} className="text-rose-600 hover:text-rose-700"><X className="w-3 h-3" /></button>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <div className="flex items-center gap-1 group/date cursor-pointer">
+                                                                            <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                                                                                {(() => {
+                                                                                    const d = new Date(h.fecha);
+                                                                                    return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es', { day: 'numeric', month: 'short', year: 'numeric' });
+                                                                                })()}
                                                                             </p>
-                                                                        ))}
+                                                                            <button onClick={() => { 
+                                                                                const d = new Date(h.fecha);
+                                                                                const safeDate = isNaN(d.getTime()) ? new Date() : d;
+                                                                                setEditandoFechaHistorialId(h.id); 
+                                                                                setFechaHistorialTemp(safeDate.toISOString().split('T')[0]); 
+                                                                            }} className="text-indigo-600 hover:text-indigo-800 p-1">
+                                                                                <Edit2 className="w-3 h-3" />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                    <p className="text-[9px] text-slate-400">{h.items.length} prod. · Total: {formatCurrency(h.total)}</p>
+                                                                    {abonado > 0 && <p className="text-[9px] text-emerald-600 font-bold">Abonado: {formatCurrency(abonado)}</p>}
+                                                                    {/* Lista de abonos individuales */}
+                                                                    {(h.abonos ?? []).length > 0 && (
+                                                                        <div className="mt-1 space-y-0.5">
+                                                                            {(h.abonos ?? []).map((a, idx) => (
+                                                                                <div key={a.id || idx} className="text-[9px] text-slate-600 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 p-1 rounded">
+                                                                                    <span>· {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} — <strong className="text-emerald-600">{formatCurrency(a.monto)}</strong> ({a.metodoPago})</span>
+                                                                                    <button onClick={(e) => { e.stopPropagation(); eliminarAbono(h.id, a.id, idx); }} className="text-rose-500 hover:text-rose-700 p-1 rounded-sm bg-rose-50 hover:bg-rose-100" title="Eliminar este abono">
+                                                                                        <Trash2 className="w-3 h-3" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+
+                                                                <div className="flex flex-col items-end gap-1">
+                                                                    <div className="flex items-center gap-1">
+                                                                        {h.fotoFactura && (
+                                                                            <button onClick={() => window.open(h.fotoFactura, '_blank')} className="w-6 h-6 rounded flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100" title="Ver foto">
+                                                                                <ImageIcon className="w-3 h-3" />
+                                                                            </button>
+                                                                        )}
+                                                                        <label className="w-6 h-6 rounded flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-slate-200 cursor-pointer" title="Subir evidencia">
+                                                                            <Camera className="w-3 h-3" />
+                                                                            <input type="file" accept="image/*" className="hidden" onChange={(e) => subirFotoHistorial(h.id, e)} />
+                                                                        </label>
+                                                                        <button onClick={() => eliminarHistorial(h.id)} className="w-6 h-6 rounded flex items-center justify-center bg-rose-50 text-rose-600 hover:bg-rose-100" title="Eliminar registro">
+                                                                            <Trash2 className="w-3 h-3" />
+                                                                        </button>
                                                                     </div>
-                                                                )}
+                                                                </div>
                                                             </div>
-                                                            <div className="flex items-center gap-2 shrink-0">
+
+                                                            <div className="flex items-center gap-2 shrink-0 mt-1">
                                                                 {pagado ? (
                                                                     <span className="text-[9px] font-black text-emerald-600 uppercase">✓ Pagado</span>
                                                                 ) : (
@@ -1042,7 +1139,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                     value={montoAbono}
                                                                                     onChange={e => setMontoAbono(e.target.value)}
                                                                                     placeholder="Monto"
-                                                                                    className="w-20 h-7 text-xs rounded-lg"
+                                                                                    className="w-20 h-7 text-xs rounded-lg bg-white dark:bg-slate-900 border-slate-300"
                                                                                     autoFocus
                                                                                 />
                                                                                 <button onClick={() => registrarAbono(h.id, 'efectivo')} className="h-7 px-2 rounded-lg bg-emerald-100 text-emerald-700 text-[9px] font-black hover:bg-emerald-200">✓ Efvo</button>
@@ -1521,9 +1618,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                             </button>
                                                             <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">Seleccionar todas ({histProv.length})</span>
                                                         </div>
-                                                        <Button onClick={() => setVerHistorial(true)} variant="outline" className="h-7 text-[9px] uppercase font-black px-2 py-0 border-indigo-200 text-indigo-600">
-                                                            Modo Edición Avanzada
-                                                        </Button>
                                                     </div>
 
                                                     {histProv.map(h => {
@@ -1545,15 +1639,49 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                     </button>
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="flex items-center gap-1 mb-0.5">
-                                                                          <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
-                                                                              {new Date(h.fecha).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                                          </p>
+                                                                            {editandoFechaHistorialId === h.id ? (
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <Input type="date" value={fechaHistorialTemp} onChange={e => setFechaHistorialTemp(e.target.value)} className="h-6 w-32 text-[10px] bg-white dark:bg-slate-900 border-indigo-200" />
+                                                                                    <button onClick={() => guardarFechaHistorial(h.id)} className="text-emerald-600 hover:text-emerald-700 p-1"><CheckCircle2 className="w-3 h-3" /></button>
+                                                                                    <button onClick={() => setEditandoFechaHistorialId(null)} className="text-rose-600 hover:text-rose-700 p-1"><X className="w-3 h-3" /></button>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="flex items-center gap-1 group/date cursor-pointer">
+                                                                                    <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
+                                                                                        {(() => {
+                                                                                            const d = new Date(h.fecha);
+                                                                                            return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+                                                                                        })()}
+                                                                                    </p>
+                                                                                    <button onClick={() => { 
+                                                                                        const d = new Date(h.fecha);
+                                                                                        const safeDate = isNaN(d.getTime()) ? new Date() : d;
+                                                                                        setEditandoFechaHistorialId(h.id); 
+                                                                                        setFechaHistorialTemp(safeDate.toISOString().split('T')[0]); 
+                                                                                    }} className="text-indigo-600 hover:text-indigo-800 p-1 bg-indigo-50 dark:bg-indigo-900/30 rounded">
+                                                                                        <Edit2 className="w-2.5 h-2.5" />
+                                                                                    </button>
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                         <p className="text-[11px] font-black uppercase text-indigo-600 truncate">{h.items.length} productos</p>
-                                                                        <div className="mt-1">
-                                                                          <span className={`inline-block text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${metodoBadge.cls}`}>
-                                                                            {metodoBadge.label}
-                                                                          </span>
+                                                                        <div className="mt-1 flex items-center gap-2">
+                                                                            <span className={`inline-block text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${metodoBadge.cls}`}>
+                                                                              {metodoBadge.label}
+                                                                            </span>
+                                                                            {/* Herramientas extra (foto y eliminar) */}
+                                                                            {h.fotoFactura && (
+                                                                                <button onClick={() => window.open(h.fotoFactura, '_blank')} className="w-5 h-5 rounded flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100" title="Ver foto">
+                                                                                    <ImageIcon className="w-3 h-3" />
+                                                                                </button>
+                                                                            )}
+                                                                            <label className="w-5 h-5 rounded flex items-center justify-center bg-slate-100 text-slate-500 hover:bg-slate-200 cursor-pointer" title="Subir evidencia">
+                                                                                <Camera className="w-3 h-3" />
+                                                                                <input type="file" accept="image/*" className="hidden" onChange={(e) => subirFotoHistorial(h.id, e)} />
+                                                                            </label>
+                                                                            <button onClick={() => eliminarHistorial(h.id)} className="w-5 h-5 rounded flex items-center justify-center bg-rose-50 text-rose-600 hover:bg-rose-100" title="Eliminar ticket completo">
+                                                                                <Trash2 className="w-3 h-3" />
+                                                                            </button>
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right shrink-0">
@@ -1566,13 +1694,35 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                                                                 {/* Abonos */}
                                                                 {(h.abonos ?? []).length > 0 && (
-                                                                    <div className="pl-7 space-y-0.5">
-                                                                        {(h.abonos ?? []).map(a => (
-                                                                            <div key={a.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 rounded p-1">
-                                                                                <span className="text-[8px] text-slate-400">{new Date(a.fecha).toLocaleDateString('es-CO')}</span>
-                                                                                <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300">{formatCurrency(a.monto)} <span className="uppercase text-[8px] opacity-60">({a.metodoPago})</span></span>
+                                                                    <div className="pl-7 space-y-1 mt-1">
+                                                                        {(h.abonos ?? []).map((a, idx) => {
+                                                                            const aBadge = {
+                                                                                efectivo: 'bg-emerald-100 text-emerald-700',
+                                                                                nequi:    'bg-violet-100 text-violet-700',
+                                                                                transferencia: 'bg-blue-100 text-blue-700',
+                                                                                credito:  'bg-rose-100 text-rose-700'
+                                                                            }[a.metodoPago] ?? 'bg-slate-100 text-slate-600';
+                                                                            
+                                                                            return (
+                                                                            <div key={a.id || idx} className="flex justify-between items-center bg-emerald-50 dark:bg-emerald-950/20 rounded-md px-2 py-1.5 group/abono">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-sm ${aBadge}`}>
+                                                                                        {{ efectivo: 'Efectivo', nequi: 'Nequi', credito: 'Crédito', transferencia: 'Cuenta' }[a.metodoPago] || a.metodoPago}
+                                                                                    </span>
+                                                                                    <span className="text-[9px] font-medium text-slate-500">
+                                                                                        {new Date(a.fecha).toLocaleDateString('es-CO')}
+                                                                                    </span>
+                                                                                </div>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400">
+                                                                                        +{formatCurrency(a.monto)}
+                                                                                    </span>
+                                                                                    <button onClick={(e) => { e.stopPropagation(); eliminarAbono(h.id, a.id, idx); }} className="text-rose-500 hover:text-rose-700 p-1 rounded-sm bg-rose-100/50 hover:bg-rose-200 transition-all" title="Eliminar abono">
+                                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                                    </button>
+                                                                                </div>
                                                                             </div>
-                                                                        ))}
+                                                                        )})}
                                                                     </div>
                                                                 )}
 
@@ -1638,7 +1788,24 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     </div>
                 </div>
 
-            {/* ── Dialog: Historial de ventas ── */}
+            {/* 🔥 BOTÓN MÁGICO TEMPORAL PARA INYECTAR DICTADO */}
+            <button
+                onClick={async () => {
+                    if (confirm('¿Inyectar los productos dictados (Icopor y Base Dorada)?')) {
+                        let prov = allClientes?.find(c => c.nombre.toLowerCase().includes('surtidora de la 36'));
+                        // Wait, they dictate Proveedores not Clientes...
+                        // Let's just create the products directly without supplier if needed, or pass the request to the DB.
+                        // Actually, I can dispatch a custom event to App.tsx to do it, but App.tsx already has the code!
+                        localStorage.removeItem('ag_dictado_insumos_2');
+                        window.location.reload();
+                    }
+                }}
+                className="mx-6 mt-4 p-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 flex items-center justify-center gap-2"
+            >
+                🚀 CLIC AQUÍ PARA FORZAR INYECCIÓN DE DICTADO Y RECARGAR
+            </button>
+
+            {/* ── Tabs Superiores ── */}
             <Dialog open={verHistorial} onOpenChange={v => { setVerHistorial(v); if (!v) { setAbonandoId(null); setMontoAbono(''); } }}>
                 <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] flex flex-col">
                     <DialogHeader className="shrink-0">
@@ -1760,14 +1927,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
                                                     <ChevronRight className="w-3 h-3" /> Abonos recibidos
                                                 </p>
-                                                {(h.abonos ?? []).map(a => {
+                                                {(h.abonos ?? []).map((a, idx) => {
                                                     const aBadge = {
                                                         efectivo: 'bg-emerald-100 text-emerald-700',
                                                         nequi:    'bg-violet-100 text-violet-700',
                                                         credito:  'bg-rose-100 text-rose-700',
                                                     }[a.metodoPago] ?? 'bg-slate-100 text-slate-600';
                                                     return (
-                                                        <div key={a.id} className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 rounded-lg px-3 py-1.5">
+                                                        <div key={a.id || idx} className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-950/20 rounded-lg px-3 py-1.5 group/abono">
                                                             <div>
                                                                 <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full mr-2 ${aBadge}`}>
                                                                     {{ efectivo: 'Efectivo', nequi: 'Nequi', credito: 'Crédito' }[a.metodoPago]}
@@ -1776,7 +1943,12 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                     {new Date(a.fecha).toLocaleDateString('es', { day: 'numeric', month: 'short' })} · {new Date(a.fecha).toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' })}
                                                                 </span>
                                                             </div>
-                                                            <span className="text-sm font-black text-emerald-600 tabular-nums">+{formatCurrency(a.monto)}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-black text-emerald-600 tabular-nums">+{formatCurrency(a.monto)}</span>
+                                                                <button onClick={(e) => { e.stopPropagation(); eliminarAbono(h.id, a.id, idx); }} className="opacity-0 group-hover/abono:opacity-100 text-rose-500 hover:text-rose-700 p-0.5 rounded-sm hover:bg-rose-100 transition-all" title="Eliminar abono">
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
                                                         </div>
                                                     );
                                                 })}

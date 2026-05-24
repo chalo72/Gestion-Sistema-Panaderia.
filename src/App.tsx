@@ -159,6 +159,8 @@ const App = () => {
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
+
+
   // 🔒 Iron-Clad: wrapper de sync con estado + alerta si cierran mientras sincroniza
   const syncWithCloudTracked = async () => {
     setIsSyncing(true);
@@ -469,6 +471,7 @@ const App = () => {
           creditosClientes={creditosClientes}
           addCreditoCliente={addCreditoCliente}
           updateCreditoCliente={updateCreditoCliente}
+          deleteCreditoCliente={deleteCreditoCliente}
           registrarPagoCredito={registrarPagoCredito}
         />;
       case 'reportes':

@@ -25,18 +25,6 @@ export const RESCUE_DATA = {
       "nombre": "Speemax Carm"
     },
     {
-      "id": "13951a34-efd1-4cea-8a49-592db6c81c12",
-      "nombre": "Empanada ",
-      "precioVenta": 2000,
-      "descripcion": "Unidad x1",
-      "margenUtilidad": 50,
-      "createdAt": "2026-05-21T21:35:51.172Z",
-      "tipo": "elaborado",
-      "categoria": "Panes",
-      "costoBase": 1300,
-      "updatedAt": "2026-05-21T21:35:52.590Z"
-    },
-    {
       "id": "149ab633-57f2-41af-9de3-7d96cd12c5b7",
       "costoBase": 600,
       "updatedAt": "2026-05-22T20:19:09.703Z",

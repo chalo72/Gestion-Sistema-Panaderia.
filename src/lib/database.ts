@@ -170,8 +170,27 @@ class MultiAdapter implements DatabaseAdapter {
   }
 
   subscribe<T>(collection: string, callback: (data: T[]) => void) {
-    // La suscripción en tiempo real usa la nube si está disponible,
-    // si no, cae al polling local del IndexedDBAdapter
+    if (this.shadow && typeof this.shadow.subscribe === 'function') {
+      console.log(`📡 [NEXUS]: Activando Real-time Sync para '${collection}'`);
+      return this.shadow.subscribe<T>(collection, async (cloudData) => {
+        try {
+          // Filtro Anti-Zombies
+          const tombstonesData = await this.primary.getCollection<any>('tombstones') || [];
+          const deadKeys = new Set(tombstonesData.map(t => `${t.table}:${t.item_id}`));
+          const datosVivos = cloudData.filter(d => !deadKeys.has(`${collection}:${(d as any).id}`));
+
+          if (datosVivos.length > 0) {
+            await (this.primary as any).hydrateFromCloud(collection, datosVivos);
+          }
+          callback(datosVivos);
+        } catch (e) {
+          console.error(`⚠️ [NEXUS]: Error en Real-time Sync para '${collection}'`, e);
+          callback(cloudData);
+        }
+      });
+    }
+    
+    // Si no hay nube, cae al polling local del IndexedDBAdapter
     return this.primary.subscribe(collection, callback);
   }
 }
@@ -225,11 +244,19 @@ async function hydratarDesdeNube(
         console.log(`📡 [NEXUS-DEBUG]: Intentando recuperar '${col}' desde la nube...`);
         const datosNube = await nube.getCollection<any>(col);
         console.log(`📡 [NEXUS-DEBUG]: Recibidos ${datosNube.length} items de '${col}' de la nube.`);
-        if (datosNube.length > 0) {
-          console.log(`📡 [NEXUS-DEBUG]: Ejemplo primer item de ${col}:`, JSON.stringify(datosNube[0]).substring(0, 100));
-          await localDB.hydrateFromCloud(col, datosNube);
+        
+        // 🛡️ Filtro Anti-Zombies: Evitar resucitar documentos que fueron eliminados localmente
+        const tombstonesData = await localDB.getCollection<any>('tombstones') || [];
+        const deadKeys = new Set(tombstonesData.map(t => `${t.table}:${t.item_id}`));
+        const datosVivos = datosNube.filter(d => !deadKeys.has(`${col}:${d.id}`));
+
+        if (datosVivos.length > 0) {
+          if (datosVivos.length < datosNube.length) {
+            console.log(`🛡️ [NEXUS]: Filtrados ${datosNube.length - datosVivos.length} items zombies de '${col}'.`);
+          }
+          await localDB.hydrateFromCloud(col, datosVivos);
         } else {
-          console.warn(`📡 [NEXUS-DEBUG]: La colección '${col}' está VACÍA en la nube.`);
+          console.warn(`📡 [NEXUS-DEBUG]: La colección '${col}' está VACÍA en la nube (o todos los items son zombies).`);
         }
       } else {
         console.log(`✅ [NEXUS]: '${col}' ya tiene ${localCount} items locales. No se sobrescribe.`);
@@ -472,6 +499,20 @@ class NexusDatabase implements IDatabase {
   async syncLocalToCloud() {
     if (firebaseAdapter) {
       console.log('📤 [NEXUS]: Iniciando respaldo local → nube...');
+      
+      // 1. Sincronizar eliminaciones (procesar tombstones)
+      try {
+        const tombstones = await localAdapter.getCollection<any>('tombstones') || [];
+        for (const t of tombstones) {
+          await firebaseAdapter.deleteDocument(t.table, t.item_id).catch(() => {});
+          // Opcional: podríamos borrar el tombstone local aquí, pero mantenerlo
+          // protege contra regeneraciones si otro dispositivo hace push.
+        }
+      } catch (e) {
+        console.warn('⚠️ [NEXUS] Error al sincronizar eliminaciones a la nube', e);
+      }
+
+      // 2. Sincronizar creaciones y actualizaciones
       for (const col of COLECCIONES_PRINCIPALES) {
         const items = await localAdapter.getCollection<any>(col);
         for (const item of items) {

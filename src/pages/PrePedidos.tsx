@@ -231,7 +231,11 @@ export default function PrePedidos({
     const phone = prov?.telefono ? prov.telefono.replace(/\D/g,'') : '';
     const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
     window.open(url, '_blank');
-    onUpdatePrePedido(pedido.id, { estado: 'enviado' });
+  };
+
+  const handleMarcarEnviado = (pedidoId: string) => {
+    onUpdatePrePedido(pedidoId, { estado: 'enviado' });
+    toast.success('Orden marcada como enviada');
   };
 
   const handleAddItemToDraft = async (productoId: string, proveedorId: string, cantidad: number, precio: number) => {
@@ -490,11 +494,18 @@ export default function PrePedidos({
                       {(p.estado === 'confirmado' || p.estado === 'enviado') && (
                         <div className="flex gap-2">
                           {p.estado === 'confirmado' && (
-                            <Button size="sm" variant="outline"
-                              className="flex-1 h-8 text-[10px] font-black uppercase border-amber-200 text-amber-700 hover:bg-amber-50 gap-1"
-                              onClick={(e) => { e.stopPropagation(); sharePedidoWhatsApp(p); }}>
-                              <Share2 className="w-3.5 h-3.5" /> Enviar y marcar
-                            </Button>
+                            <>
+                              <Button size="sm" variant="outline"
+                                className="flex-1 h-8 text-[10px] font-black uppercase border-[#25D366] text-[#25D366] hover:bg-[#25D366]/10 gap-1"
+                                onClick={(e) => { e.stopPropagation(); sharePedidoWhatsApp(p); }}>
+                                <Share2 className="w-3.5 h-3.5" /> Enviar WhatsApp
+                              </Button>
+                              <Button size="sm"
+                                className="flex-1 h-8 text-[10px] font-black uppercase bg-blue-600 hover:bg-blue-700 text-white gap-1"
+                                onClick={(e) => { e.stopPropagation(); handleMarcarEnviado(p.id); }}>
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Marcar Enviado
+                              </Button>
+                            </>
                           )}
                           {p.estado === 'enviado' && (
                             <Button size="sm"
@@ -550,9 +561,22 @@ export default function PrePedidos({
                       <h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white tracking-tight">{verDetallePedido.nombre}</h2>
                       <Badge className="bg-indigo-100 text-indigo-700 border-none px-3 font-bold uppercase tracking-widest">{verDetallePedido.estado}</Badge>
                    </div>
-                   <p className="text-sm font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-2">
-                      {getProveedorById(verDetallePedido.proveedorId)?.nombre} • ORDEN {verDetallePedido.numeroOrden || '#000'} • {new Date(verDetallePedido.fechaCreacion || Date.now()).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                   </p>
+                   <div className="flex items-center gap-2 mt-1">
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">
+                         {getProveedorById(verDetallePedido.proveedorId)?.nombre} • ORDEN {verDetallePedido.numeroOrden || '#000'} • 
+                      </p>
+                      <Input 
+                         type="datetime-local" 
+                         value={new Date(verDetallePedido.fechaCreacion - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} 
+                         onChange={(e) => {
+                             const localDate = new Date(e.target.value);
+                             onUpdatePrePedido(verDetallePedido.id, { fechaCreacion: localDate.getTime() });
+                             setVerDetallePedido({ ...verDetallePedido, fechaCreacion: localDate.getTime() });
+                             toast.success('Fecha actualizada');
+                         }}
+                         className="h-7 w-40 text-[10px] font-black bg-white dark:bg-slate-900 border-slate-200"
+                      />
+                   </div>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                    {(verDetallePedido.estado === 'borrador' || verDetallePedido.estado === 'confirmado') && (
@@ -566,9 +590,14 @@ export default function PrePedidos({
                          <Edit3 className="w-4 h-4" /> Editar
                       </Button>
                    )}
-                   <Button onClick={(e) => { e.stopPropagation(); handleShareWhatsApp(verDetallePedido); }} className="h-12 px-6 rounded-xl font-black uppercase tracking-widest bg-[#25D366] hover:bg-[#1DA851] text-white flex gap-2 items-center shadow-lg shadow-emerald-500/20 flex-1 sm:flex-none">
+                   <Button onClick={(e) => { e.stopPropagation(); sharePedidoWhatsApp(verDetallePedido); }} className="h-12 px-6 rounded-xl font-black uppercase tracking-widest bg-[#25D366] hover:bg-[#1DA851] text-white flex gap-2 items-center shadow-lg shadow-emerald-500/20 flex-1 sm:flex-none">
                       <Send className="w-4 h-4" /> WhatsApp
                    </Button>
+                   {verDetallePedido.estado === 'confirmado' && (
+                     <Button onClick={() => handleMarcarEnviado(verDetallePedido.id)} className="h-12 px-6 rounded-xl font-black uppercase tracking-widest bg-blue-600 hover:bg-blue-700 text-white flex gap-2 items-center shadow-lg shadow-blue-500/20 flex-1 sm:flex-none">
+                        <CheckCircle2 className="w-4 h-4" /> Marcar Enviado
+                     </Button>
+                   )}
                 </div>
              </div>
              

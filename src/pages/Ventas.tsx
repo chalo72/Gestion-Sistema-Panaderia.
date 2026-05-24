@@ -183,7 +183,7 @@ export function Ventas(props: VentasProps) {
                 
             const precio = safeNumber(p.precioVenta);
             
-            return matchesSearch && matchesCategory && precio > 0 && isNotInsumo;
+            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo;
         });
     }, [productos, searchTerm, selectedCategory]);
 
