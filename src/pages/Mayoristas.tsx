@@ -1084,8 +1084,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                             <button onClick={() => { 
                                                                                 const d = new Date(h.fecha);
                                                                                 const safeDate = isNaN(d.getTime()) ? new Date() : d;
-                                                                                setEditandoFechaHistorialId(h.id); 
-                                                                                setFechaHistorialTemp(safeDate.toISOString().split('T')[0]); 
+                                                                                setEditandoFechaHistorialId(h.id);
+                                                                                const yy = safeDate.getFullYear(), mo = String(safeDate.getMonth()+1).padStart(2,'0'), dd = String(safeDate.getDate()).padStart(2,'0');
+                                                                                setFechaHistorialTemp(`${yy}-${mo}-${dd}`);
                                                                             }} className="text-indigo-600 hover:text-indigo-800 p-1">
                                                                                 <Edit2 className="w-3 h-3" />
                                                                             </button>
@@ -1119,9 +1120,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                             <Camera className="w-3 h-3" />
                                                                             <input type="file" accept="image/*" className="hidden" onChange={(e) => subirFotoHistorial(h.id, e)} />
                                                                         </label>
-                                                                        <button onClick={() => eliminarHistorial(h.id)} className="w-6 h-6 rounded flex items-center justify-center bg-rose-50 text-rose-600 hover:bg-rose-100" title="Eliminar registro">
-                                                                            <Trash2 className="w-3 h-3" />
-                                                                        </button>
                                                                     </div>
                                                                 </div>
                                                             </div>
@@ -1159,6 +1157,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                     </>
                                                                 )}
                                                             </div>
+                                                            {/* Botón eliminar ticket — separado y etiquetado, no confundible con los abonos */}
+                                                            <button
+                                                                onClick={() => eliminarHistorial(h.id)}
+                                                                className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-red-300 text-red-500 hover:bg-red-50 text-[9px] font-black uppercase tracking-widest transition-colors"
+                                                                title="Eliminar este ticket completo"
+                                                            >
+                                                                <Trash2 className="w-3 h-3" /> Eliminar ticket completo
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 );
@@ -1656,8 +1662,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                     <button onClick={() => { 
                                                                                         const d = new Date(h.fecha);
                                                                                         const safeDate = isNaN(d.getTime()) ? new Date() : d;
-                                                                                        setEditandoFechaHistorialId(h.id); 
-                                                                                        setFechaHistorialTemp(safeDate.toISOString().split('T')[0]); 
+                                                                                        setEditandoFechaHistorialId(h.id);
+                                                                                        const yy = safeDate.getFullYear(), mo = String(safeDate.getMonth()+1).padStart(2,'0'), dd = String(safeDate.getDate()).padStart(2,'0');
+                                                                                        setFechaHistorialTemp(`${yy}-${mo}-${dd}`);
                                                                                     }} className="text-indigo-600 hover:text-indigo-800 p-1 bg-indigo-50 dark:bg-indigo-900/30 rounded">
                                                                                         <Edit2 className="w-2.5 h-2.5" />
                                                                                     </button>
@@ -1679,9 +1686,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                 <Camera className="w-3 h-3" />
                                                                                 <input type="file" accept="image/*" className="hidden" onChange={(e) => subirFotoHistorial(h.id, e)} />
                                                                             </label>
-                                                                            <button onClick={() => eliminarHistorial(h.id)} className="w-5 h-5 rounded flex items-center justify-center bg-rose-50 text-rose-600 hover:bg-rose-100" title="Eliminar ticket completo">
-                                                                                <Trash2 className="w-3 h-3" />
-                                                                            </button>
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right shrink-0">
@@ -1748,6 +1752,15 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                         )}
                                                                     </div>
                                                                 )}
+
+                                                                {/* Eliminar ticket completo — separado y diferenciado de eliminar abono */}
+                                                                <button
+                                                                    onClick={() => eliminarHistorial(h.id)}
+                                                                    className="mt-2 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-lg border border-dashed border-red-300 text-red-500 hover:bg-red-50 text-[9px] font-black uppercase tracking-widest transition-colors"
+                                                                    title="Eliminar este ticket completo"
+                                                                >
+                                                                    <Trash2 className="w-3 h-3" /> Eliminar ticket completo
+                                                                </button>
                                                             </div>
                                                         );
                                                     })}
