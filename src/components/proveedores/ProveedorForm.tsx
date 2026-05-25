@@ -269,9 +269,19 @@ export function ProveedorForm({
           const esMasGrande = ci.length > (initialCatalogo?.length || 0);
           
           if (esReciente || esMasGrande) {
+            // Filtrar items del borrador cuyos productos ya no existen en el sistema
+            const productIdsValidos = new Set(productosExistentes.map(p => p.id));
+            const ciValidos: ProductoCatalogo[] = ci.filter((item: ProductoCatalogo) =>
+              !item.productoId || productIdsValidos.has(item.productoId)
+            );
             setFormData(fd);
-            setCatalogoItems(ci);
-            toast.info('Se recuperó automáticamente tu trabajo sin guardar');
+            setCatalogoItems(ciValidos);
+            const eliminados = ci.length - ciValidos.length;
+            toast.info(
+              eliminados > 0
+                ? `Borrador recuperado — ${eliminados} producto(s) ya eliminado(s) del sistema se omitieron`
+                : 'Se recuperó automáticamente tu trabajo sin guardar'
+            );
             draftRestored = true;
           }
         } catch (e) {

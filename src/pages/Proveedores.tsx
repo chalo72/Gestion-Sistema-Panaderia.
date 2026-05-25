@@ -854,7 +854,8 @@ export function Proveedores({
                                 <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-center">Empaque</div>
                                 <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-right">Costo Aliado</div>
                                 <div className="col-span-1 text-xs font-black uppercase tracking-widest text-slate-400 text-center">%</div>
-                                <div className="col-span-3 text-xs font-black uppercase tracking-widest text-slate-400 text-right">P. Venta</div>
+                                <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-right">P. Venta</div>
+                                <div className="col-span-1 text-xs font-black uppercase tracking-widest text-slate-400 text-center"></div>
                               </div>
                               {insumos.map((precio, idx) => {
                                 const prodItem = getProductoById(precio.productoId);
@@ -896,10 +897,23 @@ export function Proveedores({
                                         )}>{margenPct}%</span>
                                       ) : <span className="text-xs text-slate-300">—</span>}
                                     </div>
-                                    <div className="col-span-3 text-right">
+                                    <div className="col-span-2 text-right">
                                       {pventa > 0
                                         ? <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(pventa)}</p>
                                         : <p className="text-sm text-slate-300">—</p>}
+                                    </div>
+                                    <div className="col-span-1 flex justify-center">
+                                      <button
+                                        onClick={() => {
+                                          if (window.confirm(`¿Eliminar "${prodItem?.nombre || 'este producto'}" del catálogo de ${prov.nombre}?`)) {
+                                            onDeletePrecio(precio.id);
+                                          }
+                                        }}
+                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                        title="Eliminar del catálogo"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
                                     </div>
                                   </div>
                                 );
