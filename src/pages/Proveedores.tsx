@@ -981,63 +981,154 @@ export function Proveedores({
                       {/* ── Tab: Análisis ── */}
                       {tabDetalle === 'analisis' && (() => {
                         const metricas = getMetricasProveedor(prov);
+                        // ── Cálculos financieros del ciclo ──
+                        const productosAnalisis = insumos.map(precio => {
+                          const prod = getProductoById(precio.productoId);
+                          const cantEmb = precio.cantidadEmbalaje || 1;
+                          const costoU = precio.precioCosto / cantEmb;
+                          const pventa = prod?.precioVenta || 0;
+                          const gananciaU = pventa - costoU;
+                          const margenPct = costoU > 0 && pventa > 0 ? ((pventa - costoU) / costoU) * 100 : 0;
+                          const esVenta = (precio.destino === 'venta') || (!precio.destino && prod?.tipo === 'elaborado');
+                          return { nombre: prod?.nombre || 'Producto', costoU, pventa, gananciaU, margenPct, cantEmb, precioCosto: precio.precioCosto, esVenta };
+                        });
+                        const ventas = productosAnalisis.filter(p => p.esVenta && p.pventa > 0);
+                        const inversionTotal = productosAnalisis.reduce((s, p) => s + p.precioCosto, 0);
+                        const gananciaCiclo = ventas.reduce((s, p) => s + (p.gananciaU * p.cantEmb), 0);
+                        const roiCiclo = inversionTotal > 0 ? (gananciaCiclo / inversionTotal) * 100 : 0;
+                        const margenProm = ventas.length > 0 ? ventas.reduce((s, p) => s + p.margenPct, 0) / ventas.length : 0;
+                        const topProductos = [...ventas].sort((a, b) => (b.gananciaU * b.cantEmb) - (a.gananciaU * a.cantEmb)).slice(0, 5);
+                        const alertasMargen = ventas.filter(p => p.margenPct > 0 && p.margenPct < 25);
+                        const estrellasCount = ventas.filter(p => p.margenPct >= 60).length;
                         return (
-                          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Card className="rounded-2xl border-none bg-indigo-600 text-white shadow-xl p-5 relative overflow-hidden">
-                              <Zap className="w-6 h-6 mb-2 text-emerald-300" />
-                              <h4 className="text-base font-black uppercase tracking-tight">Desempeño de {prov.nombre}</h4>
-                              <p className="text-[9px] font-bold uppercase tracking-widest text-indigo-200 mt-0.5 mb-5 opacity-70">
-                                {prov.ubicacion ? `📍 ${prov.ubicacion} — ` : ''}Basado en datos registrados
-                              </p>
-                              <div className="space-y-3">
+                          <div className="p-5 space-y-5">
+                            {/* Score proveedor */}
+                            <div className="rounded-2xl bg-gradient-to-r from-indigo-600 to-blue-700 text-white p-5 relative overflow-hidden">
+                              <div className="flex items-start justify-between gap-4 flex-wrap">
+                                <div>
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-indigo-200 mb-1">
+                                    {prov.ubicacion ? `📍 ${prov.ubicacion} — ` : ''}Score del Proveedor
+                                  </p>
+                                  <h4 className="text-lg font-black uppercase">{prov.nombre}</h4>
+                                  <p className="text-[10px] text-indigo-200 mt-1">
+                                    {insumos.length} productos · {ventas.length} de reventa · {insumos.length - ventas.length} insumos producción
+                                  </p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-3xl font-black">{metricas.calidad}%</p>
+                                  <p className="text-[9px] font-black uppercase text-indigo-200">Score calidad</p>
+                                </div>
+                              </div>
+                              <div className="mt-4 space-y-2.5">
                                 {[
-                                  { label: 'Calidad (rating)', pct: metricas.calidad, color: 'bg-amber-400' },
-                                  { label: 'Cobertura de catálogo', pct: metricas.cobertura, color: 'bg-blue-300' },
+                                  { label: 'Calidad del proveedor', pct: metricas.calidad, color: 'bg-amber-400' },
+                                  { label: 'Cobertura del catálogo', pct: metricas.cobertura, color: 'bg-cyan-400' },
+                                  { label: 'Rentabilidad del portafolio', pct: Math.min(100, Math.round(roiCiclo)), color: roiCiclo >= 30 ? 'bg-emerald-400' : 'bg-rose-400' },
                                 ].map(({ label, pct, color }) => (
                                   <div key={label}>
-                                    <div className="flex justify-between text-[9px] font-black uppercase mb-1">
+                                    <div className="flex justify-between text-[9px] font-black uppercase mb-1 text-indigo-100">
                                       <span>{label}</span><span>{pct}%</span>
                                     </div>
-                                    <div className="h-2 w-full bg-white/10 rounded-full">
-                                      <div className={cn('h-full rounded-full transition-all duration-700', color)} style={{ width: `${pct}%` }} />
+                                    <div className="h-1.5 w-full bg-white/10 rounded-full">
+                                      <div className={cn('h-full rounded-full transition-all duration-700', color)} style={{ width: `${Math.min(100, pct)}%` }} />
                                     </div>
                                   </div>
                                 ))}
                               </div>
-                              <ShieldCheck className="absolute -bottom-4 -right-4 w-24 h-24 opacity-10" />
-                            </Card>
+                              <ShieldCheck className="absolute -bottom-4 -right-4 w-28 h-28 opacity-10" />
+                            </div>
 
-                            <Card className="rounded-2xl border-none bg-white dark:bg-gray-900 shadow-md p-5">
-                              <h4 className="text-[9px] font-black uppercase tracking-widest text-blue-600 mb-4 flex items-center gap-2">
-                                <TrendingUp className="w-3.5 h-3.5" /> Resumen Financiero
-                              </h4>
-                              <div className="space-y-3">
-                                <div>
-                                  <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Insumos totales</span>
-                                  <p className="text-xl font-black text-slate-800 dark:text-white">{insumos.length}</p>
+                            {/* KPIs financieros */}
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                              {[
+                                { label: 'Inversión x Ciclo', value: formatCurrency(Math.round(inversionTotal / 100) * 100), sub: 'Lo que inviertes por pedido', color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/20', icon: '💰' },
+                                { label: 'Ganancia del Ciclo', value: gananciaCiclo > 0 ? `+${formatCurrency(Math.round(gananciaCiclo / 100) * 100)}` : '—', sub: 'Si vendes todas las unidades', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20', icon: '📈' },
+                                { label: 'ROI del Ciclo', value: roiCiclo > 0 ? `${roiCiclo.toFixed(0)}%` : '—', sub: roiCiclo >= 30 ? '✅ Rentable' : roiCiclo > 0 ? '⚠️ Mejorable' : 'Sin datos', color: roiCiclo >= 30 ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20', icon: '🎯' },
+                                { label: 'Margen Promedio', value: margenProm > 0 ? `${margenProm.toFixed(0)}%` : '—', sub: `${estrellasCount} estrella${estrellasCount !== 1 ? 's' : ''} · ${alertasMargen.length} alerta${alertasMargen.length !== 1 ? 's' : ''}`, color: margenProm >= 40 ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : margenProm >= 25 ? 'text-amber-600 bg-amber-50 dark:bg-amber-900/20' : 'text-red-600 bg-red-50 dark:bg-red-900/20', icon: '📊' },
+                              ].map(kpi => (
+                                <div key={kpi.label} className={cn('rounded-xl p-3.5 border border-slate-100 dark:border-slate-800', kpi.color)}>
+                                  <p className="text-base mb-0.5">{kpi.icon}</p>
+                                  <p className="text-[9px] font-black uppercase tracking-widest opacity-60 mb-1">{kpi.label}</p>
+                                  <p className="text-xl font-black tabular-nums leading-none">{kpi.value}</p>
+                                  <p className="text-[9px] mt-1 opacity-60 font-bold">{kpi.sub}</p>
                                 </div>
-                                <div>
-                                  <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Valor total del catálogo</span>
-                                  <p className="text-xl font-black text-blue-600">
-                                    {formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0))}
-                                  </p>
+                              ))}
+                            </div>
+
+                            {/* Top productos rentables */}
+                            {topProductos.length > 0 && (
+                              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+                                <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">🏆 Top Productos por Ganancia del Ciclo</p>
+                                  <p className="text-[9px] text-slate-400 font-bold">ganancia/u × unidades en paca</p>
                                 </div>
-                                <div>
-                                  <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Precio promedio</span>
-                                  <p className="text-lg font-black text-slate-700 dark:text-slate-200">
-                                    {insumos.length > 0 ? formatCurrency(insumos.reduce((s, i) => s + i.precioCosto, 0) / insumos.length) : '—'}
-                                  </p>
+                                {topProductos.map((p, i) => {
+                                  const gCiclo = p.gananciaU * p.cantEmb;
+                                  const pctDelTotal = gananciaCiclo > 0 ? (gCiclo / gananciaCiclo) * 100 : 0;
+                                  return (
+                                    <div key={i} className={cn('px-4 py-3 flex items-center gap-3', i % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/50 dark:bg-slate-800/30')}>
+                                      <span className="text-base shrink-0">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '⭐'}</span>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-black text-slate-800 dark:text-white uppercase truncate">{p.nombre}</p>
+                                        <p className="text-[9px] text-slate-400 font-bold">×{p.cantEmb} und · {formatCurrency(Math.round(p.gananciaU / 100) * 100)}/u · margen {p.margenPct.toFixed(0)}%</p>
+                                        <div className="mt-1 h-1 bg-slate-100 dark:bg-slate-800 rounded-full">
+                                          <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${pctDelTotal}%` }} />
+                                        </div>
+                                      </div>
+                                      <div className="text-right shrink-0">
+                                        <p className="text-sm font-black text-emerald-600 tabular-nums">+{formatCurrency(Math.round(gCiclo / 100) * 100)}</p>
+                                        <p className="text-[9px] text-slate-400 font-bold">{pctDelTotal.toFixed(0)}% del total</p>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <div className="px-4 py-2.5 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/10 dark:to-teal-900/10 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                                  <p className="text-[9px] font-black uppercase text-slate-400">Total ganancia del ciclo</p>
+                                  <p className="text-sm font-black text-emerald-600 tabular-nums">+{formatCurrency(Math.round(gananciaCiclo / 100) * 100)}</p>
                                 </div>
-                                {metricas.margenPromedio > 0 && (
-                                  <div>
-                                    <span className="text-[9px] font-bold opacity-40 uppercase tracking-widest">Margen promedio</span>
-                                    <p className={cn('text-lg font-black', metricas.margenPromedio > 30 ? 'text-emerald-600' : 'text-amber-600')}>
-                                      {metricas.margenPromedio}%
-                                    </p>
-                                  </div>
-                                )}
                               </div>
-                            </Card>
+                            )}
+
+                            {/* Alertas de margen bajo */}
+                            {alertasMargen.length > 0 && (
+                              <div className="rounded-2xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 overflow-hidden">
+                                <div className="px-4 py-3 flex items-center gap-2 border-b border-amber-200 dark:border-amber-800">
+                                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                                    {alertasMargen.length} Producto{alertasMargen.length !== 1 ? 's' : ''} con Margen Bajo (&lt;25%)
+                                  </p>
+                                </div>
+                                <div className="divide-y divide-amber-100 dark:divide-amber-900/30">
+                                  {alertasMargen.map((p, i) => (
+                                    <div key={i} className="px-4 py-2.5 flex items-center justify-between">
+                                      <div>
+                                        <p className="text-xs font-black text-slate-800 dark:text-white uppercase">{p.nombre}</p>
+                                        <p className="text-[9px] text-amber-600 font-bold">
+                                          Costo: {formatCurrency(Math.round(p.costoU / 100) * 100)} → Venta: {formatCurrency(p.pventa)} → Ganancia: {formatCurrency(Math.round(p.gananciaU / 100) * 100)}/u
+                                        </p>
+                                      </div>
+                                      <span className="text-xs font-black text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-2 py-0.5 rounded-lg shrink-0">{p.margenPct.toFixed(0)}%</span>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="px-4 py-2.5 border-t border-amber-200 dark:border-amber-800">
+                                  <p className="text-[9px] text-amber-600 font-bold">💡 Sube el precio de venta de estos productos o negocia mejor costo con {prov.nombre} para mejorar la rentabilidad.</p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Conclusión */}
+                            <div className="rounded-2xl bg-gradient-to-br from-slate-50 to-blue-50/40 dark:from-slate-800/40 dark:to-blue-950/20 border border-slate-200/60 dark:border-slate-700/60 p-4">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-2">📋 Conclusión del Ciclo</p>
+                              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
+                                {prov.nombre} te suministra <strong>{insumos.length} productos</strong>
+                                {prov.ubicacion ? ` desde ${prov.ubicacion}` : ''}.
+                                {inversionTotal > 0 && ` Inviertes ${formatCurrency(Math.round(inversionTotal / 100) * 100)} por ciclo de compra.`}
+                                {gananciaCiclo > 0 && ` Si vendes todas las unidades, generas +${formatCurrency(Math.round(gananciaCiclo / 100) * 100)} de ganancia bruta con un ROI del ${roiCiclo.toFixed(0)}%.`}
+                                {alertasMargen.length > 0 && ` ⚠️ Tienes ${alertasMargen.length} producto${alertasMargen.length !== 1 ? 's' : ''} con margen por debajo del 25% que requieren atención.`}
+                                {estrellasCount > 0 && ` ⭐ ${estrellasCount} producto${estrellasCount !== 1 ? 's están' : ' está'} por encima del 60% de margen — aprovéchalos.`}
+                              </p>
+                            </div>
                           </div>
                         );
                       })()}

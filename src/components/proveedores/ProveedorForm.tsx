@@ -1440,12 +1440,11 @@ export function ProveedorForm({
                             </div>
                             <div className="w-px h-8 bg-slate-200 dark:bg-slate-800" />
                             <div className="flex flex-col">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Ganancia Est.</span>
+                                <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Ganancia del Ciclo</span>
                                 <span className="text-sm font-black text-amber-500 tabular-nums">
                                     +{formatCurrency(catalogoItems.reduce((acc, curr) => {
-                                      const stock = curr.stockRecibido || 0;
-                                      const ganancia = (curr.precioVenta - curr.costoUnitario) * (stock > 0 ? stock : 1);
-                                      return acc + ganancia;
+                                      const ganancia = (curr.precioVenta - curr.costoUnitario) * (curr.cantidadEmbalaje || 1);
+                                      return acc + (ganancia > 0 ? ganancia : 0);
                                     }, 0))}
                                 </span>
                             </div>
