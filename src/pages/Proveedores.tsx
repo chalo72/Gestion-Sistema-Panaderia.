@@ -1103,8 +1103,9 @@ export function Proveedores({
 
       {/* ── COMPONENTE MODULAR FORMULARIO: Crear / Editar ── */}
       <ProveedorForm
+        key={editingProveedor?.id ?? 'nuevo'}
         isOpen={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
+        onClose={() => { setIsDialogOpen(false); setEditingProveedor(null); }}
         onSubmit={handleSubmit}
         editingProveedor={editingProveedor}
         productosExistentes={_productos}
