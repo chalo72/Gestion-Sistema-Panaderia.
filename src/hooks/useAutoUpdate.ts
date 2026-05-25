@@ -1,21 +1,25 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
-const CHECK_INTERVAL  = 2 * 60 * 1000;  // Verifica cada 2 minutos → actualización casi inmediata
-const STORAGE_KEY     = 'nexus_build_ts'; // Unificado con index.html para evitar doble recarga
-const RELOAD_DELAY_MS = 5_000;  // 5 segundos de aviso antes de recargar
+const CHECK_INTERVAL  = 90 * 1000;   // Cada 90 segundos — cache de Anthropic dura 5min, esto es seguro
+const STORAGE_KEY     = 'nexus_build_ts';
+const RELOAD_DELAY_MS = 4_000;       // 4 segundos de aviso antes de recargar
 
 /**
- * Auto-actualización completamente automática — sin interacción del usuario.
+ * Auto-actualización triple capa:
  *
- * Mecanismo dual:
- *   1. Service Worker controllerchange:
- *      Cuando el nuevo SW toma el control (skipWaiting en vite.config),
- *      recargamos inmediatamente. Aplica siempre que haya SW activo.
+ *  1. Service Worker controllerchange — cuando nuevo SW toma control, recarga en 1s
+ *  2. Polling version.json — cada 90s compara timestamps; si hay cambio, recarga en 4s
+ *  3. reg.update() en cada check — fuerza al navegador a descargar SW nuevo sin esperar
  *
- *   2. Polling de version.json (respaldo para red local sin SW):
- *      Compara timestamps cada 20 segundos. Si detecta versión nueva,
- *      muestra aviso de 5 segundos y recarga sin requerir acción del usuario.
+ * La combinación garantiza que cualquier dispositivo que tenga la app abierta
+ * detecte una nueva versión en ≤90 segundos, sin importar si el usuario refresca o no.
  */
+
+function forceSWUpdate() {
+  if (!('serviceWorker' in navigator)) return;
+  navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
+}
+
 export function useAutoUpdate() {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [newVersion, setNewVersion]           = useState<string | null>(null);
@@ -27,7 +31,7 @@ export function useAutoUpdate() {
   const reloadingRef      = useRef(false);
   const countdownRef      = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ── Recarga limpia ────────────────────────────────────────────────
+  // ── Recarga limpia ────────────────────────────────────────────────────────
   const recargar = useCallback(() => {
     if (reloadingRef.current) return;
     reloadingRef.current = true;
@@ -36,7 +40,7 @@ export function useAutoUpdate() {
     window.location.reload();
   }, []);
 
-  // ── Iniciar cuenta regresiva y recargar automáticamente ───────────
+  // ── Cuenta regresiva → recarga ────────────────────────────────────────────
   const iniciarContadorYRecargar = useCallback((version: string) => {
     if (reloadingRef.current) return;
     setUpdateAvailable(true);
@@ -54,83 +58,85 @@ export function useAutoUpdate() {
     }, 1000);
   }, [recargar]);
 
-  // ── 1. Service Worker controllerchange (mecanismo principal) ──────
+  // ── Capa 1: Service Worker controllerchange ───────────────────────────────
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
     const handleControllerChange = () => {
-      // Nuevo SW tomó control — esperar 3s para que IndexedDB termine operaciones pendientes
-      setTimeout(() => recargar(), 3000);
+      // Nuevo SW tomó control → recargar en 1s (reducido de 3s para respuesta más ágil)
+      setTimeout(() => recargar(), 1000);
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
 
-    // Verificar actualizaciones de SW cada CHECK_INTERVAL
-    let swUpdateInterval: ReturnType<typeof setInterval> | null = null;
-    navigator.serviceWorker.ready.then(reg => {
-      swUpdateInterval = setInterval(() => reg.update(), CHECK_INTERVAL);
-    });
+    // Forzar comprobación de SW inmediatamente al montar
+    forceSWUpdate();
 
     return () => {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
-      if (swUpdateInterval) clearInterval(swUpdateInterval);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
   }, [recargar]);
 
-  // ── 2. Polling version.json (respaldo para modo red local sin SW) ─
+  // ── Capa 2 + 3: Polling version.json + reg.update() simultáneo ───────────
   const checkForUpdates = useCallback(async () => {
     if (reloadingRef.current || updateAvailable) return;
+
+    // Siempre forzar comprobación del SW junto con el polling de version.json
+    // Esto garantiza que si hay un SW nuevo en Vercel, el navegador lo descargue
+    forceSWUpdate();
+
     try {
       const res = await fetch('/version.json', {
         cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store' }
+        headers: { 'Cache-Control': 'no-cache, no-store, max-age=0' }
       });
       if (!res.ok) return;
 
-      const data             = await res.json();
+      const data                    = await res.json();
       const serverTimestamp: number = data.timestamp ?? 0;
       const version: string         = data.version   ?? '';
 
       setCurrentVersion(version);
 
       if (savedTimestampRef.current === 0) {
-        // Primera visita — guardar timestamp actual sin recargar
+        // Primera visita — guardar sin recargar
         savedTimestampRef.current = serverTimestamp;
         localStorage.setItem(STORAGE_KEY, String(serverTimestamp));
         return;
       }
 
       if (serverTimestamp > savedTimestampRef.current) {
-        // Nueva versión detectada — actualizar storage e iniciar cuenta regresiva
         localStorage.setItem(STORAGE_KEY, String(serverTimestamp));
         savedTimestampRef.current = serverTimestamp;
         iniciarContadorYRecargar(version);
       }
     } catch {
-      // Servidor offline — ignorar silenciosamente
+      // Sin red — ignorar
     }
   }, [updateAvailable, iniciarContadorYRecargar]);
 
   useEffect(() => {
+    // Verificar inmediatamente al cargar la página
     checkForUpdates();
+
+    // Polling cada 90 segundos
     const interval = setInterval(checkForUpdates, CHECK_INTERVAL);
 
-    // Verificar inmediatamente al volver al tab/app (celular, escritorio)
+    // Verificar al volver al tab / desbloquear pantalla / traer app al frente
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        checkForUpdates();
-        // También forzar comprobación del SW
-        if ('serviceWorker' in navigator) {
-          navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
-        }
-      }
+      if (document.visibilityState === 'visible') checkForUpdates();
     };
+    // Verificar también en foco de ventana (escritorio)
+    const handleFocus = () => checkForUpdates();
+
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [checkForUpdates]);
 
