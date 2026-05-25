@@ -32,57 +32,22 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { pendingChanges, dismissAll, syncConnected, syncNow } = useRealtimeSync();
   const [isSyncingManual, setIsSyncingManual] = useState(false);
   const [syncCountdown, setSyncCountdown] = useState<number | null>(null);
-  const syncTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastActivityRef = useRef<number>(Date.now());
-  const IDLE_THRESHOLD_MS = 30_000; // 30s sin actividad → auto-recarga
 
-  // Rastrear actividad del usuario
-  useEffect(() => {
-    const touch = () => { lastActivityRef.current = Date.now(); };
-    window.addEventListener('mousemove', touch, { passive: true });
-    window.addEventListener('keydown', touch, { passive: true });
-    window.addEventListener('touchstart', touch, { passive: true });
-    return () => {
-      window.removeEventListener('mousemove', touch);
-      window.removeEventListener('keydown', touch);
-      window.removeEventListener('touchstart', touch);
-    };
-  }, []);
-
-  // Cuando llegan cambios remotos: iniciar cuenta regresiva si el usuario está inactivo
+  // Cuando llegan cambios remotos: solo mostrar el banner, SIN auto-recarga.
+  // El usuario decide cuándo aplicar los cambios.
   useEffect(() => {
     if (pendingChanges.length === 0) {
-      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
       setSyncCountdown(null);
       return;
     }
-
-    const isIdle = Date.now() - lastActivityRef.current > IDLE_THRESHOLD_MS;
-    const initialSecs = isIdle ? 5 : 15;
-    setSyncCountdown(initialSecs);
-
-    let segs = initialSecs;
-    syncTimerRef.current = setInterval(() => {
-      segs -= 1;
-      setSyncCountdown(segs);
-      if (segs <= 0) {
-        if (syncTimerRef.current) clearInterval(syncTimerRef.current);
-        window.location.reload();
-      }
-    }, 1000);
-
-    return () => {
-      if (syncTimerRef.current) clearInterval(syncTimerRef.current);
-    };
+    setSyncCountdown(1); // solo activa la visibilidad del banner (no es cuenta regresiva)
   }, [pendingChanges.length]);
 
   const aplicarSincronizacion = useCallback(() => {
-    if (syncTimerRef.current) clearInterval(syncTimerRef.current);
     window.location.reload();
   }, []);
 
   const postergarSincronizacion = useCallback(() => {
-    if (syncTimerRef.current) clearInterval(syncTimerRef.current);
     setSyncCountdown(null);
     dismissAll();
   }, [dismissAll]);
@@ -255,7 +220,7 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
             </span>
           </div>
           <div style={{ color: '#94a3b8', fontSize: 11, fontWeight: 400 }}>
-            Recargando en <span style={{ color: '#f8fafc', fontWeight: 700 }}>{syncCountdown}s</span> para mostrar la información más reciente
+            Toca <strong style={{ color: '#f8fafc' }}>Aplicar</strong> cuando termines lo que estás haciendo
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
             <button

@@ -133,26 +133,47 @@ export interface RemoteSyncEvent {
   timestamp: number;
 }
 
+// Mapa de nombre Supabase → nombre local (para tombstones)
+const SUPABASE_TO_LOCAL: Record<string, string> = {
+  productos: 'productos', proveedores: 'proveedores', precios: 'precios',
+  ventas: 'ventas', caja: 'sesiones_caja', inventario: 'inventario',
+  recepciones: 'recepciones', gastos: 'gastos',
+  creditos_clientes: 'creditos_clientes', prepedidos: 'pre_pedidos',
+  trabajadores: 'trabajadores', produccion: 'produccion',
+};
+
 // ── Canal 2: polling diff — compara IDs Supabase vs IndexedDB ────────────────
 async function pollTableForNewData(
   table: string,
   handler: Handler,
 ): Promise<string[]> {
-  const [supabaseItems, localItems] = await Promise.all([
+  const localTableName = SUPABASE_TO_LOCAL[table] ?? table;
+
+  const [supabaseItems, localItems, tombstoneIds] = await Promise.all([
     handler.getFromSupabase().catch(() => [] as any[]),
     handler.getFromLocal().catch(() => [] as any[]),
+    db.getTombstones(localTableName).catch(() => [] as string[]),
   ]);
 
-  const localIds = new Set(localItems.map((i: any) => i.id));
-  const newItems = supabaseItems.filter((i: any) => i.id && !localIds.has(i.id));
+  const localIds     = new Set(localItems.map((i: any) => i.id));
+  const tombstoneSet = new Set(tombstoneIds);
+
+  // Solo agregar registros que:
+  // 1. No existen en local (genuinamente nuevos de otro dispositivo)
+  // 2. NO fueron eliminados localmente (no están en tombstones)
+  // 3. No son eco de este dispositivo
+  const newItems = supabaseItems.filter((i: any) =>
+    i.id &&
+    !localIds.has(i.id) &&
+    !tombstoneSet.has(i.id) &&
+    !isSelfWrite(table, i.id),
+  );
 
   for (const item of newItems) {
-    if (!isSelfWrite(table, item.id)) {
-      await handler.writeToLocal(item).catch(() => {});
-    }
+    await handler.writeToLocal(item).catch(() => {});
   }
 
-  return newItems.filter((i: any) => !isSelfWrite(table, i.id)).map((i: any) => i.id);
+  return newItems.map((i: any) => i.id);
 }
 
 // ── Canal PUSH: volcar local→Supabase para que otros puedan leer ─────────────
