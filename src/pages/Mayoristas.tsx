@@ -439,21 +439,70 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const [mensajesWA, setMensajesWA] = useState<Record<string, number>>(() => {
         try { return JSON.parse(localStorage.getItem('ag_mensajes_wa') || '{}'); } catch { return {}; }
     });
-    const enviarWhatsApp = (cliente: Cliente, saldo: number, tickets: typeof historialMayoristas) => {
+    const enviarWhatsApp = (cliente: Cliente, _saldo: number, tickets: typeof historialMayoristas) => {
         const tel = (cliente as any).telefono?.replace(/\D/g, '') || '';
-        const detalles = tickets
-            .map(h => {
-                const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
-                const sd = h.total - ab;
-                return sd > 0 ? `· ${new Date(h.fecha).toLocaleDateString('es-CO')} — $${sd.toFixed(0)}` : null;
-            })
-            .filter(Boolean)
-            .join('\n');
-        const msg = `Hola ${cliente.nombre}, te recordamos que tienes un saldo pendiente de *$${saldo.toFixed(0)}* con Dulce Placer.\n${detalles}\n\nGracias por tu preferencia 🥐`;
+        const fechaHoy = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+        const totalCompras = tickets.reduce((s, h) => s + h.total, 0);
+        const totalAbonado = tickets.reduce((s, h) => s + (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0), 0);
+        const saldoTotal = totalCompras - totalAbonado;
+        const metodoLabel: Record<string, string> = { efectivo: 'Efectivo', nequi: 'Nequi', transferencia: 'Transferencia', credito: 'Crédito' };
+
+        const lineas: string[] = [
+            '🥐 *DULCE PLACER*',
+            '━━━━━━━━━━━━━━━━━━',
+            '📋 *ESTADO DE CUENTA*',
+            `👤 ${cliente.nombre}`,
+            `📅 ${fechaHoy}`,
+            '',
+        ];
+
+        tickets.forEach((h, idx) => {
+            const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+            const saldoTicket = h.total - abonado;
+            const d = new Date(h.fecha);
+            const fechaTicket = isNaN(d.getTime()) ? 'Sin fecha' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+
+            lineas.push('━━━━━━━━━━━━━━━━━━');
+            lineas.push(`📌 *Ticket ${idx + 1}* — ${fechaTicket}`);
+            h.items.forEach(item => {
+                const nombre = item.nombre.length > 22 ? item.nombre.slice(0, 20) + '..' : item.nombre;
+                lineas.push(`  • ${nombre} ×${item.cantidad}  ${formatCurrency(item.precio * item.cantidad)}`);
+            });
+            lineas.push(`  💵 *Total:* ${formatCurrency(h.total)}`);
+            if ((h.abonos ?? []).length > 0) {
+                lineas.push('  💳 *Abonos recibidos:*');
+                (h.abonos ?? []).forEach(a => {
+                    const fa = new Date(a.fecha);
+                    const faStr = isNaN(fa.getTime()) ? '' : fa.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+                    lineas.push(`    ✓ ${faStr} · ${metodoLabel[a.metodoPago] || a.metodoPago} · ${formatCurrency(a.monto)}`);
+                });
+            }
+            lineas.push(saldoTicket <= 0 ? '  ✅ *SALDADO*' : `  ⚠️ *Pendiente: ${formatCurrency(saldoTicket)}*`);
+            lineas.push('');
+        });
+
+        lineas.push('━━━━━━━━━━━━━━━━━━');
+        if (tickets.length > 1) {
+            lineas.push('📊 *RESUMEN*');
+            lineas.push(`  Total compras:  ${formatCurrency(totalCompras)}`);
+            if (totalAbonado > 0) lineas.push(`  Total abonado:  ${formatCurrency(totalAbonado)}`);
+            lineas.push('');
+        }
+        if (saldoTotal <= 0) {
+            lineas.push('✅ *¡Todo al día! Sin saldo pendiente.* 🎉');
+        } else {
+            lineas.push(`🔴 *TOTAL A PAGAR: ${formatCurrency(saldoTotal)}*`);
+            lineas.push('');
+            lineas.push('_Puedes abonar por:_');
+            lineas.push('💵 Efectivo  |  📲 Nequi  |  🏦 Transferencia');
+        }
+        lineas.push('');
+        lineas.push('_¡Gracias por tu preferencia! 🥐_');
+
+        const msg = lineas.join('\n');
         const url = `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
         window.open(url, '_blank');
-        const now = Date.now();
-        const nuevo = { ...mensajesWA, [cliente.id]: now };
+        const nuevo = { ...mensajesWA, [cliente.id]: Date.now() };
         setMensajesWA(nuevo);
         localStorage.setItem('ag_mensajes_wa', JSON.stringify(nuevo));
     };
@@ -1084,6 +1133,17 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         const productosPerfil = tablaDatosTodos
             .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()));
 
+        // Créditos pendientes del cliente (para botón WA del header)
+        const creditosPendientesHeader = historialUnificado.filter(h => {
+            if (h.clienteId !== cliente.id || h.metodoPago !== 'credito') return false;
+            const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+            return h.total - ab > 0;
+        });
+        const totalDeudaHeader = creditosPendientesHeader.reduce((s, h) => {
+            const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
+            return s + (h.total - ab);
+        }, 0);
+
         return (
             <div className="min-h-screen flex flex-col gap-0 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
 
@@ -1129,6 +1189,17 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 </span>
                             )}
                         </button>
+                        {creditosPendientesHeader.length > 0 && (
+                            <button
+                                onClick={() => enviarWhatsApp(cliente, totalDeudaHeader, creditosPendientesHeader)}
+                                title={`Enviar estado de cuenta por WhatsApp · Debe ${formatCurrency(totalDeudaHeader)}`}
+                                className="relative h-10 px-3 rounded-xl bg-[#25D366] text-white text-[10px] font-black uppercase hover:bg-[#1da851] flex items-center gap-1.5 shadow-sm transition-colors"
+                            >
+                                <MessageCircle className="w-4 h-4 shrink-0" />
+                                <span className="hidden sm:inline">Cobrar</span>
+                                <span className="hidden sm:inline font-black">{formatCurrency(totalDeudaHeader)}</span>
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -1229,7 +1300,20 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                         <option value="transferencia">Cuenta</option>
                                                     </select>
                                                 </div>
-                                                <Button size="sm" onClick={procesarAbonoMultiple} className="w-full h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">Aplicar Abono</Button>
+                                                <div className="flex gap-2">
+                                                    <Button size="sm" onClick={procesarAbonoMultiple} className="flex-1 h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">Aplicar Abono</Button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const sel = creditosPendientes.filter(h => ticketsSeleccionados.has(h.id));
+                                                            const saldoSel = sel.reduce((s, h) => { const ab=(h.abonos??[]).reduce((sa,a)=>sa+a.monto,0); return s+(h.total-ab); }, 0);
+                                                            enviarWhatsApp(cliente, saldoSel, sel);
+                                                        }}
+                                                        className="h-7 px-3 rounded-lg bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center gap-1"
+                                                        title="Enviar estado de cuenta de los tickets seleccionados por WhatsApp"
+                                                    >
+                                                        <MessageCircle className="w-3 h-3"/>WA
+                                                    </button>
+                                                </div>
                                             </div>
                                         )}
 
@@ -1271,6 +1355,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 </div>
                                                                 <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
                                                             </button>
+                                                            {/* Botón WhatsApp siempre visible — no requiere expandir */}
+                                                            {clienteObj && (
+                                                                <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5">
+                                                                    <button
+                                                                        onClick={() => enviarWhatsApp(clienteObj, saldo, [h])}
+                                                                        title="Enviar este ticket por WhatsApp"
+                                                                        className="flex-1 h-7 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center justify-center gap-1.5 transition-colors"
+                                                                    >
+                                                                        <MessageCircle className="w-3.5 h-3.5"/>WhatsApp · {formatCurrency(saldo)}
+                                                                    </button>
+                                                                </div>
+                                                            )}
 
                                                             {expanded && (
                                                                 <div className="bg-white dark:bg-slate-900 px-3 pb-3 pt-2 space-y-2.5 border-t border-slate-100 dark:border-slate-800">
@@ -1377,10 +1473,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                                                                     <div className="flex items-center gap-1.5">
                                                                         {clienteObj && (
-                                                                            <button onClick={()=>enviarWhatsApp(clienteObj,saldo,creditosPendientes.filter(t=>t.clienteId===h.clienteId))}
-                                                                                title={mensajesWA[clienteObj.id]?`Último: ${new Date(mensajesWA[clienteObj.id]).toLocaleDateString('es-CO')}`:'Cobro por WhatsApp'}
+                                                                            <button onClick={()=>enviarWhatsApp(clienteObj,saldo,[h])}
+                                                                                title={mensajesWA[clienteObj.id]?`Último: ${new Date(mensajesWA[clienteObj.id]).toLocaleDateString('es-CO')}`:'Enviar este ticket por WhatsApp'}
                                                                                 className="flex-1 h-7 rounded-xl bg-[#25D366] text-white text-[9px] font-black uppercase hover:bg-[#1da851] flex items-center justify-center gap-1">
-                                                                                <MessageCircle className="w-3 h-3"/>WA
+                                                                                <MessageCircle className="w-3 h-3"/>WA Ticket
                                                                             </button>
                                                                         )}
                                                                         {editandoNotaClienteId===h.id ? (
@@ -1563,7 +1659,20 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 <option value="transferencia">Cuenta</option>
                                                             </select>
                                                         </div>
-                                                        <Button size="sm" onClick={procesarAbonoMultiple} className="w-full h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">Aplicar Abono</Button>
+                                                        <div className="flex gap-2">
+                                                            <Button size="sm" onClick={procesarAbonoMultiple} className="flex-1 h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">Aplicar Abono</Button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    const sel = creditosPendientes.filter(h => ticketsSeleccionados.has(h.id));
+                                                                    const saldoSel = sel.reduce((s, h) => { const ab=(h.abonos??[]).reduce((sa,a)=>sa+a.monto,0); return s+(h.total-ab); }, 0);
+                                                                    enviarWhatsApp(cliente, saldoSel, sel);
+                                                                }}
+                                                                className="h-7 px-3 rounded-lg bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center gap-1"
+                                                                title="Enviar seleccionados por WhatsApp"
+                                                            >
+                                                                <MessageCircle className="w-3 h-3"/>WA
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 )}
 
@@ -1606,6 +1715,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                         </div>
                                                                         <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
                                                                     </button>
+                                                                    {/* Botón WhatsApp siempre visible */}
+                                                                    {clienteObj && (
+                                                                        <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5">
+                                                                            <button
+                                                                                onClick={() => enviarWhatsApp(clienteObj, saldo, [h])}
+                                                                                title="Enviar este ticket por WhatsApp"
+                                                                                className="flex-1 h-7 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center justify-center gap-1.5 transition-colors"
+                                                                            >
+                                                                                <MessageCircle className="w-3.5 h-3.5"/>WhatsApp · {formatCurrency(saldo)}
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
 
                                                                     {/* Detalle expandible */}
                                                                     {expanded && (
@@ -1718,10 +1839,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                             {/* WA + Nota + Eliminar */}
                                                                             <div className="flex items-center gap-1.5">
                                                                                 {clienteObj && (
-                                                                                    <button onClick={()=>enviarWhatsApp(clienteObj,saldo,creditosPendientes.filter(t=>t.clienteId===h.clienteId))}
-                                                                                        title={mensajesWA[clienteObj.id]?`Último: ${new Date(mensajesWA[clienteObj.id]).toLocaleDateString('es-CO')}`:'Cobro por WhatsApp'}
+                                                                                    <button onClick={()=>enviarWhatsApp(clienteObj,saldo,[h])}
+                                                                                        title={mensajesWA[clienteObj.id]?`Último: ${new Date(mensajesWA[clienteObj.id]).toLocaleDateString('es-CO')}`:'Enviar este ticket por WhatsApp'}
                                                                                         className="flex-1 h-7 rounded-xl bg-[#25D366] text-white text-[9px] font-black uppercase hover:bg-[#1da851] flex items-center justify-center gap-1">
-                                                                                        <MessageCircle className="w-3 h-3"/>WA
+                                                                                        <MessageCircle className="w-3 h-3"/>WA Ticket
                                                                                     </button>
                                                                                 )}
                                                                                 {editandoNotaClienteId===h.id ? (

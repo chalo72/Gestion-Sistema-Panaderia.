@@ -354,11 +354,6 @@ export function usePriceControl() {
       ventasHook.setMesas(mesas);
       ventasHook.setPedidosActivos(pedidosActivos);
       produccionHook.setProduccion(produccion);
-      finanzas.setCreditosClientes(creditosClientes as any);
-      finanzas.setCreditosTrabajadores(creditosTrabajadoresData as any);
-      finanzas.setTrabajadores(trabajadores as any);
-      setClientes(clientesData);
-
       // Auto-inicializar InventarioItem para productos sin registro
       const idsConInventario = new Set(inventario.map((i: any) => i.productoId));
       const productosSinInventario = productos.filter((p: any) => !idsConInventario.has(p.id));
@@ -375,6 +370,43 @@ export function usePriceControl() {
         await Promise.all(nuevosItems.map(item => db.updateInventarioItem(item)));
         inventarioHook.setInventario(prev => [...prev, ...nuevosItems]);
       }
+
+      // MIGRACIÓN: Vincular Créditos Huérfanos a Clientes (CRM)
+      const creditosHuerfanos = creditosClientes.filter((c: any) => !c.clienteId);
+      if (creditosHuerfanos.length > 0) {
+        console.log(`[Nexus] Migrando ${creditosHuerfanos.length} créditos a clientes permanentes...`);
+        let clientesActualizados = [...clientesData] as Cliente[];
+        const creditosActualizados = [...creditosClientes] as CreditoCliente[];
+        
+        for (const credito of creditosHuerfanos) {
+          // Buscar cliente existente por nombre exacto (case insensitive)
+          let cliente = clientesActualizados.find(c => c.nombre.toLowerCase() === credito.clienteNombre.toLowerCase());
+          
+          if (!cliente) {
+            // Crear nuevo cliente
+            cliente = {
+              id: generateUUID(),
+              nombre: credito.clienteNombre,
+              telefono: credito.clienteTelefono,
+              tipo: 'particular',
+              createdAt: new Date().toISOString(),
+            };
+            await db.addCliente(cliente);
+            clientesActualizados.push(cliente);
+          }
+          
+          // Actualizar crédito
+          credito.clienteId = cliente.id;
+          await db.updateCreditoCliente(credito);
+        }
+        setClientes(clientesActualizados);
+        finanzas.setCreditosClientes(creditosActualizados as any);
+      } else {
+        setClientes(clientesData);
+        finanzas.setCreditosClientes(creditosClientes as any);
+      }
+
+
     } catch (error) {
       console.error('Error cargando datos secundarios:', error);
     }

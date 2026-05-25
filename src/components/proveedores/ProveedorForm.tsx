@@ -373,10 +373,23 @@ export function ProveedorForm({
     if (buscarProd.length >= 1) {
       base = base.filter(p => p.nombre.toLowerCase().includes(buscarProd.toLowerCase()));
     }
-    return base
-      .sort((a, b) => a.nombre.localeCompare(b.nombre))
-      .slice(0, 100);
-  }, [productosExistentes, buscarProd]);
+    // Primero ordenar: productos ya en este catálogo van primero, luego alfabético
+    const enEsteCatalogo = new Set(catalogoItems.map(i => i.productoId).filter(Boolean));
+    const sorted = [...base].sort((a, b) => {
+      const aLocal = enEsteCatalogo.has(a.id) ? 0 : 1;
+      const bLocal = enEsteCatalogo.has(b.id) ? 0 : 1;
+      if (aLocal !== bLocal) return aLocal - bLocal;
+      return a.nombre.localeCompare(b.nombre);
+    });
+    // Deduplicar por nombre — así el mismo producto de distintos proveedores aparece una sola vez
+    const seen = new Set<string>();
+    return sorted.filter(p => {
+      const key = p.nombre.toLowerCase().trim();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 100);
+  }, [productosExistentes, buscarProd, catalogoItems]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -387,6 +400,12 @@ export function ProveedorForm({
       limpiarBorrador();
       onClose();
     } catch (err) {
+      // VALIDATION_BLOCK: el toast ya fue mostrado desde Proveedores.tsx — solo cerramos
+      // el spinner y mantenemos el formulario abierto con todos los datos intactos
+      if (err instanceof Error && err.message === 'VALIDATION_BLOCK') {
+        setGuardando(false);
+        return;
+      }
       console.error(err);
       toast.error('Error al guardar el proveedor');
     } finally {
@@ -413,8 +432,28 @@ export function ProveedorForm({
       setCatalogoItems(prev => prev.map(item => item.uid === editingUid ? itemData : item));
       toast.success('Producto actualizado en el catálogo');
     } else {
-      setCatalogoItems(prev => [itemData, ...prev]);
-      toast.success('Producto añadido al catálogo');
+      // Prevenir duplicados EXACtOS: mismo producto Y misma especificación de empaque
+      const nombreNorm = itemData.nombre.trim().toLowerCase();
+      setCatalogoItems(prev => {
+        const mismoEmpaque = (i: ProductoCatalogo) => 
+          (i.tipoEmbalaje || 'unidad') === (itemData.tipoEmbalaje || 'unidad') && 
+          (i.cantidadEmbalaje || 1) === (itemData.cantidadEmbalaje || 1);
+
+        const duplicadoPorId = itemData.productoId
+          ? prev.find(i => i.productoId === itemData.productoId && mismoEmpaque(i))
+          : null;
+        const duplicadoPorNombre = prev.find(
+          i => i.nombre.trim().toLowerCase() === nombreNorm && mismoEmpaque(i)
+        );
+        const existente = duplicadoPorId || duplicadoPorNombre;
+        if (existente) {
+          // Reemplazar el existente exacto en vez de agregar uno nuevo
+          toast.success('Precio actualizado en el catálogo (ya existía esta presentación)');
+          return prev.map(i => i.uid === existente.uid ? { ...itemData, uid: existente.uid } : i);
+        }
+        toast.success('Producto añadido al catálogo');
+        return [itemData, ...prev];
+      });
     }
     setProdActual(PROD_INIT);
     setEditingUid(null);
@@ -1318,7 +1357,7 @@ export function ProveedorForm({
                               max={500}
                               step={1}
                               value={Math.round(prodActual.margenVenta || 0)}
-                              onChange={(e) => setProdActual({ ...prodActual, margenVenta: Math.round(Number(e.target.value) || 0) })}
+                              onChange={(e) => setProdActual(prev => ({ ...prev, margenVenta: Math.round(Number(e.target.value) || 0) }))}
                               className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
                               placeholder="30"
                             />
@@ -1588,7 +1627,7 @@ const TableRow = React.memo(({
           disabled={isEditing}
           className={cn(
             "w-9 h-9 rounded-xl flex items-center justify-center transition-all bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 border",
-            isEditing ? "text-slate-300 cursor-not-allowed" : "text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30"
+            isEditing ? "text-indigo-400 cursor-default" : "text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
           )}
           title="Editar"
         >

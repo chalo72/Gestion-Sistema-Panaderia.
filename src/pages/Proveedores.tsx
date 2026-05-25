@@ -182,14 +182,34 @@ export function Proveedores({
   /* ─── Helper: obtener precios válidos (sin fantasmas ni duplicados) ─── */
   const getInsumosValidos = useCallback((provId: string): PrecioProveedor[] => {
     const todos = getPreciosByProveedor(provId);
-    // Deduplicar por productoId y filtrar registros huérfanos (producto eliminado)
+    // Deduplicar por productoId + empaque + cantidad (permite diferentes presentaciones del mismo producto)
     const mapa = new Map<string, PrecioProveedor>();
     for (const p of todos) {
       if (!getProductoById(p.productoId)) continue; // Saltar fantasmas
-      const existing = mapa.get(p.productoId);
-      // Quedarse con el más reciente (mayor fechaActualizacion)
-      if (!existing || (p.fechaActualizacion || '') >= (existing.fechaActualizacion || '')) {
-        mapa.set(p.productoId, p);
+      
+      const qty = Number(p.cantidadEmbalaje) || 1;
+      const tipo = p.tipoEmbalaje || 'unidad';
+      const key = `${p.productoId}-${tipo}-${qty}`;
+      
+      const existing = mapa.get(key);
+      if (!existing) {
+        mapa.set(key, p);
+      } else {
+        // En caso de conflicto exacto (mismo producto y misma presentación)
+        // Prioridad 1: El que tenga costo válido
+        const pCosto = Number(p.precioCosto) || 0;
+        const eCosto = Number(existing.precioCosto) || 0;
+        
+        if (pCosto > 0 && eCosto <= 0) {
+          mapa.set(key, p);
+        } else if (pCosto <= 0 && eCosto > 0) {
+          // Mantener existing
+        } else {
+          // Prioridad 2: El más reciente
+          if ((p.fechaActualizacion || '') > (existing.fechaActualizacion || '')) {
+            mapa.set(key, p);
+          }
+        }
       }
     }
     return Array.from(mapa.values());
@@ -209,6 +229,36 @@ export function Proveedores({
     }
     toast.success(`✅ Se eliminaron ${aEliminar.length} registro(s) duplicado(s) o huérfano(s).`);
   }, [getPreciosByProveedor, getInsumosValidos, onDeletePrecio]);
+
+  /* ─── Reparación global de datos contaminados entre proveedores ─── */
+  const repararDatosGlobal = useCallback(async () => {
+    let corregidos = 0;
+    // Para cada producto compartido entre múltiples proveedores, el tipo del Producto
+    // debe reflejar el consenso: si ALGÚN proveedor lo marca como insumo, el tipo
+    // debe ser 'ingrediente' a menos que TODOS lo marquen como venta.
+    const todosLosPrecios = proveedores.flatMap(pv => getPreciosByProveedor(pv.id));
+    const porProducto = new Map<string, { insumo: boolean; venta: boolean }>();
+    for (const p of todosLosPrecios) {
+      const entrada = porProducto.get(p.productoId) || { insumo: false, venta: false };
+      if (p.destino === 'insumo') entrada.insumo = true;
+      else entrada.venta = true;
+      porProducto.set(p.productoId, entrada);
+    }
+    for (const [productoId, flags] of porProducto.entries()) {
+      const prod = getProductoById(productoId);
+      if (!prod) continue;
+      // Si tiene entradas como insumo en algún proveedor pero está marcado como elaborado → corregir
+      if (flags.insumo && !flags.venta && prod.tipo === 'elaborado') {
+        await onUpdateProducto(productoId, { tipo: 'ingrediente' as any, updatedAt: new Date().toISOString() });
+        corregidos++;
+      }
+    }
+    if (corregidos === 0) {
+      toast.info('✅ Los datos ya están consistentes — no se encontraron productos mal clasificados.');
+    } else {
+      toast.success(`✅ Se corrigieron ${corregidos} producto(s) mal clasificados. Recarga la vista de Ventas.`);
+    }
+  }, [proveedores, getPreciosByProveedor, getProductoById, onUpdateProducto]);
 
   /* ─── KPIs ─── */
   const kpis = useMemo(() => {
@@ -333,14 +383,15 @@ export function Proveedores({
           });
         }
 
-        const { bloquear, advertencias } = validarCatalogo(items, preciosAnteriores);
+        const { bloquear, erroresBloqueantes, advertencias } = validarCatalogo(items, preciosAnteriores);
 
         if (bloquear) {
           toast.error(
-            `⛔ No se puede guardar — corrige estos problemas:\n${advertencias.slice(0, 3).join('\n')}`,
-            { duration: 8000 }
+            `⛔ No se puede guardar — corrige estos problemas:\n${erroresBloqueantes.slice(0, 4).join('\n')}`,
+            { duration: 10000 }
           );
-          return;
+          // Lanzar para que el formulario NO se cierre ni borre el catálogo
+          throw new Error('VALIDATION_BLOCK');
         }
 
         if (advertencias.length > 0) {
@@ -366,7 +417,20 @@ export function Proveedores({
             // Crear producto si no existe o si el ID apunta a un producto eliminado (huérfano)
             const yaExiste = productoId ? !!getProductoById(productoId) : false;
 
+            // Si no hay productoId (el usuario escribió el nombre sin seleccionar del dropdown),
+            // buscar si ya existe un producto con ese nombre exacto para reutilizarlo en vez de duplicar
             if (!productoId || !yaExiste) {
+              const nombreNorm = item.nombre.trim().toLowerCase();
+              const productoHomonimo = _productos.find(p => p.nombre.trim().toLowerCase() === nombreNorm);
+              if (productoHomonimo) {
+                console.log(`🔁 [Nexus] Reutilizando producto existente por nombre: ${item.nombre} (ID: ${productoHomonimo.id})`);
+                productoId = productoHomonimo.id;
+              }
+            }
+
+            // Crear producto solo si después de la búsqueda por nombre todavía no hay un ID válido
+            const productoIdFinal = productoId ? !!getProductoById(productoId) : false;
+            if (!productoId || !productoIdFinal) {
               console.log(`🆕 [Nexus] Creando nuevo producto: ${item.nombre}`);
               const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
               const np = await onAddProducto({
@@ -395,15 +459,23 @@ export function Proveedores({
 
               // Sincronización con Módulo de Productos
               const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
+              // Si el producto está compartido entre varios proveedores, solo actualizar campos
+              // neutros (nombre, tipo, descripción). Los campos económicos (categoría, margen,
+              // precio, costoBase) son contextuales al proveedor y no deben contaminar a los otros.
+              const esCompartido = _precios.some(
+                p => p.productoId === productoId && p.proveedorId !== provId
+              );
               await onUpdateProducto(productoId, {
                 nombre: item.nombre,
-                categoria: item.categoria || 'Otro',
                 descripcion: descripcionGenerada,
                 tipo,
-                costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
-                margenUtilidad: Number(item.margenVenta) || 30,
-                precioVenta: Math.round((Number(item.precioVenta) || 0) / 100) * 100,
-                updatedAt: new Date().toISOString()
+                updatedAt: new Date().toISOString(),
+                ...(!esCompartido && {
+                  categoria: item.categoria || 'Otro',
+                  costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
+                  margenUtilidad: Number(item.margenVenta) || 30,
+                  precioVenta: Math.round((Number(item.precioVenta) || 0) / 100) * 100,
+                }),
               });
 
               // AJUSTE DE STOCK AUTOMÁTICO
@@ -545,6 +617,14 @@ export function Proveedores({
           >
             <TrendingDown className="w-4 h-4" />
             Comparar Precios
+          </Button>
+          <Button
+            onClick={repararDatosGlobal}
+            title="Corrige productos mal clasificados que aparecen en el carrito de ventas sin ser productos elaborados"
+            className="h-10 px-3 bg-amber-500 hover:bg-amber-600 text-white shadow-none border-none rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
+          >
+            <Wrench className="w-4 h-4" />
+            Reparar
           </Button>
            {check('CREAR_PROVEEDORES') && (
             <Button
@@ -890,77 +970,93 @@ export function Proveedores({
                               <button onClick={() => handleEdit(prov)} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700">+ Agregar</button>
                             </div>
                           ) : (
-                            <>
-                              <div className="grid grid-cols-12 gap-2 px-6 py-2 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-100 dark:border-slate-700">
-                                <div className="col-span-4 text-xs font-black uppercase tracking-widest text-slate-400">Producto</div>
-                                <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-center">Empaque</div>
-                                <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-right">Costo Aliado</div>
-                                <div className="col-span-1 text-xs font-black uppercase tracking-widest text-slate-400 text-center">%</div>
-                                <div className="col-span-2 text-xs font-black uppercase tracking-widest text-slate-400 text-right">P. Venta</div>
-                                <div className="col-span-1 text-xs font-black uppercase tracking-widest text-slate-400 text-center"></div>
-                              </div>
-                              {insumos.map((precio, idx) => {
-                                const prodItem = getProductoById(precio.productoId);
-                                const costoU   = precio.cantidadEmbalaje && precio.cantidadEmbalaje > 1 ? Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100 : precio.precioCosto;
-                                const pventa   = prodItem?.precioVenta || 0;
-                                const margenPct = costoU > 0 && pventa > 0 ? Math.round(((pventa - costoU) / costoU) * 100) : 0;
-                                const emb      = EMBALAJES.find(e => e.value === precio.tipoEmbalaje);
-                                const cantPack = precio.cantidadEmbalaje || 1;
-                                return (
-                                  <div key={precio.id} className={cn('grid grid-cols-12 gap-2 items-center px-6 py-3 hover:bg-blue-50/40 dark:hover:bg-blue-900/10 transition-colors', idx < insumos.length - 1 && 'border-b border-slate-100 dark:border-slate-800')}>
-                                    <div className="col-span-4 flex items-center gap-2 min-w-0">
-                                      <span className="text-sm shrink-0">{precio.destino === 'venta' ? '🛒' : '🏭'}</span>
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-bold text-slate-800 dark:text-white truncate uppercase">{prodItem?.nombre || 'Producto'}</p>
-                                        <p className="text-xs text-slate-400 truncate">{prodItem?.categoria || ''}</p>
-                                      </div>
-                                    </div>
-                                    <div className="col-span-2 text-center">
-                                      {cantPack > 1
-                                        ? (
-                                          <div>
-                                            <span className="text-xs font-bold text-violet-600 bg-violet-50 dark:bg-violet-900/20 px-2 py-0.5 rounded-lg">{emb?.emoji || '📦'} ×{cantPack}</span>
-                                            <p className="text-[9px] font-bold text-violet-400 mt-0.5">{cantPack} und/paca</p>
+                            <div className="overflow-hidden rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm overflow-x-auto m-4">
+                              <table className="w-full text-left border-collapse">
+                                <thead>
+                                  <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Producto / Insumo</th>
+                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Und/Pack</th>
+                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">Costo Aliado</th>
+                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">Ganancia %</th>
+                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 text-right">Precio Venta</th>
+                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 text-right">Ganancia Est.</th>
+                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Acción</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  {insumos.map((precio) => {
+                                    const prodItem = getProductoById(precio.productoId);
+                                    if (!prodItem) return null;
+                                    
+                                    const nombre = prodItem.nombre;
+                                    const categoria = prodItem.categoria;
+                                    const destino = precio.destino || (prodItem.tipo === 'ingrediente' ? 'insumo' : 'venta');
+                                    const cantidadEmbalaje = precio.cantidadEmbalaje || 1;
+                                    const tipoEmbalaje = precio.tipoEmbalaje || 'unidad';
+                                    const precioCosto = precio.precioCosto;
+                                    const costoUnitario = cantidadEmbalaje > 1 ? Math.round(precioCosto / cantidadEmbalaje / 100) * 100 : precioCosto;
+                                    const margenVenta = prodItem.margenUtilidad || 0;
+                                    const precioVenta = prodItem.precioVenta || 0;
+                                    const costoReal = cantidadEmbalaje > 1 ? precioCosto / cantidadEmbalaje : precioCosto;
+                                    const gananciaU = precioVenta - costoReal;
+                                    
+                                    return (
+                                      <tr key={precio.id} className="transition-all hover:bg-blue-50/30 dark:hover:bg-blue-900/10 border-l-4 border-transparent group">
+                                        <td className="px-6 py-4">
+                                          <div className="flex items-center gap-4">
+                                            <div className={cn(
+                                              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-sm transition-transform group-hover:scale-110", 
+                                              destino === 'insumo' ? "bg-amber-50 text-amber-500 border-amber-100" : "bg-emerald-50 text-emerald-500 border-emerald-100"
+                                            )}>
+                                              {destino === 'insumo' ? <Wrench className="w-5 h-5" /> : <Store className="w-5 h-5" />}
+                                            </div>
+                                            <div className="min-w-0">
+                                              <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-tight truncate">{nombre}</p>
+                                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{categoria}</p>
+                                            </div>
                                           </div>
-                                        )
-                                        : <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg">🔹 Unidad</span>}
-                                    </div>
-                                    <div className="col-span-2 text-right">
-                                      <p className="text-sm font-black text-blue-600 tabular-nums">{formatCurrency(precio.precioCosto)}</p>
-                                      {cantPack > 1 && (
-                                        <p className="text-[10px] font-black tracking-wide text-indigo-500 dark:text-indigo-400">P.U: {formatCurrency(costoU)}</p>
-                                      )}
-                                    </div>
-                                    <div className="col-span-1 text-center">
-                                      {margenPct > 0 ? (
-                                        <span className={cn(
-                                          'text-xs font-black px-1.5 py-0.5 rounded-lg',
-                                          margenPct >= 30 ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20' : 'text-amber-600 bg-amber-50 dark:bg-amber-900/20'
-                                        )}>{margenPct}%</span>
-                                      ) : <span className="text-xs text-slate-300">—</span>}
-                                    </div>
-                                    <div className="col-span-2 text-right">
-                                      {pventa > 0
-                                        ? <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(pventa)}</p>
-                                        : <p className="text-sm text-slate-300">—</p>}
-                                    </div>
-                                    <div className="col-span-1 flex justify-center">
-                                      <button
-                                        onClick={() => {
-                                          if (window.confirm(`¿Eliminar "${prodItem?.nombre || 'este producto'}" del catálogo de ${prov.nombre}?`)) {
-                                            onDeletePrecio(precio.id);
-                                          }
-                                        }}
-                                        className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                        title="Eliminar del catálogo"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </>
+                                        </td>
+                                        <td className="px-4 py-4 text-center">
+                                          <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-[10px] font-black uppercase tracking-widest px-2.5 py-1">
+                                            {EMBALAJES.find(e => e.value === tipoEmbalaje)?.emoji} {cantidadEmbalaje}
+                                          </Badge>
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                          <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{formatCurrency(precioCosto)}</p>
+                                          {cantidadEmbalaje > 1 && <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">P.U: {formatCurrency(costoUnitario)}</p>}
+                                        </td>
+                                        <td className="px-4 py-4 text-center font-black text-[10px] text-emerald-600">
+                                          {margenVenta}%
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                          <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(precioVenta)}</p>
+                                        </td>
+                                        <td className="px-4 py-4 text-right">
+                                          <p className="text-sm font-black text-amber-500 tabular-nums">
+                                            +{formatCurrency(Math.round(gananciaU / 100) * 100)}<span className="text-[9px] text-slate-400">/u</span>
+                                          </p>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                              onClick={() => {
+                                                if (window.confirm(`¿Eliminar "${nombre}" del catálogo de ${prov.nombre}?`)) {
+                                                  onDeletePrecio(precio.id);
+                                                }
+                                              }}
+                                              className="w-9 h-9 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex items-center justify-center transition-all bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 border"
+                                              title="Eliminar"
+                                            >
+                                              <Trash2 className="w-4 h-4" />
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
                           )}
 
                           {/* ── Asistente de Negocio ── */}
@@ -1248,7 +1344,7 @@ export function Proveedores({
         categoriasVenta={categorias}
       />
 
-      {/* ── Dialog de detalle eliminado — todo se muestra inline en el acordeón ── */}
+      {/* Dialog de detalle eliminado — todo se muestra inline en el acordeón */}
     </div>
   );
 }

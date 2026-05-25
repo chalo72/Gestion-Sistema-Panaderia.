@@ -426,6 +426,9 @@ const App = () => {
             usuario={user!}
             productos={productos}
             trabajadores={trabajadores}
+            clientes={clientes}
+            ventas={ventas}
+            onAddCliente={addCliente}
           />
         );
       case 'trabajadores':

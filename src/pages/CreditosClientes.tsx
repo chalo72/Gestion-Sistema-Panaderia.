@@ -18,7 +18,8 @@ import {
 import { toast } from 'sonner';
 import type {
     CreditoCliente, CreditoTrabajador, MetodoPago,
-    Usuario, Producto, ItemCredito, Trabajador, TrabajadorRol
+    Usuario, Producto, ItemCredito, Trabajador, TrabajadorRol,
+    Cliente, Venta
 } from '@/types';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
@@ -42,6 +43,10 @@ interface CreditosClientesProps {
     productos: Producto[];
     trabajadores: Trabajador[];
     onGoToTrabajadores?: () => void;
+    // Integración CRM
+    clientes?: Cliente[];
+    ventas?: Venta[];
+    onAddCliente?: (c: Omit<Cliente, 'id' | 'createdAt'>) => Promise<Cliente>;
 }
 
 type Tab = 'clientes' | 'trabajadores';
@@ -109,6 +114,9 @@ export default function CreditosClientes({
     productos,
     trabajadores,
     onGoToTrabajadores,
+    clientes = [],
+    ventas = [],
+    onAddCliente,
 }: CreditosClientesProps) {
 
     const [tab, setTab] = useState<Tab>('clientes');
@@ -135,6 +143,7 @@ export default function CreditosClientes({
     const [itemsCliente, setItemsCliente] = useState<ItemCredito[]>([]);
     const [fotoEvidenciaCliente, setFotoEvidenciaCliente] = useState<string | undefined>(undefined);
     const [buscarProducto, setBuscarProducto] = useState('');
+    const [catTabCliente, setCatTabCliente] = useState<string>('Todos');
     const [formPagoCliente, setFormPagoCliente] = useState({
         monto: '',
         fecha: new Date().toISOString().split('T')[0],
@@ -144,6 +153,7 @@ export default function CreditosClientes({
     const [editandoCredito, setEditandoCredito] = useState<CreditoCliente | null>(null);
     const [formEditCliente, setFormEditCliente] = useState({ estado: 'activo', descripcion: '', fechaVencimiento: '' });
     const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
+    const [selectedCreditosIds, setSelectedCreditosIds] = useState<Set<string>>(new Set());
 
     // ── Carpetas (Categorías) ────────────────────────────────────────────────
     const [carpetas, setCarpetas] = useState<string[]>(() => {
@@ -228,35 +238,59 @@ export default function CreditosClientes({
     const montoTotalCliente = useMemo(() => itemsCliente.reduce((s, i) => s + i.subtotal, 0), [itemsCliente]);
 
     interface ClienteAgrupado {
+        id: string;
         nombre: string;
         telefono?: string;
         categoria?: string;
         creditosActivos: CreditoCliente[];
         creditosPagados: CreditoCliente[];
         creditosVencidos: CreditoCliente[];
+        ventasContado: Venta[];
         saldoTotal: number;
+        totalCompradoContado: number;
     }
 
     const clientesAgrupados = useMemo(() => {
         const map = new Map<string, ClienteAgrupado>();
+        
+        // Inicializar con todos los clientes del CRM
+        clientes.forEach(c => {
+            map.set(c.id, {
+                id: c.id,
+                nombre: c.nombre,
+                telefono: c.telefono,
+                categoria: 'General', // default o usar un campo del cliente
+                creditosActivos: [],
+                creditosPagados: [],
+                creditosVencidos: [],
+                ventasContado: [],
+                saldoTotal: 0,
+                totalCompradoContado: 0
+            });
+        });
+
+        // Sumar los créditos
         creditosClientes.forEach(c => {
-            const key = c.clienteNombre.toLowerCase().trim();
+            // Si el crédito está huérfano (no migrado), usar el nombre como fallback (creando un "pseudo-cliente" temporal solo para la vista)
+            const key = c.clienteId || c.clienteNombre.toLowerCase().trim();
             if (!map.has(key)) {
                 map.set(key, {
+                    id: key,
                     nombre: c.clienteNombre.trim(),
                     telefono: c.clienteTelefono,
                     categoria: c.categoriaCliente,
                     creditosActivos: [],
                     creditosPagados: [],
                     creditosVencidos: [],
-                    saldoTotal: 0
+                    ventasContado: [],
+                    saldoTotal: 0,
+                    totalCompradoContado: 0
                 });
             }
             const g = map.get(key)!;
             
-            // Preferimos la info más reciente si no estaba
             if (!g.telefono && c.clienteTelefono) g.telefono = c.clienteTelefono;
-            if (!g.categoria && c.categoriaCliente) g.categoria = c.categoriaCliente;
+            if (c.categoriaCliente) g.categoria = c.categoriaCliente;
 
             if (c.estado === 'activo') g.creditosActivos.push(c);
             else if (c.estado === 'vencido') g.creditosVencidos.push(c);
@@ -264,6 +298,15 @@ export default function CreditosClientes({
 
             if (c.estado !== 'pagado') {
                 g.saldoTotal += c.saldo;
+            }
+        });
+
+        // Sumar las ventas de contado
+        ventas.forEach(v => {
+            if (v.clienteId && map.has(v.clienteId)) {
+                const g = map.get(v.clienteId)!;
+                g.ventasContado.push(v);
+                g.totalCompradoContado += v.total;
             }
         });
 
@@ -304,14 +347,26 @@ export default function CreditosClientes({
 
     const productosFiltrados = useMemo(() => {
         const q = buscarProducto.toLowerCase();
-        if (q) return productos.filter(p => p.nombre.toLowerCase().includes(q) && p.precioVenta > 0).slice(0, 12);
+        if (q) return productos.filter(p => p.nombre.toLowerCase().includes(q) && p.precioVenta > 0).slice(0, 30);
         return [];
     }, [productos, buscarProducto]);
 
-    // Productos populares para mostrar en la grilla cuando no hay búsqueda
-    const productosPopulares = useMemo(() => {
-        return productos.filter(p => p.precioVenta > 0 && !p.categoria?.toLowerCase().startsWith('ins:')).slice(0, 12);
+    // Categorías únicas de productos para los tabs
+    const categoriasProductos = useMemo(() => {
+        const cats = Array.from(new Set(
+            productos
+                .filter(p => p.precioVenta > 0 && !p.categoria?.toLowerCase().startsWith('ins:'))
+                .map(p => p.categoria || 'Sin categoría')
+        )).sort();
+        return ['Todos', ...cats];
     }, [productos]);
+
+    // Productos por categoría activa
+    const productosPopulares = useMemo(() => {
+        const base = productos.filter(p => p.precioVenta > 0 && !p.categoria?.toLowerCase().startsWith('ins:'));
+        if (catTabCliente === 'Todos') return base;
+        return base.filter(p => (p.categoria || 'Sin categoría') === catTabCliente);
+    }, [productos, catTabCliente]);
 
     const creditosTrabFiltrados = useMemo(() => {
         return creditosTrabajadores.filter(c => {
@@ -745,6 +800,63 @@ export default function CreditosClientes({
                                             {cliente.telefono && <p className="text-[11px] text-slate-500 mt-1">📞 {cliente.telefono}</p>}
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
+                                            {cliente.telefono && (cliente.saldoTotal > 0 || cliente.creditosPagados.length > 0) && (
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const fmt = (n: number) => formatCurrency(n);
+                                                        const fmtFecha = (f: string) => { try { return new Date(f).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return f; } };
+                                                        const renderCredito = (cr: CreditoCliente, icono: string) => {
+                                                            let s = `${icono} *${cr.descripcion || 'Crédito'}* (${fmtFecha(cr.fecha)})\n`;
+                                                            if (cr.items && cr.items.length > 0) {
+                                                                cr.items.forEach(it => { s += `   • ${it.cantidad}x ${it.nombre} — ${fmt(it.subtotal)}\n`; });
+                                                            }
+                                                            if (cr.fechaVencimiento) s += `   📅 Vence: ${fmtFecha(cr.fechaVencimiento)}\n`;
+                                                            if (cr.pagos && cr.pagos.length > 0) {
+                                                                s += `   💳 Pagos:\n`;
+                                                                cr.pagos.forEach(p => { s += `      ✓ ${fmtFecha(p.fecha)} — ${fmt(p.monto)} (${p.metodoPago || 'efectivo'})\n`; });
+                                                            }
+                                                            const estadoLabel = cr.estado === 'pagado' ? '✅ Pagado' : cr.estado === 'vencido' ? '⚠️ Vencido' : '🔄 Activo';
+                                                            s += `   ${estadoLabel} · Saldo: *${fmt(cr.saldo)}*\n`;
+                                                            return s;
+                                                        };
+                                                        let msg = `🧾 *ESTADO DE CUENTA — Dulce Placer*\n`;
+                                                        msg += `👤 *${cliente.nombre}*\n`;
+                                                        msg += `📅 ${fmtFecha(new Date().toISOString())}\n`;
+                                                        msg += `${'─'.repeat(28)}\n\n`;
+                                                        const activos = cliente.creditosActivos;
+                                                        const vencidos = cliente.creditosVencidos;
+                                                        const pagados = cliente.creditosPagados;
+                                                        if (activos.length > 0) {
+                                                            msg += `*🔄 CRÉDITOS ACTIVOS (${activos.length})*\n`;
+                                                            activos.forEach(cr => { msg += renderCredito(cr, '🔄') + '\n'; });
+                                                        }
+                                                        if (vencidos.length > 0) {
+                                                            msg += `*⚠️ CRÉDITOS VENCIDOS (${vencidos.length})*\n`;
+                                                            vencidos.forEach(cr => { msg += renderCredito(cr, '⚠️') + '\n'; });
+                                                        }
+                                                        if (pagados.length > 0) {
+                                                            msg += `*✅ CRÉDITOS PAGADOS (${pagados.length})*\n`;
+                                                            pagados.forEach(cr => { msg += renderCredito(cr, '✅') + '\n'; });
+                                                        }
+                                                        msg += `${'─'.repeat(28)}\n`;
+                                                        if (cliente.saldoTotal > 0) {
+                                                            msg += `💰 *SALDO PENDIENTE: ${fmt(cliente.saldoTotal)}*\n`;
+                                                        } else {
+                                                            msg += `✅ *Sin saldo pendiente*\n`;
+                                                        }
+                                                        msg += `\nGracias por tu preferencia 🙏\n_Dulce Placer_`;
+                                                        const tel = cliente.telefono!.replace(/\D/g, '');
+                                                        const url = `https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`;
+                                                        window.open(url, '_blank');
+                                                    }}
+                                                    className="p-2 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-900/50 transition-all"
+                                                    title="Enviar recordatorio por WhatsApp"
+                                                >
+                                                    <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                                </button>
+                                            )}
                                             <div className={`p-2 rounded-full ${expandedClienteId === cliente.nombre ? 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-slate-100 dark:bg-slate-900 text-slate-400'}`}>
                                                 {expandedClienteId === cliente.nombre ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                                             </div>
@@ -765,111 +877,208 @@ export default function CreditosClientes({
                                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                                 
                                                 {/* Columna Izquierda: NUEVA VENTA A CRÉDITO (Mini POS) */}
-                                                <div className="bg-white dark:bg-slate-950 p-4 rounded-2xl shadow-sm border border-blue-100 dark:border-blue-900/30">
-                                                    <h4 className="text-xs font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 mb-4 flex items-center gap-2">
-                                                        <ShoppingCart className="w-4 h-4" /> Nueva Venta a Crédito
-                                                    </h4>
+                                                <div className="bg-gradient-to-br from-white to-blue-50/50 dark:from-slate-950 dark:to-blue-950/20 p-5 rounded-3xl shadow-xl shadow-blue-900/5 border border-blue-100/60 dark:border-blue-900/30 relative overflow-hidden backdrop-blur-xl">
+                                                    {/* Decoración de fondo */}
+                                                    <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 dark:bg-blue-500/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none"></div>
+                                                    
+                                                    <div className="flex items-center justify-between mb-5 relative z-10">
+                                                        <h4 className="text-sm font-black uppercase tracking-widest text-blue-700 dark:text-blue-400 flex items-center gap-2">
+                                                            <div className="p-1.5 bg-blue-100 dark:bg-blue-900/50 rounded-lg"><ShoppingCart className="w-4 h-4" /></div>
+                                                            Venta a Crédito
+                                                        </h4>
+                                                        <Button 
+                                                            size="sm" 
+                                                            onClick={() => {
+                                                                setItemsCliente(prev => [...prev, {
+                                                                    productoId: 'manual-' + Date.now(),
+                                                                    nombre: 'Factura física (sin detalle)',
+                                                                    cantidad: 1,
+                                                                    precioUnitario: 0,
+                                                                    subtotal: 0
+                                                                }]);
+                                                            }}
+                                                            className="h-8 px-3 bg-white dark:bg-slate-900 hover:bg-blue-50 dark:hover:bg-slate-800 text-[10px] font-black uppercase tracking-widest text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 shadow-sm rounded-xl transition-all"
+                                                        >
+                                                            + Solo Valor Manual
+                                                        </Button>
+                                                    </div>
                                                     
                                                     {/* Buscador de productos */}
-                                                    <div className="relative mb-4">
-                                                        <div className="relative">
-                                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                                            <Input placeholder="Buscar producto..." value={buscarProducto}
-                                                                onChange={e => setBuscarProducto(e.target.value)} className="pl-9 rounded-xl bg-slate-50 dark:bg-slate-900 border-none shadow-inner h-10 text-sm" />
+                                                    <div className="relative mb-5 z-10">
+                                                        <div className="relative group">
+                                                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 group-focus-within:text-blue-600 transition-colors" />
+                                                            <Input placeholder="Buscar en el catálogo..." value={buscarProducto}
+                                                                onChange={e => setBuscarProducto(e.target.value)} 
+                                                                className="pl-10 rounded-2xl bg-white dark:bg-slate-900 border-blue-100 dark:border-blue-800/60 shadow-sm focus-visible:ring-blue-500 h-11 text-sm font-bold text-slate-700 dark:text-slate-300" />
                                                             {buscarProducto && (
-                                                                <button onClick={() => setBuscarProducto('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                                <button onClick={() => setBuscarProducto('')} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                                                                     <X className="w-4 h-4" />
                                                                 </button>
                                                             )}
                                                         </div>
                                                         {productosFiltrados.length > 0 && (
-                                                            <div className="absolute z-20 left-0 right-0 top-full mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden max-h-48 overflow-y-auto">
+                                                            <div className="absolute z-30 left-0 right-0 top-full mt-2 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-200/50 dark:border-slate-700/50 rounded-2xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar">
                                                                 {productosFiltrados.map(p => (
                                                                     <button key={p.id} onClick={() => agregarProducto(p)}
-                                                                        className="w-full flex items-center justify-between px-4 py-2.5 text-xs hover:bg-blue-50 dark:hover:bg-blue-900/50 transition-colors border-b border-slate-100 dark:border-slate-700 last:border-0">
-                                                                        <span className="font-bold text-slate-800 dark:text-slate-200">{p.nombre}</span>
-                                                                        <span className="text-blue-600 dark:text-blue-400 font-black">{formatCurrency(p.precioVenta)}</span>
+                                                                        className="w-full flex items-center justify-between px-4 py-3 text-xs hover:bg-blue-50 dark:hover:bg-blue-900/40 transition-colors border-b border-slate-100 dark:border-slate-800 last:border-0 group">
+                                                                        <span className="font-black text-slate-700 dark:text-slate-200 group-hover:text-blue-700 dark:group-hover:text-blue-300">{p.nombre}</span>
+                                                                        <span className="text-blue-600 dark:text-blue-400 font-black bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-md">{formatCurrency(p.precioVenta)}</span>
                                                                     </button>
                                                                 ))}
                                                             </div>
                                                         )}
                                                     </div>
 
-                                                    {/* Grilla de productos rápidos (visible siempre) */}
-                                                    {!buscarProducto && productosPopulares.length > 0 && (
-                                                        <div className="mb-4">
-                                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Toca para agregar</p>
-                                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-[200px] overflow-y-auto pr-1">
-                                                                {productosPopulares.map(p => (
-                                                                    <button key={p.id} onClick={() => agregarProducto(p)}
-                                                                        className="flex flex-col items-start p-2.5 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/50 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-300 dark:hover:border-blue-700 transition-all text-left group">
-                                                                        <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 leading-tight truncate w-full group-hover:text-blue-700 dark:group-hover:text-blue-300">{p.nombre}</span>
-                                                                        <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 mt-0.5">{formatCurrency(p.precioVenta)}</span>
-                                                                    </button>
-                                                                ))}
+                                                    {/* Catálogo por categorías — Acordeones */}
+                                                    {!buscarProducto && (
+                                                        <div className="mb-6 z-10 relative">
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5"><Package className="w-3 h-3"/> Catálogo por Categorías</p>
+                                                            <div className="max-h-[300px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                                                                {categoriasProductos.filter(c => c !== 'Todos').map(cat => {
+                                                                    const prods = productos.filter(p => p.precioVenta > 0 && !p.categoria?.toLowerCase().startsWith('ins:') && (p.categoria || 'Sin categoría') === cat);
+                                                                    if (prods.length === 0) return null;
+                                                                    return (
+                                                                        <details key={cat} className="group bg-white/60 dark:bg-slate-900/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 [&_summary::-webkit-details-marker]:hidden">
+                                                                            <summary className="flex items-center justify-between p-3 cursor-pointer select-none">
+                                                                                <span className="text-xs font-black uppercase tracking-widest text-slate-700 dark:text-slate-300">{cat}</span>
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <Badge className="text-[9px] px-1.5 bg-blue-50 text-blue-600 dark:bg-blue-900/30 border-none">{prods.length}</Badge>
+                                                                                    <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" />
+                                                                                </div>
+                                                                            </summary>
+                                                                            <div className="p-2 pt-0 grid grid-cols-2 gap-2">
+                                                                                {prods.map(p => (
+                                                                                    <button key={p.id} type="button" onClick={(e) => { e.preventDefault(); e.stopPropagation(); agregarProducto(p); }}
+                                                                                        className="flex flex-col items-start p-2 rounded-xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition-all text-left">
+                                                                                        <span className="text-[10px] font-black text-slate-700 dark:text-slate-300 leading-tight w-full line-clamp-2">{p.nombre}</span>
+                                                                                        <span className="text-[10px] font-black text-emerald-600 dark:text-emerald-400 mt-1">{formatCurrency(p.precioVenta)}</span>
+                                                                                    </button>
+                                                                                ))}
+                                                                            </div>
+                                                                        </details>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}
 
-                                                    {itemsCliente.length > 0 ? (
-                                                        <div className="space-y-2 mb-4 animate-ag-fade-in">
-                                                            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 mb-1">🛒 Productos seleccionados</p>
-                                                            {itemsCliente.map(item => (
-                                                                <div key={item.productoId} className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
-                                                                    <div className="flex items-center justify-between">
-                                                                        <span className="font-bold text-xs text-slate-700 dark:text-slate-300 truncate">{item.nombre}</span>
-                                                                        <button onClick={() => cambiarCantidad(item.productoId, 0)} className="text-red-400 hover:text-red-600 transition-colors">
-                                                                            <X className="w-3.5 h-3.5" />
-                                                                        </button>
-                                                                    </div>
-                                                                    <div className="flex items-center gap-2 text-xs">
-                                                                        <div className="flex items-center gap-1 bg-white dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700 shadow-sm">
-                                                                            <button onClick={() => cambiarCantidad(item.productoId, item.cantidad - 1)}
-                                                                                className="w-6 h-6 rounded bg-slate-50 dark:bg-slate-700 font-black hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center">-</button>
-                                                                            <span className="w-6 text-center font-black">{item.cantidad}</span>
-                                                                            <button onClick={() => cambiarCantidad(item.productoId, item.cantidad + 1)}
-                                                                                className="w-6 h-6 rounded bg-slate-50 dark:bg-slate-700 font-black hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex items-center justify-center">+</button>
+                                                    {/* Carrito de Compras */}
+                                                    <div className="relative z-10">
+                                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2.5 flex items-center gap-1.5">
+                                                            <ShoppingCart className="w-3 h-3"/> Tu Carrito
+                                                        </p>
+                                                        
+                                                        {itemsCliente.length === 0 ? (
+                                                            <div className="border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-8 text-center bg-white/30 dark:bg-slate-900/20">
+                                                                <ShoppingCart className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-700 mb-2" />
+                                                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Carrito vacío</p>
+                                                                <p className="text-[10px] text-slate-400 mt-1">Busca un producto o ingresa un valor manual arriba.</p>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="space-y-3 animate-ag-fade-in bg-white/60 dark:bg-slate-900/40 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                                                <div className="max-h-[220px] overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                                                                    {itemsCliente.map(item => (
+                                                                        <div key={item.productoId} className="flex flex-col gap-2 p-3 bg-white dark:bg-slate-950 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                                                                            <div className="flex items-center justify-between">
+                                                                                <span className="font-black text-xs text-slate-800 dark:text-slate-200 truncate pr-2">{item.nombre}</span>
+                                                                                <button onClick={() => cambiarCantidad(item.productoId, 0)} className="text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 p-1 rounded-md transition-colors shrink-0">
+                                                                                    <X className="w-3.5 h-3.5" />
+                                                                                </button>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-2 text-xs">
+                                                                                <div className="flex items-center bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200/50 dark:border-slate-700/50 p-0.5">
+                                                                                    <button onClick={() => cambiarCantidad(item.productoId, item.cantidad - 1)}
+                                                                                        className="w-7 h-7 rounded-md bg-white dark:bg-slate-800 text-slate-500 font-black hover:text-slate-700 shadow-sm flex items-center justify-center">-</button>
+                                                                                    <span className="w-8 text-center font-black">{item.cantidad}</span>
+                                                                                    <button onClick={() => cambiarCantidad(item.productoId, item.cantidad + 1)}
+                                                                                        className="w-7 h-7 rounded-md bg-white dark:bg-slate-800 text-slate-500 font-black hover:text-slate-700 shadow-sm flex items-center justify-center">+</button>
+                                                                                </div>
+                                                                                <span className="text-slate-300 dark:text-slate-600 font-bold">x</span>
+                                                                                <div className="flex-1 flex items-center gap-1 bg-slate-50 dark:bg-slate-900 rounded-lg px-2.5 py-1.5 border border-slate-200/50 dark:border-slate-700/50">
+                                                                                    <span className="text-slate-400 font-bold text-[10px]">$</span>
+                                                                                    <input 
+                                                                                        type="number" 
+                                                                                        value={item.precioUnitario || ''} 
+                                                                                        onChange={(e) => cambiarPrecio(item.productoId, parseFloat(e.target.value) || 0)}
+                                                                                        className="w-full bg-transparent outline-none font-black text-slate-700 dark:text-slate-300 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                                    />
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="text-right pt-1 border-t border-slate-50 dark:border-slate-800">
+                                                                                <span className="font-black text-sm text-blue-600 dark:text-blue-400">{formatCurrency(item.subtotal)}</span>
+                                                                            </div>
                                                                         </div>
-                                                                        <span className="text-slate-400">x</span>
-                                                                        <div className="flex-1 flex items-center gap-1 bg-white dark:bg-slate-800 rounded-lg px-2 py-1 border border-slate-200 dark:border-slate-700 shadow-sm">
-                                                                            <span className="text-slate-500 font-bold">$</span>
-                                                                            <input 
-                                                                                type="number" 
-                                                                                value={item.precioUnitario || ''} 
-                                                                                onChange={(e) => cambiarPrecio(item.productoId, parseFloat(e.target.value) || 0)}
-                                                                                className="w-full bg-transparent outline-none font-black text-slate-700 dark:text-slate-300 text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                            />
-                                                                        </div>
-                                                                        <span className="font-black text-blue-600 dark:text-blue-400 w-20 text-right ml-auto">{formatCurrency(item.subtotal)}</span>
+                                                                    ))}
+                                                                </div>
+                                                                <div className="bg-slate-900 dark:bg-slate-950 p-4 rounded-xl text-white shadow-inner mt-2">
+                                                                    <div className="flex justify-between items-end">
+                                                                        <span className="text-slate-400 uppercase tracking-widest text-[10px] font-bold">Total Fiado</span>
+                                                                        <span className="text-2xl font-black text-emerald-400">{formatCurrency(montoTotalCliente)}</span>
                                                                     </div>
                                                                 </div>
-                                                            ))}
-                                                            <div className="border-t border-slate-200 dark:border-slate-800 pt-3 mt-3 flex justify-between items-center font-black">
-                                                                <span className="text-slate-500 uppercase tracking-widest text-[10px]">Total Fiado</span>
-                                                                <span className="text-lg text-blue-600 dark:text-blue-400">{formatCurrency(montoTotalCliente)}</span>
+                                                                <Button 
+                                                                    onClick={() => {
+                                                                        if(!formCliente.clienteNombre) {
+                                                                            setFormCliente(p => ({ ...p, clienteNombre: cliente.nombre }));
+                                                                        }
+                                                                        handleGuardarCredito();
+                                                                    }} 
+                                                                    disabled={isSavingCliente}
+                                                                    className="w-full h-12 bg-blue-600 hover:bg-blue-700 hover:-translate-y-0.5 text-white font-black rounded-xl shadow-lg shadow-blue-500/30 text-xs uppercase tracking-widest transition-all"
+                                                                >
+                                                                    {isSavingCliente ? 'Procesando...' : 'Confirmar y Fiar'}
+                                                                </Button>
                                                             </div>
-                                                            <Button 
-                                                                onClick={() => {
-                                                                    if(!formCliente.clienteNombre) {
-                                                                        setFormCliente(p => ({ ...p, clienteNombre: cliente.nombre }));
-                                                                    }
-                                                                    handleGuardarCredito();
-                                                                }} 
-                                                                disabled={isSavingCliente}
-                                                                className="w-full h-10 mt-2 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-xl shadow-md text-xs uppercase tracking-widest"
-                                                            >
-                                                                {isSavingCliente ? 'Procesando...' : 'Confirmar y Fiar'}
-                                                            </Button>
-                                                        </div>
-                                                    ) : null}
+                                                        )}
+                                                    </div>
                                                 </div>
 
                                                 {/* Columna Derecha: HISTORIAL */}
                                                 <div>
-                                                    <div className="mb-4 flex justify-between items-center">
+                                                    <div className="mb-4 flex justify-between items-center gap-2 flex-wrap">
                                                         <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                                                             <Clock className="w-4 h-4" /> Historial y Abonos
                                                         </h4>
+                                                        {/* Botón WA masivo — aparece solo cuando hay selección */}
+                                                        {selectedCreditosIds.size > 0 && (() => {
+                                                            const creditosTodos = [...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados];
+                                                            const seleccionados = creditosTodos.filter(c => selectedCreditosIds.has(c.id));
+                                                            const tel = (cliente.telefono || '').replace(/\D/g, '');
+                                                            const saldoTotal = seleccionados.reduce((s, c) => s + c.saldo, 0);
+                                                            const handleWAMasivo = () => {
+                                                                if (!tel) { toast.error('El cliente no tiene teléfono registrado'); return; }
+                                                                const fmt = (n: number) => formatCurrency(n);
+                                                                const fmtF = (f: string) => { try { return new Date(f).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return f; } };
+                                                                let msg = `🥐 *DULCE PLACER*\n━━━━━━━━━━━━━━━━━━\n📋 *ESTADO DE CUENTA*\n👤 ${cliente.nombre}\n📅 ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
+                                                                seleccionados.forEach((c, i) => {
+                                                                    msg += `━━━━━━━━━━━━━━━━━━\n📌 *Ticket ${i + 1}* — ${fmtF(c.fecha)}\n`;
+                                                                    if (c.descripcion) msg += `_${c.descripcion}_\n`;
+                                                                    if (c.items && c.items.length > 0) { c.items.forEach(it => { msg += `  • ${it.cantidad}x ${it.nombre}  ${fmt(it.subtotal)}\n`; }); }
+                                                                    msg += `  💵 *Total:* ${fmt(c.monto)}\n`;
+                                                                    if (c.pagos && c.pagos.length > 0) { msg += `  💳 *Abonos:*\n`; c.pagos.forEach(p => { msg += `    ✓ ${fmtF(p.fecha)} · ${fmt(p.monto)}\n`; }); }
+                                                                    msg += c.saldo <= 0 ? `  ✅ *SALDADO*\n\n` : `  ⚠️ *Pendiente: ${fmt(c.saldo)}*\n\n`;
+                                                                });
+                                                                msg += `━━━━━━━━━━━━━━━━━━\n`;
+                                                                if (seleccionados.length > 1) msg += `📊 *Total seleccionados:* ${fmt(seleccionados.reduce((s,c)=>s+c.monto,0))}\n`;
+                                                                msg += saldoTotal <= 0 ? `✅ *¡Todo al día!* 🎉` : `🔴 *TOTAL A PAGAR: ${fmt(saldoTotal)}*\n\n_Puedes abonar por:_\n💵 Efectivo  |  📲 Nequi  |  🏦 Transferencia`;
+                                                                msg += `\n\n_¡Gracias por tu preferencia! 🥐_`;
+                                                                window.open(`https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`, '_blank');
+                                                                setSelectedCreditosIds(new Set());
+                                                            };
+                                                            return (
+                                                                <div className="flex items-center gap-2 animate-ag-fade-in">
+                                                                    <span className="text-[9px] font-black uppercase tracking-widest text-blue-500">{selectedCreditosIds.size} selec.</span>
+                                                                    <button
+                                                                        onClick={handleWAMasivo}
+                                                                        className="h-8 px-3 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm transition-colors"
+                                                                    >
+                                                                        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                                                        Enviar {selectedCreditosIds.size} por WA · {fmt(saldoTotal)}
+                                                                    </button>
+                                                                    <button onClick={() => setSelectedCreditosIds(new Set())} className="h-8 w-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-600 flex items-center justify-center text-xs font-black">✕</button>
+                                                                </div>
+                                                            );
+                                                        })()}
                                                     </div>
 
                                                     {cliente.creditosActivos.length === 0 && cliente.creditosVencidos.length === 0 && cliente.creditosPagados.length === 0 ? (
@@ -878,13 +1087,28 @@ export default function CreditosClientes({
                                                         </div>
                                                     ) : (
                                                         <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                                            {[...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados].map(credito => (
-                                                                <div key={credito.id} className="p-3.5 bg-white dark:bg-slate-950 shadow-sm border border-slate-200 dark:border-slate-800 rounded-2xl relative overflow-hidden group">
+                                                            {[...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados].map(credito => {
+                                                                const isSelected = selectedCreditosIds.has(credito.id);
+                                                                return (
+                                                                <div key={credito.id} 
+                                                                    onClick={() => {
+                                                                        const next = new Set(selectedCreditosIds);
+                                                                        if (isSelected) next.delete(credito.id);
+                                                                        else next.add(credito.id);
+                                                                        setSelectedCreditosIds(next);
+                                                                    }}
+                                                                    className={`p-3.5 shadow-sm border rounded-2xl relative overflow-hidden group cursor-pointer transition-colors ${
+                                                                        isSelected ? 'bg-blue-50/50 border-blue-400 dark:bg-blue-900/20 dark:border-blue-700' : 'bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800'
+                                                                    }`}>
                                                                     <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${credito.estado === 'activo' ? 'bg-amber-500' : credito.estado === 'vencido' ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
                                                                     
                                                                     <div className="flex items-start justify-between gap-3 pl-3">
                                                                         <div className="flex-1 min-w-0">
                                                                             <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                                                                {/* Checkbox de selección */}
+                                                                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? 'bg-blue-500 border-blue-500' : 'border-slate-300 dark:border-slate-600 group-hover:border-blue-400'}`}>
+                                                                                    {isSelected && <CheckCircle className="w-2.5 h-2.5 text-white" />}
+                                                                                </div>
                                                                                 <Badge className={`${ESTADO_COLOR_CLIENTE[credito.estado]} text-[9px] font-bold uppercase tracking-widest flex items-center gap-1 border-none px-1.5 py-0`}>
                                                                                     {credito.estado === 'activo' && <Clock className="w-3 h-3" />}
                                                                                     {credito.estado === 'pagado' && <CheckCircle className="w-3 h-3" />}
@@ -893,8 +1117,8 @@ export default function CreditosClientes({
                                                                                 </Badge>
                                                                                 <span className="text-[10px] text-slate-500 font-bold">{new Date(credito.createdAt || credito.fecha).toLocaleDateString()}</span>
                                                                             </div>
-                                                                            {credito.descripcion && <p className="text-xs text-slate-600 dark:text-slate-400 truncate mb-1">{credito.descripcion}</p>}
-                                                                            <div className="flex items-center gap-4 mt-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl">
+                                                                            {credito.descripcion && <p className="text-xs text-slate-600 dark:text-slate-400 truncate mb-1 ml-6">{credito.descripcion}</p>}
+                                                                            <div className="flex items-center gap-4 mt-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl ml-6">
                                                                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Deuda:<br/><span className="text-xs text-slate-700 dark:text-slate-300">{formatCurrency(credito.monto)}</span></span>
                                                                                 <span className={`text-[10px] font-black uppercase tracking-widest ${credito.saldo > 0 ? 'text-red-600/70 dark:text-red-400/70' : 'text-emerald-600/70 dark:text-emerald-400/70'}`}>
                                                                                     Saldo:<br/><span className={`text-xs ${credito.saldo > 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{formatCurrency(credito.saldo)}</span>
@@ -903,6 +1127,41 @@ export default function CreditosClientes({
                                                                         </div>
                                                                         
                                                                         <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                                                            {/* Botón WhatsApp individual */}
+                                                                            {cliente.telefono && credito.saldo > 0 && (
+                                                                                <Button
+                                                                                    size="sm"
+                                                                                    onClick={(e) => { 
+                                                                                        e.stopPropagation(); 
+                                                                                        const fmt = (n: number) => formatCurrency(n);
+                                                                                        const fmtFecha = (f: string) => { try { return new Date(f).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return f; } };
+                                                                                        let msg = `🧾 *DETALLE DE CRÉDITO — Dulce Placer*\n`;
+                                                                                        msg += `👤 *${cliente.nombre}*\n`;
+                                                                                        msg += `📅 Fecha crédito: ${fmtFecha(credito.fecha)}\n`;
+                                                                                        msg += `${'─'.repeat(28)}\n`;
+                                                                                        msg += `*${credito.descripcion || 'Compra en panadería'}*\n\n`;
+                                                                                        if (credito.items && credito.items.length > 0) {
+                                                                                            credito.items.forEach(it => { msg += `   • ${it.cantidad}x ${it.nombre} — ${fmt(it.subtotal)}\n`; });
+                                                                                            msg += `\n`;
+                                                                                        }
+                                                                                        msg += `💰 *Deuda Original: ${fmt(credito.monto)}*\n`;
+                                                                                        if (credito.pagos && credito.pagos.length > 0) {
+                                                                                            msg += `💳 *Abonos:*\n`;
+                                                                                            credito.pagos.forEach(p => { msg += `   ✓ ${fmtFecha(p.fecha)} — ${fmt(p.monto)}\n`; });
+                                                                                        }
+                                                                                        msg += `${'─'.repeat(28)}\n`;
+                                                                                        msg += `🔴 *SALDO PENDIENTE: ${fmt(credito.saldo)}*\n\n`;
+                                                                                        msg += `Agradecemos mucho tu pronto pago. 🙏`;
+                                                                                        const tel = cliente.telefono!.replace(/\D/g, '');
+                                                                                        const url = `https://wa.me/57${tel}?text=${encodeURIComponent(msg)}`;
+                                                                                        window.open(url, '_blank');
+                                                                                    }}
+                                                                                    className="h-8 w-8 p-0 bg-emerald-100 hover:bg-emerald-200 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg shadow-sm"
+                                                                                    title="Cobrar este crédito por WhatsApp"
+                                                                                >
+                                                                                    <svg viewBox="0 0 24 24" className="w-4 h-4" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+                                                                                </Button>
+                                                                            )}
                                                                             {credito.estado !== 'pagado' && (
                                                                                 <Button
                                                                                     size="sm"
@@ -954,9 +1213,67 @@ export default function CreditosClientes({
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                            ))}
+                                                            );
+                                                        })}
                                                         </div>
                                                     )}
+                                                    
+                                                    {/* Compras al Contado */}
+                                                    {cliente.ventasContado && cliente.ventasContado.length > 0 && (
+                                                        <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-4">
+                                                            <div className="flex justify-between items-center mb-3">
+                                                                <h4 className="text-xs font-black uppercase tracking-widest text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                                                                    <DollarSign className="w-4 h-4" /> Historial Compras Contado
+                                                                </h4>
+                                                                <span className="text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 px-2 py-0.5 rounded-full">
+                                                                    Total: {formatCurrency(cliente.totalCompradoContado)}
+                                                                </span>
+                                                            </div>
+                                                            <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                                                                {cliente.ventasContado.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).map(venta => (
+                                                                    <div key={venta.id} className="flex justify-between items-center p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+                                                                        <div>
+                                                                            <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300">{new Date(venta.fecha).toLocaleString()}</p>
+                                                                            <p className="text-[10px] text-slate-500">{venta.items.length} productos</p>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            <p className="font-black text-sm text-slate-800 dark:text-slate-200">{formatCurrency(venta.total)}</p>
+                                                                            <p className="text-[9px] uppercase font-bold text-emerald-500">{venta.metodoPago}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Galería de Evidencias */}
+                                                    {(() => {
+                                                        const creditosConFoto = [...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados].filter(c => !!c.fotoEvidencia);
+                                                        if (creditosConFoto.length === 0) return null;
+                                                        
+                                                        return (
+                                                            <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-4">
+                                                                <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2 mb-3">
+                                                                    <Image className="w-4 h-4" /> Galería de Evidencias (Facturas)
+                                                                </h4>
+                                                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                                                                    {creditosConFoto.sort((a, b) => new Date(b.createdAt || b.fecha).getTime() - new Date(a.createdAt || a.fecha).getTime()).map(c => (
+                                                                        <button 
+                                                                            key={c.id} 
+                                                                            onClick={() => setShowFotoModal(c.fotoEvidencia!)}
+                                                                            className="relative aspect-square rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 hover:ring-2 hover:ring-blue-500 transition-all group shadow-sm"
+                                                                        >
+                                                                            <img src={c.fotoEvidencia} alt="Evidencia" className="w-full h-full object-cover" />
+                                                                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity">
+                                                                                <Search className="w-6 h-6 text-white mb-1" />
+                                                                                <span className="text-[10px] font-bold text-white text-center px-1 bg-black/50 rounded-full py-0.5">{new Date(c.createdAt || c.fecha).toLocaleDateString()}</span>
+                                                                            </div>
+                                                                        </button>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         </div>
@@ -1252,9 +1569,27 @@ export default function CreditosClientes({
 
                         {/* Selector productos */}
                         <div>
-                            <Label className="text-xs font-bold uppercase tracking-widest flex items-center gap-1">
-                                <ShoppingCart className="w-3 h-3" /> Productos fiados *
-                            </Label>
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs font-bold uppercase tracking-widest flex items-center gap-1">
+                                    <ShoppingCart className="w-3 h-3" /> Productos fiados *
+                                </Label>
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    onClick={() => {
+                                        setItemsCliente(prev => [...prev, {
+                                            productoId: 'manual-' + Date.now(),
+                                            nombre: 'Factura física (sin detalle)',
+                                            cantidad: 1,
+                                            precioUnitario: 0,
+                                            subtotal: 0
+                                        }]);
+                                    }}
+                                    className="h-7 text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-slate-900"
+                                >
+                                    + Agregar solo por valor
+                                </Button>
+                            </div>
                             <div className="relative mt-1">
                                 <Input placeholder="Buscar producto del catálogo..." value={buscarProducto}
                                     onChange={e => setBuscarProducto(e.target.value)} />

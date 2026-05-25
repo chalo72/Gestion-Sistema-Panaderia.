@@ -182,8 +182,10 @@ export function Ventas(props: VentasProps) {
                 categoriaLower === selectedCategory.toLowerCase().trim();
                 
             const precio = safeNumber(p.precioVenta);
-            
-            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo;
+            // Solo mostrar productos elaborados (para venta) — nunca ingredientes de proveedor
+            const esElaborado = p.tipo === 'elaborado';
+
+            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo && esElaborado;
         });
     }, [productos, searchTerm, selectedCategory]);
 
