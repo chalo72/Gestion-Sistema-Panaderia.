@@ -86,30 +86,21 @@ export function useAutoUpdate() {
     try { localStorage.setItem('nexus_update_signal', `${ts}:${version}:${Date.now()}`); } catch { /**/ }
   }, []);
 
-  // ── Cuenta regresiva → recarga ────────────────────────────────────────────
+  // ── Notificar nueva versión — SIN auto-recarga, el usuario decide ────────
   const iniciarContadorYRecargar = useCallback((version: string) => {
     if (reloadingRef.current) return;
     setUpdateAvailable(true);
     setNewVersion(version);
-    setCountdown(Math.round(RELOAD_DELAY_MS / 1000));
-
-    let segs = Math.round(RELOAD_DELAY_MS / 1000);
-    countdownRef.current = setInterval(() => {
-      segs -= 1;
-      setCountdown(segs);
-      if (segs <= 0) {
-        if (countdownRef.current) clearInterval(countdownRef.current);
-        recargar();
-      }
-    }, 1000);
-  }, [recargar]);
+    setCountdown(null); // sin cuenta regresiva automática
+  }, []);
 
   // ── Capa 1 (SW): controllerchange ─────────────────────────────────────────
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
     const handleControllerChange = () => {
-      setTimeout(() => recargar(), 1000);
+      // Solo notifica, no recarga automáticamente
+      setUpdateAvailable(true);
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
