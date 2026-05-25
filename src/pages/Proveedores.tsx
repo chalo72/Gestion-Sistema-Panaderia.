@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { validarCatalogo } from '@/lib/price-guard';
 import { useCan } from '@/contexts/AuthContext';
 import {
@@ -178,19 +178,50 @@ export function Proveedores({
   const [catalogoParaForm, setCatalogoParaForm] = useState<ProductoCatalogo[]>([]);
 
 
+  /* ─── Helper: obtener precios válidos (sin fantasmas ni duplicados) ─── */
+  const getInsumosValidos = useCallback((provId: string): PrecioProveedor[] => {
+    const todos = getPreciosByProveedor(provId);
+    // Deduplicar por productoId y filtrar registros huérfanos (producto eliminado)
+    const mapa = new Map<string, PrecioProveedor>();
+    for (const p of todos) {
+      if (!getProductoById(p.productoId)) continue; // Saltar fantasmas
+      const existing = mapa.get(p.productoId);
+      // Quedarse con el más reciente (mayor fechaActualizacion)
+      if (!existing || (p.fechaActualizacion || '') >= (existing.fechaActualizacion || '')) {
+        mapa.set(p.productoId, p);
+      }
+    }
+    return Array.from(mapa.values());
+  }, [getPreciosByProveedor, getProductoById]);
+
+  /* ─── Detectar y limpiar registros huérfanos/duplicados de un proveedor ─── */
+  const limpiarCatalogoProveedor = useCallback(async (provId: string) => {
+    const todos = getPreciosByProveedor(provId);
+    const validos = new Set(getInsumosValidos(provId).map(p => p.id));
+    const aEliminar = todos.filter(p => !validos.has(p.id));
+    if (aEliminar.length === 0) {
+      toast.info('El catálogo ya está limpio — no hay registros duplicados ni fantasmas.');
+      return;
+    }
+    for (const p of aEliminar) {
+      await onDeletePrecio(p.id);
+    }
+    toast.success(`✅ Se eliminaron ${aEliminar.length} registro(s) duplicado(s) o huérfano(s).`);
+  }, [getPreciosByProveedor, getInsumosValidos, onDeletePrecio]);
+
   /* ─── KPIs ─── */
   const kpis = useMemo(() => {
-    const totalInsumos = proveedores.reduce((acc, p) => acc + getPreciosByProveedor(p.id).length, 0);
+    const totalInsumos = proveedores.reduce((acc, p) => acc + getInsumosValidos(p.id).length, 0);
     const activos = proveedores.filter(p => (p as any).activo !== false).length;
     const mejorCalificado = proveedores.reduce<Proveedor | null>((best, p) =>
       !best || (p.calificacion || 0) > (best.calificacion || 0) ? p : best, null);
     const promedioRating = proveedores.length
       ? proveedores.reduce((s, p) => s + (p.calificacion || 5), 0) / proveedores.length
       : 0;
-    const conProductos = proveedores.filter(p => getPreciosByProveedor(p.id).length > 0).length;
+    const conProductos = proveedores.filter(p => getInsumosValidos(p.id).length > 0).length;
     const sinProductos = proveedores.length - conProductos;
     return { totalInsumos, activos, mejorCalificado, promedioRating, conProductos, sinProductos };
-  }, [proveedores, getPreciosByProveedor]);
+  }, [proveedores, getInsumosValidos]);
 
   /* ─── Filtrado + orden ─── */
   const filtrados = useMemo(() => {
@@ -395,8 +426,8 @@ export function Proveedores({
 
   const handleEdit = (proveedor: Proveedor) => {
     setEditingProveedor(proveedor);
-    // Pre-cargar productos existentes del proveedor
-    const preciosExistentes = getPreciosByProveedor(proveedor.id);
+    // Pre-cargar solo precios válidos (sin fantasmas ni duplicados)
+    const preciosExistentes = getInsumosValidos(proveedor.id);
     const itemsPreCargados: ProductoCatalogo[] = preciosExistentes.map(precio => {
       const prod = getProductoById(precio.productoId);
       return {
@@ -434,7 +465,7 @@ export function Proveedores({
 
   /* ─── Metricas reales del proveedor ─── */
   const getMetricasProveedor = (prov: Proveedor) => {
-    const insumos = getPreciosByProveedor(prov.id);
+    const insumos = getInsumosValidos(prov.id);
     const calidad = Math.round(((prov.calificacion || 5) / 5) * 100);
     const cobertura = insumos.length > 0 ? Math.min(100, Math.round((insumos.length / 10) * 100)) : 0;
     let margenPromedio = 0;
@@ -633,7 +664,7 @@ export function Proveedores({
               const activo       = (prov as any).activo !== false;
               const rubro        = (prov as any).rubro as string | undefined;
               const notas        = (prov as any).notas as string | undefined;
-              const insumos      = getPreciosByProveedor(prov.id).sort((a, b) => {
+              const insumos = getInsumosValidos(prov.id).sort((a, b) => {
                 const nombreA = getProductoById(a.productoId)?.nombre || '';
                 const nombreB = getProductoById(b.productoId)?.nombre || '';
                 return nombreA.localeCompare(nombreB);
@@ -787,8 +818,29 @@ export function Proveedores({
                       </div>
 
                       {/* ── Tab: Catálogo (tabla de productos) ── */}
-                      {tabDetalle === 'catalogo' && (
+                      {tabDetalle === 'catalogo' && (() => {
+                        // Detectar registros sucios (fantasmas o duplicados)
+                        const totalBruto = getPreciosByProveedor(prov.id).length;
+                        const hayRegistrosSucios = totalBruto > insumos.length;
+                        return (
                         <>
+                          {/* Banner de limpieza cuando hay fantasmas/duplicados */}
+                          {hayRegistrosSucios && (
+                            <div className="mx-4 mt-3 mb-1 flex items-center justify-between gap-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-2xl px-4 py-2.5 animate-ag-fade-in">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                                <p className="text-[11px] font-black text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+                                  {totalBruto - insumos.length} registro(s) duplicado(s) o huérfano(s) detectado(s)
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => limpiarCatalogoProveedor(prov.id)}
+                                className="shrink-0 h-8 px-3 flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors"
+                              >
+                                <Database className="w-3.5 h-3.5" /> Limpiar
+                              </button>
+                            </div>
+                          )}
                           {insumos.length === 0 ? (
                             <div className="flex flex-col items-center py-10 gap-2 opacity-40">
                               <Package className="w-10 h-10 text-slate-300" />
@@ -866,7 +918,8 @@ export function Proveedores({
                             />
                           )}
                         </>
-                      )}
+                        );
+                      })()}
 
                       {/* ── Tab: Análisis ── */}
                       {tabDetalle === 'analisis' && (() => {
