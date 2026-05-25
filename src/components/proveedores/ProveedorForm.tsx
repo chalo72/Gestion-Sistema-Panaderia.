@@ -268,7 +268,12 @@ export function ProveedorForm({
           const esReciente = savedAt ? (Date.now() - new Date(savedAt).getTime()) < 86400000 : false; // 24h
           const esMasGrande = ci.length > (initialCatalogo?.length || 0);
           
-          if (esReciente || esMasGrande) {
+          // Validar que el borrador pertenece al proveedor correcto
+          const nombreEsperado = editingProveedor?.nombre?.toLowerCase().trim() || '';
+          const draftNombre    = (fd.nombre || '').toLowerCase().trim();
+          const draftEsDeEsteProveedor = !nombreEsperado || draftNombre === nombreEsperado;
+
+          if ((esReciente || esMasGrande) && draftEsDeEsteProveedor) {
             // Filtrar items del borrador cuyos productos ya no existen en el sistema
             const productIdsValidos = new Set(productosExistentes.map(p => p.id));
             const ciValidos: ProductoCatalogo[] = ci.filter((item: ProductoCatalogo) =>
@@ -283,6 +288,9 @@ export function ProveedorForm({
                 : 'Se recuperó automáticamente tu trabajo sin guardar'
             );
             draftRestored = true;
+          } else if (!draftEsDeEsteProveedor) {
+            // Borrador corrupto (pertenece a otro proveedor) — eliminarlo silenciosamente
+            localStorage.removeItem(draftKey);
           }
         } catch (e) {
           localStorage.removeItem(draftKey);

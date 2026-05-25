@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
-const CHECK_INTERVAL  = 60 * 60 * 1000; // Verifica cada 1 hora (evitar bucle de recarga)
+const CHECK_INTERVAL  = 2 * 60 * 1000;  // Verifica cada 2 minutos → actualización casi inmediata
 const STORAGE_KEY     = 'nexus_build_ts'; // Unificado con index.html para evitar doble recarga
 const RELOAD_DELAY_MS = 5_000;  // 5 segundos de aviso antes de recargar
 
@@ -115,7 +115,23 @@ export function useAutoUpdate() {
   useEffect(() => {
     checkForUpdates();
     const interval = setInterval(checkForUpdates, CHECK_INTERVAL);
-    return () => clearInterval(interval);
+
+    // Verificar inmediatamente al volver al tab/app (celular, escritorio)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        checkForUpdates();
+        // También forzar comprobación del SW
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(reg => reg.update()).catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [checkForUpdates]);
 
   return { currentVersion, updateAvailable, newVersion, countdown, isUpdating, recargar };
