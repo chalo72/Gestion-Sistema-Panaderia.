@@ -50,10 +50,12 @@ const COLLECTIONS = [
 
 export class IndexedDBAdapter implements DatabaseAdapter {
   private db: IDBDatabase | null = null;
+  private initPromise: Promise<void> | null = null;
 
-  /** Abre (o crea) la base de datos y registra todos los Object Stores. */
+  /** Abre (o crea) la base de datos y registra todos los Object Stores. Idempotente. */
   async init(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    if (this.initPromise) return this.initPromise;
+    this.initPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onupgradeneeded = (event) => {
@@ -79,6 +81,13 @@ export class IndexedDBAdapter implements DatabaseAdapter {
         reject(error);
       };
     });
+    return this.initPromise;
+  }
+
+  /** Garantiza que init() haya completado antes de operar. */
+  private ensureReady(): Promise<void> {
+    if (this.db) return Promise.resolve();
+    return this.init();
   }
 
   /** Devuelve la instancia de DB asegurada (lanza error si init() no fue llamado). */
@@ -122,6 +131,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
 
   /** Obtiene todos los documentos de una colección. */
   async getCollection<T>(name: string): Promise<T[]> {
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const db = this.getDB();
 
@@ -144,6 +154,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
 
   /** Obtiene un documento específico por su ID. */
   async getDocument<T>(collection: string, id: string): Promise<T | null> {
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const db = this.getDB();
 
@@ -166,6 +177,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
    * Usa `put()` que es un upsert nativo (crea o actualiza).
    */
   async setDocument<T>(collection: string, id: string, data: T): Promise<void> {
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const db = this.getDB();
 
@@ -190,6 +202,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
 
   /** Elimina un documento por su ID. */
   async deleteDocument(collection: string, id: string): Promise<void> {
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const db = this.getDB();
 
@@ -237,7 +250,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
    */
   async hydrateFromCloud<T extends { id: string }>(collection: string, items: T[]): Promise<void> {
     if (!items || items.length === 0) return;
-    
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const db = this.getDB();
       if (!db.objectStoreNames.contains(collection)) {
@@ -277,6 +290,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
    * Útil para forzar una re-sincronización desde la nube.
    */
   async clearCollection(collection: string): Promise<void> {
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const db = this.getDB();
       if (!db.objectStoreNames.contains(collection)) { resolve(); return; }
@@ -294,6 +308,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
    * Retorna el número de documentos en una colección.
    */
   async count(collection: string): Promise<number> {
+    await this.ensureReady();
     return new Promise((resolve, reject) => {
       const db = this.getDB();
       if (!db.objectStoreNames.contains(collection)) { resolve(0); return; }
