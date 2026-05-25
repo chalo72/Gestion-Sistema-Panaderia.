@@ -29,7 +29,8 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const { countdown, updateAvailable, recargar } = useAutoUpdate();
 
   // ── Sincronización Realtime bidireccional ─────────────────────────────────
-  const { pendingChanges, dismissAll } = useRealtimeSync();
+  const { pendingChanges, dismissAll, syncConnected, syncNow } = useRealtimeSync();
+  const [isSyncingManual, setIsSyncingManual] = useState(false);
   const [syncCountdown, setSyncCountdown] = useState<number | null>(null);
   const syncTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
@@ -85,6 +86,12 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     setSyncCountdown(null);
     dismissAll();
   }, [dismissAll]);
+
+  const handleSyncNow = useCallback(async () => {
+    setIsSyncingManual(true);
+    await syncNow().catch(() => {});
+    setIsSyncingManual(false);
+  }, [syncNow]);
 
   // Cargar misiones y hallazgos iniciales
   useEffect(() => {
@@ -191,11 +198,44 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       isVigilando
     }}>
       {children}
+      {/* ── Botón flotante de sync — siempre visible, muestra estado ────────── */}
+      <button
+        onClick={handleSyncNow}
+        disabled={isSyncingManual}
+        title={syncConnected ? 'Realtime conectado — clic para sincronizar ahora' : 'Clic para sincronizar ahora'}
+        style={{
+          position: 'fixed',
+          bottom: updateAvailable ? 80 : pendingChanges.length > 0 && syncCountdown !== null ? 188 : 16,
+          right: 16,
+          zIndex: 9997,
+          background: syncConnected ? 'rgba(16,185,129,0.15)' : 'rgba(15,23,42,0.85)',
+          border: `1px solid ${syncConnected ? 'rgba(16,185,129,0.4)' : 'rgba(148,163,184,0.2)'}`,
+          borderRadius: 20,
+          padding: '6px 12px',
+          display: 'flex', alignItems: 'center', gap: 6,
+          cursor: isSyncingManual ? 'wait' : 'pointer',
+          color: syncConnected ? '#6ee7b7' : '#94a3b8',
+          fontSize: 11, fontWeight: 600,
+          backdropFilter: 'blur(8px)',
+          transition: 'all 0.2s',
+        }}
+      >
+        <span style={{
+          width: 7, height: 7, borderRadius: '50%',
+          background: isSyncingManual ? '#f59e0b' : syncConnected ? '#10b981' : '#64748b',
+          display: 'inline-block',
+          animation: isSyncingManual ? 'pulse 1s infinite' : 'none',
+        }} />
+        {isSyncingManual ? 'Sincronizando…' : 'NexusSync'}
+      </button>
+
       {/* ── Banner de sincronización de datos remotos ──────────────────────── */}
       {pendingChanges.length > 0 && syncCountdown !== null && (
         <div
           style={{
-            position: 'fixed', bottom: updateAvailable ? 80 : 16, right: 16,
+            position: 'fixed',
+            bottom: updateAvailable ? 80 : 56,
+            right: 16,
             zIndex: 9998, maxWidth: 340,
             background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)',
             color: '#e2e8f0', borderRadius: 14,
