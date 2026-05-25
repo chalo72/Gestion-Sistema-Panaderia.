@@ -472,6 +472,8 @@ class NexusDatabase implements IDatabase {
   // Sincronización Bidireccional
   async syncCloudToLocal() {
     let cloudExito = false;
+
+    // 1️⃣ Intentar Firebase (legacy)
     if (firebaseAdapter) {
       try {
         await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
@@ -480,9 +482,46 @@ class NexusDatabase implements IDatabase {
         console.error('❌ [NEXUS] Falla al conectar con Firebase. Usando BUNDLE DE RESCATE LOCAL.', error);
       }
     }
-    
+
+    // 2️⃣ Intentar Supabase si Firebase no está disponible
+    if (!cloudExito) {
+      try {
+        const supaDB = new SupabaseDatabase();
+        const remoteProductos = await supaDB.getAllProductos();
+        if (remoteProductos && remoteProductos.length > 0) {
+          console.log('☁️ [NEXUS] Datos encontrados en Supabase. Sincronizando hacia local...');
+          const tasks: Array<{ col: string; fn: () => Promise<any[]> }> = [
+            { col: 'productos',          fn: () => supaDB.getAllProductos() },
+            { col: 'proveedores',        fn: () => supaDB.getAllProveedores() },
+            { col: 'precios',            fn: () => supaDB.getAllPrecios() },
+            { col: 'ventas',             fn: () => supaDB.getAllVentas() },
+            { col: 'inventario',         fn: () => supaDB.getAllInventario() },
+            { col: 'gastos',             fn: () => supaDB.getAllGastos() },
+            { col: 'recepciones',        fn: () => supaDB.getAllRecepciones() },
+            { col: 'pre_pedidos',        fn: () => supaDB.getAllPrePedidos() },
+            { col: 'creditos_clientes',  fn: () => supaDB.getAllCreditosClientes() },
+            { col: 'recetas',            fn: () => supaDB.getAllRecetas() },
+            { col: 'sesiones_caja',      fn: () => supaDB.getAllSesionesCaja() },
+          ];
+          for (const task of tasks) {
+            try {
+              const items = await task.fn();
+              if (items && items.length > 0) {
+                await localAdapter.hydrateFromCloud(task.col, items);
+              }
+            } catch (_) { /* colección opcional, continuar */ }
+          }
+          cloudExito = true;
+          console.log('✅ [NEXUS] Sincronización desde Supabase completada.');
+        }
+      } catch (e) {
+        console.warn('☁️ [NEXUS] Supabase no disponible en este momento:', e);
+      }
+    }
+
+    // 3️⃣ Fallback: inyectar RESCUE_DATA si aún no hay datos
     const checkProductos = await localAdapter.getCollection('productos');
-    
+
     if (!cloudExito || !checkProductos || checkProductos.length === 0) {
       console.warn('⚠️ [NEXUS] Base de datos vacía o falla de nube. Inyectando RESCUE_DATA hardcodeado al IndexedDB...');
       for (const [colName, items] of Object.entries(RESCUE_DATA)) {
@@ -493,6 +532,28 @@ class NexusDatabase implements IDatabase {
         }
       }
       console.log('✅ [NEXUS] Rescate Físico Terminado.');
+
+      // 4️⃣ Subir RESCUE_DATA a Supabase si está vacío, para que otros dispositivos puedan sincronizar
+      try {
+        const supaDB = new SupabaseDatabase();
+        const remoteCheck = await supaDB.getAllProductos().catch(() => [] as any[]);
+        if (remoteCheck.length === 0) {
+          console.log('☁️ [NEXUS] Supabase vacío — subiendo RESCUE_DATA para sincronización entre dispositivos...');
+          const rescueUploads: Array<{ items: any[]; fn: (item: any) => Promise<void> }> = [
+            { items: (RESCUE_DATA as any).productos   || [], fn: (d) => supaDB.addProducto(d) },
+            { items: (RESCUE_DATA as any).proveedores || [], fn: (d) => supaDB.addProveedor(d) },
+            { items: (RESCUE_DATA as any).precios     || [], fn: (d) => supaDB.addPrecio(d) },
+          ];
+          for (const task of rescueUploads) {
+            for (const item of task.items) {
+              await task.fn(item).catch(() => {});
+            }
+          }
+          console.log('✅ [NEXUS] RESCUE_DATA disponible en Supabase para todos los dispositivos.');
+        }
+      } catch (e) {
+        console.warn('⚠️ [NEXUS] No se pudo subir RESCUE_DATA a Supabase (no crítico):', e);
+      }
     }
   }
 
@@ -590,23 +651,23 @@ class NexusDatabase implements IDatabase {
 
     for (const task of rescate) {
       try {
-        console.log(`📡 [RESCATE]: Recuperando '${task.col}'...`);
+        console.log('[RESCATE] Recuperando ' + task.col + '...');
         const items = await task.fn();
         if (items && items.length > 0) {
-          console.log(`📥 [RESCATE]: Volcando ${items.length} items en local...`);
+          console.log('[RESCATE] Volcando ' + items.length + ' items en local...');
           await localAdapter.hydrateFromCloud(task.col, items);
         }
       } catch (e) {
-        console.error(`❌ [RESCATE]: Error en '${task.col}':`, e);
+        console.error('[RESCATE] Error en ' + task.col + ':', e);
       }
     }
-    console.log('🏁 [NEXUS]: Rescate completado. Sincronizando con nueva nube...');
+    console.log('[NEXUS] Rescate completado. Sincronizando con nueva nube...');
     await this.syncLocalToCloud();
   }
 }
 
 // ─────────────────────────────────────────────────────────
-// 🏗️ ARQUITECTURA TRÍO: IndexedDB (Local) + Firebase (Nube)
+// ARQUITECTURA: IndexedDB (Local) + Firebase (Nube)
 // ─────────────────────────────────────────────────────────
 
 const firebaseConfig = {
@@ -622,35 +683,22 @@ const hasFirebase =
   !!import.meta.env.VITE_FIREBASE_API_KEY &&
   !!import.meta.env.VITE_FIREBASE_PROJECT_ID;
 
-// 1️⃣ MOTOR LOCAL: IndexedDB — SIEMPRE activo, fuente de verdad offline
+// MOTOR LOCAL: IndexedDB — SIEMPRE activo, fuente de verdad offline
 const localAdapter = new IndexedDBAdapter();
 
-// 2️⃣ MOTOR NUBE: Firebase — activo solo si hay credenciales configuradas en .env
+// MOTOR NUBE: Firebase — activo solo si hay credenciales configuradas en .env
 const firebaseAdapter = hasFirebase ? new FirebaseAdapter(firebaseConfig) : null;
 
-// 3️⃣ ORQUESTADOR: IndexedDB como primario, Firebase como sombra.
-//    Escrituras → local primero, luego nube en paralelo.
-//    Lecturas → local siempre (offline-first).
+// ORQUESTADOR: IndexedDB como primario, Firebase como sombra.
 const activeAdapter: DatabaseAdapter = firebaseAdapter
   ? new MultiAdapter(localAdapter, firebaseAdapter)
   : localAdapter;
 
-// Inicialización asíncrona con hidratación automática desde la nube al arrancar
-(async () => {
-  try {
-    await activeAdapter.init();
-
-    if (firebaseAdapter) {
-      // Carga datos Firebase → IndexedDB solo si el local está vacío
-      await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES);
-    } else {
-      console.log('📴 [NEXUS]: Sin Firebase configurado. Modo 100% Local (IndexedDB).');
-    }
-  } catch (e) {
-    console.error('❌ [NEXUS]: Error crítico al inicializar la base de datos.', e);
-  }
-})();
-
-// La app importa solo esto — el motor real es completamente transparente
 export const db = new NexusDatabase(activeAdapter);
 
+db.init().then(() => {
+  console.log('[IndexedDB]: Base de datos local lista.');
+  if (firebaseAdapter) {
+    hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES);
+  }
+}).catch(console.error);

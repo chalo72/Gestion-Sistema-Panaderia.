@@ -130,8 +130,8 @@ export default defineConfig(({ mode }) => {
           clientsClaim: true,      // Nuevo SW reclama todos los clientes inmediatamente
           // Limpiar caches viejos al activar nuevo SW
           cleanupOutdatedCaches: true,
-          // Navigation preload → acelera carga tras activar nuevo SW
-          navigationPreload: true,
+          // Navigation preload desactivado → evita advertencia "preloadResponse cancelled"
+          navigationPreload: false,
           runtimeCaching: [
             {
               // version.json: siempre desde red para detectar nuevas versiones
