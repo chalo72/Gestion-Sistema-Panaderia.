@@ -32,6 +32,7 @@ import {
   CheckCircle2,
   Filter,
   Database,
+  Bell,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -42,7 +43,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, PrecioProveedor, ProductoTipo, Categoria } from '@/types';
 import { ProveedorForm, type ProductoCatalogo } from '@/components/proveedores/ProveedorForm';
-import { AnalisisInteligente } from '@/components/proveedores/AnalisisInteligente';
+import { AnalisisInteligente, getScheduleAlerta } from '@/components/proveedores/AnalisisInteligente';
 import { ComparadorPrecios } from '@/components/prepedidos/ComparadorPrecios';
 
 /* ── Tipos para la vista ── */
@@ -222,6 +223,13 @@ export function Proveedores({
     const sinProductos = proveedores.length - conProductos;
     return { totalInsumos, activos, mejorCalificado, promedioRating, conProductos, sinProductos };
   }, [proveedores, getInsumosValidos]);
+
+  /* ─── Alertas de visitas próximas ─── */
+  const alertasVisita = useMemo(() => {
+    return proveedores
+      .map(p => ({ prov: p, alerta: getScheduleAlerta(p.id) }))
+      .filter(x => x.alerta !== null) as { prov: Proveedor; alerta: { diasRestantes: number; proximaVisita: string } }[];
+  }, [proveedores]);
 
   /* ─── Filtrado + orden ─── */
   const filtrados = useMemo(() => {
@@ -587,6 +595,40 @@ export function Proveedores({
         </div>
       )}
 
+      {/* ── Alertas de visitas próximas ── */}
+      {alertasVisita.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {alertasVisita.map(({ prov, alerta }) => (
+            <div key={prov.id} className={cn(
+              'flex items-center gap-3 px-4 py-3 rounded-2xl border',
+              alerta.diasRestantes <= 0
+                ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
+                : alerta.diasRestantes <= 1
+                ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
+                : 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
+            )}>
+              <Bell className={cn('w-4 h-4 shrink-0',
+                alerta.diasRestantes <= 0 ? 'text-red-600' :
+                alerta.diasRestantes <= 1 ? 'text-amber-600' : 'text-yellow-600'
+              )} />
+              <p className="text-xs font-black text-slate-800 dark:text-white flex-1">
+                {alerta.diasRestantes <= 0
+                  ? `🚨 Hoy llega el preventista de ${prov.nombre} — ¡prepedido listo?`
+                  : alerta.diasRestantes === 1
+                  ? `🔔 Mañana llega el preventista de ${prov.nombre} — prepara el prepedido`
+                  : `📅 En ${alerta.diasRestantes} días llega el preventista de ${prov.nombre}`}
+              </p>
+              <button
+                onClick={() => setSelectedProvId(prov.id)}
+                className="shrink-0 text-[10px] font-black text-blue-600 hover:text-blue-800 underline"
+              >
+                Ver proveedor
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* ── Toolbar ── */}
       <div className="flex items-center justify-between gap-4 px-1 flex-wrap">
         <div className="flex items-center gap-3 flex-wrap">
@@ -929,6 +971,7 @@ export function Proveedores({
                               formatCurrency={formatCurrency}
                               proveedorNombre={prov.nombre}
                               proveedorUbicacion={prov.ubicacion}
+                              proveedorId={prov.id}
                             />
                           )}
                         </>
