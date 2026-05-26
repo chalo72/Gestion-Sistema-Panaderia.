@@ -499,6 +499,11 @@ export function Proveedores({
       setIsDialogOpen(false);
       setEditingProveedor(null);
     } catch (err) {
+      // Re-lanzar VALIDATION_BLOCK para que ProveedorForm.handleSave lo capture
+      // y mantenga el formulario abierto con los datos intactos.
+      if (err instanceof Error && err.message === 'VALIDATION_BLOCK') {
+        throw err;
+      }
       console.error("❌ [Nexus-Volt] Error crítico en el flujo de guardado:", err);
       toast.error('Error al guardar. Verifica los datos e intenta de nuevo.');
     }

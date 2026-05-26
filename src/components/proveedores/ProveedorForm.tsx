@@ -394,9 +394,38 @@ export function ProveedorForm({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
+
+    // Auto-incluir el ítem que está en el formulario si el usuario olvidó dar clic en
+    // "Guardar Cambios" antes de pulsar "Actualizar Aliado".
+    let itemsParaGuardar = catalogoItems;
+    if (prodActual.nombre.trim() && prodActual.precioCosto > 0) {
+      const itemData: ProductoCatalogo = {
+        ...prodActual,
+        uid: editingUid || generateUUID(),
+        precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
+        costoUnitario: Math.round(costUnit / 100) * 100,
+        precioVenta: Math.round(sellPrice / 100) * 100,
+        precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1) / 100) * 100,
+        stockRecibido: prodActual.stockRecibido,
+      };
+      if (editingUid) {
+        // Reemplazar el ítem que se estaba editando
+        itemsParaGuardar = catalogoItems.map(i => i.uid === editingUid ? itemData : i);
+      } else {
+        // Solo agregar si no hay ya un ítem idéntico por nombre+embalaje
+        const ya = catalogoItems.find(
+          i => i.nombre.trim().toLowerCase() === itemData.nombre.trim().toLowerCase() &&
+               (i.tipoEmbalaje || 'unidad') === (itemData.tipoEmbalaje || 'unidad') &&
+               (i.cantidadEmbalaje || 1) === (itemData.cantidadEmbalaje || 1)
+        );
+        itemsParaGuardar = ya ? catalogoItems : [itemData, ...catalogoItems];
+      }
+      toast.info(`Se incluyó automáticamente: ${prodActual.nombre}`);
+    }
+
     setGuardando(true);
     try {
-      await onSubmit(formData, catalogoItems);
+      await onSubmit(formData, itemsParaGuardar);
       limpiarBorrador();
       onClose();
     } catch (err) {
