@@ -227,8 +227,11 @@ const COLECCIONES_PRINCIPALES = [
 ];
 
 /**
- * 🌊 HYDRATE: Carga datos de Firebase → IndexedDB al arrancar.
- * Solo hidrata si la colección local está vacía (primera vez o reset manual).
+ * 🌊 HYDRATE: Sincroniza Firebase → IndexedDB (merge bidireccional).
+ * - Siempre descarga datos de la nube.
+ * - Filtra tombstones locales para no resucitar eliminaciones.
+ * - Hace merge: agrega/actualiza items de la nube sin borrar los locales.
+ * - Si force=true, sobrescribe todos los items (reset completo desde nube).
  */
 async function hydratarDesdeNube(
   localDB: IndexedDBAdapter,
@@ -236,36 +239,61 @@ async function hydratarDesdeNube(
   colecciones: string[],
   force: boolean = false
 ): Promise<void> {
-  console.log(`🌊 [NEXUS]: Iniciando hidratación Firebase → IndexedDB (Force: ${force})...`);
+  console.log(`🌊 [NEXUS]: Iniciando sincronización Firebase → IndexedDB (Force: ${force})...`);
   for (const col of colecciones) {
     try {
       const localCount = await localDB.count(col);
-      if (localCount === 0 || force) {
-        console.log(`📡 [NEXUS-DEBUG]: Intentando recuperar '${col}' desde la nube...`);
-        const datosNube = await nube.getCollection<any>(col);
-        console.log(`📡 [NEXUS-DEBUG]: Recibidos ${datosNube.length} items de '${col}' de la nube.`);
-        
-        // 🛡️ Filtro Anti-Zombies: Evitar resucitar documentos que fueron eliminados localmente
-        const tombstonesData = await localDB.getCollection<any>('tombstones') || [];
-        const deadKeys = new Set(tombstonesData.map(t => `${t.table}:${t.item_id}`));
-        const datosVivos = datosNube.filter(d => !deadKeys.has(`${col}:${d.id}`));
+      // Siempre sincronizar (merge) — no solo cuando está vacío
+      console.log(`📡 [NEXUS-DEBUG]: Sincronizando '${col}' (local: ${localCount} items)...`);
+      const datosNube = await nube.getCollection<any>(col);
+      console.log(`📡 [NEXUS-DEBUG]: Recibidos ${datosNube.length} items de '${col}' de la nube.`);
 
-        if (datosVivos.length > 0) {
-          if (datosVivos.length < datosNube.length) {
-            console.log(`🛡️ [NEXUS]: Filtrados ${datosNube.length - datosVivos.length} items zombies de '${col}'.`);
-          }
+      if (datosNube.length === 0 && localCount > 0) {
+        // La nube está vacía pero tenemos datos locales — no borrar locales
+        console.warn(`📡 [NEXUS-DEBUG]: '${col}' vacío en nube, conservando ${localCount} items locales.`);
+        continue;
+      }
+
+      // 🛡️ Filtro Anti-Zombies: no resucitar items eliminados localmente
+      const tombstonesData = await localDB.getCollection<any>('tombstones') || [];
+      const deadKeys = new Set(tombstonesData.map((t: any) => `${t.table}:${t.item_id}`));
+      const datosVivos = datosNube.filter((d: any) => !deadKeys.has(`${col}:${d.id}`));
+
+      if (datosVivos.length < datosNube.length) {
+        console.log(`🛡️ [NEXUS]: Filtrados ${datosNube.length - datosVivos.length} items zombies de '${col}'.`);
+      }
+
+      if (datosVivos.length > 0) {
+        if (force || localCount === 0) {
+          // Reset completo: reemplazar toda la colección local
           await localDB.hydrateFromCloud(col, datosVivos);
         } else {
-          console.warn(`📡 [NEXUS-DEBUG]: La colección '${col}' está VACÍA en la nube (o todos los items son zombies).`);
+          // Merge: obtener IDs locales y solo insertar/actualizar lo que vino de la nube
+          const localItems = await localDB.getCollection<any>(col);
+          const localIds = new Set(localItems.map((i: any) => i.id));
+          let nuevos = 0;
+          for (const item of datosVivos) {
+            if (!localIds.has(item.id)) {
+              // Item nuevo en la nube — agregar localmente
+              await localDB.setDocument(col, item.id, item);
+              nuevos++;
+            }
+            // Si ya existe localmente, se respeta la versión local (offline-first)
+          }
+          if (nuevos > 0) {
+            console.log(`🔄 [NEXUS]: Merge '${col}': ${nuevos} items nuevos desde la nube.`);
+          } else {
+            console.log(`✅ [NEXUS]: '${col}' sincronizado — sin cambios nuevos.`);
+          }
         }
       } else {
-        console.log(`✅ [NEXUS]: '${col}' ya tiene ${localCount} items locales. No se sobrescribe.`);
+        console.warn(`📡 [NEXUS-DEBUG]: '${col}' — todos los items de la nube son zombies o está vacío.`);
       }
     } catch (e) {
-      console.warn(`⚠️ [NEXUS]: No se pudo hidratar '${col}'.`, e);
+      console.warn(`⚠️ [NEXUS]: No se pudo sincronizar '${col}'.`, e);
     }
   }
-  console.log('✅ [NEXUS]: Hidratación completada.');
+  console.log('✅ [NEXUS]: Sincronización completada.');
 }
 
 /**
@@ -560,20 +588,14 @@ class NexusDatabase implements IDatabase {
   async syncLocalToCloud() {
     if (firebaseAdapter) {
       console.log('📤 [NEXUS]: Iniciando respaldo local → nube...');
-      
-      // 1. Sincronizar eliminaciones (procesar tombstones)
-      try {
-        const tombstones = await localAdapter.getCollection<any>('tombstones') || [];
-        for (const t of tombstones) {
-          await firebaseAdapter.deleteDocument(t.table, t.item_id).catch(() => {});
-          // Opcional: podríamos borrar el tombstone local aquí, pero mantenerlo
-          // protege contra regeneraciones si otro dispositivo hace push.
-        }
-      } catch (e) {
-        console.warn('⚠️ [NEXUS] Error al sincronizar eliminaciones a la nube', e);
-      }
 
-      // 2. Sincronizar creaciones y actualizaciones
+      // NOTA: Los tombstones NO se propagan a Firebase automáticamente.
+      // La eliminación en Firebase ya se hace en tiempo real dentro de _delete().
+      // Propagar tombstones aquí causaría que una eliminación en un dispositivo
+      // se replique a la nube y destruya el dato para todos los demás dispositivos.
+      // Si se quiere eliminar definitivamente desde la nube, debe hacerse explícitamente.
+
+      // Sincronizar creaciones y actualizaciones
       for (const col of COLECCIONES_PRINCIPALES) {
         const items = await localAdapter.getCollection<any>(col);
         for (const item of items) {

@@ -86,13 +86,25 @@ export function useAutoUpdate() {
     try { localStorage.setItem('nexus_update_signal', `${ts}:${version}:${Date.now()}`); } catch { /**/ }
   }, []);
 
-  // ── Notificar nueva versión — SIN auto-recarga, el usuario decide ────────
+  // ── Notificar nueva versión — 30s de cuenta regresiva y recarga automática ─
   const iniciarContadorYRecargar = useCallback((version: string) => {
     if (reloadingRef.current) return;
     setUpdateAvailable(true);
     setNewVersion(version);
-    setCountdown(null); // sin cuenta regresiva automática
-  }, []);
+
+    let remaining = 30;
+    setCountdown(remaining);
+
+    if (countdownRef.current) clearInterval(countdownRef.current);
+    countdownRef.current = setInterval(() => {
+      remaining -= 1;
+      setCountdown(remaining);
+      if (remaining <= 0) {
+        if (countdownRef.current) clearInterval(countdownRef.current);
+        recargar();
+      }
+    }, 1000);
+  }, [recargar]);
 
   // ── Capa 1 (SW): controllerchange ─────────────────────────────────────────
   // Solo muestra el banner si ya había un controller activo (es decir,

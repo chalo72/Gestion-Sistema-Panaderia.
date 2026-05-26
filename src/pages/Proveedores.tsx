@@ -25,7 +25,7 @@ import {
   PhoneCall,
   AlertTriangle,
   Store,
-  Wrench,
+  FlaskConical,
   BarChart3,
   Zap,
   ShieldCheck,
@@ -727,7 +727,7 @@ export function Proveedores({
             title="Corrige productos mal clasificados que aparecen en el carrito de ventas sin ser productos elaborados"
             className="h-10 px-3 bg-amber-500 hover:bg-amber-600 text-white shadow-none border-none rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
           >
-            <Wrench className="w-4 h-4" />
+            <FlaskConical className="w-4 h-4" />
             Reparar
           </Button>
           <Button
@@ -938,7 +938,7 @@ export function Proveedores({
                             <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                             <span className="text-[9px] font-black text-amber-500">{prov.calificacion || 5}</span>
                           </div>
-                          {totalInsumos > 0 && <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded"><Wrench className="w-2 h-2 inline mr-0.5" />{totalInsumos}</span>}
+                          {totalInsumos > 0 && <span className="text-[9px] font-black text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded"><FlaskConical className="w-2 h-2 inline mr-0.5" />{totalInsumos}</span>}
                           {totalVenta   > 0 && <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-1.5 py-0.5 rounded"><Store className="w-2 h-2 inline mr-0.5" />{totalVenta}</span>}
                         </div>
                       )}
@@ -955,7 +955,7 @@ export function Proveedores({
                             <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                             <span className="text-xs font-black text-amber-500">{prov.calificacion || 5}</span>
                           </div>
-                          {totalInsumos > 0 && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full"><Wrench className="w-2.5 h-2.5 inline mr-0.5" />{totalInsumos} ins.</span>}
+                          {totalInsumos > 0 && <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 px-2 py-0.5 rounded-full"><FlaskConical className="w-2.5 h-2.5 inline mr-0.5" />{totalInsumos} ins.</span>}
                           {totalVenta   > 0 && <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full"><Store className="w-2.5 h-2.5 inline mr-0.5" />{totalVenta} vta.</span>}
                         </div>
                       </>
@@ -1120,7 +1120,7 @@ export function Proveedores({
                                               "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-sm transition-transform group-hover:scale-110", 
                                               destino === 'insumo' ? "bg-amber-50 text-amber-500 border-amber-100" : "bg-emerald-50 text-emerald-500 border-emerald-100"
                                             )}>
-                                              {destino === 'insumo' ? <Wrench className="w-5 h-5" /> : <Store className="w-5 h-5" />}
+                                              {destino === 'insumo' ? <FlaskConical className="w-5 h-5" /> : <Store className="w-5 h-5" />}
                                             </div>
                                             <div className="min-w-0">
                                               <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-tight truncate">{nombre}</p>

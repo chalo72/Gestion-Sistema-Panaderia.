@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
   Star, X, UserCheck, CheckCircle2, Tag, Store,
-  Wrench, Building2, Search, FileText, Save, Camera,
+  FlaskConical, Building2, Search, FileText, Save, Camera,
   ShieldCheck, Info, ImageIcon, ShoppingCart,
   Zap,
   Fingerprint,
@@ -1311,7 +1311,7 @@ export function ProveedorForm({
                                 prodActual.destino === 'insumo' ? "bg-amber-100 text-amber-600 shadow-sm" : "text-slate-300 hover:text-slate-400"
                               )}
                             >
-                              <Wrench className="w-3.5 h-3.5" />
+                              <FlaskConical className="w-3.5 h-3.5" />
                               <span className="text-[8px] font-black ml-1 uppercase">Insumo</span>
                             </button>
                             <button
@@ -1601,7 +1601,7 @@ const TableRow = React.memo(({
           "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-sm transition-transform group-hover:scale-110", 
           item.destino === 'insumo' ? "bg-amber-50 text-amber-500 border-amber-100" : "bg-emerald-50 text-emerald-500 border-emerald-100"
         )}>
-          {item.destino === 'insumo' ? <Wrench className="w-5 h-5" /> : <Store className="w-5 h-5" />}
+          {item.destino === 'insumo' ? <FlaskConical className="w-5 h-5" /> : <Store className="w-5 h-5" />}
         </div>
         <div className="min-w-0">
           <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-tight truncate">{item.nombre}</p>
