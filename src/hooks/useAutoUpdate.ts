@@ -95,12 +95,18 @@ export function useAutoUpdate() {
   }, []);
 
   // ── Capa 1 (SW): controllerchange ─────────────────────────────────────────
+  // Solo muestra el banner si ya había un controller activo (es decir,
+  // hay un SW anterior que fue REEMPLAZADO por uno nuevo). Si no había
+  // controller previo es la primera instalación — no hay nada nuevo.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
+    const hadController = !!navigator.serviceWorker.controller;
+
     const handleControllerChange = () => {
-      // Solo notifica, no recarga automáticamente
-      setUpdateAvailable(true);
+      if (hadController) {
+        setUpdateAvailable(true);
+      }
     };
 
     navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
@@ -209,22 +215,15 @@ export function useAutoUpdate() {
         if (wasLongHidden) {
           // Estaba oculto >5 min → verificar rápido al despertar (bloqueo de pantalla, multi-tarea)
           setTimeout(() => checkForUpdates(true), 1500);
-        } else {
-          checkForUpdates();
         }
       }
     };
 
-    // Foco en ventana (PC con múltiples ventanas)
-    const handleFocus = () => checkForUpdates();
-
     document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('focus', handleFocus);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('focus', handleFocus);
     };
   }, [checkForUpdates]);
 
