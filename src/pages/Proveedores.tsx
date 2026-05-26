@@ -194,23 +194,31 @@ export function Proveedores({
     setShowRecuperarDialog(true);
     setProveedoresEliminados([]);
     try {
-      const tombedIds = await db.getTombstones('proveedores');
-      if (tombedIds.length === 0) {
-        toast.info('No hay proveedores en la papelera.');
-        setShowRecuperarDialog(false);
-        return;
-      }
-      const { data: provsData, error } = await supabase
+      // Traer TODOS los proveedores de Supabase
+      const { data: supabaseProvs, error } = await supabase
         .from('proveedores')
-        .select('*')
-        .in('id', tombedIds);
-      if (error || !provsData || provsData.length === 0) {
-        toast.info('No se encontraron proveedores recuperables en la nube.');
+        .select('*');
+      if (error || !supabaseProvs || supabaseProvs.length === 0) {
+        toast.info('No se encontraron proveedores en la nube.');
         setShowRecuperarDialog(false);
         return;
       }
+
+      // Comparar contra los que ya existen localmente
+      const localProvs = await db.getAllProveedores();
+      const localIds = new Set(localProvs.map((p: any) => p.id));
+
+      // Los que están en Supabase pero NO en este dispositivo
+      const faltantes = supabaseProvs.filter(p => !localIds.has(p.id));
+
+      if (faltantes.length === 0) {
+        toast.info('Este dispositivo ya tiene todos los proveedores de la nube.');
+        setShowRecuperarDialog(false);
+        return;
+      }
+
       const resultados = await Promise.all(
-        provsData.map(async (prov) => {
+        faltantes.map(async (prov) => {
           const { data: preciosData } = await supabase
             .from('precios').select('*').eq('proveedor_id', prov.id);
           return { proveedor: prov, precios: preciosData || [], recuperando: false };
@@ -249,8 +257,14 @@ export function Proveedores({
         notas: p.notas || '',
         createdAt: p.created_at || new Date().toISOString(),
       };
-      await db.removeTombstone('proveedores', p.id);
+      // Limpiar tombstone del ID actual (por si existe) y todos los tombstones
+      // de proveedores con este mismo nombre (IDs viejos de versiones anteriores)
+      const tombedProvIds = await db.getTombstones('proveedores').catch(() => [] as string[]);
+      await Promise.all(tombedProvIds.map((tid: string) => db.removeTombstone('proveedores', tid).catch(() => {})));
       await db.addProveedor(provData);
+      // Restaurar precios limpiando tombstones previos también
+      const tombedPrecioIds = await db.getTombstones('precios').catch(() => [] as string[]);
+      await Promise.all(tombedPrecioIds.map((tid: string) => db.removeTombstone('precios', tid).catch(() => {})));
       for (const precio of entry.precios) {
         const precioData = {
           id: precio.id,
@@ -263,7 +277,6 @@ export function Proveedores({
           tipoEmbalaje: precio.tipo_embalaje || 'unidad',
           cantidadEmbalaje: precio.cantidad_embalaje || 1,
         };
-        await db.removeTombstone('precios', precio.id);
         await db.addPrecio(precioData);
       }
       toast.success(`✅ "${p.nombre}" recuperado con ${entry.precios.length} producto(s). Recargando...`);
