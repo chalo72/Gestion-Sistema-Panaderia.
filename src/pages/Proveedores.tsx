@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback } from 'react';
 import { validarCatalogo } from '@/lib/price-guard';
 import { useCan } from '@/contexts/AuthContext';
+import { db } from '@/lib/database';
+import { supabase } from '@/lib/supabase';
 import {
   Truck,
   Plus,
@@ -33,6 +35,8 @@ import {
   Filter,
   Database,
   Bell,
+  RotateCcw,
+  Loader2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -177,6 +181,101 @@ export function Proveedores({
 
   /* ─── Estado catálogo de productos para el componente Form ─── */
   const [catalogoParaForm, setCatalogoParaForm] = useState<ProductoCatalogo[]>([]);
+
+  /* ─── Recuperación de proveedores eliminados ─── */
+  const [showRecuperarDialog, setShowRecuperarDialog] = useState(false);
+  const [buscandoEliminados, setBuscandoEliminados] = useState(false);
+  const [proveedoresEliminados, setProveedoresEliminados] = useState<Array<{
+    proveedor: any; precios: any[]; recuperando: boolean;
+  }>>([]);
+
+  const buscarProveedoresEliminados = useCallback(async () => {
+    setBuscandoEliminados(true);
+    setShowRecuperarDialog(true);
+    setProveedoresEliminados([]);
+    try {
+      const tombedIds = await db.getTombstones('proveedores');
+      if (tombedIds.length === 0) {
+        toast.info('No hay proveedores en la papelera.');
+        setShowRecuperarDialog(false);
+        return;
+      }
+      const { data: provsData, error } = await supabase
+        .from('proveedores')
+        .select('*')
+        .in('id', tombedIds);
+      if (error || !provsData || provsData.length === 0) {
+        toast.info('No se encontraron proveedores recuperables en la nube.');
+        setShowRecuperarDialog(false);
+        return;
+      }
+      const resultados = await Promise.all(
+        provsData.map(async (prov) => {
+          const { data: preciosData } = await supabase
+            .from('precios').select('*').eq('proveedor_id', prov.id);
+          return { proveedor: prov, precios: preciosData || [], recuperando: false };
+        })
+      );
+      setProveedoresEliminados(resultados);
+    } catch (err) {
+      console.error('[Recuperar] Error:', err);
+      toast.error('Error al buscar en la nube. Verifica la conexión.');
+      setShowRecuperarDialog(false);
+    } finally {
+      setBuscandoEliminados(false);
+    }
+  }, []);
+
+  const recuperarProveedor = useCallback(async (idx: number) => {
+    const entry = proveedoresEliminados[idx];
+    if (!entry) return;
+    setProveedoresEliminados(prev =>
+      prev.map((e, i) => i === idx ? { ...e, recuperando: true } : e)
+    );
+    try {
+      const p = entry.proveedor;
+      const provData = {
+        id: p.id,
+        nombre: p.nombre || '',
+        contacto: p.contacto || '',
+        telefono: p.telefono || '',
+        email: p.email || '',
+        direccion: p.direccion || '',
+        ubicacion: p.ubicacion || '',
+        imagen: p.imagen || '',
+        calificacion: p.calificacion || 5,
+        activo: p.activo !== false,
+        rubro: p.rubro || '',
+        notas: p.notas || '',
+        createdAt: p.created_at || new Date().toISOString(),
+      };
+      await db.removeTombstone('proveedores', p.id);
+      await db.addProveedor(provData);
+      for (const precio of entry.precios) {
+        const precioData = {
+          id: precio.id,
+          productoId: precio.producto_id,
+          proveedorId: precio.proveedor_id,
+          precioCosto: precio.precio_costo || 0,
+          fechaActualizacion: precio.fecha_actualizacion || new Date().toISOString(),
+          notas: precio.notas || '',
+          destino: precio.destino || 'insumo',
+          tipoEmbalaje: precio.tipo_embalaje || 'unidad',
+          cantidadEmbalaje: precio.cantidad_embalaje || 1,
+        };
+        await db.removeTombstone('precios', precio.id);
+        await db.addPrecio(precioData);
+      }
+      toast.success(`✅ "${p.nombre}" recuperado con ${entry.precios.length} producto(s). Recargando...`);
+      setTimeout(() => window.location.reload(), 1800);
+    } catch (err) {
+      console.error('[Recuperar] Error al restaurar:', err);
+      toast.error('Error al recuperar. Verifica la conexión e intenta de nuevo.');
+      setProveedoresEliminados(prev =>
+        prev.map((e, i) => i === idx ? { ...e, recuperando: false } : e)
+      );
+    }
+  }, [proveedoresEliminados]);
 
 
   /* ─── Helper: obtener precios válidos (sin fantasmas ni duplicados) ─── */
@@ -630,6 +729,14 @@ export function Proveedores({
           >
             <Wrench className="w-4 h-4" />
             Reparar
+          </Button>
+          <Button
+            onClick={buscarProveedoresEliminados}
+            title="Busca y recupera proveedores eliminados desde la copia de seguridad en la nube"
+            className="h-10 px-3 bg-rose-500 hover:bg-rose-600 text-white shadow-none border-none rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Recuperar
           </Button>
            {check('CREAR_PROVEEDORES') && (
             <Button
@@ -1348,6 +1455,67 @@ export function Proveedores({
         formatCurrency={formatCurrency}
         categoriasVenta={categorias}
       />
+
+      {/* ── DIÁLOGO DE RECUPERACIÓN DE PROVEEDORES ELIMINADOS ── */}
+      <Dialog open={showRecuperarDialog} onOpenChange={setShowRecuperarDialog}>
+        <DialogContent className="w-[95vw] max-w-lg rounded-[2rem] p-0 overflow-hidden border border-slate-200 dark:border-slate-800">
+          <div className="bg-gradient-to-br from-rose-500 to-rose-700 p-6 text-white text-center">
+            <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <RotateCcw className="w-7 h-7" />
+            </div>
+            <DialogTitle className="text-lg font-black uppercase tracking-tight">Recuperar Proveedor</DialogTitle>
+            <DialogDescription className="text-white/70 font-bold text-[10px] uppercase tracking-widest mt-1">
+              Proveedores eliminados · Copia de seguridad en la nube
+            </DialogDescription>
+          </div>
+          <div className="p-6 space-y-4">
+            {buscandoEliminados ? (
+              <div className="flex flex-col items-center gap-3 py-8">
+                <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+                <p className="text-sm font-bold text-slate-500 uppercase tracking-widest">Buscando en la nube...</p>
+              </div>
+            ) : proveedoresEliminados.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-sm font-bold text-slate-400">No se encontraron proveedores recuperables.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                  {proveedoresEliminados.length} proveedor(es) encontrado(s) — selecciona uno para restaurar:
+                </p>
+                {proveedoresEliminados.map((entry, idx) => (
+                  <div key={entry.proveedor.id} className="flex items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-black text-slate-800 dark:text-white text-sm uppercase truncate">{entry.proveedor.nombre}</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
+                        {entry.precios.length} precio(s) asociado(s)
+                        {entry.proveedor.telefono ? ` · ${entry.proveedor.telefono}` : ''}
+                      </p>
+                    </div>
+                    <Button
+                      onClick={() => recuperarProveedor(idx)}
+                      disabled={entry.recuperando}
+                      className="shrink-0 h-9 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest border-none"
+                    >
+                      {entry.recuperando
+                        ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />Restaurando...</>
+                        : <><RotateCcw className="w-3 h-3 mr-1" />Restaurar</>
+                      }
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              variant="ghost"
+              className="w-full h-10 rounded-2xl font-black uppercase text-[10px] tracking-widest text-slate-400"
+              onClick={() => setShowRecuperarDialog(false)}
+            >
+              Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog de detalle eliminado — todo se muestra inline en el acordeón */}
     </div>
