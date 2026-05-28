@@ -1435,13 +1435,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                     <Edit2 className="w-2.5 h-2.5"/>{(() => { const d=new Date(h.fecha); return isNaN(d.getTime())?'Sin Fecha':d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
                                                                                 </button>
                                                                             )}
-                                                                            <div className="space-y-0.5">
+                                                                            <div className="space-y-0.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-2 mt-1">
                                                                                 {h.items.map(item=>(
-                                                                                    <div key={item.productoId} className="flex items-center justify-between text-[9px]">
-                                                                                        <span className="text-slate-600 dark:text-slate-400 truncate">{item.nombre}</span>
-                                                                                        <span className="shrink-0 ml-1 font-black text-slate-700 dark:text-slate-300">×{item.cantidad} <span className="text-indigo-600">{formatCurrency(item.precio*item.cantidad)}</span></span>
+                                                                                    <div key={item.productoId} className="flex items-center gap-2 text-[9px]">
+                                                                                        <span className="text-slate-600 dark:text-slate-400 truncate flex-1">{item.nombre}</span>
+                                                                                        {editandoHistorialId===h.id ? (
+                                                                                            <div className="flex items-center gap-1 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 px-1 py-0.5 shrink-0">
+                                                                                                <button onClick={()=>actualizarItemEnHistorial(h.id,item.productoId,-1)} className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-rose-500"><Minus className="w-2.5 h-2.5"/></button>
+                                                                                                <span className="font-black w-4 text-center tabular-nums">{item.cantidad}</span>
+                                                                                                <button onClick={()=>actualizarItemEnHistorial(h.id,item.productoId,1)} className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-indigo-500"><Plus className="w-2.5 h-2.5"/></button>
+                                                                                            </div>
+                                                                                        ) : (
+                                                                                            <span className="text-slate-500 shrink-0">×{item.cantidad}</span>
+                                                                                        )}
+                                                                                        <span className="shrink-0 font-black text-slate-700 dark:text-slate-300"><span className="text-indigo-600">{formatCurrency(item.precio*item.cantidad)}</span></span>
                                                                                     </div>
                                                                                 ))}
+                                                                                <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700 mt-1">
+                                                                                    <button onClick={()=>setEditandoHistorialId(editandoHistorialId===h.id?null:h.id)} className={`text-[9px] font-black uppercase tracking-wide flex items-center gap-1 transition-colors ${editandoHistorialId===h.id?'text-indigo-600':'text-slate-400 hover:text-indigo-500'}`}>
+                                                                                        <Pencil className="w-2.5 h-2.5"/>{editandoHistorialId===h.id?'Listo':'Editar ticket'}
+                                                                                    </button>
+                                                                                    <span className="text-[9px] font-black text-slate-700 dark:text-slate-300 tabular-nums">Total: {formatCurrency(h.total)}</span>
+                                                                                </div>
+                                                                                {editandoHistorialId===h.id && (
+                                                                                    <div className="mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800 space-y-1.5">
+                                                                                        <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 flex items-center gap-1"><Plus className="w-3 h-3"/>Agregar producto</p>
+                                                                                        <input type="text" placeholder="Buscar producto..." value={busquedaEditTicket} onChange={e=>setBusquedaEditTicket(e.target.value)} className="w-full h-7 rounded-lg border border-indigo-200 bg-white dark:bg-slate-800 px-2 text-[10px] outline-none focus:border-indigo-400"/>
+                                                                                        {busquedaEditTicket.length>=2 && (
+                                                                                            <div className="max-h-32 overflow-y-auto space-y-1">
+                                                                                                {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).slice(0,8).map(d=>(
+                                                                                                    <button key={d.producto.id} onClick={()=>{agregarProductoAHistorial(h.id,d.producto.id,d.producto.nombre,d.precioMayorista);setBusquedaEditTicket('');}} className="w-full flex items-center justify-between px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left">
+                                                                                                        <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200 truncate">{d.producto.nombre}</span>
+                                                                                                        <span className="text-[9px] font-black text-indigo-600 shrink-0 ml-2">{formatCurrency(d.precioMayorista)}</span>
+                                                                                                    </button>
+                                                                                                ))}
+                                                                                                {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).length===0 && <p className="text-[10px] text-slate-400 text-center py-1">Sin resultados</p>}
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                             {h.fotoFactura && (
                                                                                 <label className="inline-flex items-center gap-1 text-[8px] text-slate-400 hover:text-indigo-500 cursor-pointer mt-0.5">
@@ -1830,13 +1862,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                             <Edit2 className="w-2.5 h-2.5"/>{(() => { const d=new Date(h.fecha); return isNaN(d.getTime())?'Sin Fecha':d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
                                                                                         </button>
                                                                                     )}
-                                                                                    <div className="space-y-0.5">
+                                                                                    <div className="space-y-0.5 bg-slate-50 dark:bg-slate-800/40 rounded-xl p-2 mt-1">
                                                                                         {h.items.map(item=>(
-                                                                                            <div key={item.productoId} className="flex items-center justify-between text-[9px]">
-                                                                                                <span className="text-slate-600 dark:text-slate-400 truncate">{item.nombre}</span>
-                                                                                                <span className="shrink-0 ml-1 font-black text-slate-700 dark:text-slate-300">×{item.cantidad} <span className="text-indigo-600">{formatCurrency(item.precio*item.cantidad)}</span></span>
+                                                                                            <div key={item.productoId} className="flex items-center gap-2 text-[9px]">
+                                                                                                <span className="text-slate-600 dark:text-slate-400 truncate flex-1">{item.nombre}</span>
+                                                                                                {editandoHistorialId===h.id ? (
+                                                                                                    <div className="flex items-center gap-1 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 px-1 py-0.5 shrink-0">
+                                                                                                        <button onClick={()=>actualizarItemEnHistorial(h.id,item.productoId,-1)} className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-rose-500"><Minus className="w-2.5 h-2.5"/></button>
+                                                                                                        <span className="font-black w-4 text-center tabular-nums">{item.cantidad}</span>
+                                                                                                        <button onClick={()=>actualizarItemEnHistorial(h.id,item.productoId,1)} className="w-4 h-4 flex items-center justify-center text-slate-400 hover:text-indigo-500"><Plus className="w-2.5 h-2.5"/></button>
+                                                                                                    </div>
+                                                                                                ) : (
+                                                                                                    <span className="text-slate-500 shrink-0">×{item.cantidad}</span>
+                                                                                                )}
+                                                                                                <span className="shrink-0 font-black text-slate-700 dark:text-slate-300"><span className="text-indigo-600">{formatCurrency(item.precio*item.cantidad)}</span></span>
                                                                                             </div>
                                                                                         ))}
+                                                                                        <div className="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700 mt-1">
+                                                                                            <button onClick={()=>setEditandoHistorialId(editandoHistorialId===h.id?null:h.id)} className={`text-[9px] font-black uppercase tracking-wide flex items-center gap-1 transition-colors ${editandoHistorialId===h.id?'text-indigo-600':'text-slate-400 hover:text-indigo-500'}`}>
+                                                                                                <Pencil className="w-2.5 h-2.5"/>{editandoHistorialId===h.id?'Listo':'Editar ticket'}
+                                                                                            </button>
+                                                                                            <span className="text-[9px] font-black text-slate-700 dark:text-slate-300 tabular-nums">Total: {formatCurrency(h.total)}</span>
+                                                                                        </div>
+                                                                                        {editandoHistorialId===h.id && (
+                                                                                            <div className="mt-2 pt-2 border-t border-indigo-100 dark:border-indigo-800 space-y-1.5">
+                                                                                                <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 flex items-center gap-1"><Plus className="w-3 h-3"/>Agregar producto</p>
+                                                                                                <input type="text" placeholder="Buscar producto..." value={busquedaEditTicket} onChange={e=>setBusquedaEditTicket(e.target.value)} className="w-full h-7 rounded-lg border border-indigo-200 bg-white dark:bg-slate-800 px-2 text-[10px] outline-none focus:border-indigo-400"/>
+                                                                                                {busquedaEditTicket.length>=2 && (
+                                                                                                    <div className="max-h-32 overflow-y-auto space-y-1">
+                                                                                                        {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).slice(0,8).map(d=>(
+                                                                                                            <button key={d.producto.id} onClick={()=>{agregarProductoAHistorial(h.id,d.producto.id,d.producto.nombre,d.precioMayorista);setBusquedaEditTicket('');}} className="w-full flex items-center justify-between px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left">
+                                                                                                                <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200 truncate">{d.producto.nombre}</span>
+                                                                                                                <span className="text-[9px] font-black text-indigo-600 shrink-0 ml-2">{formatCurrency(d.precioMayorista)}</span>
+                                                                                                            </button>
+                                                                                                        ))}
+                                                                                                        {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).length===0 && <p className="text-[10px] text-slate-400 text-center py-1">Sin resultados</p>}
+                                                                                                    </div>
+                                                                                                )}
+                                                                                            </div>
+                                                                                        )}
                                                                                     </div>
                                                                                     {h.fotoFactura && (
                                                                                         <label className="inline-flex items-center gap-1 text-[8px] text-slate-400 hover:text-indigo-500 cursor-pointer mt-0.5">
