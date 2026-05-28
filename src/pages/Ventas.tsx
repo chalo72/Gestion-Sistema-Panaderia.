@@ -52,6 +52,8 @@ import type {
 interface TabCartState {
     cart: { producto: Producto; cantidad: number }[];
     cliente: string;
+    vendedoraId?: string;
+    vendedoraNombre?: string;
 }
 
 interface VentasProps {
@@ -111,28 +113,40 @@ export function Ventas(props: VentasProps) {
     } = props;
 
     // ==========================================
-    // VENDEDORA ACTIVA — Selector rápido multi-vendedora
+    // VENDEDORA ACTIVA — Por pestaña (no global)
     // ==========================================
     const { usuarios } = useAuth();
     const vendedorasDisponibles = useMemo<VendedoraOption[]>(() => {
         if (!usuarios || usuarios.length === 0) return [];
-        // Mostrar usuarios con rol VENDEDOR + ADMIN + GERENTE (todos pueden vender)
         return usuarios
             .filter(u => u.activo !== false)
             .map(u => ({ id: u.id, nombre: u.nombre, rol: u.rol }));
     }, [usuarios]);
 
-    // La vendedora activa por defecto es quien está logueada
-    const [vendedoraActiva, setVendedoraActiva] = useState<VendedoraOption | null>(
-        usuario ? { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol } : null
-    );
-
-    // Sincronizar con el usuario logueado cuando cambia
-    useEffect(() => {
-        if (usuario && !vendedoraActiva) {
-            setVendedoraActiva({ id: usuario.id, nombre: usuario.nombre, rol: usuario.rol });
+    // Vendedora de la pestaña activa (derivada, no estado global)
+    const vendedoraActiva = useMemo<VendedoraOption | null>(() => {
+        const tab = tabCarts[activeTabId];
+        if (tab?.vendedoraId && tab?.vendedoraNombre) {
+            return { id: tab.vendedoraId, nombre: tab.vendedoraNombre };
         }
-    }, [usuario]);
+        // Fallback: usuario logueado
+        return usuario ? { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol } : null;
+    }, [tabCarts, activeTabId, usuario]);
+
+    // Cambiar vendedora de la pestaña activa
+    const setVendedoraActiva = useCallback((v: VendedoraOption | null) => {
+        setTabCarts(prev => {
+            const current = prev[activeTabId] || { cart: [], cliente: '' };
+            return {
+                ...prev,
+                [activeTabId]: {
+                    ...current,
+                    vendedoraId: v?.id,
+                    vendedoraNombre: v?.nombre,
+                }
+            };
+        });
+    }, [activeTabId]);
 
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
     const [searchTerm, setSearchTerm] = useState('');
@@ -294,13 +308,22 @@ export function Ventas(props: VentasProps) {
             label: `Venta Rápida ${numVentasRapidas + 1}`,
             tipo: 'venta-rapida'
         }]);
-        setTabCarts(prev => ({
-            ...prev,
-            [newId]: { cart: [], cliente: '' }
-        }));
+        setTabCarts(prev => {
+            // La nueva pestaña hereda la vendedora de la pestaña actual
+            const current = prev[activeTabId] || { cart: [], cliente: '' };
+            return {
+                ...prev,
+                [newId]: {
+                    cart: [],
+                    cliente: '',
+                    vendedoraId: current.vendedoraId || usuario?.id,
+                    vendedoraNombre: current.vendedoraNombre || usuario?.nombre,
+                }
+            };
+        });
         setActiveTabId(newId);
         setViewMode('pos');
-    }, [tabs, cajaActiva]);
+    }, [tabs, cajaActiva, activeTabId, usuario]);
 
     const handleSelectTab = useCallback((tabId: string) => {
         setActiveTabId(tabId);
@@ -413,11 +436,14 @@ export function Ventas(props: VentasProps) {
                 }]);
                 setTabCarts(prev => ({
                     ...prev,
-                    [mesaTabId]: { cart: [], cliente: `Mesa ${mesa.numero}` }
+                    [mesaTabId]: {
+                        cart: [],
+                        cliente: `Mesa ${mesa.numero}`,
+                        vendedoraId: idVendedora,
+                        vendedoraNombre: nombreVendedora,
+                    }
                 }));
             }
-            // Si la vendedora seleccionó desde el modal, actualizar la activa
-            if (vendedora) setVendedoraActiva(vendedora);
             setActiveTabId(mesaTabId);
             setViewMode('pos');
             toast.success(`Mesa ${mesa.numero} — ${nombreVendedora}`);
