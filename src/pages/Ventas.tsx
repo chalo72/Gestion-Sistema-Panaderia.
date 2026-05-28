@@ -573,9 +573,9 @@ export function Ventas(props: VentasProps) {
                 />
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row gap-2 overflow-hidden p-2">
+            <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3">
                 {/* Panel izquierdo: Catálogo o Mesas */}
-                <div className="flex-1 flex flex-col min-h-0 bg-card rounded-xl border shadow-sm overflow-hidden min-h-[200px]">
+                <div className="flex-1 flex flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden" style={{ minHeight: '0' }}>
                     {viewMode === 'pos' ? (
                         <ProductCatalog
                             productos={productosVenta}
@@ -604,7 +604,7 @@ export function Ventas(props: VentasProps) {
                 </div>
 
                 {/* Panel derecho: Carrito / Orden */}
-                <div className="w-full lg:w-[400px] max-h-[50vh] lg:max-h-none shrink-0 flex flex-col min-h-0 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <div className="w-full lg:w-[440px] xl:w-[480px] shrink-0 flex flex-col min-h-0 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden" style={{ minHeight: '0' }}>
                     <CartDetail
                         cart={cart}
                         onUpdateQuantity={updateQuantity}

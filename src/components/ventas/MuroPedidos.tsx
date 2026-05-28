@@ -66,8 +66,11 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
     const handleDelete = async (mesa: Mesa, e: React.MouseEvent) => {
         e.stopPropagation();
         if (!onDeleteMesa) return;
-        if (mesa.estado !== 'disponible') {
-            toast.error('No puedes eliminar una mesa ocupada');
+        // Bloquear solo si tiene productos activos en el pedido
+        const pedido = pedidosActivos.find(p => p.id === mesa.pedidoActivoId);
+        const tieneItems = (pedido?.items?.length ?? 0) > 0;
+        if (tieneItems) {
+            toast.error('No puedes eliminar una mesa con pedido activo');
             return;
         }
         await onDeleteMesa(mesa.id);
@@ -75,7 +78,7 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
     };
 
     return (
-        <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden">
             {/* Header */}
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
                 <div className="flex items-center justify-between">
@@ -103,8 +106,14 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
             </div>
 
             {/* Grid de Mesas */}
-            <ScrollArea className="flex-1 p-4">
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            <ScrollArea className="flex-1 p-5">
+                <div className={cn(
+                    "grid gap-5",
+                    mesas.length <= 2 ? "grid-cols-2" :
+                    mesas.length <= 4 ? "grid-cols-2 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3" :
+                    mesas.length <= 6 ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-3" :
+                    "grid-cols-2 sm:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4"
+                )}>
                     {mesas.map(mesa => {
                         const pedido = pedidosActivos.find(p => p.id === mesa.pedidoActivoId);
                         const isOcupada = mesa.estado !== 'disponible' && (pedido?.items?.length ?? 0) > 0;
@@ -119,7 +128,7 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                             <div key={mesa.id}
                                 onClick={() => onSelectMesa(mesa)}
                                 className={cn(
-                                    "group rounded-2xl border-2 p-5 cursor-pointer transition-all hover:shadow-lg active:scale-[0.97] relative",
+                                    "group rounded-2xl border-2 p-6 cursor-pointer transition-all hover:shadow-xl active:scale-[0.97] relative min-h-[180px] flex flex-col justify-between",
                                     isOcupada
                                         ? "bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700 hover:border-blue-400"
                                         : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-400"
@@ -141,13 +150,13 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                                 </div>
 
                                 {/* Número de mesa */}
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className={cn("w-12 h-12 rounded-xl flex items-center justify-center",
+                                <div className="flex items-center justify-between mb-4">
+                                    <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center",
                                         isOcupada ? "bg-blue-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-400"
                                     )}>
-                                        <Users className="w-6 h-6" />
+                                        <Users className="w-7 h-7" />
                                     </div>
-                                    <span className={cn("text-xs font-bold px-2 py-1 rounded-lg",
+                                    <span className={cn("text-xs font-bold px-3 py-1.5 rounded-xl",
                                         isOcupada ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
                                     )}>
                                         {isOcupada ? 'Ocupada' : 'Libre'}
@@ -155,7 +164,7 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                                 </div>
 
                                 {/* Info de mesa */}
-                                <h3 className="text-xl font-extrabold text-slate-800 dark:text-white">Mesa {mesa.numero}</h3>
+                                <h3 className="text-2xl font-extrabold text-slate-800 dark:text-white">Mesa {mesa.numero}</h3>
                                 <p className="text-sm text-slate-400 mb-3">
                                     {mesa.capacidad} personas{mesa.ubicacion ? ` · ${mesa.ubicacion}` : ''}
                                 </p>
