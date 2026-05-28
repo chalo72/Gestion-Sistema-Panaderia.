@@ -2813,61 +2813,49 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     </div>
                 </div>
 
-                {/* ── Navegación móvil mini-POS ── */}
-                <div className="lg:hidden shrink-0 bg-white dark:bg-slate-900 safe-area-bottom">
-                    {showMobilePOSCart ? (
-                        <div className="border-t border-slate-200 dark:border-slate-800 p-2">
-                            <button
-                                onClick={() => setShowMobilePOSCart(false)}
-                                className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest"
-                            >
-                                <ShoppingCart className="w-4 h-4" />
-                                ← Volver a productos
-                            </button>
-                        </div>
-                    ) : carritoPos.length > 0 ? (
-                        <div className="p-3 pb-4">
-                            <button
-                                onClick={() => setShowMobilePOSCart(true)}
-                                className="w-full h-16 flex items-center justify-between px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-500/30 text-white"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                                        <span className="text-base font-black">
-                                            {carritoPos.reduce((s, i) => s + i.cantidad, 0)}
-                                        </span>
-                                    </div>
-                                    <span className="text-sm font-black uppercase tracking-wide">Ver ticket</span>
-                                </div>
-                                <p className="text-xl font-black tabular-nums">{formatCurrency(totalCarrito)}</p>
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="border-t border-slate-200 dark:border-slate-800 p-2">
-                            <div className="h-12 flex items-center justify-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                                <ShoppingCart className="w-4 h-4" />
-                                Agrega productos al ticket
-                            </div>
-                        </div>
-                    )}
-                </div>
+                {/* ── Navegación móvil mini-POS: dos botones siempre visibles ── */}
+                <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+                    {/* Productos */}
+                    <button
+                        onClick={() => setShowMobilePOSCart(false)}
+                        className={cn(
+                            'flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-black uppercase tracking-widest transition-colors',
+                            !showMobilePOSCart
+                                ? 'text-indigo-500 bg-indigo-50 dark:bg-indigo-900/10'
+                                : 'text-slate-400 hover:text-slate-600'
+                        )}
+                    >
+                        <ShoppingCart className="w-5 h-5" />
+                        Productos
+                    </button>
 
-            {/* 🔥 BOTÓN MÁGICO TEMPORAL PARA INYECTAR DICTADO */}
-            <button
-                onClick={async () => {
-                    if (confirm('¿Inyectar los productos dictados (Icopor y Base Dorada)?')) {
-                        let prov = allClientes?.find(c => c.nombre.toLowerCase().includes('surtidora de la 36'));
-                        // Wait, they dictate Proveedores not Clientes...
-                        // Let's just create the products directly without supplier if needed, or pass the request to the DB.
-                        // Actually, I can dispatch a custom event to App.tsx to do it, but App.tsx already has the code!
-                        localStorage.removeItem('ag_dictado_insumos_2');
-                        window.location.reload();
-                    }
-                }}
-                className="mx-6 mt-4 p-3 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 flex items-center justify-center gap-2"
-            >
-                🚀 CLIC AQUÍ PARA FORZAR INYECCIÓN DE DICTADO Y RECARGAR
-            </button>
+                    <div className="w-px bg-slate-200 dark:bg-slate-700 self-stretch" />
+
+                    {/* Ticket */}
+                    <button
+                        onClick={() => setShowMobilePOSCart(true)}
+                        className={cn(
+                            'flex-[2] flex items-center justify-center gap-2 py-3 transition-all',
+                            showMobilePOSCart || carritoPos.length > 0
+                                ? 'bg-indigo-600 text-white'
+                                : 'text-slate-400'
+                        )}
+                    >
+                        {carritoPos.length > 0 ? (
+                            <>
+                                <span className="w-6 h-6 rounded-full bg-white/25 text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                                    {carritoPos.reduce((s, i) => s + i.cantidad, 0)}
+                                </span>
+                                <div className="flex flex-col items-start leading-none">
+                                    <span className="text-[11px] font-black">{formatCurrency(totalCarrito)}</span>
+                                    <span className="text-[9px] opacity-70 font-bold uppercase">Ver ticket</span>
+                                </div>
+                            </>
+                        ) : (
+                            <span className="text-[10px] font-black uppercase tracking-widest">Ticket vacío</span>
+                        )}
+                    </button>
+                </div>
 
             {/* ── Tabs Superiores ── */}
             <Dialog open={verHistorial} onOpenChange={v => { setVerHistorial(v); if (!v) { setAbonandoId(null); setMontoAbono(''); } }}>
