@@ -1,14 +1,51 @@
 /**
  * ProductAvatar — Imagen profesional de producto / categoría
  *
- * Técnica: fondo borroso del emoji + emoji nítido encima + gradiente suave.
- * Sin caricaturas. Resultado: aspecto "casi real", estilo Rappi/Uber Eats.
+ * 3 ESTILOS:
+ *   bokeh   — Emoji borroso de fondo + emoji nítido + gradiente cálido (Rappi/Uber Eats)
+ *   cristal — Fondo claro con sombra de color bajo el emoji. Limpio y moderno.
+ *   noche   — Fondo oscuro #0f172a + glow neón del color de categoría.
  *
  * Los emojis de alimentos en iOS/Android/macOS son fotorrealistas.
- * En Windows se ven un poco más planos pero aun así profesionales.
+ * En Windows se ven un poco más planos pero aún así profesionales.
  */
 
-/** Mapa categoría → { emoji, gradiente (dos colores Tailwind) } */
+import { useEffect, useMemo, useReducer } from 'react';
+
+// ─────────────────────────────────────────────────────────────────
+// Estilos disponibles
+// ─────────────────────────────────────────────────────────────────
+export type AvatarStyle = 'bokeh' | 'cristal' | 'noche';
+
+// ─────────────────────────────────────────────────────────────────
+// Persistencia de preferencias en localStorage
+// ─────────────────────────────────────────────────────────────────
+const PREFS_KEY = 'ag_avatar_prefs';
+
+export type AvatarPrefs = Record<string, { style?: AvatarStyle; imagen?: string }>;
+
+export function getAvatarPrefs(): AvatarPrefs {
+  try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch { return {}; }
+}
+
+export function setAvatarPref(
+  productoId: string,
+  pref: Partial<{ style: AvatarStyle; imagen: string | undefined }>
+) {
+  const prefs = getAvatarPrefs();
+  const merged = { ...(prefs[productoId] || {}), ...pref };
+  if (merged.imagen === undefined) delete merged.imagen;
+  if (merged.style === undefined) delete merged.style;
+  const updated = { ...prefs };
+  if (Object.keys(merged).length === 0) delete updated[productoId];
+  else updated[productoId] = merged;
+  localStorage.setItem(PREFS_KEY, JSON.stringify(updated));
+  window.dispatchEvent(new Event('avatar-prefs-changed'));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Mapa categoría → { emoji, gradiente, color texto }
+// ─────────────────────────────────────────────────────────────────
 export const CATEGORIA_AVATAR: Record<string, { emoji: string; from: string; to: string; text: string }> = {
   // ── Panadería ──────────────────────────────────────────────────
   'panes':                   { emoji: '🥖', from: '#f59e0b', to: '#d97706', text: '#7c2d12' },
@@ -73,22 +110,18 @@ export const CATEGORIA_AVATAR: Record<string, { emoji: string; from: string; to:
 /** Busca config de categoría ignorando mayúsculas, tildes y espacios extra */
 function getAvatarConfig(categoria: string) {
   const key = categoria.toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '') // quitar tildes para comparación
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .trim();
 
-  // Búsqueda directa
   for (const [k, v] of Object.entries(CATEGORIA_AVATAR)) {
     const kNorm = k.normalize('NFD').replace(/[̀-ͯ]/g, '');
     if (kNorm === key) return v;
   }
-
-  // Búsqueda parcial (si la clave está contenida en la categoría o viceversa)
   for (const [k, v] of Object.entries(CATEGORIA_AVATAR)) {
     const kNorm = k.normalize('NFD').replace(/[̀-ͯ]/g, '');
     if (key.includes(kNorm) || kNorm.includes(key)) return v;
   }
 
-  // Fallback inteligente por palabras clave
   if (key.includes('pan') || key.includes('bread')) return CATEGORIA_AVATAR['panes'];
   if (key.includes('torta') || key.includes('cake')) return CATEGORIA_AVATAR['tortas'];
   if (key.includes('bebida') || key.includes('drink')) return CATEGORIA_AVATAR['bebidas'];
@@ -117,16 +150,49 @@ interface ProductAvatarProps {
   className?: string;
   /** Si se está viendo en modo hover/seleccionado */
   hover?: boolean;
+  /** ID del producto → carga prefs guardadas automáticamente */
+  productoId?: string;
+  /** Forzar un estilo (para preview en el configurador — no se guarda) */
+  forceStyle?: AvatarStyle;
+  /** Forzar una imagen (para preview en el configurador — no se guarda) */
+  forceImagen?: string;
 }
 
-export function ProductAvatar({ imagen, nombre, categoria = '', emoji, color, className = '', hover }: ProductAvatarProps) {
-  if (imagen) {
+export function ProductAvatar({
+  imagen, nombre, categoria = '', emoji, color, className = '',
+  hover, productoId, forceStyle, forceImagen
+}: ProductAvatarProps) {
+  // Escucha cambios de prefs para re-renderizar automáticamente
+  const [tick, forceUpdate] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => {
+    if (!productoId) return;
+    const handler = () => forceUpdate();
+    window.addEventListener('avatar-prefs-changed', handler);
+    return () => window.removeEventListener('avatar-prefs-changed', handler);
+  }, [productoId]);
+
+  // Cargar preferencias guardadas para este producto
+  const pref = useMemo(() => {
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- tick forces refresh
+    void tick;
+    if (forceStyle !== undefined || forceImagen !== undefined) {
+      return { style: forceStyle, imagen: forceImagen };
+    }
+    if (!productoId) return null;
+    return getAvatarPrefs()[productoId] || null;
+  }, [productoId, forceStyle, forceImagen, tick]);
+
+  const finalImagen = pref?.imagen || imagen;
+  const style: AvatarStyle = pref?.style || 'bokeh';
+
+  if (finalImagen) {
     return (
       <div className={`w-full h-full overflow-hidden ${className}`}>
         <img
-          src={imagen}
+          src={finalImagen}
           alt={nombre || categoria}
           className={`w-full h-full object-cover transition-transform duration-500 ${hover ? 'scale-110' : 'scale-100'}`}
+          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
         />
       </div>
     );
@@ -135,25 +201,102 @@ export function ProductAvatar({ imagen, nombre, categoria = '', emoji, color, cl
   const cfg = getAvatarConfig(categoria);
   const finalEmoji = emoji || cfg.emoji;
 
+  // ── Estilo CRISTAL ──────────────────────────────────────────
+  if (style === 'cristal') {
+    return (
+      <div
+        className={`relative w-full h-full overflow-hidden flex items-center justify-center ${className}`}
+        style={{ background: `linear-gradient(145deg, #f8fafc 0%, ${cfg.from}75 100%)` }}
+      >
+        {/* Radial glow suave al centro */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        >
+          <div style={{
+            width: '65%', height: '65%', borderRadius: '50%',
+            background: `radial-gradient(circle, ${cfg.to}30 0%, transparent 70%)`
+          }} />
+        </div>
+        {/* Emoji con sombra de color debajo */}
+        <span
+          className={`relative z-10 select-none transition-transform duration-500 ${hover ? 'scale-110' : 'scale-100'}`}
+          style={{
+            fontSize: '2.8rem', lineHeight: 1,
+            filter: `drop-shadow(0 6px 14px ${cfg.to}90) drop-shadow(0 2px 4px ${cfg.to}50)`
+          }}
+        >
+          {finalEmoji}
+        </span>
+        {/* Punto de acento de color */}
+        <div
+          aria-hidden="true"
+          className="absolute bottom-2.5 right-2.5 w-2 h-2 rounded-full pointer-events-none"
+          style={{ background: cfg.to, opacity: 0.85 }}
+        />
+        {/* Borde sutil */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 pointer-events-none rounded-[inherit]"
+          style={{ boxShadow: `inset 0 0 0 1px ${cfg.to}25` }}
+        />
+      </div>
+    );
+  }
+
+  // ── Estilo NOCHE ────────────────────────────────────────────
+  if (style === 'noche') {
+    return (
+      <div
+        className={`relative w-full h-full overflow-hidden flex items-center justify-center ${className}`}
+        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)' }}
+      >
+        {/* Glow borroso de fondo */}
+        <span
+          aria-hidden="true"
+          className="absolute inset-0 flex items-center justify-center select-none pointer-events-none"
+          style={{ fontSize: '5rem', filter: 'blur(24px)', opacity: 0.55, transform: 'scale(1.3)' }}
+        >
+          {finalEmoji}
+        </span>
+        {/* Radial neon al centro */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+        >
+          <div style={{
+            width: '72%', height: '72%', borderRadius: '50%',
+            background: `radial-gradient(circle, ${cfg.to}35 0%, transparent 70%)`
+          }} />
+        </div>
+        {/* Emoji con neon glow */}
+        <span
+          className={`relative z-10 select-none transition-transform duration-500 ${hover ? 'scale-110' : 'scale-100'}`}
+          style={{
+            fontSize: '2.6rem', lineHeight: 1,
+            filter: `drop-shadow(0 0 8px ${cfg.to}) drop-shadow(0 0 20px ${cfg.from}95)`
+          }}
+        >
+          {finalEmoji}
+        </span>
+      </div>
+    );
+  }
+
+  // ── Estilo BOKEH (default) ──────────────────────────────────
   return (
     <div
       className={`relative w-full h-full overflow-hidden flex items-center justify-center ${className}`}
       style={{ background: `linear-gradient(135deg, ${cfg.from} 0%, ${cfg.to} 100%)` }}
     >
-      {/* Fondo borroso del emoji — efecto "bokeh" profesional */}
+      {/* Fondo borroso del emoji — bokeh */}
       <span
         aria-hidden="true"
         className="absolute inset-0 flex items-center justify-center select-none pointer-events-none"
-        style={{
-          fontSize: '6rem',
-          filter: 'blur(20px)',
-          opacity: 0.35,
-          transform: 'scale(1.5)',
-        }}
+        style={{ fontSize: '6rem', filter: 'blur(20px)', opacity: 0.35, transform: 'scale(1.5)' }}
       >
         {finalEmoji}
       </span>
-
       {/* Emoji nítido principal */}
       <span
         className={`relative z-10 select-none transition-transform duration-500 drop-shadow-lg ${hover ? 'scale-110' : 'scale-100'}`}
@@ -161,9 +304,9 @@ export function ProductAvatar({ imagen, nombre, categoria = '', emoji, color, cl
       >
         {finalEmoji}
       </span>
-
-      {/* Gradiente overlay inferior para profundidad */}
+      {/* Gradiente overlay inferior */}
       <div
+        aria-hidden="true"
         className="absolute inset-x-0 bottom-0 h-1/3 pointer-events-none"
         style={{ background: `linear-gradient(to top, ${cfg.to}60, transparent)` }}
       />
@@ -204,12 +347,7 @@ export function CategoriaAvatar({ nombre, emoji, color, count, className = '', s
       <span
         aria-hidden="true"
         className="absolute inset-0 flex items-center justify-center select-none pointer-events-none"
-        style={{
-          fontSize: '5rem',
-          filter: 'blur(18px)',
-          opacity: 0.25,
-          transform: 'scale(1.8) translateY(10px)',
-        }}
+        style={{ fontSize: '5rem', filter: 'blur(18px)', opacity: 0.25, transform: 'scale(1.8) translateY(10px)' }}
       >
         {finalEmoji}
       </span>
