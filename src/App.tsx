@@ -120,6 +120,10 @@ const App = () => {
     abrirCaja,
     cerrarCaja,
     registrarMovimientoCaja,
+    mesas,
+    addMesa,
+    updateMesa,
+    deleteMesa,
     addPedidoActivo: onAddPedidoActivo,
     updatePedidoActivo: onUpdatePedidoActivo,
     deletePedidoActivo: onDeletePedidoActivo,
@@ -323,9 +327,11 @@ const App = () => {
             clientes={clientes}
             categorias={configuracion.categorias}
             onRegistrarMovimientoCaja={registrarMovimientoCaja}
-            mesas={[]}
+            mesas={mesas}
             pedidosActivos={pedidosActivos}
-            onUpdateMesa={async (_m) => {}}
+            onUpdateMesa={updateMesa}
+            onAddMesa={addMesa}
+            onDeleteMesa={deleteMesa}
             onAddPedidoActivo={onAddPedidoActivo}
             onUpdatePedidoActivo={onUpdatePedidoActivo}
             onDeletePedidoActivo={onDeletePedidoActivo}
@@ -645,7 +651,8 @@ const App = () => {
 
       <main className={cn(
         "transition-all duration-300",
-        user ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-64") : "pl-0"
+        user ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-64") : "pl-0",
+        currentView === 'ventas' ? 'h-screen overflow-hidden' : ''
       )}>
         {/* Header Superior (Solo si hay usuario) */}
         {user && (
@@ -690,7 +697,7 @@ const App = () => {
           </header>
         )}
 
-        <div className="p-4 md:p-8">
+        <div className={currentView === 'ventas' ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'p-4 md:p-8'}>
           <ErrorBoundary moduleName={currentView}>
             <PageTransition viewKey={currentView}>
               {renderView()}
@@ -698,8 +705,8 @@ const App = () => {
           </ErrorBoundary>
         </div>
 
-        {/* Footer Táctico */}
-        {user && (
+        {/* Footer Táctico — oculto en POS para máximo espacio */}
+        {user && currentView !== 'ventas' && (
           <footer className="min-h-10 py-2 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 px-4 md:px-8 flex flex-col md:flex-row items-center justify-between gap-2 text-[9px] text-slate-400 uppercase tracking-widest font-black shrink-0">
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-1.5">

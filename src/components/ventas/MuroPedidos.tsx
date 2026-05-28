@@ -107,7 +107,7 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {mesas.map(mesa => {
                         const pedido = pedidosActivos.find(p => p.id === mesa.pedidoActivoId);
-                        const isOcupada = mesa.estado !== 'disponible';
+                        const isOcupada = mesa.estado !== 'disponible' && (pedido?.items?.length ?? 0) > 0;
 
                         let tiempoStr = '';
                         if (pedido?.fechaInicio) {
@@ -174,6 +174,11 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                                         {tiempoStr && (
                                             <div className="flex items-center gap-1.5 text-xs text-slate-400">
                                                 <Clock className="w-3.5 h-3.5" /> Abierta hace {tiempoStr}
+                                            </div>
+                                        )}
+                                        {mesa.abiertaPor && (
+                                            <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-500 bg-blue-50 dark:bg-blue-900/30 px-2 py-1 rounded-lg">
+                                                <span>👤</span> {mesa.abiertaPor}
                                             </div>
                                         )}
                                         {pedido.cliente && (

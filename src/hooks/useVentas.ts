@@ -3,7 +3,7 @@ import { generateUUID } from '@/lib/safe-utils';
  * useVentas — Sub-hook para gestión de ventas, caja, mesas y pedidos activos
  * Extraído de usePriceControl.ts para reducir su tamaño
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
 import type { 
   Venta, 
@@ -192,6 +192,41 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   const deletePedidoActivo = useCallback(async (id: string) => {
     await db.deletePedidoActivo(id);
     setPedidosActivos(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  // Sync bidireccional: actualiza React state cuando otro dispositivo hace cambios
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { table, eventType, id } = (e as CustomEvent<{ table: string; eventType: string; id: string }>).detail;
+
+      if (table === 'ventas') {
+        if (eventType === 'DELETE') {
+          setVentas(prev => prev.filter(v => v.id !== id));
+        } else {
+          db.getAllVentas().then(setVentas).catch(() => {});
+        }
+      } else if (table === 'caja') {
+        db.getAllSesionesCaja().then(sesiones => {
+          setSesionesCaja(sesiones as any);
+          const activa = (sesiones as any[]).find((s: any) => s.estado === 'abierta');
+          setCajaActiva(activa);
+        }).catch(() => {});
+      } else if (table === 'mesas') {
+        if (eventType === 'DELETE') {
+          setMesas(prev => prev.filter(m => m.id !== id));
+        } else {
+          db.getAllMesas().then(setMesas).catch(() => {});
+        }
+      } else if (table === 'pedidos_activos') {
+        if (eventType === 'DELETE') {
+          setPedidosActivos(prev => prev.filter(p => p.id !== id));
+        } else {
+          db.getAllPedidosActivos().then(setPedidosActivos).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
   }, []);
 
   return {

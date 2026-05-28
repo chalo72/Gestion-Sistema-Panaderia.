@@ -640,6 +640,9 @@ export interface Mesa {
   estado: 'disponible' | 'ocupada' | 'reservada' | 'mantenimiento';
   pedidoActivoId?: string;
   ubicacion?: string;
+  abiertaPor?: string;
+  abiertaPorId?: string;
+  fechaApertura?: string;
 }
 
 export interface PedidoActivo {

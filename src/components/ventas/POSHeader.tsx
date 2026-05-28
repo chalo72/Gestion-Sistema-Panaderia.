@@ -7,6 +7,7 @@ export interface TabPOS {
     label: string; // 'Venta Rápida' o 'Mesa 1'
     tipo: 'venta-rapida' | 'mesa';
     mesaId?: string;
+    abiertaPor?: string; // usuario que abrió esta pestaña
 }
 
 interface POSHeaderProps {
@@ -112,8 +113,15 @@ export function POSHeader({
                                             {tab.tipo === 'venta-rapida' ? <Zap className="w-2.5 h-2.5" /> : <Users className="w-2.5 h-2.5" />}
                                         </div>
 
-                                        <span className="text-[10px] font-black uppercase tracking-tight whitespace-nowrap">
-                                            {tab.label}
+                                        <span className="flex flex-col leading-none">
+                                            <span className="text-[10px] font-black uppercase tracking-tight whitespace-nowrap">
+                                                {tab.label}
+                                            </span>
+                                            {tab.abiertaPor && (
+                                                <span className="text-[8px] font-semibold text-slate-400 whitespace-nowrap normal-case tracking-normal">
+                                                    {tab.abiertaPor}
+                                                </span>
+                                            )}
                                         </span>
 
                                         {/* Botón de Cerrar Pestaña siempre visible */}

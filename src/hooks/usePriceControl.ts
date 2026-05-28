@@ -92,6 +92,28 @@ export function usePriceControl() {
   const produccionHook = useProduccionHook({ onAjustarStock: (...args) => onAjustarStockRef.current(...args), recetas });
   const ventasHook = useVentas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
 
+  // Escuchar cambios Realtime de otros dispositivos y actualizar estado en memoria sin recargar
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { table, eventType, id } = (e as CustomEvent<{ table: string; eventType: string; id: string }>).detail;
+      if (eventType === 'DELETE') {
+        if (table === 'proveedores') setProveedores(p => p.filter(x => x.id !== id));
+        else if (table === 'productos') { setProductos(p => p.filter(x => x.id !== id)); db.getAllPrecios().then(setPrecios).catch(() => {}); }
+        else if (table === 'precios') setPrecios(p => p.filter(x => x.id !== id));
+        else if (table === 'prepedidos') setPrepedidos(p => p.filter(x => x.id !== id));
+        else if (table === 'recetas') setRecetas(p => p.filter(x => x.id !== id));
+      } else {
+        if (table === 'proveedores') db.getAllProveedores().then(setProveedores).catch(() => {});
+        else if (table === 'productos') { db.getAllProductos().then(setProductos).catch(() => {}); db.getAllPrecios().then(setPrecios).catch(() => {}); }
+        else if (table === 'precios') { db.getAllPrecios().then(setPrecios).catch(() => {}); db.getAllProductos().then(setProductos).catch(() => {}); }
+        else if (table === 'prepedidos') db.getAllPrePedidos().then(setPrepedidos).catch(() => {});
+        else if (table === 'recetas') db.getAllRecetas().then(setRecetas).catch(() => {});
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
+  }, []);
+
   // Inicializar base de datos y cargar datos
   useEffect(() => {
     const initDB = async () => {

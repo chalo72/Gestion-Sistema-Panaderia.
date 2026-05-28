@@ -3,7 +3,7 @@ import { generateUUID } from '@/lib/safe-utils';
  * useFinanzas — Sub-hook para gestión de gastos, créditos y trabajadores
  * Extraído de usePriceControl.ts para reducir su tamaño
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
 import type {
   Gasto,
@@ -168,6 +168,41 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
   const deleteTrabajador = useCallback(async (id: string) => {
     await db.deleteTrabajador(id);
     setTrabajadores(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Sync bidireccional: actualiza React state cuando otro dispositivo hace cambios
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { table, eventType, id } = (e as CustomEvent<{ table: string; eventType: string; id: string }>).detail;
+
+      if (table === 'gastos') {
+        if (eventType === 'DELETE') {
+          setGastos(prev => prev.filter(g => g.id !== id));
+        } else {
+          db.getAllGastos().then(setGastos as any).catch(() => {});
+        }
+      } else if (table === 'creditos') {
+        if (eventType === 'DELETE') {
+          setCreditosClientes(prev => prev.filter(c => c.id !== id));
+        } else {
+          db.getAllCreditosClientes().then(setCreditosClientes as any).catch(() => {});
+        }
+      } else if (table === 'creditos_trabajadores') {
+        if (eventType === 'DELETE') {
+          setCreditosTrabajadores(prev => prev.filter(c => c.id !== id));
+        } else {
+          db.getAllCreditosTrabajadores().then(setCreditosTrabajadores as any).catch(() => {});
+        }
+      } else if (table === 'trabajadores') {
+        if (eventType === 'DELETE') {
+          setTrabajadores(prev => prev.filter(t => t.id !== id));
+        } else {
+          db.getAllTrabajadores().then(setTrabajadores as any).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
   }, []);
 
   return {

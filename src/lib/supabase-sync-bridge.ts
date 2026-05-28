@@ -47,8 +47,8 @@ const WRITES: WriteSpec[] = [
   { method: 'addPrePedido',         table: 'prepedidos',         fn: (d) => supabaseDB.addPrePedido(d) },
   { method: 'updatePrePedido',      table: 'prepedidos',         fn: (d) => supabaseDB.updatePrePedido(d) },
   { method: 'updateInventarioItem', table: 'inventario',         fn: (d) => supabaseDB.updateInventarioItem(d) },
-  { method: 'addCreditoCliente',    table: 'creditos_clientes',  fn: (d) => supabaseDB.addCreditoCliente(d) },
-  { method: 'updateCreditoCliente', table: 'creditos_clientes',  fn: (d) => supabaseDB.updateCreditoCliente(d) },
+  { method: 'addCreditoCliente',    table: 'creditos',  fn: (d) => supabaseDB.addCreditoCliente(d) },
+  { method: 'updateCreditoCliente', table: 'creditos',  fn: (d) => supabaseDB.updateCreditoCliente(d) },
   { method: 'addCreditoTrabajador', table: 'creditos_trabajadores', fn: (d) => supabaseDB.addCreditoTrabajador(d) },
   { method: 'updateCreditoTrabajador', table: 'creditos_trabajadores', fn: (d) => supabaseDB.updateCreditoTrabajador(d) },
   { method: 'addTrabajador',        table: 'trabajadores',       fn: (d) => supabaseDB.addTrabajador(d) },
@@ -57,6 +57,9 @@ const WRITES: WriteSpec[] = [
   { method: 'updateReceta',         table: 'recetas',            fn: (d) => supabaseDB.updateReceta(d) },
   { method: 'addOrdenProduccion',   table: 'produccion',         fn: (d) => supabaseDB.addOrdenProduccion(d) },
   { method: 'updateOrdenProduccion',table: 'produccion',         fn: (d) => supabaseDB.updateOrdenProduccion(d) },
+  { method: 'updateMesa',           table: 'mesas',              fn: (d) => supabaseDB.updateMesa(d) },
+  { method: 'addPedidoActivo',      table: 'pedidos_activos',    fn: (d) => supabaseDB.addPedidoActivo(d) },
+  { method: 'updatePedidoActivo',   table: 'pedidos_activos',    fn: (d) => supabaseDB.updatePedidoActivo(d) },
 ];
 
 const DELETES: DeleteSpec[] = [
@@ -66,10 +69,12 @@ const DELETES: DeleteSpec[] = [
   { method: 'deleteGasto',              table: 'gastos',                 fn: (id) => supabaseDB.deleteGasto(id) },
   { method: 'deleteRecepcion',          table: 'recepciones',            fn: (id) => supabaseDB.deleteRecepcion(id) },
   { method: 'deletePrePedido',          table: 'prepedidos',             fn: (id) => supabaseDB.deletePrePedido(id) },
-  { method: 'deleteCreditoCliente',     table: 'creditos_clientes',      fn: (id) => supabaseDB.deleteCreditoCliente(id) },
+  { method: 'deleteCreditoCliente',     table: 'creditos',      fn: (id) => supabaseDB.deleteCreditoCliente(id) },
   { method: 'deleteCreditoTrabajador',  table: 'creditos_trabajadores',  fn: (id) => supabaseDB.deleteCreditoTrabajador(id) },
   { method: 'deleteTrabajador',         table: 'trabajadores',           fn: (id) => supabaseDB.deleteTrabajador(id) },
   { method: 'deleteReceta',             table: 'recetas',                fn: (id) => supabaseDB.deleteReceta(id) },
+  { method: 'deleteMesa',               table: 'mesas',                  fn: (id) => supabaseDB.deleteMesa(id) },
+  { method: 'deletePedidoActivo',       table: 'pedidos_activos',        fn: (id) => supabaseDB.deletePedidoActivo(id) },
 ];
 
 export function applySyncPatch(): void {
@@ -84,7 +89,9 @@ export function applySyncPatch(): void {
     (db as any)[spec.method] = async (data: any) => {
       registerSelfWrite(spec.table, data?.id ?? '');
       await original(data);
-      spec.fn(data).catch(() => {}); // espejo fire-and-forget
+      spec.fn(data)
+        .then(() => console.log(`✅ [Bridge] ${spec.table} → Supabase OK (${data?.id})`))
+        .catch((err: any) => console.error(`❌ [Bridge] ${spec.table} → Supabase FALLÓ:`, err?.message ?? err, data));
     };
   }
 
@@ -96,7 +103,9 @@ export function applySyncPatch(): void {
     (db as any)[spec.method] = async (id: string) => {
       registerSelfWrite(spec.table, id);
       await original(id);
-      spec.fn(id).catch(() => {}); // espejo fire-and-forget
+      spec.fn(id)
+        .then(() => console.log(`✅ [Bridge] DELETE ${spec.table} → Supabase OK (${id})`))
+        .catch((err: any) => console.error(`❌ [Bridge] DELETE ${spec.table} → Supabase FALLÓ:`, err?.message ?? err, id));
     };
   }
 

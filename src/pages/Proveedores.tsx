@@ -186,7 +186,7 @@ export function Proveedores({
   const [showRecuperarDialog, setShowRecuperarDialog] = useState(false);
   const [buscandoEliminados, setBuscandoEliminados] = useState(false);
   const [proveedoresEliminados, setProveedoresEliminados] = useState<Array<{
-    proveedor: any; precios: any[]; recuperando: boolean;
+    proveedor: any; precios: any[]; recuperando: boolean; yaExisteLocal: boolean;
   }>>([]);
 
   const buscarProveedoresEliminados = useCallback(async () => {
@@ -208,22 +208,26 @@ export function Proveedores({
       const localProvs = await db.getAllProveedores();
       const localIds = new Set(localProvs.map((p: any) => p.id));
 
-      // Los que están en Supabase pero NO en este dispositivo
-      const faltantes = supabaseProvs.filter(p => !localIds.has(p.id));
-
-      if (faltantes.length === 0) {
-        toast.info('Este dispositivo ya tiene todos los proveedores de la nube.');
-        setShowRecuperarDialog(false);
-        return;
-      }
-
+      // Traer precios de todos y ordenar: primero los que tienen más productos
       const resultados = await Promise.all(
-        faltantes.map(async (prov) => {
+        supabaseProvs.map(async (prov) => {
           const { data: preciosData } = await supabase
             .from('precios').select('*').eq('proveedor_id', prov.id);
-          return { proveedor: prov, precios: preciosData || [], recuperando: false };
+          return {
+            proveedor: prov,
+            precios: preciosData || [],
+            recuperando: false,
+            yaExisteLocal: localIds.has(prov.id),
+          };
         })
       );
+
+      // Ordenar: primero los que tienen productos, luego los que no están en local
+      resultados.sort((a, b) => {
+        if (b.precios.length !== a.precios.length) return b.precios.length - a.precios.length;
+        return a.yaExisteLocal ? 1 : -1;
+      });
+
       setProveedoresEliminados(resultados);
     } catch (err) {
       console.error('[Recuperar] Error:', err);
@@ -1494,25 +1498,32 @@ export function Proveedores({
             ) : (
               <div className="space-y-3">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                  {proveedoresEliminados.length} proveedor(es) encontrado(s) — selecciona uno para restaurar:
+                  {proveedoresEliminados.length} en la nube — el que tiene más productos es el que buscas:
                 </p>
                 {proveedoresEliminados.map((entry, idx) => (
-                  <div key={entry.proveedor.id} className="flex items-center justify-between gap-3 p-4 bg-slate-50 dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <div key={entry.proveedor.id} className={`flex items-center justify-between gap-3 p-4 rounded-2xl border ${entry.precios.length > 0 ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800' : 'bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800'}`}>
                     <div className="min-w-0 flex-1">
-                      <p className="font-black text-slate-800 dark:text-white text-sm uppercase truncate">{entry.proveedor.nombre}</p>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">
-                        {entry.precios.length} precio(s) asociado(s)
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-black text-slate-800 dark:text-white text-sm uppercase">{entry.proveedor.nombre}</p>
+                        {entry.yaExisteLocal && (
+                          <span className="text-[9px] font-black bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full uppercase">ya está aquí</span>
+                        )}
+                      </div>
+                      <p className={`text-xs font-black mt-1 ${entry.precios.length > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                        {entry.precios.length > 0
+                          ? `🧾 ${entry.precios.length} producto(s) en catálogo`
+                          : 'Sin productos'}
                         {entry.proveedor.telefono ? ` · ${entry.proveedor.telefono}` : ''}
                       </p>
                     </div>
                     <Button
                       onClick={() => recuperarProveedor(idx)}
                       disabled={entry.recuperando}
-                      className="shrink-0 h-9 px-4 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest border-none"
+                      className={`shrink-0 h-9 px-4 text-white rounded-xl text-[10px] font-black uppercase tracking-widest border-none ${entry.precios.length > 0 ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rose-600 hover:bg-rose-700'}`}
                     >
                       {entry.recuperando
                         ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />Restaurando...</>
-                        : <><RotateCcw className="w-3 h-3 mr-1" />Restaurar</>
+                        : <><RotateCcw className="w-3 h-3 mr-1" />{entry.yaExisteLocal ? 'Actualizar' : 'Restaurar'}</>
                       }
                     </Button>
                   </div>

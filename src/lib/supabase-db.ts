@@ -200,7 +200,7 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async addPrecio(precio: DBPrecio): Promise<void> {
-        const { error } = await supabase.from('precios').upsert(this.mapPrecioToDB(precio));
+        const { error } = await supabase.from('precios').upsert(this.mapPrecioToDB(precio), { onConflict: 'producto_id,proveedor_id' });
         if (error) throw error;
     }
 
@@ -243,8 +243,8 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async addPrePedido(prepedido: DBPrePedido): Promise<void> {
-        // Insert parent
-        const { error: ppError } = await supabase.from('prepedidos').insert({
+        // Upsert parent — handles both new inserts and duplicates from sync
+        const { error: ppError } = await supabase.from('prepedidos').upsert({
             id: prepedido.id,
             nombre: prepedido.nombre,
             proveedor_id: prepedido.proveedorId,
@@ -257,7 +257,8 @@ export class SupabaseDatabase implements IDatabase {
         });
         if (ppError) throw ppError;
 
-        // Insert items
+        // Replace items: delete existing then re-insert (same strategy as updatePrePedido)
+        await supabase.from('prepedido_items').delete().eq('prepedido_id', prepedido.id);
         if (prepedido.items.length > 0) {
             const items = prepedido.items.map(i => ({
                 id: i.id,
@@ -267,7 +268,7 @@ export class SupabaseDatabase implements IDatabase {
                 precio_unitario: i.precioUnitario,
                 subtotal: i.subtotal
             }));
-            const { error: itemsError } = await supabase.from('prepedido_items').insert(items);
+            const { error: itemsError } = await supabase.from('prepedido_items').upsert(items);
             if (itemsError) throw itemsError;
         }
     }
@@ -456,7 +457,7 @@ export class SupabaseDatabase implements IDatabase {
             stock_minimo: item.stockMinimo,
             ubicacion: item.ubicacion,
             ultimo_movimiento: item.ultimoMovimiento
-        });
+        }, { onConflict: 'producto_id' });
         if (error) throw error;
     }
 
@@ -643,10 +644,31 @@ export class SupabaseDatabase implements IDatabase {
     async getAllMesas(): Promise<any[]> {
         const { data, error } = await supabase.from('mesas').select('*');
         if (error) return [];
-        return data;
+        return data.map((m: any) => ({
+            id: m.id,
+            numero: m.numero,
+            capacidad: m.capacidad,
+            estado: m.estado,
+            pedidoActivoId: m.pedido_activo_id ?? undefined,
+            ubicacion: m.ubicacion ?? undefined,
+            abiertaPor: m.abierta_por ?? undefined,
+            abiertaPorId: m.abierta_por_id ?? undefined,
+            fechaApertura: m.fecha_apertura ?? undefined,
+        }));
     }
     async updateMesa(mesa: any): Promise<void> {
-        const { error } = await supabase.from('mesas').upsert(mesa);
+        const row = {
+            id: mesa.id,
+            numero: mesa.numero,
+            capacidad: mesa.capacidad,
+            estado: mesa.estado,
+            pedido_activo_id: mesa.pedidoActivoId ?? null,
+            ubicacion: mesa.ubicacion ?? null,
+            abierta_por: mesa.abiertaPor ?? null,
+            abierta_por_id: mesa.abiertaPorId ?? null,
+            fecha_apertura: mesa.fechaApertura ?? null,
+        };
+        const { error } = await supabase.from('mesas').upsert(row);
         if (error) throw error;
     }
     async deleteMesa(id: string): Promise<void> {
@@ -658,10 +680,31 @@ export class SupabaseDatabase implements IDatabase {
     async getAllPedidosActivos(): Promise<any[]> {
         const { data, error } = await supabase.from('pedidos_activos').select('*');
         if (error) return [];
-        return data;
+        return data.map((p: any) => ({
+            id: p.id,
+            mesaId: p.mesa_id ?? undefined,
+            items: p.items ?? [],
+            cliente: p.cliente ?? undefined,
+            total: p.total ?? 0,
+            estado: p.estado,
+            notas: p.notas ?? undefined,
+            fechaInicio: p.fecha_inicio,
+            ultimoCambio: p.ultimo_cambio,
+        }));
     }
     async addPedidoActivo(pedido: any): Promise<void> {
-        await supabase.from('pedidos_activos').upsert(pedido);
+        const row = {
+            id: pedido.id,
+            mesa_id: pedido.mesaId ?? null,
+            items: pedido.items ?? [],
+            cliente: pedido.cliente ?? null,
+            total: pedido.total ?? 0,
+            estado: pedido.estado,
+            notas: pedido.notas ?? null,
+            fecha_inicio: pedido.fechaInicio,
+            ultimo_cambio: pedido.ultimoCambio ?? new Date().toISOString(),
+        };
+        await supabase.from('pedidos_activos').upsert(row);
     }
     async updatePedidoActivo(pedido: any): Promise<void> {
         await this.addPedidoActivo(pedido);
@@ -944,18 +987,38 @@ export class SupabaseDatabase implements IDatabase {
 
     // --- Créditos Clientes ---
     async getAllCreditosClientes(): Promise<any[]> {
-        const { data, error } = await supabase.from('creditos_clientes').select('*');
+        const { data, error } = await supabase.from('creditos').select('*');
         if (error) return [];
         return data;
     }
     async addCreditoCliente(c: any): Promise<void> {
-        await supabase.from('creditos_clientes').upsert(c);
+        // Detectar si viene en formato local (camelCase) y convertir a snake_case
+        const row = c.clienteNombre !== undefined ? {
+            id: c.id,
+            cliente_id: c.clienteId ?? null,
+            cliente_nombre: c.clienteNombre,
+            cliente_telefono: c.clienteTelefono ?? null,
+            categoria_cliente: c.categoriaCliente ?? null,
+            monto: c.monto,
+            saldo: c.saldo,
+            descripcion: c.descripcion,
+            fecha: c.fecha,
+            fecha_vencimiento: c.fechaVencimiento ?? null,
+            estado: c.estado,
+            items: c.items ?? [],
+            foto_evidencia: c.fotoEvidencia ?? null,
+            pagos: c.pagos ?? [],
+            usuario_id: c.usuarioId ?? null,
+            created_at: c.createdAt ?? new Date().toISOString(),
+        } : c; // ya está en snake_case (vino de Supabase)
+        const { error } = await supabase.from('creditos').upsert(row);
+        if (error) throw error;
     }
     async updateCreditoCliente(c: any): Promise<void> {
         await this.addCreditoCliente(c);
     }
     async deleteCreditoCliente(id: string): Promise<void> {
-        await supabase.from('creditos_clientes').delete().eq('id', id);
+        await supabase.from('creditos').delete().eq('id', id);
     }
 
     // --- Helpers (Mappers) ---

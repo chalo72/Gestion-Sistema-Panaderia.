@@ -5,6 +5,7 @@ import type { DBMisionAgent, DBHallazgoAgente } from '@/lib/database';
 import { consultarAgente } from '@/constants/agentes';
 import { useAutoUpdate } from '@/hooks/useAutoUpdate';
 import { applySyncPatch } from '@/lib/supabase-sync-bridge';
+import { initDeviceId } from '@/lib/deviceId';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 
 interface CentinelaContextType {
@@ -16,8 +17,54 @@ interface CentinelaContextType {
 
 const CentinelaContext = createContext<CentinelaContextType | undefined>(undefined);
 
+// Barra de versión — cuenta 5s, parpadea x2, se cierra sola. Sin recarga forzada.
+function VersionBar({ onDismiss, recargar }: { onDismiss: () => void; recargar: () => void }) {
+  const [secs, setSecs] = React.useState(5);
+  const [flash, setFlash] = React.useState(false);
+  const [hidden, setHidden] = React.useState(false);
+  React.useEffect(() => {
+    const t = setInterval(() => {
+      setSecs(s => {
+        if (s <= 1) {
+          clearInterval(t);
+          setFlash(true);
+          setTimeout(() => { setFlash(false); setTimeout(() => setHidden(true), 200); }, 600);
+          return 0;
+        }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, []);
+  if (hidden) return null;
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      background: flash ? 'rgba(16,185,129,0.9)' : 'linear-gradient(90deg,#312e81,#4f46e5,#312e81)',
+      color: '#e0e7ff', padding: '4px 14px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      fontSize: 11, fontWeight: 600,
+      boxShadow: '0 1px 6px rgba(79,70,229,0.3)',
+      animation: flash ? 'vbFlash 0.3s ease 2' : 'vbSlide 0.3s ease',
+      transition: 'background 0.2s',
+    }}>
+      <style>{`
+        @keyframes vbSlide{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+        @keyframes vbFlash{0%,100%{opacity:1}50%{opacity:0.15}}
+      `}</style>
+      <span>&#128260; Nueva versión lista — {secs > 0 ? `cierra en ${secs}s` : '✓'}</span>
+      <button onClick={recargar} style={{
+        background:'rgba(255,255,255,0.18)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',
+        borderRadius:6,padding:'1px 10px',fontSize:10,fontWeight:700,cursor:'pointer',
+      }}>Aplicar</button>
+    </div>
+  );
+}
+
 // Activar el puente de espejo local->Supabase UNA VEZ al iniciar (fuera del componente)
 applySyncPatch();
+// Anclar device ID en IndexedDB (sobrevive limpieza de caché HTTP)
+initDeviceId().catch(() => {});
 
 export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [misionesActivas, setMisionesActivas] = useState<DBMisionAgent[]>([]);
@@ -34,33 +81,70 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   // Sync automatico al arrancar: en cuanto Supabase Realtime confirma conexion,
   // hace un merge completo UNA VEZ: sube datos locales y baja los del resto.
+  // Si encuentra datos nuevos, recarga UNA VEZ más para mostrarlos
+  // (sessionStorage evita el loop: la segunda carga no hace syncNow).
   useEffect(() => {
-    if (syncConnected && !hasSyncedOnMount.current) {
-      hasSyncedOnMount.current = true;
-      syncNow().catch(() => {});
+    if (!syncConnected || hasSyncedOnMount.current) return;
+    hasSyncedOnMount.current = true;
+
+    const alreadyReloaded = sessionStorage.getItem('nexus_post_sync_reload');
+    if (alreadyReloaded) {
+      sessionStorage.removeItem('nexus_post_sync_reload');
+      return; // ya sincronizamos y recargamos — no volver a hacerlo
     }
+
+    syncNow().catch(() => {});
   }, [syncConnected, syncNow]);
 
+  // Si syncNow encontró datos nuevos (MANUAL), el banner ya los muestra.
+  // NO recargamos automáticamente — los datos se ven al navegar entre páginas.
+  // Esto evita interrumpir al usuario en medio de una venta o formulario.
   useEffect(() => {
-    if (pendingChanges.length === 0) {
-      setSyncCountdown(null);
-      return;
-    }
-    setSyncCountdown(1);
-  }, [pendingChanges.length]);
+    const tieneNuevos = pendingChanges.some(c => c.eventType === 'MANUAL');
+    if (!tieneNuevos) return;
+    // Solo marcar como sincronizado, sin recargar
+    sessionStorage.removeItem('nexus_post_sync_reload');
+  }, [pendingChanges]);
+
+  const autoReloadTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [chipFlash, setChipFlash] = useState(false);
+
+  const hasRealtimeChanges = pendingChanges.some(c => c.eventType !== 'MANUAL');
+
+  // Cuenta regresiva 3→0, titila al llegar a 0, desaparece sola. Sin recarga.
+  useEffect(() => {
+    if (!hasRealtimeChanges) { setSyncCountdown(null); return; }
+    if (syncCountdown !== null) return; // ya corriendo
+    let secs = 3;
+    setSyncCountdown(secs);
+    if (autoReloadTimerRef.current) clearInterval(autoReloadTimerRef.current);
+    autoReloadTimerRef.current = setInterval(() => {
+      secs -= 1;
+      setSyncCountdown(secs);
+      if (secs <= 0) {
+        clearInterval(autoReloadTimerRef.current!);
+        setChipFlash(true);
+        setTimeout(() => { setChipFlash(false); dismissAll(); setSyncCountdown(null); }, 800);
+      }
+    }, 1000);
+    return () => { if (autoReloadTimerRef.current) clearInterval(autoReloadTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasRealtimeChanges]);
 
   const aplicarSincronizacion = useCallback(() => {
-    window.location.reload();
-  }, []);
-
-  const postergarSincronizacion = useCallback(() => {
-    setSyncCountdown(null);
-    dismissAll();
+    if (autoReloadTimerRef.current) clearInterval(autoReloadTimerRef.current);
+    setSyncCountdown(null); setChipFlash(false); dismissAll();
   }, [dismissAll]);
+
+  const postergarSincronizacion = aplicarSincronizacion;
 
   const handleSyncNow = useCallback(async () => {
     setIsSyncingManual(true);
-    await syncNow().catch(() => {});
+    // Timeout de 25s para que el botón nunca quede pegado
+    await Promise.race([
+      syncNow().catch(() => {}),
+      new Promise<void>(resolve => setTimeout(resolve, 25000)),
+    ]);
     setIsSyncingManual(false);
   }, [syncNow]);
 
@@ -143,97 +227,40 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <CentinelaContext.Provider value={{ misionesActivas, hallazgos, ejecutarMisionManual: ejecutarMision, isVigilando }}>
       {children}
 
-      {/* Boton flotante NexusSync */}
+      {/* Boton flotante NexusSync — parpadea cuando hay cambios en curso */}
       <button
         onClick={handleSyncNow}
         disabled={isSyncingManual}
         title={syncConnected ? 'Realtime conectado - clic para sincronizar ahora' : 'Clic para sincronizar ahora'}
         style={{
           position: 'fixed',
-          bottom: updateAvailable ? 80 : pendingChanges.length > 0 && syncCountdown !== null ? 188 : 16,
-          right: 16,
+          bottom: 16, right: 16,
           zIndex: 9997,
           background: syncConnected ? 'rgba(16,185,129,0.15)' : 'rgba(15,23,42,0.85)',
           border: '1px solid ' + (syncConnected ? 'rgba(16,185,129,0.4)' : 'rgba(148,163,184,0.2)'),
-          borderRadius: 20,
-          padding: '6px 12px',
+          borderRadius: 20, padding: '6px 12px',
           display: 'flex', alignItems: 'center', gap: 6,
           cursor: isSyncingManual ? 'wait' : 'pointer',
           color: syncConnected ? '#6ee7b7' : '#94a3b8',
           fontSize: 11, fontWeight: 600,
-          backdropFilter: 'blur(8px)',
-          transition: 'all 0.2s',
+          backdropFilter: 'blur(8px)', transition: 'all 0.2s',
         }}
       >
         <span style={{
           width: 7, height: 7, borderRadius: '50%',
-          background: isSyncingManual ? '#f59e0b' : syncConnected ? '#10b981' : '#64748b',
+          background: isSyncingManual || (syncCountdown !== null && syncCountdown > 0)
+            ? '#f59e0b' : syncConnected ? '#10b981' : '#64748b',
           display: 'inline-block',
-          animation: isSyncingManual ? 'pulse 1s infinite' : 'none',
+          animation: isSyncingManual || (syncCountdown !== null && syncCountdown > 0)
+            ? 'pulse 0.8s infinite' : 'none',
         }} />
+        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
         {isSyncingManual ? 'Sincronizando...' : 'NexusSync'}
       </button>
 
-      {/* Banner de cambios remotos */}
-      {pendingChanges.length > 0 && syncCountdown !== null && (
-        <div style={{
-          position: 'fixed',
-          bottom: updateAvailable ? 80 : 56,
-          right: 16,
-          zIndex: 9998, maxWidth: 340,
-          background: 'linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%)',
-          color: '#e2e8f0', borderRadius: 14,
-          padding: '12px 16px',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px rgba(56,189,248,0.25)',
-          fontSize: 13, fontWeight: 600,
-          display: 'flex', flexDirection: 'column', gap: 8,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 18 }}>&#128225;</span>
-            <span style={{ flex: 1 }}>
-              <span style={{ color: '#38bdf8' }}>Datos nuevos</span>{' '}
-              <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 11 }}>
-                ({pendingChanges.map(c => c.label).join(', ')})
-              </span>
-            </span>
-          </div>
-          <div style={{ color: '#94a3b8', fontSize: 11, fontWeight: 400 }}>
-            Toca <strong style={{ color: '#f8fafc' }}>Aplicar</strong> cuando termines lo que estas haciendo
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={aplicarSincronizacion}
-              style={{ flex: 1, background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 8, padding: '5px 10px', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}
-            >
-              Aplicar ya
-            </button>
-            <button
-              onClick={postergarSincronizacion}
-              style={{ flex: 1, background: 'rgba(255,255,255,0.08)', color: '#cbd5e1', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 8, padding: '5px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >
-              Mas tarde
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Banner de nueva version disponible */}
+      {/* Barra de nueva versión — delgada, cuenta 5s, parpadea x2 y se cierra sola. Sin recarga. */}
       {updateAvailable && (
-        <div style={{
-          position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 9999, display: 'flex', alignItems: 'center', gap: 12,
-          background: '#4f46e5', color: '#fff', borderRadius: 16,
-          padding: '12px 20px', boxShadow: '0 8px 32px rgba(79,70,229,0.4)',
-          fontSize: 13, fontWeight: 800
-        }}>
-          <span>&#128260; Nueva version disponible{countdown !== null ? ' - recargando en ' + countdown + 's' : ''}</span>
-          <button
-            onClick={recargar}
-            style={{ background: '#fff', color: '#4f46e5', border: 'none', borderRadius: 10, padding: '4px 14px', fontSize: 12, fontWeight: 900, cursor: 'pointer' }}
-          >
-            Actualizar ya
-          </button>
-        </div>
+        <VersionBar onDismiss={() => { /* solo cierra */ }} recargar={recargar} />
       )}
     </CentinelaContext.Provider>
   );

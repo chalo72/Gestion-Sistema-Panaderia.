@@ -3,7 +3,7 @@ import { generateUUID } from '@/lib/safe-utils';
  * useInventario — Sub-hook para gestión de inventario, movimientos y recepciones
  * Extraído de usePriceControl.ts para reducir su tamaño
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
 import type { 
   InventarioItem, 
@@ -115,6 +115,26 @@ export function useInventario({ productos }: UseInventarioParams) {
   const getRecepcionesByProveedor = useCallback((proveedorId: string) => {
     return recepciones.filter(r => r.proveedorId === proveedorId);
   }, [recepciones]);
+
+  // Sync bidireccional: actualiza React state cuando otro dispositivo hace cambios
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { table, eventType, id } = (e as CustomEvent<{ table: string; eventType: string; id: string }>).detail;
+
+      if (table === 'inventario') {
+        // El inventario no se elimina, siempre se actualiza
+        db.getAllInventario().then(setInventario as any).catch(() => {});
+      } else if (table === 'recepciones') {
+        if (eventType === 'DELETE') {
+          setRecepciones(prev => prev.filter(r => r.id !== id));
+        } else {
+          db.getAllRecepciones().then(setRecepciones as any).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
+  }, []);
 
   return {
     // State

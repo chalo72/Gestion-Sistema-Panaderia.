@@ -370,7 +370,14 @@ export function Ventas(props: VentasProps) {
                 ultimoCambio: new Date().toISOString()
             };
             onAddPedidoActivo(nuevoPedido).then(() => {
-                return onUpdateMesa({ ...mesa, estado: 'ocupada', pedidoActivoId: nuevoPedido.id });
+                return onUpdateMesa({
+                    ...mesa,
+                    estado: 'ocupada',
+                    pedidoActivoId: nuevoPedido.id,
+                    abiertaPor: usuario?.nombre || usuario?.email || 'Usuario',
+                    abiertaPorId: usuario?.id,
+                    fechaApertura: new Date().toISOString(),
+                });
             }).then(() => {
                 // Crear pestaña nueva si no existe
                 const existingTab = tabs.find(t => t.id === mesaTabId);
@@ -379,7 +386,8 @@ export function Ventas(props: VentasProps) {
                         id: mesaTabId,
                         label: `Mesa ${mesa.numero}`,
                         tipo: 'mesa',
-                        mesaId: mesa.id
+                        mesaId: mesa.id,
+                        abiertaPor: usuario?.nombre || usuario?.email || undefined,
                     }]);
                     setTabCarts(prev => ({
                         ...prev,
@@ -389,7 +397,7 @@ export function Ventas(props: VentasProps) {
                 // Activar la pestaña de la mesa
                 setActiveTabId(mesaTabId);
                 setViewMode('pos');
-                toast.success(`Mesa ${mesa.numero} abierta — pestaña creada`);
+                toast.success(`Mesa ${mesa.numero} abierta — atendida por ${usuario?.nombre || 'Usuario'}`);
             }).catch(() => {
                 toast.error(`Error al abrir la mesa ${mesa.numero}`);
             });
@@ -409,7 +417,8 @@ export function Ventas(props: VentasProps) {
                     id: mesaTabId,
                     label: `Mesa ${mesa.numero}`,
                     tipo: 'mesa',
-                    mesaId: mesa.id
+                    mesaId: mesa.id,
+                    abiertaPor: mesa.abiertaPor,
                 }]);
                 setTabCarts(prev => ({
                     ...prev,
@@ -533,7 +542,7 @@ export function Ventas(props: VentasProps) {
             if (mesa.pedidoActivoId) {
                 await onDeletePedidoActivo(mesa.pedidoActivoId);
             }
-            await onUpdateMesa({ ...mesa, estado: 'disponible', pedidoActivoId: undefined });
+            await onUpdateMesa({ ...mesa, estado: 'disponible', pedidoActivoId: undefined, abiertaPor: undefined, abiertaPorId: undefined, fechaApertura: undefined });
             handleCloseTab(activeTabId);
             toast.success(`Mesa ${mesa.numero} liberada`);
         } catch {

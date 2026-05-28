@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 const CHECK_INTERVAL    = 30 * 1000;   // Polling cada 30s
 const STORAGE_KEY       = 'nexus_build_ts';
 const BROADCAST_CHANNEL = 'nexus_update_v1';
-const RELOAD_DELAY_MS   = 3_000;
+const COUNTDOWN_SECONDS = 8;           // Segundos antes del reload silencioso
 const HIDDEN_THRESHOLD  = 5 * 60 * 1000; // 5 min oculto → verificar al volver
 
 /**
@@ -25,20 +25,10 @@ const HIDDEN_THRESHOLD  = 5 * 60 * 1000; // 5 min oculto → verificar al volver
  *             a Vercel sin intermediario, cargando la versión más nueva.
  */
 
-// ── Recarga nuclear (desregistra SW + limpia caches) ─────────────────────────
-async function nuclearReload(): Promise<void> {
-  if ('serviceWorker' in navigator) {
-    try {
-      const regs = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(regs.map(r => r.unregister()));
-    } catch { /* continúa igual */ }
-  }
-  if ('caches' in window) {
-    try {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
-    } catch { /* continúa igual */ }
-  }
+// ── Recarga suave — solo refresca la página, sin destruir SW ni cachés ────────
+// El Service Worker seguirá sirviendo activos en caché correctamente.
+// Esto evita la pérdida de contexto del usuario (formularios, scroll, etc.).
+function softReload(): void {
   window.location.reload();
 }
 
@@ -69,13 +59,13 @@ export function useAutoUpdate() {
   const hiddenSinceRef     = useRef<number | null>(null);
   const bcRef              = useRef<BroadcastChannel | null>(null);
 
-  // ── Recarga nuclear ───────────────────────────────────────────────────────
+  // ── Recarga suave ─────────────────────────────────────────────────────────
   const recargar = useCallback(() => {
     if (reloadingRef.current) return;
     reloadingRef.current = true;
     setIsUpdating(true);
     if (countdownRef.current) clearInterval(countdownRef.current);
-    nuclearReload();
+    softReload();
   }, []);
 
   // ── Broadcast: avisar a todas las pestañas hermanas ───────────────────────
@@ -86,25 +76,13 @@ export function useAutoUpdate() {
     try { localStorage.setItem('nexus_update_signal', `${ts}:${version}:${Date.now()}`); } catch { /**/ }
   }, []);
 
-  // ── Notificar nueva versión — 30s de cuenta regresiva y recarga automática ─
+  // ── Notificar nueva versión — muestra el banner, el usuario decide cuándo recargar
   const iniciarContadorYRecargar = useCallback((version: string) => {
     if (reloadingRef.current) return;
     setUpdateAvailable(true);
     setNewVersion(version);
-
-    let remaining = 30;
-    setCountdown(remaining);
-
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    countdownRef.current = setInterval(() => {
-      remaining -= 1;
-      setCountdown(remaining);
-      if (remaining <= 0) {
-        if (countdownRef.current) clearInterval(countdownRef.current);
-        recargar();
-      }
-    }, 1000);
-  }, [recargar]);
+    setCountdown(null); // sin cuenta regresiva automática
+  }, []);
 
   // ── Capa 1 (SW): controllerchange ─────────────────────────────────────────
   // Solo muestra el banner si ya había un controller activo (es decir,
