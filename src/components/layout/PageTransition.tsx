@@ -29,7 +29,7 @@ export function PageTransition({ children, viewKey, className }: PageTransitionP
     return (
         <div
             key={viewKey}
-            className={cn('h-full min-h-0', className, isAnimating ? 'page-transition-enter' : '')}
+            className={cn(className, isAnimating ? 'page-transition-enter' : '')}
             style={{ willChange: 'transform, opacity, filter' }}
         >
             {children}

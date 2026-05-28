@@ -699,7 +699,7 @@ const App = () => {
 
         <div className={currentView === 'ventas' ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'p-4 md:p-8'}>
           <ErrorBoundary moduleName={currentView}>
-            <PageTransition viewKey={currentView}>
+            <PageTransition viewKey={currentView} className={currentView === 'ventas' ? 'h-full min-h-0' : ''}>
               {renderView()}
             </PageTransition>
           </ErrorBoundary>
