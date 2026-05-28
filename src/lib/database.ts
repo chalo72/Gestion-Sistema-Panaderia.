@@ -315,10 +315,33 @@ class NexusDatabase implements IDatabase {
 
   async init() { await this.adapter.init(); }
 
+  // 🔄 Helper de escritura Supabase (fire-and-forget, fallo silencioso)
+  private _supabaseSync(op: 'add' | 'update' | 'delete', col: string, data?: any) {
+    try {
+      const supaDB = new SupabaseDatabase();
+      if (op === 'delete') {
+        supaDB.deleteProducto(data).catch(() => {});
+      } else if (col === 'productos') {
+        (op === 'add' ? supaDB.addProducto(data) : supaDB.updateProducto(data)).catch(() => {});
+      } else if (col === 'proveedores') {
+        (op === 'add' ? supaDB.addProveedor(data) : supaDB.updateProveedor(data)).catch(() => {});
+      } else if (col === 'precios') {
+        (op === 'add' ? supaDB.addPrecio(data) : supaDB.updatePrecio(data)).catch(() => {});
+      }
+    } catch (_) { /* fallo silencioso — IndexedDB ya tiene el dato */ }
+  }
+
   // Productos
   async getAllProductos() { return this.adapter.getCollection('productos'); }
-  async addProducto(p: any) { return this.adapter.setDocument('productos', p.id, p); }
-  async updateProducto(p: any) { return this.adapter.setDocument('productos', p.id, p); }
+  async addProducto(p: any) {
+    await this.adapter.setDocument('productos', p.id, p);
+    // 🔀 Sincronizar en Supabase para que otros dispositivos lo vean
+    try { new SupabaseDatabase().addProducto(p).catch(() => {}); } catch (_) {}
+  }
+  async updateProducto(p: any) {
+    await this.adapter.setDocument('productos', p.id, p);
+    try { new SupabaseDatabase().updateProducto(p).catch(() => {}); } catch (_) {}
+  }
   async deleteProducto(id: string) { return this._delete('productos', id); }
 
   // Proveedores
@@ -369,7 +392,12 @@ class NexusDatabase implements IDatabase {
   async getAllTrabajadores() { return this.adapter.getCollection('trabajadores'); }
   async getAllGastos() { return this.adapter.getCollection('gastos'); }
   async getAllPedidosActivos() { return this.adapter.getCollection('pedidos_activos'); }
+  async addPedidoActivo(p: any) { return this.adapter.setDocument('pedidos_activos', p.id, p); }
+  async updatePedidoActivo(p: any) { return this.adapter.setDocument('pedidos_activos', p.id, p); }
+  async deletePedidoActivo(id: string) { return this._delete('pedidos_activos', id); }
   async getAllMesas() { return this.adapter.getCollection('mesas'); }
+  async updateMesa(m: any) { return this.adapter.setDocument('mesas', m.id, m); }
+  async deleteMesa(id: string) { return this._delete('mesas', id); }
   async getAllAhorros() { return this.adapter.getCollection('ahorros'); }
   async updateInventarioItem(item: any) {
     return this.adapter.setDocument('inventario', item.id, item);
@@ -517,7 +545,7 @@ class NexusDatabase implements IDatabase {
         const supaDB = new SupabaseDatabase();
         const remoteProductos = await supaDB.getAllProductos();
         if (remoteProductos && remoteProductos.length > 0) {
-          console.log('☁️ [NEXUS] Datos encontrados en Supabase. Sincronizando hacia local...');
+          console.log('☁️ [NEXUS] Datos encontrados en Supabase. Sincronizando hacia local (MERGE — LOCAL GANA)...');
           const tasks: Array<{ col: string; fn: () => Promise<any[]> }> = [
             { col: 'productos',          fn: () => supaDB.getAllProductos() },
             { col: 'proveedores',        fn: () => supaDB.getAllProveedores() },
@@ -531,16 +559,38 @@ class NexusDatabase implements IDatabase {
             { col: 'recetas',            fn: () => supaDB.getAllRecetas() },
             { col: 'sesiones_caja',      fn: () => supaDB.getAllSesionesCaja() },
           ];
+
+          // Precargar tombstones una sola vez para todo el bloque
+          const tombstonesData = await localAdapter.getCollection<any>('tombstones') || [];
+          const deadKeys = new Set(tombstonesData.map((t: any) => `${t.table}:${t.item_id}`));
+
           for (const task of tasks) {
             try {
               const items = await task.fn();
               if (items && items.length > 0) {
-                await localAdapter.hydrateFromCloud(task.col, items);
+                // 🔀 MERGE BIDIRECCIONAL: Solo agregar lo que NO existe localmente.
+                // Los datos locales nunca se sobreescriben — así los productos recién creados
+                // en cualquier módulo (Productos, Mayoristas, etc.) no se pierden al sincronizar.
+                const localItems = await localAdapter.getCollection<any>(task.col);
+                const localIds = new Set(localItems.map((i: any) => i.id));
+                let nuevos = 0;
+                for (const item of items) {
+                  const key = `${task.col}:${item.id}`;
+                  if (!localIds.has(item.id) && !deadKeys.has(key)) {
+                    await localAdapter.setDocument(task.col, item.id, item);
+                    nuevos++;
+                  }
+                }
+                if (nuevos > 0) {
+                  console.log(`🔄 [NEXUS-Supabase] Merge '${task.col}': ${nuevos} items nuevos desde la nube.`);
+                } else {
+                  console.log(`✅ [NEXUS-Supabase] '${task.col}' sincronizado — sin cambios nuevos.`);
+                }
               }
             } catch (_) { /* colección opcional, continuar */ }
           }
           cloudExito = true;
-          console.log('✅ [NEXUS] Sincronización desde Supabase completada.');
+          console.log('✅ [NEXUS] Sincronización MERGE desde Supabase completada. Datos locales preservados.');
         }
       } catch (e) {
         console.warn('☁️ [NEXUS] Supabase no disponible en este momento:', e);
