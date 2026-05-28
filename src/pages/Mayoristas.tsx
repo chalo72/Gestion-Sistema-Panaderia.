@@ -257,6 +257,37 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // ID del ticket pendiente que fue retomado al carrito actual
     const [ticketRetomadoId, setTicketRetomadoId] = useState<string | null>(null);
+    const [ticketEditandoEnPOS, setTicketEditandoEnPOS] = useState<{ id: string; esCentral: boolean; fechaLabel: string } | null>(null);
+
+    const editarTicketEnPOS = (h: { id: string; items: any[]; total: number; fecha: number | string }) => {
+        const esCentral = !!(creditosClientes?.find(c => c.id === h.id));
+        if (carritoPos.length > 0 && !window.confirm('¿Reemplazar el carrito actual para editar este ticket?')) return;
+        const d = new Date(h.fecha);
+        const fechaLabel = isNaN(d.getTime()) ? 'ticket' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+        setCarritoPos(h.items.map((i: any) => ({ productoId: i.productoId, nombre: i.nombre, precio: i.precio, cantidad: i.cantidad })));
+        setTicketEditandoEnPOS({ id: h.id, esCentral, fechaLabel });
+        setTicketRetomadoId(null);
+    };
+
+    const guardarEdicionEnPOS = async () => {
+        if (!ticketEditandoEnPOS || carritoPos.length === 0) return;
+        const { id, esCentral } = ticketEditandoEnPOS;
+        const nuevoTotal = carritoPos.reduce((s, i) => s + i.precio * i.cantidad, 0);
+        if (esCentral) {
+            if (updateCreditoCliente) {
+                try {
+                    await updateCreditoCliente(id, { items: [...carritoPos], monto: nuevoTotal });
+                    toast.success('Ticket actualizado');
+                } catch (e) { toast.error('Error al guardar cambios'); return; }
+            }
+        } else {
+            const nuevos = historialMayoristas.map(h => h.id !== id ? h : { ...h, items: [...carritoPos], total: nuevoTotal });
+            persistirHistorial(nuevos);
+            toast.success('Ticket actualizado');
+        }
+        setCarritoPos([]);
+        setTicketEditandoEnPOS(null);
+    };
 
     const retomarTicket = (ticket: TicketPendiente) => {
         if (carritoPos.length > 0 && !window.confirm('¿Reemplazar el ticket actual con el guardado?')) return;
@@ -1320,44 +1351,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             </div>
                                         )}
 
-                                        {/* Abono múltiple a seleccionados */}
-                                        {ticketsSeleccionados.size > 0 && (
-                                            <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 animate-ag-fade-in">
-                                                <div className="flex justify-between items-center mb-2">
-                                                    <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-widest">{ticketsSeleccionados.size} seleccionados</span>
-                                                    <span className="text-sm font-black tabular-nums text-indigo-700 dark:text-indigo-400">
-                                                        {formatCurrency(Array.from(ticketsSeleccionados).reduce((s, id) => {
-                                                            const h = creditosPendientes.find(c => c.id === id);
-                                                            if (h) { const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0); return s + (h.total - ab); }
-                                                            return s;
-                                                        }, 0))}
-                                                    </span>
-                                                </div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Input type="number" placeholder="Monto..." value={montoAbonoMultiple} onChange={e => setMontoAbonoMultiple(e.target.value)} className="h-8 text-xs bg-white dark:bg-slate-800 border-indigo-200 font-bold"/>
-                                                    <select value={metodoAbonoMultiple} onChange={e => setMetodoAbonoMultiple(e.target.value as MetodoPago)} className="h-8 rounded-lg text-xs bg-white dark:bg-slate-800 border border-indigo-200 px-2 font-bold">
-                                                        <option value="efectivo">Efectivo</option>
-                                                        <option value="nequi">Nequi</option>
-                                                        <option value="transferencia">Cuenta</option>
-                                                    </select>
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <Button size="sm" onClick={procesarAbonoMultiple} className="flex-1 h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">Aplicar Abono</Button>
-                                                    <button
-                                                        onClick={() => {
-                                                            const sel = creditosPendientes.filter(h => ticketsSeleccionados.has(h.id));
-                                                            const saldoSel = sel.reduce((s, h) => { const ab=(h.abonos??[]).reduce((sa,a)=>sa+a.monto,0); return s+(h.total-ab); }, 0);
-                                                            enviarWhatsApp(cliente, saldoSel, sel);
-                                                        }}
-                                                        className="h-7 px-3 rounded-lg bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center gap-1"
-                                                        title="Enviar estado de cuenta de los tickets seleccionados por WhatsApp"
-                                                    >
-                                                        <MessageCircle className="w-3 h-3"/>WA
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
                                         {/* Lista de créditos pendientes */}
                                         {creditosPendientes.length === 0 ? (
                                             <div className="py-8 flex flex-col items-center gap-2 opacity-50">
@@ -1375,10 +1368,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     return (
                                                         <div key={h.id} className="rounded-2xl overflow-hidden shadow-sm border border-indigo-200 dark:border-indigo-800 transition-all duration-200">
                                                             <button className="w-full text-left px-3 py-2.5 flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white dark:from-indigo-900/20 dark:to-slate-900 hover:from-indigo-100/70 transition-colors" onClick={() => toggleCreditoExpand(h.id)}>
-                                                                <input type="checkbox" checked={ticketsSeleccionados.has(h.id)} onClick={e => e.stopPropagation()}
-                                                                    onChange={(e) => { const s = new Set(ticketsSeleccionados); e.target.checked ? s.add(h.id) : s.delete(h.id); setTicketsSeleccionados(s); }}
-                                                                    className="w-3.5 h-3.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shrink-0"
-                                                                />
                                                                 <div className="flex-1 min-w-0">
                                                                     <div className="flex items-center gap-1.5 flex-wrap">
                                                                         <span className="text-[11px] font-black text-slate-800 dark:text-white">
@@ -1396,18 +1385,17 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 </div>
                                                                 <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
                                                             </button>
-                                                            {/* Botón WhatsApp siempre visible — no requiere expandir */}
-                                                            {clienteObj && (
-                                                                <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5">
-                                                                    <button
-                                                                        onClick={() => enviarWhatsApp(clienteObj, saldo, [h])}
-                                                                        title="Enviar este ticket por WhatsApp"
-                                                                        className="flex-1 h-7 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center justify-center gap-1.5 transition-colors"
-                                                                    >
+                                                            {/* Botones de acción — siempre visibles */}
+                                                            <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5">
+                                                                <button onClick={(e)=>{e.stopPropagation();editarTicketEnPOS(h);}} className="h-7 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-[9px] font-black uppercase flex items-center justify-center gap-1 transition-colors shrink-0">
+                                                                    <Pencil className="w-3 h-3"/>Editar
+                                                                </button>
+                                                                {clienteObj && (
+                                                                    <button onClick={() => enviarWhatsApp(clienteObj, saldo, [h])} className="flex-1 h-7 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center justify-center gap-1.5 transition-colors">
                                                                         <MessageCircle className="w-3.5 h-3.5"/>WhatsApp · {formatCurrency(saldo)}
                                                                     </button>
-                                                                </div>
-                                                            )}
+                                                                )}
+                                                            </div>
 
                                                             {expanded && (
                                                                 <div className="bg-white dark:bg-slate-900 px-3 pb-3 pt-2 space-y-2.5 border-t border-slate-100 dark:border-slate-800">
@@ -1744,44 +1732,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     </div>
                                                 )}
 
-                                                {/* Abono múltiple a seleccionados */}
-                                                {ticketsSeleccionados.size > 0 && (
-                                                    <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 animate-ag-fade-in">
-                                                        <div className="flex justify-between items-center mb-2">
-                                                            <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-widest">{ticketsSeleccionados.size} seleccionados</span>
-                                                            <span className="text-sm font-black tabular-nums text-indigo-700 dark:text-indigo-400">
-                                                                {formatCurrency(Array.from(ticketsSeleccionados).reduce((s, id) => {
-                                                                    const h = creditosPendientes.find(c => c.id === id);
-                                                                    if (h) { const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0); return s + (h.total - ab); }
-                                                                    return s;
-                                                                }, 0))}
-                                                            </span>
-                                                        </div>
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <Input type="number" placeholder="Monto..." value={montoAbonoMultiple} onChange={e => setMontoAbonoMultiple(e.target.value)} className="h-8 text-xs bg-white dark:bg-slate-800 border-indigo-200 font-bold"/>
-                                                            <select value={metodoAbonoMultiple} onChange={e => setMetodoAbonoMultiple(e.target.value as MetodoPago)} className="h-8 rounded-lg text-xs bg-white dark:bg-slate-800 border border-indigo-200 px-2 font-bold">
-                                                                <option value="efectivo">Efectivo</option>
-                                                                <option value="nequi">Nequi</option>
-                                                                <option value="transferencia">Cuenta</option>
-                                                            </select>
-                                                        </div>
-                                                        <div className="flex gap-2">
-                                                            <Button size="sm" onClick={procesarAbonoMultiple} className="flex-1 h-7 text-[10px] font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white">Aplicar Abono</Button>
-                                                            <button
-                                                                onClick={() => {
-                                                                    const sel = creditosPendientes.filter(h => ticketsSeleccionados.has(h.id));
-                                                                    const saldoSel = sel.reduce((s, h) => { const ab=(h.abonos??[]).reduce((sa,a)=>sa+a.monto,0); return s+(h.total-ab); }, 0);
-                                                                    enviarWhatsApp(cliente, saldoSel, sel);
-                                                                }}
-                                                                className="h-7 px-3 rounded-lg bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center gap-1"
-                                                                title="Enviar seleccionados por WhatsApp"
-                                                            >
-                                                                <MessageCircle className="w-3 h-3"/>WA
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
                                                 {creditosPendientes.length === 0 ? (
                                                     <div className="py-8 flex flex-col items-center gap-2 opacity-50">
                                                         <CheckCircle2 className="w-8 h-8 text-emerald-500"/>
@@ -1799,10 +1749,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 <div key={h.id} className="rounded-2xl overflow-hidden shadow-sm border border-indigo-200 dark:border-indigo-800 transition-all duration-200">
                                                                     {/* Cabecera */}
                                                                     <button className="w-full text-left px-3 py-2.5 flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white dark:from-indigo-900/20 dark:to-slate-900 hover:from-indigo-100/70 transition-colors" onClick={() => toggleCreditoExpand(h.id)}>
-                                                                        <input type="checkbox" checked={ticketsSeleccionados.has(h.id)} onClick={e => e.stopPropagation()}
-                                                                            onChange={(e) => { const s = new Set(ticketsSeleccionados); e.target.checked ? s.add(h.id) : s.delete(h.id); setTicketsSeleccionados(s); }}
-                                                                            className="w-3.5 h-3.5 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-600 cursor-pointer shrink-0"
-                                                                        />
                                                                         <div className="flex-1 min-w-0">
                                                                             <div className="flex items-center gap-1.5 flex-wrap">
                                                                                 <span className="text-[11px] font-black text-slate-800 dark:text-white">
@@ -1821,18 +1767,17 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                         </div>
                                                                         <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
                                                                     </button>
-                                                                    {/* Botón WhatsApp siempre visible */}
-                                                                    {clienteObj && (
-                                                                        <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5">
-                                                                            <button
-                                                                                onClick={() => enviarWhatsApp(clienteObj, saldo, [h])}
-                                                                                title="Enviar este ticket por WhatsApp"
-                                                                                className="flex-1 h-7 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center justify-center gap-1.5 transition-colors"
-                                                                            >
+                                                                    {/* Botones de acción — siempre visibles */}
+                                                                    <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5">
+                                                                        <button onClick={(e)=>{e.stopPropagation();editarTicketEnPOS(h);}} className="h-7 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-[9px] font-black uppercase flex items-center justify-center gap-1 transition-colors shrink-0">
+                                                                            <Pencil className="w-3 h-3"/>Editar
+                                                                        </button>
+                                                                        {clienteObj && (
+                                                                            <button onClick={() => enviarWhatsApp(clienteObj, saldo, [h])} className="flex-1 h-7 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center justify-center gap-1.5 transition-colors">
                                                                                 <MessageCircle className="w-3.5 h-3.5"/>WhatsApp · {formatCurrency(saldo)}
                                                                             </button>
-                                                                        </div>
-                                                                    )}
+                                                                        )}
+                                                                    </div>
 
                                                                     {/* Detalle expandible */}
                                                                     {expanded && (
@@ -2369,6 +2314,19 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     e.target.value = '';
                                 }}
                             />
+                            {/* Banner modo edición */}
+                            {ticketEditandoEnPOS && (
+                                <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700 rounded-xl px-3 py-2">
+                                    <div className="flex items-center gap-2">
+                                        <Pencil className="w-3.5 h-3.5 text-amber-600 shrink-0"/>
+                                        <div>
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Editando ticket</p>
+                                            <p className="text-[10px] font-bold text-amber-600">{ticketEditandoEnPOS.fechaLabel}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={()=>{setTicketEditandoEnPOS(null);setCarritoPos([]);}} className="text-amber-400 hover:text-rose-500 transition-colors"><X className="w-4 h-4"/></button>
+                                </div>
+                            )}
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total</span>
                                 <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{formatCurrency(totalCarrito)}</span>
@@ -2396,69 +2354,83 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     <Camera className="w-3.5 h-3.5" /> Tomar foto de factura
                                 </button>
                             )}
-                            <Button
-                                disabled={carritoPos.length === 0}
-                                onClick={guardarTicketPendiente}
-                                variant="outline"
-                                className="w-full h-10 rounded-xl font-black uppercase text-xs tracking-widest gap-2 border-amber-200 text-amber-600 hover:bg-amber-50 disabled:opacity-40"
-                            >
-                                <Clock className="w-4 h-4" /> Guardar para después
-                            </Button>
-                            {/* Selector de método de pago */}
-                            <div>
-                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Forma de pago</p>
-                                <div className="grid grid-cols-4 gap-1.5">
-                                    {([
-                                        { id: 'efectivo', label: 'Efectivo', Icon: Banknote, color: 'emerald' },
-                                        { id: 'nequi',    label: 'Nequi',    Icon: Smartphone, color: 'violet' },
-                                        { id: 'transferencia', label: 'Cuenta', Icon: Building2, color: 'blue' },
-                                        { id: 'credito',  label: 'Crédito',  Icon: CreditCard,  color: 'rose' },
-                                    ] as const).map(({ id, label, Icon, color }) => (
-                                        <button
-                                            key={id}
-                                            onClick={() => setMetodoPagoSeleccionado(id as MetodoPago)}
-                                            className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wide transition-all ${metodoPagoSeleccionado === id
-                                                ? color === 'emerald' ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-700 dark:text-emerald-400'
-                                                : color === 'violet'  ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30 dark:border-violet-700 dark:text-violet-400'
-                                                : color === 'blue'    ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400'
-                                                :                       'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/30 dark:border-rose-700 dark:text-rose-400'
-                                                : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 dark:bg-slate-800/40 dark:border-slate-700'
-                                            }`}
-                                        >
-                                            <Icon className="w-3.5 h-3.5" />
-                                            {label}
-                                        </button>
-                                    ))}
-                                </div>
-                                {metodoPagoSeleccionado === 'credito' && (
-                                    <p className="text-[9px] text-rose-500 font-bold mt-1.5 flex items-center gap-1">
-                                        <CreditCard className="w-3 h-3" /> Se registrará como cuenta por cobrar — podrás abonar después
-                                    </p>
-                                )}
-                            </div>
-                            <Button
-                                disabled={carritoPos.length === 0}
-                                onClick={async () => {
-                                    await guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
-                                    toast.success(`Venta registrada para ${cliente.nombre}: ${formatCurrency(totalCarrito)}`);
-                                    setCarritoPos([]);
-                                    setFotoFactura(undefined);
-                                    setMetodoPagoSeleccionado('efectivo');
-                                    setTicketRetomadoId(null);
-                                }}
-                                className={`w-full h-12 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg transition-colors ${
-                                    metodoPagoSeleccionado === 'nequi'   ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-500/20' :
-                                    metodoPagoSeleccionado === 'transferencia' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' :
-                                    metodoPagoSeleccionado === 'credito' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' :
-                                    'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20'
-                                }`}
-                            >
-                                {metodoPagoSeleccionado === 'efectivo' && <Banknote className="w-4 h-4" />}
-                                {metodoPagoSeleccionado === 'nequi'    && <Smartphone className="w-4 h-4" />}
-                                {metodoPagoSeleccionado === 'transferencia' && <Building2 className="w-4 h-4" />}
-                                {metodoPagoSeleccionado === 'credito'  && <CreditCard className="w-4 h-4" />}
-                                {metodoPagoSeleccionado === 'credito' ? 'Registrar a Crédito' : `Confirmar — ${metodoPagoSeleccionado === 'nequi' ? 'Nequi' : metodoPagoSeleccionado === 'transferencia' ? 'Cuenta' : 'Efectivo'}`}
-                            </Button>
+                            {!ticketEditandoEnPOS && (
+                                <Button
+                                    disabled={carritoPos.length === 0}
+                                    onClick={guardarTicketPendiente}
+                                    variant="outline"
+                                    className="w-full h-10 rounded-xl font-black uppercase text-xs tracking-widest gap-2 border-amber-200 text-amber-600 hover:bg-amber-50 disabled:opacity-40"
+                                >
+                                    <Clock className="w-4 h-4" /> Guardar para después
+                                </Button>
+                            )}
+                            {ticketEditandoEnPOS ? (
+                                <Button
+                                    disabled={carritoPos.length === 0}
+                                    onClick={guardarEdicionEnPOS}
+                                    className="w-full h-12 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg bg-amber-600 hover:bg-amber-700 shadow-amber-500/20 transition-colors"
+                                >
+                                    <CheckCircle2 className="w-4 h-4" /> Guardar cambios
+                                </Button>
+                            ) : (
+                                <>
+                                    {/* Selector de método de pago */}
+                                    <div>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">Forma de pago</p>
+                                        <div className="grid grid-cols-4 gap-1.5">
+                                            {([
+                                                { id: 'efectivo', label: 'Efectivo', Icon: Banknote, color: 'emerald' },
+                                                { id: 'nequi',    label: 'Nequi',    Icon: Smartphone, color: 'violet' },
+                                                { id: 'transferencia', label: 'Cuenta', Icon: Building2, color: 'blue' },
+                                                { id: 'credito',  label: 'Crédito',  Icon: CreditCard,  color: 'rose' },
+                                            ] as const).map(({ id, label, Icon, color }) => (
+                                                <button
+                                                    key={id}
+                                                    onClick={() => setMetodoPagoSeleccionado(id as MetodoPago)}
+                                                    className={`flex flex-col items-center gap-0.5 py-2 rounded-xl border text-[9px] font-black uppercase tracking-wide transition-all ${metodoPagoSeleccionado === id
+                                                        ? color === 'emerald' ? 'bg-emerald-50 border-emerald-300 text-emerald-700 dark:bg-emerald-950/30 dark:border-emerald-700 dark:text-emerald-400'
+                                                        : color === 'violet'  ? 'bg-violet-50 border-violet-300 text-violet-700 dark:bg-violet-950/30 dark:border-violet-700 dark:text-violet-400'
+                                                        : color === 'blue'    ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950/30 dark:border-blue-700 dark:text-blue-400'
+                                                        :                       'bg-rose-50 border-rose-300 text-rose-700 dark:bg-rose-950/30 dark:border-rose-700 dark:text-rose-400'
+                                                        : 'bg-slate-50 border-slate-200 text-slate-400 hover:border-slate-300 dark:bg-slate-800/40 dark:border-slate-700'
+                                                    }`}
+                                                >
+                                                    <Icon className="w-3.5 h-3.5" />
+                                                    {label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {metodoPagoSeleccionado === 'credito' && (
+                                            <p className="text-[9px] text-rose-500 font-bold mt-1.5 flex items-center gap-1">
+                                                <CreditCard className="w-3 h-3" /> Se registrará como cuenta por cobrar — podrás abonar después
+                                            </p>
+                                        )}
+                                    </div>
+                                    <Button
+                                        disabled={carritoPos.length === 0}
+                                        onClick={async () => {
+                                            await guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
+                                            toast.success(`Venta registrada para ${cliente.nombre}: ${formatCurrency(totalCarrito)}`);
+                                            setCarritoPos([]);
+                                            setFotoFactura(undefined);
+                                            setMetodoPagoSeleccionado('efectivo');
+                                            setTicketRetomadoId(null);
+                                        }}
+                                        className={`w-full h-12 text-white rounded-xl font-black uppercase text-xs tracking-widest gap-2 shadow-lg transition-colors ${
+                                            metodoPagoSeleccionado === 'nequi'   ? 'bg-violet-600 hover:bg-violet-700 shadow-violet-500/20' :
+                                            metodoPagoSeleccionado === 'transferencia' ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' :
+                                            metodoPagoSeleccionado === 'credito' ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-500/20' :
+                                            'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-500/20'
+                                        }`}
+                                    >
+                                        {metodoPagoSeleccionado === 'efectivo' && <Banknote className="w-4 h-4" />}
+                                        {metodoPagoSeleccionado === 'nequi'    && <Smartphone className="w-4 h-4" />}
+                                        {metodoPagoSeleccionado === 'transferencia' && <Building2 className="w-4 h-4" />}
+                                        {metodoPagoSeleccionado === 'credito'  && <CreditCard className="w-4 h-4" />}
+                                        {metodoPagoSeleccionado === 'credito' ? 'Registrar a Crédito' : `Confirmar — ${metodoPagoSeleccionado === 'nequi' ? 'Nequi' : metodoPagoSeleccionado === 'transferencia' ? 'Cuenta' : 'Efectivo'}`}
+                                    </Button>
+                                </>
+                            )}
                             {carritoPos.length > 0 && (
                                 <Button
                                     onClick={limpiarCarrito}
