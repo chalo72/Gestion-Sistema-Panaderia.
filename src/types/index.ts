@@ -577,6 +577,7 @@ export interface Venta {
   total: number;
   metodoPago: MetodoPago;
   usuarioId: string;
+  vendedoraNombre?: string; // Quién realizó esta venta (para multi-vendedora en mismo dispositivo)
   cliente?: string;
   notas?: string;
   fecha: string;
@@ -608,7 +609,7 @@ export interface CajaSesion {
   estado: 'abierta' | 'cerrada';
   // Sistema multi-caja Dulce Placer
   cajaNombre?: string;
-  turno?: 'Mañana' | 'Tarde' | 'Noche';
+  turno?: 'Mañana' | 'Tarde-Noche';
   vendedoraNombre?: string;
 }
 // ============================================

@@ -421,9 +421,15 @@ class NexusDatabase implements IDatabase {
   async getAllVentas() { return this.adapter.getCollection('ventas'); }
   async addVenta(v: any) { return this.adapter.setDocument('ventas', v.id, v); }
   async getAllSesionesCaja() { return this.adapter.getCollection('sesiones_caja'); }
-  async getSesionCajaActiva() {
+  async getSesionCajaActiva(usuarioId?: string) {
     const sesiones = await this.adapter.getCollection<any>('sesiones_caja');
-    return sesiones.find(s => s.activa === true) || null;
+    // Busca por estado === 'abierta' (campo correcto del tipo CajaSesion)
+    // Si se pasa usuarioId, filtra por la caja del usuario actual
+    const abiertas = sesiones.filter((s: any) => s.estado === 'abierta');
+    if (usuarioId) {
+      return abiertas.find((s: any) => s.usuarioId === usuarioId) || abiertas[0] || null;
+    }
+    return abiertas[0] || null;
   }
   async addSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
   async updateSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }

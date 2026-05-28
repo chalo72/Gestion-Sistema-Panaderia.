@@ -12,6 +12,8 @@ import {
     BarChart3,
     ShoppingCart
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { VendedoraQuickPicker, VendedoraMesaModal, type VendedoraOption } from '@/components/ventas/VendedoraQuickPicker';
 import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,6 +110,30 @@ export function Ventas(props: VentasProps) {
         clientes: masterClientes
     } = props;
 
+    // ==========================================
+    // VENDEDORA ACTIVA — Selector rápido multi-vendedora
+    // ==========================================
+    const { usuarios } = useAuth();
+    const vendedorasDisponibles = useMemo<VendedoraOption[]>(() => {
+        if (!usuarios || usuarios.length === 0) return [];
+        // Mostrar usuarios con rol VENDEDOR + ADMIN + GERENTE (todos pueden vender)
+        return usuarios
+            .filter(u => u.activo !== false)
+            .map(u => ({ id: u.id, nombre: u.nombre, rol: u.rol }));
+    }, [usuarios]);
+
+    // La vendedora activa por defecto es quien está logueada
+    const [vendedoraActiva, setVendedoraActiva] = useState<VendedoraOption | null>(
+        usuario ? { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol } : null
+    );
+
+    // Sincronizar con el usuario logueado cuando cambia
+    useEffect(() => {
+        if (usuario && !vendedoraActiva) {
+            setVendedoraActiva({ id: usuario.id, nombre: usuario.nombre, rol: usuario.rol });
+        }
+    }, [usuario]);
+
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -122,6 +148,8 @@ export function Ventas(props: VentasProps) {
     const [showAperturaModal, setShowAperturaModal] = useState(false);
     const [showCierreModal, setShowCierreModal] = useState(false);
     const [movimientoCaja, setMovimientoCaja] = useState<{ tipo: 'entrada' | 'salida' } | null>(null);
+    // Mesa esperando selección de vendedora (multi-vendedora)
+    const [mesaPendienteVendedora, setMesaPendienteVendedora] = useState<Mesa | null>(null);
 
     // ==========================================
     // SISTEMA DE PESTAÑAS MÚLTIPLES
@@ -349,6 +377,55 @@ export function Ventas(props: VentasProps) {
     // ==========================================
     // ACCIONES DE MESAS
     // ==========================================
+    // Abre la mesa con una vendedora específica asignada
+    const abrirMesaConVendedora = useCallback((mesa: Mesa, vendedora: VendedoraOption | null) => {
+        const mesaTabId = `mesa-${mesa.id}`;
+        const nombreVendedora = vendedora?.nombre || vendedoraActiva?.nombre || usuario?.nombre || 'Usuario';
+        const idVendedora = vendedora?.id || vendedoraActiva?.id || usuario?.id;
+
+        const nuevoPedido: PedidoActivo = {
+            id: generateUUID(),
+            mesaId: mesa.id,
+            items: [],
+            total: 0,
+            estado: 'abierto',
+            fechaInicio: new Date().toISOString(),
+            ultimoCambio: new Date().toISOString()
+        };
+        onAddPedidoActivo(nuevoPedido).then(() => {
+            return onUpdateMesa({
+                ...mesa,
+                estado: 'ocupada',
+                pedidoActivoId: nuevoPedido.id,
+                abiertaPor: nombreVendedora,
+                abiertaPorId: idVendedora,
+                fechaApertura: new Date().toISOString(),
+            });
+        }).then(() => {
+            const existingTab = tabs.find(t => t.id === mesaTabId);
+            if (!existingTab) {
+                setTabs(prev => [...prev, {
+                    id: mesaTabId,
+                    label: `Mesa ${mesa.numero}`,
+                    tipo: 'mesa',
+                    mesaId: mesa.id,
+                    abiertaPor: nombreVendedora,
+                }]);
+                setTabCarts(prev => ({
+                    ...prev,
+                    [mesaTabId]: { cart: [], cliente: `Mesa ${mesa.numero}` }
+                }));
+            }
+            // Si la vendedora seleccionó desde el modal, actualizar la activa
+            if (vendedora) setVendedoraActiva(vendedora);
+            setActiveTabId(mesaTabId);
+            setViewMode('pos');
+            toast.success(`Mesa ${mesa.numero} — ${nombreVendedora}`);
+        }).catch(() => {
+            toast.error(`Error al abrir la mesa ${mesa.numero}`);
+        });
+    }, [tabs, vendedoraActiva, usuario, onAddPedidoActivo, onUpdateMesa]);
+
     const handleSelectMesa = (mesa: Mesa) => {
         if (!cajaActiva) {
             toast.error('Debe abrir caja antes de gestionar mesas');
@@ -359,48 +436,13 @@ export function Ventas(props: VentasProps) {
         const mesaTabId = `mesa-${mesa.id}`;
 
         if (mesa.estado === 'disponible') {
-            // Crear pedido nuevo para la mesa
-            const nuevoPedido: PedidoActivo = {
-                id: generateUUID(),
-                mesaId: mesa.id,
-                items: [],
-                total: 0,
-                estado: 'abierto',
-                fechaInicio: new Date().toISOString(),
-                ultimoCambio: new Date().toISOString()
-            };
-            onAddPedidoActivo(nuevoPedido).then(() => {
-                return onUpdateMesa({
-                    ...mesa,
-                    estado: 'ocupada',
-                    pedidoActivoId: nuevoPedido.id,
-                    abiertaPor: usuario?.nombre || usuario?.email || 'Usuario',
-                    abiertaPorId: usuario?.id,
-                    fechaApertura: new Date().toISOString(),
-                });
-            }).then(() => {
-                // Crear pestaña nueva si no existe
-                const existingTab = tabs.find(t => t.id === mesaTabId);
-                if (!existingTab) {
-                    setTabs(prev => [...prev, {
-                        id: mesaTabId,
-                        label: `Mesa ${mesa.numero}`,
-                        tipo: 'mesa',
-                        mesaId: mesa.id,
-                        abiertaPor: usuario?.nombre || usuario?.email || undefined,
-                    }]);
-                    setTabCarts(prev => ({
-                        ...prev,
-                        [mesaTabId]: { cart: [], cliente: `Mesa ${mesa.numero}` }
-                    }));
-                }
-                // Activar la pestaña de la mesa
-                setActiveTabId(mesaTabId);
-                setViewMode('pos');
-                toast.success(`Mesa ${mesa.numero} abierta — atendida por ${usuario?.nombre || 'Usuario'}`);
-            }).catch(() => {
-                toast.error(`Error al abrir la mesa ${mesa.numero}`);
-            });
+            // Si hay múltiples vendedoras, preguntar quién atiende
+            if (vendedorasDisponibles.length >= 2) {
+                setMesaPendienteVendedora(mesa);
+                return;
+            }
+            // Solo hay una vendedora — abrir directo
+            abrirMesaConVendedora(mesa, null);
         } else {
             // Mesa ocupada: abrir la pestaña existente o crear una con los datos del pedido
             const pedido = pedidosActivos.find(p => p.id === mesa.pedidoActivoId);
@@ -466,7 +508,8 @@ export function Ventas(props: VentasProps) {
                 })),
                 metodoPago: tipoTransaccion === 'credito' ? 'credito' as MetodoPago : metodoPago,
                 cliente: cliente.trim() || 'Cliente Anónimo',
-                usuarioId: usuario?.id || 'anon',
+                usuarioId: vendedoraActiva?.id || usuario?.id || 'anon',
+                vendedoraNombre: vendedoraActiva?.nombre || usuario?.nombre || '',
                 tipoTransaccion,
                 dineroRecibido: tipoTransaccion === 'credito' ? totalToPay : safeNumber(dineroRecibido),
                 vueltas: tipoTransaccion === 'credito' ? 0 : Math.max(0, safeNumber(dineroRecibido) - totalToPay),
@@ -571,6 +614,17 @@ export function Ventas(props: VentasProps) {
                     onMovimientoEntrada={() => setMovimientoCaja({ tipo: 'entrada' })}
                     onMovimientoSalida={() => setMovimientoCaja({ tipo: 'salida' })}
                 />
+                {/* ── Selector Rápido de Vendedora (solo visible con 2+ usuarios) ── */}
+                {vendedorasDisponibles.length >= 2 && (
+                    <div className="flex items-center gap-3 px-4 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        <VendedoraQuickPicker
+                            vendedoras={vendedorasDisponibles}
+                            activaId={vendedoraActiva?.id ?? null}
+                            onSelect={setVendedoraActiva}
+                            compact
+                        />
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3">
@@ -864,6 +918,19 @@ export function Ventas(props: VentasProps) {
                     </div>
                 </DialogContent>
             </Dialog>
+
+            {/* ── Modal rápido: ¿Quién atiende esta mesa? ── */}
+            {mesaPendienteVendedora && (
+                <VendedoraMesaModal
+                    vendedoras={vendedorasDisponibles}
+                    mesaNumero={mesaPendienteVendedora.numero}
+                    onSelect={(vendedora) => {
+                        const mesa = mesaPendienteVendedora;
+                        setMesaPendienteVendedora(null);
+                        abrirMesaConVendedora(mesa, vendedora);
+                    }}
+                />
+            )}
         </div>
     );
 }
