@@ -623,14 +623,18 @@ class NexusDatabase implements IDatabase {
         const remoteCheck = await supaDB.getAllProductos().catch(() => [] as any[]);
         if (remoteCheck.length === 0) {
           console.log('☁️ [NEXUS] Supabase vacío — subiendo RESCUE_DATA para sincronización entre dispositivos...');
-          const rescueUploads: Array<{ items: any[]; fn: (item: any) => Promise<void> }> = [
-            { items: (RESCUE_DATA as any).productos   || [], fn: (d) => supaDB.addProducto(d) },
-            { items: (RESCUE_DATA as any).proveedores || [], fn: (d) => supaDB.addProveedor(d) },
-            { items: (RESCUE_DATA as any).precios     || [], fn: (d) => supaDB.addPrecio(d) },
+          const tombstonesData = await localAdapter.getCollection<any>('tombstones') || [];
+          const deadKeys = new Set(tombstonesData.map((t: any) => `${t.table}:${t.item_id}`));
+          const rescueUploads: Array<{ col: string; items: any[]; fn: (item: any) => Promise<void> }> = [
+            { col: 'productos',   items: (RESCUE_DATA as any).productos   || [], fn: (d) => supaDB.addProducto(d) },
+            { col: 'proveedores', items: (RESCUE_DATA as any).proveedores || [], fn: (d) => supaDB.addProveedor(d) },
+            { col: 'precios',     items: (RESCUE_DATA as any).precios     || [], fn: (d) => supaDB.addPrecio(d) },
           ];
           for (const task of rescueUploads) {
             for (const item of task.items) {
-              await task.fn(item).catch(() => {});
+              if (!deadKeys.has(`${task.col}:${item.id}`)) {
+                await task.fn(item).catch(() => {});
+              }
             }
           }
           console.log('✅ [NEXUS] RESCUE_DATA disponible en Supabase para todos los dispositivos.');
