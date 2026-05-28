@@ -21,6 +21,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Producto, PrecioProveedor, Cliente } from '@/types';
+import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
 
 // ─── Tipos locales ───────────────────────────────────────────────────────────
@@ -2052,13 +2053,22 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 enCarrito ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100 bg-white'
                                             )}
                                         >
-                                            <CardContent className="p-3 flex flex-col h-full relative overflow-hidden">
+                                            <CardContent className="p-0 flex flex-col h-full relative overflow-hidden">
                                                 {enCarrito && (
                                                    <div className="absolute top-0 right-0 bg-indigo-600 text-white font-black text-[10px] px-2 py-1 rounded-bl-xl z-10 shadow-sm">
                                                       EN TICKET
                                                    </div>
                                                 )}
-                                                <div className="flex-1">
+                                                {/* Avatar profesional */}
+                                                <div className="w-full aspect-square rounded-t-2xl overflow-hidden">
+                                                    <ProductAvatar
+                                                        imagen={(d.producto as any).imagen}
+                                                        nombre={d.producto.nombre}
+                                                        categoria={d.producto.categoria || ''}
+                                                        className="w-full h-full"
+                                                    />
+                                                </div>
+                                                <div className="flex-1 p-3">
                                                    <h4 className="font-black text-[11px] uppercase tracking-tight text-[#1a1c2e] dark:text-slate-200 leading-snug line-clamp-2 mb-2 pr-4 break-words">
                                                        {d.producto.nombre}
                                                    </h4>
@@ -2068,7 +2078,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                        </p>
                                                    )}
                                                 </div>
-                                                <div className="flex flex-col gap-1.5 mt-auto">
+                                                <div className="flex flex-col gap-1.5 mt-auto px-3 pb-3">
                                                    <div className="flex items-end justify-between">
                                                       <p className="text-xl font-black text-slate-900 dark:text-white tabular-nums leading-none tracking-tighter">
                                                         {formatCurrency(d.precioMayorista)}

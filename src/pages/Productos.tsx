@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import type { Producto, Proveedor, PrecioProveedor, Categoria, InventarioItem } from '@/types';
 import { ProductHeader } from '@/components/productos/ProductHeader';
 import { ProductCard } from '@/components/productos/ProductCard';
@@ -352,10 +353,14 @@ export default function Productos({
                                                 onClick={() => setExpandedProducto(isExp ? null : producto.id)}>
                                                 <td className="px-5 py-4">
                                                     <div className="flex items-center gap-3">
-                                                        {producto.imagen ? <img src={producto.imagen} alt="" className="w-11 h-11 rounded-xl object-cover" /> :
-                                                            <div className={cn("w-11 h-11 rounded-xl flex items-center justify-center", esInsumo ? "bg-blue-50 dark:bg-blue-900/20" : "bg-orange-50 dark:bg-orange-900/20")}>
-                                                                {esInsumo ? <Warehouse className="w-5 h-5 text-blue-600" /> : <ChefHat className="w-5 h-5 text-orange-600" />}
-                                                            </div>}
+                                                        <div className="w-11 h-11 rounded-xl overflow-hidden shrink-0">
+                                                            <ProductAvatar
+                                                                imagen={producto.imagen}
+                                                                nombre={producto.nombre}
+                                                                categoria={producto.categoria || ''}
+                                                                className="w-full h-full"
+                                                            />
+                                                        </div>
                                                         <div>
                                                             <span className="text-base font-bold text-slate-900 dark:text-white block">{producto.nombre}</span>
                                                             {producto.descripcion && <span className="text-sm text-slate-500 dark:text-slate-400 line-clamp-1">{producto.descripcion}</span>}

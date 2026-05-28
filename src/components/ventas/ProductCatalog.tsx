@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import type { Producto, InventarioItem, Categoria } from '@/types';
 import { safeNumber } from '@/lib/safe-utils';
 import { toast } from 'sonner';
+import { ProductAvatar, CategoriaAvatar } from '@/components/ui/ProductAvatar';
 
 interface ProductCatalogProps {
     productos: Producto[];
@@ -160,26 +161,19 @@ export function ProductCatalog({
                 ) : !selectedCategory ? (
                     /* ═══ NIVEL 1: Categorías Estilo Premium Stitch ═══ */
                     <>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
                             {categoriasConProductos.map(cat => {
                                 const count = productosPorCategoria[cat.nombre.toLowerCase().trim()] || 0;
                                 return (
-                                    <div key={cat.id}
+                                    <CategoriaAvatar
+                                        key={cat.id}
+                                        nombre={cat.nombre}
+                                        emoji={cat.icono}
+                                        color={cat.color}
+                                        count={count}
+                                        className="h-[120px]"
                                         onClick={() => setSelectedCategory(cat.nombre)}
-                                        className="group cursor-pointer bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-2xl hover:shadow-emerald-900/10 transition-all active:scale-95 overflow-hidden flex flex-col items-center p-4">
-                                        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 transition-all group-hover:scale-110 group-hover:rotate-3 shadow-inner"
-                                            style={{ backgroundColor: `${cat.color}15`, color: cat.color }}>
-                                            <span className="text-3xl">{cat.icono || '📦'}</span>
-                                        </div>
-                                        <div className="text-center space-y-1">
-                                            <h3 className="text-[10px] font-black text-slate-800 dark:text-white uppercase tracking-tighter leading-tight line-clamp-2">
-                                                {cat.nombre}
-                                            </h3>
-                                            <div className="inline-flex px-2 py-0.5 rounded-full bg-slate-50 dark:bg-slate-900 text-[8px] font-black text-slate-400 uppercase tracking-widest border border-slate-100 dark:border-slate-800">
-                                                {count} {count === 1 ? 'Prod' : 'Prods'}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    />
                                 );
                             })}
                         </div>
@@ -275,15 +269,17 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
     return (
         <div className="group bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-xl hover:shadow-emerald-900/5 transition-all cursor-pointer active:scale-[0.97] overflow-hidden flex flex-col"
             onClick={() => onAddToCart(producto)}>
-            {/* Imagen Estilo Stitch */}
-            <div className="aspect-square bg-slate-50 dark:bg-slate-900 overflow-hidden relative">
-                {producto.imagen ? (
-                    <img src={producto.imagen} alt={producto.nombre} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-slate-50 dark:bg-slate-900">
-                        <span className="text-4xl group-hover:scale-125 transition-transform duration-500">{catIcon}</span>
-                    </div>
-                )}
+            {/* Imagen Estilo Pro — ProductAvatar */}
+            <div className="aspect-square overflow-hidden relative">
+                <ProductAvatar
+                    imagen={producto.imagen}
+                    nombre={producto.nombre}
+                    categoria={producto.categoria || ''}
+                    emoji={catIcon !== '📦' ? catIcon : undefined}
+                    color={catColor}
+                    hover={false}
+                    className="w-full h-full"
+                />
 
                 {/* Badge de Stock Premium */}
                 <div className="absolute top-2 right-2 flex items-center gap-1.5">
