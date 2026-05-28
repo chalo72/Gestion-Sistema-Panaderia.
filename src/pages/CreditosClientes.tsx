@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import {
     CreditCard, Plus, Search, Trash2, DollarSign,
     CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp,
-    Camera, ShoppingCart, X, Package, Image, UserCircle2, Scissors, Edit2, FolderOpen, Users, ArrowLeft
+    Camera, X, Package, Image, UserCircle2, Scissors, Edit2, FolderOpen, Users, ArrowLeft
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -679,12 +679,11 @@ export default function CreditosClientes({
                                                     clienteTelefono: cliente.telefono || '',
                                                     categoriaCliente: cliente.categoria || '',
                                                     descripcion: '',
+                                                    monto: '',
                                                     fecha: new Date().toISOString().split('T')[0],
                                                     fechaVencimiento: ''
                                                 });
-                                                setItemsCliente([]);
                                                 setFotoEvidenciaCliente(undefined);
-                                                setBuscarProducto('');
                                             }
                                         }}
                                     >
