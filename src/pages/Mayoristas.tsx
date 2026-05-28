@@ -358,8 +358,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         try { return JSON.parse(localStorage.getItem('ag_historial_mayoristas') || '[]'); } catch { return []; }
     });
 
+    const [isGuardandoTicket, setIsGuardandoTicket] = useState(false);
+
     const guardarEnHistorial = async (items: typeof carritoPos, total: number, foto?: string, metodo?: MetodoPago) => {
         if (!viendoPerfilCliente) return;
+        if (isGuardandoTicket) return; // anti-doble-clic
+        setIsGuardandoTicket(true);
+
         const nuevo: HistorialMayorista = {
             id: generateUUID(),
             clienteId: viendoPerfilCliente.id,
@@ -373,10 +378,12 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         };
 
         // 1. Guardar en Base de Datos Centralizada
+        let creditoGuardadoEnNube = false;
         try {
             if (metodo === 'credito') {
                 if (addCreditoCliente) {
                     await addCreditoCliente({
+                        id: nuevo.id,
                         clienteId: nuevo.clienteId,
                         clienteNombre: nuevo.clienteNombre,
                         monto: nuevo.total,
@@ -387,6 +394,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         estado: 'pendiente',
                         pagos: []
                     });
+                    creditoGuardadoEnNube = true;
                 }
             } else {
                 if (registrarVenta) {
@@ -417,7 +425,6 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 tipo: 'salida',
                 motivo: `Venta mayorista: ${viendoPerfilCliente.nombre}`,
             })));
-            // Verificar productos que llegaron a 0
             const agotados: string[] = [];
             for (const item of items) {
                 const inv = await db.getInventarioItemByProducto(item.productoId);
@@ -430,16 +437,25 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             console.warn('[Mayoristas] No se pudo actualizar inventario:', e);
         }
 
-        // Persistir en IndexedDB como respaldo (además de localStorage)
+        // Persistir en IndexedDB como respaldo
         try {
             await db.addHistorial({ ...nuevo, tipo: 'mayorista' });
         } catch (e) {
             console.warn('[Mayoristas] No se pudo guardar historial en IndexedDB:', e);
         }
 
+        // Para créditos guardados en nube: NO duplicar en localStorage.
+        // creditosClientes ya los mostrará via historialUnificado.
+        // Solo se guarda en localStorage si la nube falló (modo offline/fallback).
+        if (metodo === 'credito' && creditoGuardadoEnNube) {
+            setIsGuardandoTicket(false);
+            return;
+        }
+
         const nuevos = [nuevo, ...historialMayoristas];
         setHistorialMayoristas(nuevos);
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
+        setIsGuardandoTicket(false);
     };
 
     // Foto temporal adjunta al carrito actual
@@ -2470,7 +2486,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         )}
                                     </div>
                                     <Button
-                                        disabled={carritoPos.length === 0}
+                                        disabled={carritoPos.length === 0 || isGuardandoTicket}
                                         onClick={async () => {
                                             // Verificar stock antes de confirmar
                                             const sinStock: string[] = [];
