@@ -456,12 +456,11 @@ export function Ventas(props: VentasProps) {
         const mesaTabId = `mesa-${mesa.id}`;
 
         if (mesa.estado === 'disponible') {
-            // Si hay múltiples vendedoras, preguntar quién atiende
-            if (vendedorasDisponibles.length >= 2) {
+            // Si hay vendedoras disponibles, preguntar quién atiende
+            if (vendedorasDisponibles.length >= 1) {
                 setMesaPendienteVendedora(mesa);
                 return;
             }
-            // Solo hay una vendedora — abrir directo
             abrirMesaConVendedora(mesa, null);
         } else {
             // Mesa ocupada: abrir la pestaña existente o crear una con los datos del pedido
@@ -635,8 +634,8 @@ export function Ventas(props: VentasProps) {
                     onMovimientoEntrada={() => setMovimientoCaja({ tipo: 'entrada' })}
                     onMovimientoSalida={() => setMovimientoCaja({ tipo: 'salida' })}
                 />
-                {/* ── Selector Rápido de Vendedora (solo visible con 2+ usuarios) ── */}
-                {vendedorasDisponibles.length >= 2 && (
+                {/* ── Selector Rápido de Vendedora ── */}
+                {vendedorasDisponibles.length >= 1 && (
                     <div className="flex items-center gap-3 px-4 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800">
                         <VendedoraQuickPicker
                             vendedoras={vendedorasDisponibles}

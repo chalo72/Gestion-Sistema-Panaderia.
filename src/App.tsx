@@ -349,7 +349,7 @@ const App = () => {
             onAddPedidoActivo={onAddPedidoActivo}
             onUpdatePedidoActivo={onUpdatePedidoActivo}
             onDeletePedidoActivo={onDeletePedidoActivo}
-            onUpdateProducto={async (id, updates) => { updateProducto(id, updates); }}
+            onUpdateProducto={updateProducto}
             onAjustarStock={onAjustarStock}
           />
         );
