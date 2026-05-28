@@ -17,36 +17,42 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
-          manualChunks: {
-            // React core — cargado primero, cacheado siempre
-            'vendor-react': ['react', 'react-dom', 'react/jsx-runtime'],
-            // UI primitivos Radix — estables, raramente cambian
-            'vendor-ui': [
-              '@radix-ui/react-dialog',
-              '@radix-ui/react-dropdown-menu',
-              '@radix-ui/react-select',
-              '@radix-ui/react-tabs',
-              '@radix-ui/react-tooltip',
-              '@radix-ui/react-popover',
-              '@radix-ui/react-switch',
-              '@radix-ui/react-label',
-              '@radix-ui/react-checkbox',
-              '@radix-ui/react-scroll-area',
-              'lucide-react',
-              'class-variance-authority',
-              'clsx',
-              'tailwind-merge',
-              'sonner',
-            ],
-            // Gráficos — solo se necesitan en Reportes/Dashboard
-            'vendor-charts': ['recharts'],
-            // Utilidades pesadas — solo cuando se usan
-            'vendor-ocr': ['tesseract.js'],
-            'vendor-excel': ['xlsx'],
-            // Firebase — solo si está configurado
-            'vendor-firebase': ['firebase/app', 'firebase/firestore'],
+          manualChunks(id) {
+            // React core — chunk estable, hash no cambia hasta que React cambie de versión
+            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/react/jsx-runtime')) {
+              return 'vendor-react';
+            }
             // Supabase
-            'vendor-supabase': ['@supabase/supabase-js'],
+            if (id.includes('node_modules/@supabase/')) {
+              return 'vendor-supabase';
+            }
+            // Firebase
+            if (id.includes('node_modules/firebase/')) {
+              return 'vendor-firebase';
+            }
+            // Gráficos — lazy, solo en Reportes
+            if (id.includes('node_modules/recharts') || id.includes('node_modules/d3')) {
+              return 'vendor-charts';
+            }
+            // Excel — lazy, solo en exportaciones
+            if (id.includes('node_modules/xlsx')) {
+              return 'vendor-excel';
+            }
+            // OCR — lazy, solo en escaneo de facturas
+            if (id.includes('node_modules/tesseract')) {
+              return 'vendor-ocr';
+            }
+            // UI primitivos Radix + utilidades — estables
+            if (
+              id.includes('node_modules/@radix-ui/') ||
+              id.includes('node_modules/lucide-react') ||
+              id.includes('node_modules/class-variance-authority') ||
+              id.includes('node_modules/clsx') ||
+              id.includes('node_modules/tailwind-merge') ||
+              id.includes('node_modules/sonner')
+            ) {
+              return 'vendor-ui';
+            }
           },
         },
       },
@@ -136,6 +142,8 @@ export default defineConfig(({ mode }) => {
           ]
         },
         workbox: {
+          // Excluir chunks pesados que solo se usan bajo demanda (Reportes, Exportar, OCR)
+          globIgnores: ['**/vendor-charts*', '**/vendor-excel*', '**/vendor-ocr*'],
           globPatterns: ['**/*.{js,css,html,svg,ico,woff2}'],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5 MB
           skipWaiting: true,       // Nuevo SW toma control sin esperar
@@ -176,7 +184,7 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkFirst',
               options: {
                 cacheName: 'app-shell-v5',
-                networkTimeoutSeconds: 5,
+                networkTimeoutSeconds: 2,
                 cacheableResponse: {
                   statuses: [0, 200]
                 }
