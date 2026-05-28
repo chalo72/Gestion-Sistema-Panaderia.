@@ -408,6 +408,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             toast.error('Error al sincronizar con la base de datos principal');
         }
 
+        // Descontar del inventario siempre (con o sin caja, efectivo o crédito)
+        try {
+            await db.batchAjustarStock(items.map(item => ({
+                productoId: item.productoId,
+                cantidad: item.cantidad,
+                tipo: 'salida',
+                motivo: `Venta mayorista: ${viendoPerfilCliente.nombre}`,
+            })));
+        } catch (e) {
+            console.warn('[Mayoristas] No se pudo actualizar inventario:', e);
+        }
+
         const nuevos = [nuevo, ...historialMayoristas];
         setHistorialMayoristas(nuevos);
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
