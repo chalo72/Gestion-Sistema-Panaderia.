@@ -1030,7 +1030,7 @@ export class SupabaseDatabase implements IDatabase {
             descripcion: p.descripcion,
             precioVenta: p.precio_venta,
             margenUtilidad: p.margen_utilidad,
-            tipo: p.tipo || 'ingrediente',
+            tipo: p.tipo || 'elaborado',
             costoBase: p.costo_base || 0,
             createdAt: p.created_at,
             updatedAt: p.updated_at
