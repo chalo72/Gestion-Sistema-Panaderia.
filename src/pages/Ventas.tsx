@@ -676,6 +676,7 @@ export function Ventas(props: VentasProps) {
                             onEditProduct={onUpdateProducto}
                             onAjustarStock={onAjustarStock}
                             onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
+                            cart={cart}
                         />
                     ) : (
                         <MuroPedidos

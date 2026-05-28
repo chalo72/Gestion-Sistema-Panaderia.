@@ -25,11 +25,23 @@ const HIDDEN_THRESHOLD  = 5 * 60 * 1000; // 5 min oculto → verificar al volver
  *             a Vercel sin intermediario, cargando la versión más nueva.
  */
 
-// ── Recarga suave — solo refresca la página, sin destruir SW ni cachés ────────
-// El Service Worker seguirá sirviendo activos en caché correctamente.
-// Esto evita la pérdida de contexto del usuario (formularios, scroll, etc.).
-function softReload(): void {
-  window.location.reload();
+// ── Recarga nuclear — borra caché del SW + desregistra + recarga ─────────────
+// Garantiza que móviles con PWA instalada carguen la versión más nueva.
+async function nuclearReload(): Promise<void> {
+  try {
+    // 1. Borrar todos los caches del Service Worker
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+    // 2. Desregistrar todos los Service Workers
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch { /* ignorar errores — recargar de todas formas */ }
+  // 3. Forzar descarga fresca evitando caché del navegador
+  window.location.replace(window.location.href.split('?')[0] + '?_v=' + Date.now());
 }
 
 // ── Forzar descarga del SW nuevo ─────────────────────────────────────────────
@@ -59,13 +71,13 @@ export function useAutoUpdate() {
   const hiddenSinceRef     = useRef<number | null>(null);
   const bcRef              = useRef<BroadcastChannel | null>(null);
 
-  // ── Recarga suave ─────────────────────────────────────────────────────────
+  // ── Recarga nuclear ───────────────────────────────────────────────────────
   const recargar = useCallback(() => {
     if (reloadingRef.current) return;
     reloadingRef.current = true;
     setIsUpdating(true);
     if (countdownRef.current) clearInterval(countdownRef.current);
-    softReload();
+    nuclearReload();
   }, []);
 
   // ── Broadcast: avisar a todas las pestañas hermanas ───────────────────────
@@ -94,8 +106,11 @@ export function useAutoUpdate() {
     const hadController = !!navigator.serviceWorker.controller;
 
     const handleControllerChange = () => {
-      if (hadController) {
-        setUpdateAvailable(true);
+      if (hadController && !reloadingRef.current) {
+        // SW nuevo tomó el control → recargar automáticamente con caché limpio
+        reloadingRef.current = true;
+        setIsUpdating(true);
+        nuclearReload();
       }
     };
 

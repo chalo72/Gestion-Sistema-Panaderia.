@@ -44,6 +44,8 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
     password: '',
   });
 
+  const [isSavingUser, setIsSavingUser] = useState(false);
+
   const filteredUsuarios = useMemo(() => {
     return usuarios.filter(u =>
       u.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -63,8 +65,6 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
       </div>
     );
   }
-
-  const [isSavingUser, setIsSavingUser] = useState(false);
 
   const handleGuardarUsuario = async () => {
     if (!formData.email.trim()) { toast.error('El identificador de usuario es obligatorio.'); return; }

@@ -23,11 +23,12 @@ interface ProductCatalogProps {
     onEditProduct?: (id: string, updates: Partial<Producto>) => Promise<void>;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
     onOpenAdHoc?: () => void;
+    cart?: { producto: { id: string }; cantidad: number }[];
 }
 
 export function ProductCatalog({
     productos, inventario, categorias, searchTerm, setSearchTerm,
-    selectedCategory, setSelectedCategory, onAddToCart, formatCurrency, onEditProduct, onAjustarStock, onOpenAdHoc
+    selectedCategory, setSelectedCategory, onAddToCart, formatCurrency, onEditProduct, onAjustarStock, onOpenAdHoc, cart
 }: ProductCatalogProps) {
 
     const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
@@ -192,7 +193,8 @@ export function ProductCatalog({
                             {productos.map(producto => (
                                 <ProductCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
-                                    onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined} />
+                                    onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
+                                    cantidadEnCarrito={cart?.find(i => i.producto.id === producto.id)?.cantidad ?? 0} />
                             ))}
                         </div>
                     )
@@ -237,7 +239,8 @@ export function ProductCatalog({
                             {productos.map(producto => (
                                 <ProductCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
-                                    onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined} />
+                                    onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
+                                    cantidadEnCarrito={cart?.find(i => i.producto.id === producto.id)?.cantidad ?? 0} />
                             ))}
                         </div>
                     )
@@ -294,10 +297,11 @@ export function ProductCatalog({
 }
 
 /* Card de producto individual - Estética Premium Stitch */
-function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurrency, onEdit }: {
+function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurrency, onEdit, cantidadEnCarrito }: {
     producto: Producto; inventario: InventarioItem[]; categorias: Categoria[];
     onAddToCart: (p: Producto) => void; formatCurrency: (v: number) => string;
     onEdit?: (e: React.MouseEvent) => void;
+    cantidadEnCarrito?: number;
 }) {
     const itemInv = inventario.find(i => i.productoId === producto.id);
     const stock = itemInv?.stockActual || 0;
@@ -319,6 +323,13 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                     hover={false}
                     className="w-full h-full"
                 />
+
+                {/* Badge cantidad en carrito — número suspendido */}
+                {(cantidadEnCarrito ?? 0) > 0 && (
+                    <div className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] bg-emerald-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 shadow-lg shadow-emerald-500/40 border-2 border-white ring-1 ring-emerald-400 z-20 animate-bounce-once">
+                        {cantidadEnCarrito}
+                    </div>
+                )}
 
                 {/* Badge de Stock */}
                 <div className="absolute top-1.5 right-1.5">
