@@ -59,8 +59,8 @@ const ICON_MAP: Record<string, any> = {
   'pico-claw': ShieldAlert, 'open-claw': Eye, 'auto-claw': Activity
 };
 
-export default function Oficina({ publicAppUrl, onViewChange }: OficinaProps) {
-  const { usuarios } = useAuth();
+export default function Oficina({ publicAppUrl, onViewChange, ventas = [], productos = [], inventario = [], sesionesCaja = [], creditosClientes = [], gastos = [], formatCurrency }: OficinaProps) {
+  const { usuarios, usuario } = useAuth();
   const [anuncios, setAnuncios] = useState([{ id: 1, autor: 'Sistema', texto: 'Holding v8.0 Digitalizado al 100% 🎉', hora: 'Hoy' }]);
   const [nuevoAnuncio, setNuevoAnuncio] = useState('');
   const [onlineIds] = useState<Set<string>>(() => {
@@ -76,6 +76,102 @@ export default function Oficina({ publicAppUrl, onViewChange }: OficinaProps) {
   const [promptAgente, setPromptAgente] = useState('');
   const [respuestaAgente, setRespuestaAgente] = useState('');
   const [estaCargandoAgente, setEstaCargandoAgente] = useState(false);
+  const [ultimoBriefing, setUltimoBriefing] = useState<{ texto: string; hora: string } | null>(null);
+  const [cargandoBriefing, setCargandoBriefing] = useState(false);
+
+  const fmt = (v: number) => formatCurrency ? formatCurrency(v) : `$${v.toLocaleString('es-CO')}`;
+
+  // ── Compila un resumen de datos reales del negocio ──
+  const contextoNegocio = useMemo(() => {
+    const hoy = new Date().toISOString().split('T')[0];
+    const ventasHoy = ventas.filter(v => v.fecha?.startsWith(hoy));
+    const totalHoy = ventasHoy.reduce((s, v) => s + v.total, 0);
+    const ticketProm = ventasHoy.length > 0 ? totalHoy / ventasHoy.length : 0;
+
+    // Top 3 productos hoy
+    const conteoProductos: Record<string, { nombre: string; cantidad: number; total: number }> = {};
+    ventasHoy.forEach(v => v.items.forEach(item => {
+      const prod = productos.find(p => p.id === item.productoId);
+      const nombre = prod?.nombre || item.productoId;
+      if (!conteoProductos[item.productoId]) conteoProductos[item.productoId] = { nombre, cantidad: 0, total: 0 };
+      conteoProductos[item.productoId].cantidad += item.cantidad;
+      conteoProductos[item.productoId].total += item.subtotal;
+    }));
+    const top3 = Object.values(conteoProductos).sort((a, b) => b.total - a.total).slice(0, 3);
+
+    // Métodos de pago hoy
+    const metodos: Record<string, number> = {};
+    ventasHoy.forEach(v => { metodos[v.metodoPago] = (metodos[v.metodoPago] || 0) + v.total; });
+
+    // Stock bajo
+    const stockBajo = inventario.filter(i => i.stockMinimo !== undefined && i.stock <= i.stockMinimo).map(i => {
+      const prod = productos.find(p => p.id === i.productoId);
+      return `${prod?.nombre || i.productoId} (stock: ${i.stock})`;
+    });
+
+    // Créditos vencidos
+    const creditosVencidos = creditosClientes.filter(c => c.estado === 'vencido');
+    const totalCreditosVencidos = creditosVencidos.reduce((s, c) => s + (c.saldo || 0), 0);
+
+    // Caja activa
+    const cajaAbierta = sesionesCaja.find(s => s.estado === 'abierta');
+
+    // Gastos del mes
+    const mesActual = hoy.substring(0, 7);
+    const gastosMes = gastos.filter(g => g.fecha?.startsWith(mesActual));
+    const totalGastosMes = gastosMes.reduce((s, g) => s + g.monto, 0);
+
+    // Ventas de ayer para comparativo
+    const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
+    const ayerStr = ayer.toISOString().split('T')[0];
+    const ventasAyer = ventas.filter(v => v.fecha?.startsWith(ayerStr));
+    const totalAyer = ventasAyer.reduce((s, v) => s + v.total, 0);
+
+    return `RESUMEN OPERATIVO HOY (${new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}):
+
+VENTAS HOY:
+- Total: ${fmt(totalHoy)} en ${ventasHoy.length} transacciones
+- Ticket promedio: ${fmt(ticketProm)}
+- Vs ayer: ${fmt(totalAyer)} (${totalAyer > 0 ? ((totalHoy - totalAyer) / totalAyer * 100).toFixed(1) : 0}% diferencia)
+
+PRODUCTOS MÁS VENDIDOS HOY:
+${top3.length > 0 ? top3.map((p, i) => `${i + 1}. ${p.nombre}: ${p.cantidad} unidades = ${fmt(p.total)}`).join('\n') : '- Sin ventas aún'}
+
+MÉTODOS DE PAGO HOY:
+${Object.entries(metodos).map(([m, v]) => `- ${m}: ${fmt(v)}`).join('\n') || '- Sin datos'}
+
+CAJA:
+- Estado: ${cajaAbierta ? `ABIERTA (apertura: ${fmt(cajaAbierta.montoApertura || 0)})` : 'Cerrada / sin sesión activa'}
+
+INVENTARIO - ALERTAS DE STOCK BAJO (${stockBajo.length}):
+${stockBajo.length > 0 ? stockBajo.map(s => `- ${s}`).join('\n') : '- Todos los productos con stock suficiente'}
+
+CRÉDITOS VENCIDOS: ${creditosVencidos.length} clientes — Total pendiente: ${fmt(totalCreditosVencidos)}
+
+GASTOS DEL MES: ${fmt(totalGastosMes)} en ${gastosMes.length} registros
+
+EQUIPO ACTIVO: ${usuarios.filter(u => u.activo !== false).length} personas registradas en el sistema`;
+  }, [ventas, productos, inventario, sesionesCaja, creditosClientes, gastos, usuarios]);
+
+  // ── Briefing automático del Gerente ──
+  const pedirBriefingGerente = async () => {
+    setCargandoBriefing(true);
+    try {
+      let texto = '';
+      await consultarAgente(
+        'gerente',
+        `Analiza los datos reales del negocio de hoy y dame un informe ejecutivo conciso (máximo 200 palabras) con: 1) Estado del negocio hoy, 2) Alertas críticas que requieren atención inmediata, 3) Una recomendación de acción para el dueño. Habla directamente al dueño como su gerente de confianza. Formato natural, no JSON.`,
+        (chunk) => { texto += chunk; },
+        undefined,
+        contextoNegocio
+      );
+      setUltimoBriefing({ texto, hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) });
+    } catch (err: any) {
+      toast.error(`Error en briefing: ${err.message}`);
+    } finally {
+      setCargandoBriefing(false);
+    }
+  };
 
   const handleShareWhatsApp = (nombre: string, email: string, rol: UserRole) => {
     const passwords = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
@@ -100,7 +196,7 @@ export default function Oficina({ publicAppUrl, onViewChange }: OficinaProps) {
     try {
       await consultarAgente(agenteActivo, promptAgente, (chunk) => {
         setRespuestaAgente(prev => prev + chunk);
-      });
+      }, undefined, contextoNegocio);
       toast.success(`${AGENTES_CONFIG[agenteActivo].nombre} ha respondido.`);
     } catch (err: any) {
       toast.error(`Error de enlace: ${err.message}`);
@@ -153,6 +249,70 @@ export default function Oficina({ publicAppUrl, onViewChange }: OficinaProps) {
 
       <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-12 relative z-10 animate-ag-fade-in">
         
+        {/* ── DESPACHO DEL GERENTE ── */}
+        <section className="relative overflow-hidden rounded-3xl border border-[#DAA520]/30 bg-gradient-to-br from-[#DAA520]/5 to-slate-900/60 backdrop-blur-xl p-6 shadow-2xl">
+          <div className="flex flex-col md:flex-row md:items-start gap-5">
+            <div className="flex-1 space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-8 bg-[#DAA520] rounded-full shadow-[0_0_10px_#DAA520]" />
+                <h2 className="text-sm font-black text-white uppercase tracking-widest italic">
+                  Despacho del <span className="text-[#DAA520]">Gerente IA</span>
+                </h2>
+                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full animate-pulse">
+                  DATOS REALES
+                </span>
+              </div>
+
+              {ultimoBriefing ? (
+                <div className="bg-black/30 rounded-2xl p-5 border border-white/5">
+                  <p className="text-sm text-slate-200 font-medium leading-relaxed whitespace-pre-wrap">
+                    {ultimoBriefing.texto}
+                  </p>
+                  <p className="text-[9px] text-[#DAA520] font-black uppercase tracking-widest mt-3">
+                    NEXUS-VOLT · {ultimoBriefing.hora}
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-black/20 rounded-2xl p-5 border border-white/5 text-center">
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
+                    Presiona el botón para recibir el informe del día con datos reales del negocio
+                  </p>
+                  <div className="grid grid-cols-3 gap-3 mt-4">
+                    {[
+                      { label: 'Ventas hoy', val: (() => { const hoy = new Date().toISOString().split('T')[0]; return ventas.filter(v => v.fecha?.startsWith(hoy)).reduce((s, v) => s + v.total, 0); })() },
+                      { label: 'Stock alertas', val: inventario.filter(i => i.stockMinimo !== undefined && i.stock <= i.stockMinimo).length },
+                      { label: 'Créditos vencidos', val: creditosClientes.filter(c => c.estado === 'vencido').length },
+                    ].map(kpi => (
+                      <div key={kpi.label} className="bg-white/5 rounded-xl p-3 text-center">
+                        <p className="text-[9px] text-slate-500 font-black uppercase">{kpi.label}</p>
+                        <p className="text-lg font-black text-white">{typeof kpi.val === 'number' && kpi.val > 100 ? fmt(kpi.val) : kpi.val}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-3 shrink-0">
+              <button
+                onClick={pedirBriefingGerente}
+                disabled={cargandoBriefing}
+                className="flex items-center gap-2 bg-[#DAA520] hover:bg-[#B8860B] disabled:opacity-60 text-black font-black text-xs uppercase tracking-widest px-5 py-3 rounded-2xl transition-all active:scale-95 shadow-lg shadow-[#DAA520]/20"
+              >
+                {cargandoBriefing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                {cargandoBriefing ? 'Analizando...' : 'Briefing del Día'}
+              </button>
+              <button
+                onClick={() => { setAgenteActivo('gerente'); setRespuestaAgente(''); setPromptAgente(''); }}
+                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white font-black text-xs uppercase tracking-widest px-5 py-3 rounded-2xl transition-all active:scale-95 border border-white/10"
+              >
+                <BarChart3 className="w-4 h-4 text-[#DAA520]" />
+                Consultar Gerente
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* Header Táctico */}
         <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 backdrop-blur-xl p-8 shadow-2xl">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

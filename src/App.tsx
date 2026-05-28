@@ -277,7 +277,19 @@ const App = () => {
       case 'roles':
         return <RoleManager />;
       case 'oficina':
-        return <Oficina onViewChange={setCurrentView} publicAppUrl={configuracion.publicUrl} />;
+        return (
+          <Oficina
+            onViewChange={setCurrentView}
+            publicAppUrl={configuracion.publicUrl}
+            ventas={ventas}
+            productos={productos}
+            inventario={inventario as any}
+            sesionesCaja={sesionesCaja}
+            creditosClientes={creditosClientes}
+            gastos={gastos}
+            formatCurrency={formatCurrency}
+          />
+        );
       case 'listapreciosproincial':
         return (
           <ListaPreciosProvincial 
