@@ -326,7 +326,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
 
                 {/* Badge cantidad en carrito — número suspendido */}
                 {(cantidadEnCarrito ?? 0) > 0 && (
-                    <div className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] bg-emerald-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 shadow-lg shadow-emerald-500/40 border-2 border-white ring-1 ring-emerald-400 z-20 animate-bounce-once">
+                    <div className="absolute top-1 right-1 min-w-[20px] h-[20px] bg-emerald-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 shadow-lg z-20 border-2 border-white">
                         {cantidadEnCarrito}
                     </div>
                 )}
