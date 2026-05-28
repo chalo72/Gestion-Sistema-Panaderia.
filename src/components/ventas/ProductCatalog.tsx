@@ -31,6 +31,13 @@ export function ProductCatalog({
 
     const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
     const [editForm, setEditForm] = useState({ nombre: '', precioVenta: 0, descripcion: '', stock: 0 });
+    const [multiplier, setMultiplier] = useState(1);
+
+    const handleAddToCart = (producto: Producto) => {
+        for (let i = 0; i < multiplier; i++) onAddToCart(producto);
+        if (multiplier > 1) toast.success(`×${multiplier} ${producto.nombre}`);
+        setMultiplier(1);
+    };
 
     // Contar productos por categoría (normalizado: lowercase+trim para agrupar variantes)
     const productosPorCategoria = useMemo(() => {
@@ -122,6 +129,27 @@ export function ProductCatalog({
                             className="w-full h-12 pl-12 pr-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-inner"
                         />
                     </div>
+                    {/* Multiplicador de cantidad */}
+                    <div title="Multiplicador: el próximo producto se agregará esta cantidad de veces"
+                        className={cn(
+                            "shrink-0 flex items-center gap-1 h-12 rounded-2xl px-3 transition-all",
+                            multiplier > 1 ? "bg-amber-500 shadow-lg shadow-amber-500/30" : "bg-slate-100 dark:bg-slate-800"
+                        )}>
+                        {multiplier > 1 && <span className="text-white text-xs font-black">×</span>}
+                        <input
+                            type="number" min={1} max={99} value={multiplier}
+                            onChange={e => setMultiplier(Math.max(1, parseInt(e.target.value) || 1))}
+                            className={cn(
+                                "w-8 text-center text-sm font-black bg-transparent border-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                                multiplier > 1 ? "text-white" : "text-slate-500 dark:text-slate-400"
+                            )}
+                        />
+                        {multiplier > 1 && (
+                            <button onClick={() => setMultiplier(1)} className="text-white/70 hover:text-white transition-colors">
+                                <X className="w-3 h-3" />
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Stats & Breadcrumb */}
@@ -152,7 +180,7 @@ export function ProductCatalog({
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                             {productos.map(producto => (
                                 <ProductCard key={producto.id} producto={producto} inventario={inventario}
-                                    categorias={categorias} onAddToCart={onAddToCart} formatCurrency={formatCurrency}
+                                    categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
                                     onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined} />
                             ))}
                         </div>
@@ -197,7 +225,7 @@ export function ProductCatalog({
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                             {productos.map(producto => (
                                 <ProductCard key={producto.id} producto={producto} inventario={inventario}
-                                    categorias={categorias} onAddToCart={onAddToCart} formatCurrency={formatCurrency}
+                                    categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
                                     onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined} />
                             ))}
                         </div>

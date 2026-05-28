@@ -134,6 +134,11 @@ export function Ventas(props: VentasProps) {
     const [tipoTransaccion, setTipoTransaccion] = useState<'efectivo' | 'credito'>('efectivo');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastVenta, setLastVenta] = useState<Venta | null>(null);
+    const [descuento, setDescuento] = useState(0);
+    const [showAdHocModal, setShowAdHocModal] = useState(false);
+    const [adHocNombre, setAdHocNombre] = useState('');
+    const [adHocPrecio, setAdHocPrecio] = useState('');
+    const [adHocGuardar, setAdHocGuardar] = useState(false);
     const [showDailyReport, setShowDailyReport] = useState(false);
     const [showAperturaModal, setShowAperturaModal] = useState(false);
     const [showCierreModal, setShowCierreModal] = useState(false);

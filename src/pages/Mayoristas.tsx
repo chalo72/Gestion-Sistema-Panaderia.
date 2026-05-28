@@ -416,8 +416,24 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 tipo: 'salida',
                 motivo: `Venta mayorista: ${viendoPerfilCliente.nombre}`,
             })));
+            // Verificar productos que llegaron a 0
+            const agotados: string[] = [];
+            for (const item of items) {
+                const inv = await db.getInventarioItemByProducto(item.productoId);
+                if (inv && inv.stockActual <= 0) agotados.push(item.nombre);
+            }
+            if (agotados.length > 0) {
+                toast.warning(`Stock agotado: ${agotados.join(', ')}`, { duration: 5000 });
+            }
         } catch (e) {
             console.warn('[Mayoristas] No se pudo actualizar inventario:', e);
+        }
+
+        // Persistir en IndexedDB como respaldo (además de localStorage)
+        try {
+            await db.addHistorial({ ...nuevo, tipo: 'mayorista' });
+        } catch (e) {
+            console.warn('[Mayoristas] No se pudo guardar historial en IndexedDB:', e);
         }
 
         const nuevos = [nuevo, ...historialMayoristas];
@@ -2452,6 +2468,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     <Button
                                         disabled={carritoPos.length === 0}
                                         onClick={async () => {
+                                            // Verificar stock antes de confirmar
+                                            const sinStock: string[] = [];
+                                            for (const item of carritoPos) {
+                                                const inv = await db.getInventarioItemByProducto(item.productoId);
+                                                if (inv && inv.stockActual > 0 && item.cantidad > inv.stockActual) {
+                                                    sinStock.push(`${item.nombre} (disponible: ${inv.stockActual})`);
+                                                }
+                                            }
+                                            if (sinStock.length > 0) {
+                                                const continuar = window.confirm(`Stock insuficiente:\n${sinStock.join('\n')}\n\n¿Deseas confirmar la venta de todas formas?`);
+                                                if (!continuar) return;
+                                            }
                                             await guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
                                             toast.success(`Venta registrada para ${cliente.nombre}: ${formatCurrency(totalCarrito)}`);
                                             setCarritoPos([]);

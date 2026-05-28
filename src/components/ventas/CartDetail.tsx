@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShoppingCart, Users, Minus, Plus, Trash2, CreditCard, DollarSign, Banknote, Zap, X } from 'lucide-react';
+import { ShoppingCart, Users, Minus, Plus, Trash2, CreditCard, DollarSign, Banknote, Zap, X, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -17,16 +17,19 @@ interface CartDetailProps {
     usuario: any;
     cliente: string;
     setCliente: (c: string) => void;
-    // Identificador de la pestaña activa
     activeTabLabel?: string;
     activeTabTipo?: 'venta-rapida' | 'mesa';
     onLiberarMesa?: () => void;
+    descuento?: number;
+    setDescuento?: (v: number) => void;
+    rolUsuario?: string;
 }
 
 export function CartDetail({
     cart, onUpdateQuantity, onRemoveFromCart, onClearCart,
     onProcessPayment, formatCurrency, cajaActiva, usuario, cliente, setCliente,
     activeTabLabel, activeTabTipo, onLiberarMesa,
+    descuento = 0, setDescuento, rolUsuario,
 }: CartDetailProps) {
 
     const [billeteRecibido, setBilleteRecibido] = useState('');
@@ -35,9 +38,11 @@ export function CartDetail({
         return sum + (safeNumber(item.producto?.precioVenta) * (item.cantidad || 0));
     }, 0), [cart]);
 
+    const totalConDescuento = Math.max(0, totalCart - descuento);
     const totalItems = cart.reduce((s, i) => s + i.cantidad, 0);
     const billete = parseFloat(billeteRecibido || '0');
-    const cambio = billete - totalCart;
+    const cambio = billete - totalConDescuento;
+    const puedeDescuento = rolUsuario === 'ADMIN' || rolUsuario === 'GERENTE';
 
     const isMesa = activeTabTipo === 'mesa';
     const tabLabel = activeTabLabel || (cliente || 'Venta Rápida');
@@ -173,20 +178,47 @@ export function CartDetail({
                                     {(b / 1000)}K
                                 </button>
                             ))}
-                            <button onClick={() => setBilleteRecibido(totalCart.toString())}
+                            <button onClick={() => setBilleteRecibido(totalConDescuento.toString())}
                                 className="px-3 py-2 rounded-xl text-[10px] font-bold uppercase bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400">
                                 Exacto
                             </button>
                         </div>
                     )}
 
+                    {/* Descuento — solo ADMIN/GERENTE */}
+                    {puedeDescuento && cart.length > 0 && (
+                        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 rounded-xl px-3 py-2 border border-amber-200 dark:border-amber-800">
+                            <Tag className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase tracking-widest shrink-0">Descuento $</span>
+                            <input
+                                type="number"
+                                min={0}
+                                max={totalCart}
+                                value={descuento || ''}
+                                placeholder="0"
+                                onChange={e => setDescuento?.(Math.max(0, parseFloat(e.target.value) || 0))}
+                                className="flex-1 text-right text-sm font-black bg-transparent border-none outline-none text-amber-700 dark:text-amber-300 tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            {descuento > 0 && (
+                                <button onClick={() => setDescuento?.(0)} className="text-amber-500 hover:text-amber-700 shrink-0">
+                                    <X className="w-3 h-3" />
+                                </button>
+                            )}
+                        </div>
+                    )}
+
                     {/* Resumen de Pago - Franja Delgada */}
                     <div className="bg-slate-900 rounded-lg p-2.5 flex items-center justify-between border border-slate-800 shadow-sm">
-                        <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-2">Total</span>
+                        <div className="flex flex-col px-2">
+                            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Total</span>
+                            {descuento > 0 && (
+                                <span className="text-[9px] text-slate-600 line-through tabular-nums">{formatCurrency(totalCart)}</span>
+                            )}
+                        </div>
                         <div className="flex items-center gap-3">
                             <DollarSign className="w-4 h-4 text-indigo-400" />
                             <p className="text-xl font-black text-white tabular-nums px-2">
-                                {formatCurrency(totalCart)}
+                                {formatCurrency(totalConDescuento)}
                             </p>
                         </div>
                     </div>
