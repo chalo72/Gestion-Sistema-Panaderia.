@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
+import { AvatarConfigurator } from '@/components/ui/AvatarConfigurator';
 import type { Producto, Proveedor, PrecioProveedor, Categoria, InventarioItem } from '@/types';
 import { ProductHeader } from '@/components/productos/ProductHeader';
 import { ProductCard } from '@/components/productos/ProductCard';
@@ -221,6 +222,19 @@ export default function Productos({
                 onOpenIceCreamAssistant={() => setIsIceCreamAssistantOpen(true)}
                 onOpenBeverageAssistant={() => setIsBeverageAssistantOpen(true)}
                 checkPermission={(p: any) => check(p)} />
+
+            {/* Botón acceso al Configurador de Avatares */}
+            <button
+                onClick={() => setIsAvatarConfiguratorOpen(true)}
+                className="w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl border-2 border-dashed border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all group"
+            >
+                <span className="text-2xl group-hover:scale-110 transition-transform">🎨</span>
+                <div className="text-left">
+                    <p className="text-sm font-black text-indigo-700 dark:text-indigo-300">Personalizar avatares de productos</p>
+                    <p className="text-xs text-indigo-400 mt-0.5">Elige entre 3 diseños (Bokeh · Cristal · Noche) o agrega una imagen desde URL</p>
+                </div>
+                <span className="ml-auto text-xs font-black text-indigo-500 bg-indigo-100 dark:bg-indigo-900 px-3 py-1.5 rounded-xl">Abrir catálogo →</span>
+            </button>
 
             {/* KPI Cards Ultra Compactas */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
@@ -476,6 +490,13 @@ export default function Productos({
                 precios={_precios}
                 onAddProducto={onAddProducto}
                 formatCurrency={formatCurrency}
+            />
+
+            {/* ── Configurador de avatares ── */}
+            <AvatarConfigurator
+                open={isAvatarConfiguratorOpen}
+                onClose={() => setIsAvatarConfiguratorOpen(false)}
+                productos={productos}
             />
         </div>
     );
