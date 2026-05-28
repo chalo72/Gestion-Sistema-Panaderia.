@@ -135,7 +135,8 @@ export default function HistorialVentas({
                 const matchesSearch =
                     v.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     (v.cliente || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    v.usuarioId.toLowerCase().includes(searchTerm.toLowerCase());
+                    v.usuarioId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    (v.vendedoraNombre || '').toLowerCase().includes(searchTerm.toLowerCase());
 
                 // Filtro por rango de fechas
                 let matchesDate = true;
@@ -1263,7 +1264,7 @@ export default function HistorialVentas({
                     <table className="w-full text-left border-collapse">
                         <thead>
                             <tr className="bg-slate-50/50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
-                                <th className="px-6 py-5 text-xs font-black uppercase tracking-[0.2em] text-slate-400">ID / Turno</th>
+                                <th className="px-6 py-5 text-xs font-black uppercase tracking-[0.2em] text-slate-400">ID / Atendió</th>
                                 <th className="px-6 py-5 text-xs font-black uppercase tracking-[0.2em] text-slate-400">
                                     <button onClick={() => handleSort('fecha')} className="flex items-center gap-1 hover:text-indigo-600 transition-colors group">
                                         Fecha / Hora
@@ -1297,13 +1298,16 @@ export default function HistorialVentas({
                                 return (
                                     <tr key={venta.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-all">
                                         <td className="px-6 py-4">
-                                            <div className="flex flex-col">
+                                            <div className="flex flex-col gap-0.5">
                                                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 group-hover:text-indigo-600 transition-colors">
                                                     #{venta.id.substring(0, 8)}
                                                 </span>
-                                                <Badge variant="ghost" className="text-[9px] w-fit font-bold p-0 text-slate-500 uppercase">
-                                                    Turno: {venta.cajaId ? (sesionesCaja.find(s => s.id === venta.cajaId)?.usuarioId || 'General') : 'Sin Turno'}
-                                                </Badge>
+                                                {(venta.vendedoraNombre || venta.usuarioId) && (
+                                                    <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                                                        <User className="w-3 h-3 shrink-0" />
+                                                        {venta.vendedoraNombre || venta.usuarioId}
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -1682,12 +1686,18 @@ export default function HistorialVentas({
                     <div className="p-8 space-y-8">
                         {/* Info General */}
                         <div className="grid grid-cols-2 gap-4">
-                            <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex flex-col">
-                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
-                                    <User className="w-3 h-3" /> Responsable
+                            <div className="p-5 rounded-3xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800/40 flex flex-col">
+                                <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                    <User className="w-3 h-3" /> Atendió
                                 </span>
-                                <span className="text-sm font-black text-slate-800 dark:text-white uppercase truncate">{selectedVenta?.usuarioId || 'Sistema'}</span>
-                                <span className="text-[10px] text-slate-400 font-bold mt-1">Operador Autorizado</span>
+                                <span className="text-sm font-black text-slate-800 dark:text-white uppercase truncate">
+                                    {selectedVenta?.vendedoraNombre || selectedVenta?.usuarioId || 'Sistema'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-bold mt-1">
+                                    {isValid(selectedVenta ? parseISO(selectedVenta.fecha) : new Date())
+                                        ? format(parseISO(selectedVenta!.fecha), "dd MMM yyyy · HH:mm", { locale: es })
+                                        : '—'}
+                                </span>
                             </div>
                             <div className="p-5 rounded-3xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 flex flex-col">
                                 <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">

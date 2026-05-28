@@ -775,31 +775,51 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     const guardarFechaHistorial = async (historialId: string) => {
         if (!fechaHistorialTemp) return;
-        
-        // Evitar desplazamiento de zona horaria al parsear "YYYY-MM-DD" creando la fecha local al mediodía
+
+        // Evitar desplazamiento de zona horaria: crear la fecha local al mediodía
         const [y, m, d] = fechaHistorialTemp.split('-');
         const nuevaFecha = new Date(parseInt(y), parseInt(m) - 1, parseInt(d), 12, 0, 0).getTime();
-        
+
         if (isNaN(nuevaFecha)) { toast.error('Fecha inválida'); return; }
 
+        const fechaISO = new Date(nuevaFecha).toISOString();
+
+        // Intentar guardar en BD central si es un crédito registrado allí
         if (updateCreditoCliente) {
             const esCentral = creditosClientes?.find(c => c.id === historialId);
             if (esCentral) {
                 try {
-                    await updateCreditoCliente(historialId, { fecha: new Date(nuevaFecha).toISOString() });
+                    // Incluir updatedAt para que el smart-sync sepa que es dato nuevo
+                    await updateCreditoCliente(historialId, {
+                        fecha: fechaISO,
+                        updatedAt: new Date().toISOString(),
+                    } as any);
                 } catch (e) {
                     console.error('Error al actualizar fecha en central', e);
+                    toast.error('No se pudo guardar en la base de datos, se guardó solo localmente');
                 }
             }
         }
 
-        const nuevos = historialMayoristas.map(h => h.id === historialId ? { ...h, fecha: nuevaFecha } : h);
+        // Siempre actualizar en localStorage también (respaldo doble)
+        const nuevos = historialMayoristas.map(h =>
+            h.id === historialId ? { ...h, fecha: nuevaFecha } : h
+        );
+        // Si el ticket NO estaba en historialMayoristas (era solo central), agregarlo como respaldo
+        const yaExisteLocal = nuevos.some(h => h.id === historialId);
+        if (!yaExisteLocal) {
+            const enUnificado = historialUnificado.find(h => h.id === historialId);
+            if (enUnificado) {
+                nuevos.unshift({ ...enUnificado, fecha: nuevaFecha } as any);
+            }
+        }
         setHistorialMayoristas(nuevos);
         localStorage.setItem('ag_historial_mayoristas', JSON.stringify(nuevos));
-        // Override local para reflejar el cambio inmediatamente en la UI (sin esperar re-render del padre)
+
+        // Override inmediato en UI
         setDateOverrides(prev => ({ ...prev, [historialId]: nuevaFecha }));
         setEditandoFechaHistorialId(null);
-        toast.success('Fecha actualizada');
+        toast.success('Fecha guardada');
     };
 
     const eliminarHistorial = async (historialId: string) => {
@@ -1080,11 +1100,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // ── Consolidar Historial Local y Centralizado para la UI ──
     const historialUnificado = useMemo(() => {
+        // 1. Efectivo / otros métodos — siempre vienen de localStorage
         const localCash = historialMayoristas.filter(h => h.metodoPago !== 'credito').map(h => ({
             ...h,
             fecha: dateOverrides[h.id] ?? h.fecha,
         }));
-        const centralCredits = creditosClientes ? creditosClientes.map(c => ({
+
+        // 2. Créditos de la BD central (Supabase / IndexedDB) — fuente autoritativa
+        const centralCredits = (creditosClientes ?? []).map(c => ({
             id: c.id,
             clienteId: c.clienteId,
             clienteNombre: c.clienteNombre,
@@ -1099,13 +1122,21 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 metodoPago: (p.metodoPago || 'efectivo') as MetodoPago
             })),
             fotoFactura: undefined
-        })) : historialMayoristas.filter(h => h.metodoPago === 'credito').map(h => ({
-            ...h,
-            fecha: dateOverrides[h.id] ?? h.fecha,
         }));
-        // Deduplicar por ID — centralCredits tiene prioridad (datos oficiales de Supabase)
+
+        // 3. Créditos HUÉRFANOS: solo en localStorage, no llegaron a la BD
+        //    (creados offline, fallo de red, etc.) — se muestran como fallback
+        const centralIds = new Set(centralCredits.map(c => c.id));
+        const localCreditHuerfanos = historialMayoristas
+            .filter(h => h.metodoPago === 'credito' && !centralIds.has(h.id))
+            .map(h => ({
+                ...h,
+                fecha: dateOverrides[h.id] ?? h.fecha,
+            }));
+
+        // 4. Deduplicar por ID — centralCredits > localCreditHuerfanos > localCash
         const seen = new Set<string>();
-        const deduped = [...centralCredits, ...localCash].filter(h => {
+        const deduped = [...centralCredits, ...localCash, ...localCreditHuerfanos].filter(h => {
             if (seen.has(h.id)) return false;
             seen.add(h.id);
             return true;
