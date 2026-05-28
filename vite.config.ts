@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks: {
             // React core — cargado primero, cacheado siempre
-            'vendor-react': ['react', 'react-dom'],
+            'vendor-react': ['react', 'react-dom', 'react/jsx-runtime'],
             // UI primitivos Radix — estables, raramente cambian
             'vendor-ui': [
               '@radix-ui/react-dialog',
@@ -28,13 +28,25 @@ export default defineConfig(({ mode }) => {
               '@radix-ui/react-tabs',
               '@radix-ui/react-tooltip',
               '@radix-ui/react-popover',
+              '@radix-ui/react-switch',
+              '@radix-ui/react-label',
+              '@radix-ui/react-checkbox',
+              '@radix-ui/react-scroll-area',
               'lucide-react',
+              'class-variance-authority',
+              'clsx',
+              'tailwind-merge',
+              'sonner',
             ],
             // Gráficos — solo se necesitan en Reportes/Dashboard
             'vendor-charts': ['recharts'],
             // Utilidades pesadas — solo cuando se usan
             'vendor-ocr': ['tesseract.js'],
             'vendor-excel': ['xlsx'],
+            // Firebase — solo si está configurado
+            'vendor-firebase': ['firebase/app', 'firebase/firestore'],
+            // Supabase
+            'vendor-supabase': ['@supabase/supabase-js'],
           },
         },
       },
