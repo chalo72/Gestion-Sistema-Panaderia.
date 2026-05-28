@@ -1052,9 +1052,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // Mismo cálculo pero SIN filtro de busqueda — usado en catálogo de perfil cliente
     // para que la búsqueda principal no oculte productos en el mini-POS
+    // tombstoneIds NO se aplica aquí: si el producto está en state, es porque no fue borrado.
+    // El tombstone solo guarda contra sync; filtrar por él aquí causa inconsistencias.
     const tablaDatosTodos = useMemo(() => {
         return productos
-            .filter(p => !tombstoneIds.has(p.id))
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
                 let costo = calcularCosto(p, mejorPrecio);
@@ -1088,7 +1089,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, tombstoneIds, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride]);
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride]);
 
     // Stats del resumen
     const stats = useMemo(() => {
@@ -2139,7 +2140,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     {d.producto.nombre}
                                                 </h4>
                                                 {d.producto.descripcion && (
-                                                    <p className="text-[8px] font-bold text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 line-clamp-1 mt-0.5 leading-tight transition-colors">
+                                                    <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 line-clamp-1 mt-0.5 leading-tight transition-colors">
                                                         {d.producto.descripcion}
                                                     </p>
                                                 )}
@@ -2322,10 +2323,15 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 </div>
                             ) : (
                                 <div className="p-4 space-y-2">
-                                    {carritoPos.map(item => (
+                                    {carritoPos.map(item => {
+                                        const descCarrito = tablaDatosTodos.find(d => d.producto.id === item.productoId)?.producto.descripcion;
+                                        return (
                                         <div key={item.productoId} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-2 py-1.5">
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-[10px] font-black text-slate-900 dark:text-white truncate">{item.nombre}</p>
+                                                {descCarrito && (
+                                                    <p className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 truncate leading-tight">{descCarrito}</p>
+                                                )}
                                                 <p className="text-[9px] font-bold text-slate-400">{formatCurrency(item.precio)} c/u</p>
                                             </div>
                                             {/* Controles de cantidad */}
@@ -2352,7 +2358,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 <X className="w-3 h-3" />
                                             </button>
                                         </div>
-                                    ))}
+                                    ); })}
                                 </div>
                             )}
                         </ScrollArea>
