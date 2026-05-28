@@ -307,6 +307,13 @@ class NexusDatabase implements IDatabase {
     if (firebaseAdapter) {
       firebaseAdapter.deleteDocument(collection, id).catch(() => {});
     }
+    // Propagar a Supabase para que la eliminación no vuelva en el próximo sync
+    try {
+      const supaDB = new SupabaseDatabase();
+      if (collection === 'productos')        supaDB.deleteProducto(id).catch(() => {});
+      else if (collection === 'proveedores') supaDB.deleteProveedor(id).catch(() => {});
+      else if (collection === 'precios')     supaDB.deletePrecio(id).catch(() => {});
+    } catch (_) {}
     if (collection !== 'tombstones') {
       await this.addTombstone(collection, id).catch(() => {});
     }
