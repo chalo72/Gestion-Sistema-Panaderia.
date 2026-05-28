@@ -384,8 +384,9 @@ class NexusDatabase implements IDatabase {
   }
 
   // ─── Métodos adicionales — ahora delegan al adapter real ───
-  async getInventarioItemByProducto(id: string) {
-    return this.adapter.getDocument('inventario', id);
+  async getInventarioItemByProducto(productoId: string) {
+    const all = await this.adapter.getCollection<any>('inventario');
+    return all.find((i: any) => i.productoId === productoId) || null;
   }
   async getAllCreditosClientes() { return this.adapter.getCollection('creditos_clientes'); }
   async getAllCreditosTrabajadores() { return this.adapter.getCollection('creditos_trabajadores'); }
