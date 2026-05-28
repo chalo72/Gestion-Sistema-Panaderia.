@@ -313,7 +313,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                     {producto.nombre}
                 </h4>
                 {producto.descripcion && (
-                    <p className="text-[8px] text-slate-400 line-clamp-1 mt-0.5 leading-tight">
+                    <p className="text-[8px] font-bold text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 line-clamp-1 mt-0.5 leading-tight transition-colors">
                         {producto.descripcion}
                     </p>
                 )}
