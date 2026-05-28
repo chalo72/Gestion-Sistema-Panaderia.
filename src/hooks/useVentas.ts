@@ -6,8 +6,6 @@ import { generateUUID } from '@/lib/safe-utils';
 import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
-
-const _supaDB = new SupabaseDatabase();
 import type {
   Venta,
   CajaSesion,
@@ -17,6 +15,8 @@ import type {
 } from '@/types';
 import { toast } from 'sonner';
 import { procesarCuadreTurno } from '@/lib/security-agent';
+
+const _supaDB = new SupabaseDatabase();
 
 interface UseVentasParams {
   onAjustarStock: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
