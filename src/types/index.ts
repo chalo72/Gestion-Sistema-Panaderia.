@@ -327,7 +327,64 @@ export interface Configuracion {
   pesoArrobaKg?: number;        // NUEVO: Peso de la arroba configurable
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones';
+
+// ============================================
+// SISTEMA DE SEGURIDAD ANTI-FRAUDE
+// ============================================
+
+export type NivelAlerta = 'critica' | 'alta' | 'media' | 'info';
+export type TipoAlerta =
+  | 'faltante_caja'
+  | 'venta_precio_bajo'
+  | 'descuento_excesivo'
+  | 'patron_ventas_bajo'
+  | 'venta_eliminada'
+  | 'inventario_faltante'
+  | 'turno_sin_cerrar'
+  | 'cliente_frecuente_descuento'
+  | 'agente_ia';
+
+export interface AlertaSeguridad {
+  id: string;
+  tipo: TipoAlerta;
+  nivel: NivelAlerta;
+  titulo: string;
+  descripcion: string;
+  fecha: string;
+  vendedora?: string;
+  leida: boolean;
+  datos?: Record<string, any>;
+}
+
+export interface CuadreTurno {
+  id: string;
+  usuarioId: string;
+  usuarioNombre: string;
+  fechaApertura: string;
+  fechaCierre: string;
+  montoApertura: number;
+  montoDeclarado: number;
+  montoEsperado: number;
+  diferencia: number;
+  ventasEfectivo: number;
+  ventasNequi: number;
+  ventasTransferencia: number;
+  ventasCredito: number;
+  totalVentas: number;
+  alertaGenerada: boolean;
+}
+
+export interface ConfigSeguridad {
+  toleranciaFaltanteCaja: number;
+  descuentoMaxSinPin: number;
+  precioMinimoVenta: number;
+  alertarPatronBajoVentas: boolean;
+  horasParaAlertaTurnoAbierto: number;
+  whatsappAdmin: string;
+  pinGerente: string;
+  activado: boolean;
+}
 
 // ============================================
 // SISTEMA DE ROLES Y PERMISOS

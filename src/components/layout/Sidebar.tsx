@@ -23,7 +23,8 @@ import {
   CreditCard,
   UserCircle2,
   Store,
-  Building2
+  Building2,
+  MessageCircle
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -34,6 +35,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState } from 'react';
+import { getAlertasNoLeidas } from '@/lib/security-agent';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -80,14 +82,16 @@ export function Sidebar({
   const { check, role } = useCan();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
+  const [alertasSeguridad] = useState(() => getAlertasNoLeidas());
 
   const allMenuGroups: MenuGroup[] = [
     {
       section: 'Inicio',
       emoji: '🏛️', // Icono de oficina central/gobierno
       items: [
-        { id: 'dashboard',   label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
-        { id: 'agentes-ia',  label: 'Mando Superior (IA)', icon: Shield,    permission: 'VER_DASHBOARD' }, // Usamos Shield para denotar control y seguridad
+        { id: 'dashboard',       label: 'Centro de Mando',     icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+        { id: 'comunicaciones',  label: 'Equipo & Checklist',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
+        { id: 'agentes-ia',      label: 'Mando Superior (IA)', icon: Shield,          permission: 'VER_DASHBOARD' },
       ],
     },
     {
@@ -143,11 +147,12 @@ export function Sidebar({
       section: 'Administración',
       emoji: '👥',
       items: [
-        { id: 'oficina',       label: 'Oficina del Equipo', icon: Building2,   permission: 'VER_USUARIOS' },
-        { id: 'trabajadores',  label: 'Trabajadores',       icon: UserCircle2, permission: 'VER_USUARIOS' },
-        { id: 'usuarios',      label: 'Equipo de Trabajo',  icon: Users,       permission: 'VER_USUARIOS' },
-        { id: 'roles',         label: 'Seguridad y Roles',  icon: Shield,      permission: 'VER_USUARIOS' },
-        { id: 'configuracion', label: 'Configuración',      icon: Settings,    permission: 'VER_CONFIGURACION' },
+        { id: 'oficina',       label: 'Oficina del Equipo',   icon: Building2,   permission: 'VER_USUARIOS' },
+        { id: 'trabajadores',  label: 'Trabajadores',         icon: UserCircle2, permission: 'VER_USUARIOS' },
+        { id: 'usuarios',      label: 'Equipo de Trabajo',    icon: Users,       permission: 'VER_USUARIOS' },
+        { id: 'roles',         label: 'Seguridad y Roles',    icon: Shield,      permission: 'VER_USUARIOS' },
+        { id: 'seguridad',     label: 'Agente Anti-Fraude',   icon: Shield,      permission: 'VER_FINANZAS' },
+        { id: 'configuracion', label: 'Configuración',        icon: Settings,    permission: 'VER_CONFIGURACION' },
       ],
     },
   ];
@@ -272,6 +277,11 @@ export function Sidebar({
                           {(!isCollapsed || isMobile) && item.id === 'alertas' && alertasNoLeidas > 0 && (
                             <span className="ml-auto bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-ag-pulse-glow">
                               {alertasNoLeidas}
+                            </span>
+                          )}
+                          {(!isCollapsed || isMobile) && item.id === 'seguridad' && alertasSeguridad > 0 && (
+                            <span className="ml-auto bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-ag-pulse-glow">
+                              {alertasSeguridad}
                             </span>
                           )}
                           {isActive && (!isCollapsed || isMobile) && (

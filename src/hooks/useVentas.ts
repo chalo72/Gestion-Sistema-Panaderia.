@@ -5,14 +5,15 @@ import { generateUUID } from '@/lib/safe-utils';
  */
 import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
-import type { 
-  Venta, 
-  CajaSesion, 
-  Mesa, 
-  PedidoActivo, 
+import type {
+  Venta,
+  CajaSesion,
+  Mesa,
+  PedidoActivo,
   MovimientoCaja
 } from '@/types';
 import { toast } from 'sonner';
+import { procesarCuadreTurno } from '@/lib/security-agent';
 
 interface UseVentasParams {
   onAjustarStock: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
@@ -43,11 +44,12 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     await db.addSesionCaja(sesion as any);
     setSesionesCaja(prev => [...prev, sesion]);
     setCajaActiva(sesion);
+    localStorage.setItem('dp_caja_apertura_ts', sesion.fechaApertura);
     toast.success('Caja abierta correctamente');
     return sesion;
   }, []);
 
-  const cerrarCaja = useCallback(async (montoCierre: number) => {
+  const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string) => {
     if (!cajaActiva) return undefined;
     const sesion: CajaSesion = {
       ...cajaActiva,
@@ -58,6 +60,23 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     await db.updateSesionCaja(sesion as any);
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
     setCajaActiva(undefined);
+    // Generar cuadre de seguridad automáticamente
+    try {
+      procesarCuadreTurno({
+        usuarioId: cajaActiva.usuarioId || 'desconocido',
+        usuarioNombre: nombreUsuario || cajaActiva.usuarioId || 'Vendedora',
+        fechaApertura: cajaActiva.fechaApertura,
+        montoApertura: cajaActiva.montoApertura || 0,
+        montoDeclarado: montoCierre,
+        ventasEfectivo: cajaActiva.totalVentasEfectivo || 0,
+        ventasNequi: (cajaActiva as any).totalVentasNequi || 0,
+        ventasTransferencia: (cajaActiva as any).totalVentasTransferencia || 0,
+        ventasCredito: cajaActiva.totalCreditos || 0,
+      });
+      localStorage.removeItem('dp_caja_apertura_ts');
+    } catch (e) {
+      console.warn('[Security] Error al generar cuadre:', e);
+    }
     toast.success('Caja cerrada correctamente');
     return sesion;
   }, [cajaActiva]);

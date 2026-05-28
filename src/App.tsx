@@ -48,6 +48,8 @@ import Precios from '@/pages/Precios';
 import CargaMasiva from '@/pages/CargaMasiva';
 import ListaPreciosProvincial from '@/pages/ListaPreciosProvincial';
 import Clientes from '@/pages/Clientes';
+import Seguridad from '@/pages/Seguridad';
+import Comunicaciones from '@/pages/Comunicaciones';
 
 const App = () => {
   const [isSyncing, setIsSyncing] = useState(false);
@@ -617,6 +619,10 @@ const App = () => {
           onUpdateCliente={updateCliente}
           onDeleteCliente={deleteCliente}
         />;
+      case 'comunicaciones':
+        return <Comunicaciones />;
+      case 'seguridad':
+        return <Seguridad userRole={user?.rol} ventas={ventas} />;
       case 'login':
         return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
       default:
