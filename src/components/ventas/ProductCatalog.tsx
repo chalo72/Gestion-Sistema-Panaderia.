@@ -83,9 +83,15 @@ export function ProductCatalog({
             if (onAjustarStock) {
                 const itemInv = inventario.find(i => i.productoId === editingProduct.id);
                 const stockActual = itemInv?.stockActual || 0;
-                if (editForm.stock !== stockActual) {
-                    const delta = editForm.stock - stockActual;
-                    await onAjustarStock(editingProduct.id, delta, 'ajuste', 'Ajuste desde POS');
+                const nuevoStock = Math.max(0, editForm.stock);
+                if (nuevoStock !== stockActual) {
+                    const delta = nuevoStock - stockActual;
+                    // Usar 'entrada' si sube el stock, 'salida' si baja — onAjustarStock requiere valor positivo
+                    if (delta > 0) {
+                        await onAjustarStock(editingProduct.id, delta, 'entrada', 'Ajuste manual desde POS');
+                    } else {
+                        await onAjustarStock(editingProduct.id, Math.abs(delta), 'salida', 'Ajuste manual desde POS');
+                    }
                 }
             }
             toast.success('Producto actualizado');
