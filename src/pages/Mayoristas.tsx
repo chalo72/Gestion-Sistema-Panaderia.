@@ -268,6 +268,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         setCarritoPos(h.items.map((i: any) => ({ productoId: i.productoId, nombre: i.nombre, precio: i.precio, cantidad: i.cantidad })));
         setTicketEditandoEnPOS({ id: h.id, esCentral, fechaLabel });
         setTicketRetomadoId(null);
+        setPanelView('ticket');
+        toast('✏️ Ticket cargado — modifica los productos y toca Guardar cambios');
     };
 
     const guardarEdicionEnPOS = async () => {
@@ -275,15 +277,29 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         const { id, esCentral } = ticketEditandoEnPOS;
         const nuevoTotal = carritoPos.reduce((s, i) => s + i.precio * i.cantidad, 0);
         if (esCentral) {
-            if (updateCreditoCliente) {
-                try {
-                    await updateCreditoCliente(id, { items: [...carritoPos], monto: nuevoTotal });
-                    toast.success('Ticket actualizado');
-                } catch (e) { toast.error('Error al guardar cambios'); return; }
+            if (!updateCreditoCliente) {
+                toast.error('No se puede guardar: función de actualización no disponible');
+                return;
+            }
+            try {
+                await updateCreditoCliente(id, { items: [...carritoPos], monto: nuevoTotal });
+                // Respaldo local — igual que W-008 para fechas
+                const existeLocal = historialMayoristas.find(h => h.id === id);
+                if (existeLocal) {
+                    persistirHistorial(historialMayoristas.map(h => h.id !== id ? h : { ...h, items: [...carritoPos], total: nuevoTotal }));
+                }
+                toast.success('Ticket actualizado');
+            } catch (e) {
+                toast.error('Error al guardar cambios');
+                return;
             }
         } else {
-            const nuevos = historialMayoristas.map(h => h.id !== id ? h : { ...h, items: [...carritoPos], total: nuevoTotal });
-            persistirHistorial(nuevos);
+            const existeLocal = historialMayoristas.find(h => h.id === id);
+            if (!existeLocal) {
+                toast.error('Ticket no encontrado en historial local');
+                return;
+            }
+            persistirHistorial(historialMayoristas.map(h => h.id !== id ? h : { ...h, items: [...carritoPos], total: nuevoTotal }));
             toast.success('Ticket actualizado');
         }
         setCarritoPos([]);
@@ -2257,19 +2273,35 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     </p>
                                 </div>
                             ) : (
-                                <div className="p-4 space-y-3">
+                                <div className="p-4 space-y-2">
                                     {carritoPos.map(item => (
-                                        <div key={item.productoId} className="flex items-center gap-3">
+                                        <div key={item.productoId} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-2 py-1.5">
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-black text-slate-900 dark:text-white truncate">{item.nombre}</p>
-                                                <p className="text-[10px] font-bold text-slate-400">{formatCurrency(item.precio)} × {item.cantidad}</p>
+                                                <p className="text-[10px] font-black text-slate-900 dark:text-white truncate">{item.nombre}</p>
+                                                <p className="text-[9px] font-bold text-slate-400">{formatCurrency(item.precio)} c/u</p>
                                             </div>
-                                            <p className="text-sm font-black text-indigo-600 tabular-nums shrink-0">{formatCurrency(item.precio * item.cantidad)}</p>
+                                            {/* Controles de cantidad */}
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <button
+                                                    onClick={() => actualizarCantidadPos(item.productoId, -1)}
+                                                    className="w-6 h-6 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center hover:bg-rose-100 hover:text-rose-600 transition-all active:scale-90"
+                                                >
+                                                    <Minus className="w-3 h-3" />
+                                                </button>
+                                                <span className="text-xs font-black text-slate-800 dark:text-white w-5 text-center tabular-nums">{item.cantidad}</span>
+                                                <button
+                                                    onClick={() => actualizarCantidadPos(item.productoId, 1)}
+                                                    className="w-6 h-6 rounded-md bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 transition-all active:scale-90"
+                                                >
+                                                    <Plus className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                            <p className="text-xs font-black text-indigo-600 tabular-nums shrink-0 w-16 text-right">{formatCurrency(item.precio * item.cantidad)}</p>
                                             <button
                                                 onClick={() => eliminarDelCarrito(item.productoId)}
-                                                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all shrink-0"
+                                                className="w-6 h-6 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all shrink-0"
                                             >
-                                                <X className="w-3.5 h-3.5" />
+                                                <X className="w-3 h-3" />
                                             </button>
                                         </div>
                                     ))}
