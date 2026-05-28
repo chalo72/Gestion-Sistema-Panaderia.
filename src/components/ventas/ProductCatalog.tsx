@@ -22,11 +22,12 @@ interface ProductCatalogProps {
     formatCurrency: (value: number) => string;
     onEditProduct?: (id: string, updates: Partial<Producto>) => Promise<void>;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
+    onOpenAdHoc?: () => void;
 }
 
 export function ProductCatalog({
     productos, inventario, categorias, searchTerm, setSearchTerm,
-    selectedCategory, setSelectedCategory, onAddToCart, formatCurrency, onEditProduct, onAjustarStock
+    selectedCategory, setSelectedCategory, onAddToCart, formatCurrency, onEditProduct, onAjustarStock, onOpenAdHoc
 }: ProductCatalogProps) {
 
     const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
@@ -150,6 +151,16 @@ export function ProductCatalog({
                             </button>
                         )}
                     </div>
+                    {/* Botón producto ad-hoc */}
+                    {onOpenAdHoc && (
+                        <button
+                            onClick={onOpenAdHoc}
+                            title="Agregar producto no listado"
+                            className="shrink-0 w-12 h-12 rounded-2xl bg-violet-100 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-all active:scale-90"
+                        >
+                            <Plus className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                        </button>
+                    )}
                 </div>
 
                 {/* Stats & Breadcrumb */}

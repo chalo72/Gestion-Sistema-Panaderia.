@@ -5,6 +5,9 @@ import { generateUUID } from '@/lib/safe-utils';
  */
 import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
+import { SupabaseDatabase } from '@/lib/supabase-db';
+
+const _supaDB = new SupabaseDatabase();
 import type {
   Venta,
   CajaSesion,
@@ -42,6 +45,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       ventasIds: []
     };
     await db.addSesionCaja(sesion as any);
+    _supaDB.addSesionCaja(sesion as any).catch(() => {});
     setSesionesCaja(prev => [...prev, sesion]);
     setCajaActiva(sesion);
     localStorage.setItem('dp_caja_apertura_ts', sesion.fechaApertura);
@@ -58,6 +62,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       estado: 'cerrada'
     };
     await db.updateSesionCaja(sesion as any);
+    _supaDB.updateSesionCaja(sesion as any).catch(() => {});
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
     setCajaActiva(undefined);
     // Generar cuadre de seguridad automáticamente
@@ -140,8 +145,9 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       fecha: new Date().toISOString(),
     };
 
-    // 1. Guardar venta en DB
+    // 1. Guardar venta en DB local + Supabase (para que otros dispositivos la vean)
     await db.addVenta(venta as any);
+    _supaDB.addVenta(venta as any).catch(() => {});
     setVentas(prev => [venta, ...prev]);
 
     // 2. Descontar del inventario

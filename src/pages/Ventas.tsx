@@ -10,7 +10,10 @@ import {
     Store,
     CreditCard,
     BarChart3,
-    ShoppingCart
+    ShoppingCart,
+    MessageCircle,
+    Package,
+    Save
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VendedoraQuickPicker, VendedoraMesaModal, type VendedoraOption } from '@/components/ventas/VendedoraQuickPicker';
@@ -288,6 +291,7 @@ export function Ventas(props: VentasProps) {
 
     const clearCart = () => {
         updateActiveCart(() => []);
+        setDescuento(0);
     };
 
     // ==========================================
@@ -671,6 +675,7 @@ export function Ventas(props: VentasProps) {
                             categorias={categorias}
                             onEditProduct={onUpdateProducto}
                             onAjustarStock={onAjustarStock}
+                            onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
                         />
                     ) : (
                         <MuroPedidos
@@ -704,53 +709,60 @@ export function Ventas(props: VentasProps) {
                         activeTabLabel={activeTab?.label}
                         activeTabTipo={activeTab?.tipo}
                         onLiberarMesa={handleLiberarMesa}
+                        descuento={descuento}
+                        setDescuento={setDescuento}
+                        rolUsuario={usuario?.rol}
                     />
                 </div>
             </div>
 
-            {/* ── Barra de navegación móvil: Catálogo ↔ Ticket ── */}
-            {/* Solo visible en móvil (oculta en lg+). El desktop usa el layout lado a lado. */}
-            <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 safe-area-bottom">
-                {/* Botón Catálogo */}
-                <button
-                    onClick={() => setShowMobileCart(false)}
-                    className={cn(
-                        'flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors',
-                        !showMobileCart
-                            ? 'text-primary border-t-2 border-primary bg-orange-50/60 dark:bg-orange-900/10'
-                            : 'text-slate-400 hover:text-slate-600'
-                    )}
-                >
-                    <ShoppingCart className="w-5 h-5" />
-                    Catálogo
-                </button>
-
-                {/* Botón Ticket — muestra total y cantidad */}
-                <button
-                    onClick={() => setShowMobileCart(true)}
-                    className={cn(
-                        'flex-[2] flex items-center justify-center gap-2 py-2.5 transition-colors relative',
-                        showMobileCart
-                            ? 'bg-emerald-500 text-white'
-                            : cart.length > 0
-                                ? 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95'
-                                : 'text-slate-400 border-l border-slate-200 dark:border-slate-700'
-                    )}
-                >
-                    {cart.length > 0 ? (
-                        <>
-                            <span className="w-6 h-6 rounded-full bg-white/25 text-white text-[11px] font-black flex items-center justify-center shrink-0">
-                                {cart.reduce((s, i) => s + i.cantidad, 0)}
-                            </span>
-                            <span className="text-sm font-black">{formatCurrency(totalCart)}</span>
-                            <span className="text-[10px] font-bold opacity-80">
-                                {showMobileCart ? '← Catálogo' : '→ Ver ticket'}
-                            </span>
-                        </>
-                    ) : (
-                        <span className="text-[10px] font-black uppercase tracking-widest">Ticket vacío</span>
-                    )}
-                </button>
+            {/* ── Navegación móvil ── */}
+            <div className="lg:hidden shrink-0 bg-white dark:bg-slate-900 safe-area-bottom">
+                {showMobileCart ? (
+                    /* Cuando el carrito está abierto: botón simple para volver al catálogo */
+                    <div className="border-t border-slate-200 dark:border-slate-800 p-2">
+                        <button
+                            onClick={() => setShowMobileCart(false)}
+                            className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest"
+                        >
+                            <ShoppingCart className="w-4 h-4" />
+                            ← Volver al catálogo
+                        </button>
+                    </div>
+                ) : cart.length > 0 ? (
+                    /* Botón flotante prominente cuando hay productos en el carrito */
+                    <div className="p-3 pb-4">
+                        <button
+                            onClick={() => setShowMobileCart(true)}
+                            className="w-full h-16 flex items-center justify-between px-5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] transition-all shadow-lg shadow-emerald-500/30 text-white"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                                    <span className="text-base font-black">
+                                        {cart.reduce((s, i) => s + i.cantidad, 0)}
+                                    </span>
+                                </div>
+                                <span className="text-sm font-black uppercase tracking-wide">Ver ticket</span>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-xl font-black tabular-nums">
+                                    {formatCurrency(Math.max(0, totalCart - descuento))}
+                                </p>
+                                {descuento > 0 && (
+                                    <p className="text-[10px] line-through opacity-60">{formatCurrency(totalCart)}</p>
+                                )}
+                            </div>
+                        </button>
+                    </div>
+                ) : (
+                    /* Sin productos: barra mínima con acceso al catálogo */
+                    <div className="border-t border-slate-200 dark:border-slate-800 p-2">
+                        <div className="h-12 flex items-center justify-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                            <ShoppingCart className="w-4 h-4" />
+                            Agrega productos al ticket
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Modal de Pago Profesional */}
@@ -903,10 +915,113 @@ export function Ventas(props: VentasProps) {
                                 <span className="text-xs font-black uppercase bg-slate-200 dark:bg-slate-800 px-3 py-1 rounded-lg">{lastVenta?.metodoPago}</span>
                             </div>
                         </div>
-                        <Button
-                            onClick={() => setShowSuccessModal(false)}
-                            className="w-full h-16 rounded-2xl bg-slate-900 dark:bg-white dark:text-black text-white font-black uppercase text-xs shadow-xl"
-                        >Siguiente Venta</Button>
+                        <div className="flex gap-3 w-full">
+                            {lastVenta && (
+                                <button
+                                    onClick={() => {
+                                        const lineas = (lastVenta as any).items?.map((i: any) =>
+                                            `• ${i.nombre} x${i.cantidad} — ${formatCurrency(i.subtotal ?? (i.precioUnitario * i.cantidad))}`
+                                        ).join('%0A') ?? '';
+                                        const texto = `🍞 *Dulce Placer*%0A*Ticket #${(lastVenta.id || '').slice(-6).toUpperCase()}*%0A%0A${lineas}%0A%0A*Total: ${formatCurrency(lastVenta.total)}*%0A${lastVenta.metodoPago?.toUpperCase?.() ?? ''}`;
+                                        window.open(`https://wa.me/?text=${texto}`, '_blank');
+                                    }}
+                                    className="flex-1 h-16 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 transition-all text-white flex items-center justify-center gap-2 font-black text-xs uppercase shadow-lg shadow-emerald-500/20"
+                                >
+                                    <MessageCircle className="w-5 h-5" />
+                                    WhatsApp
+                                </button>
+                            )}
+                            <Button
+                                onClick={() => setShowSuccessModal(false)}
+                                className="flex-[2] h-16 rounded-2xl bg-slate-900 dark:bg-white dark:text-black text-white font-black uppercase text-xs shadow-xl"
+                            >Siguiente Venta</Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal Producto Ad-hoc — producto no listado, temporal */}
+            <Dialog open={showAdHocModal} onOpenChange={setShowAdHocModal}>
+                <DialogContent className="max-w-sm rounded-2xl p-0 overflow-hidden border border-slate-200 dark:border-slate-700">
+                    <div className="bg-violet-600 text-white px-6 py-5">
+                        <div className="flex items-center gap-3 mb-1">
+                            <Package className="w-5 h-5 opacity-80" />
+                            <h3 className="font-black text-base uppercase tracking-tight">Producto no listado</h3>
+                        </div>
+                        <p className="text-xs text-violet-200">Agrega un producto temporal al ticket</p>
+                        <DialogDescription className="sr-only">Agregar producto ad-hoc al carrito</DialogDescription>
+                    </div>
+                    <div className="p-6 space-y-4">
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Nombre</Label>
+                            <input
+                                autoFocus
+                                placeholder="Ej: Torta especial pedido"
+                                value={adHocNombre}
+                                onChange={e => setAdHocNombre(e.target.value)}
+                                className="w-full h-11 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Precio</Label>
+                            <input
+                                type="number"
+                                min={0}
+                                placeholder="0"
+                                value={adHocPrecio}
+                                onChange={e => setAdHocPrecio(e.target.value)}
+                                className="w-full h-11 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                        </div>
+                        {onUpdateProducto && (
+                            <label className="flex items-center gap-3 cursor-pointer select-none">
+                                <div
+                                    onClick={() => setAdHocGuardar(v => !v)}
+                                    className={cn(
+                                        "w-10 h-5 rounded-full transition-colors relative",
+                                        adHocGuardar ? "bg-violet-500" : "bg-slate-200 dark:bg-slate-700"
+                                    )}
+                                >
+                                    <span className={cn(
+                                        "absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all",
+                                        adHocGuardar ? "left-5" : "left-0.5"
+                                    )} />
+                                </div>
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                                    <Save className="w-3.5 h-3.5" />
+                                    Guardar en el catálogo
+                                </span>
+                            </label>
+                        )}
+                        <div className="flex gap-3 pt-2">
+                            <Button variant="ghost" onClick={() => setShowAdHocModal(false)} className="flex-1 h-11 rounded-xl text-sm text-slate-400">Cancelar</Button>
+                            <Button
+                                disabled={!adHocNombre.trim() || !adHocPrecio || parseFloat(adHocPrecio) <= 0}
+                                onClick={() => {
+                                    const precio = parseFloat(adHocPrecio);
+                                    const productoTemp: Producto = {
+                                        id: `adhoc-${Date.now()}`,
+                                        nombre: adHocNombre.trim(),
+                                        precioVenta: precio,
+                                        categoria: 'Otros',
+                                        tipo: 'elaborado',
+                                        activo: true,
+                                    } as Producto;
+                                    addToCart(productoTemp);
+                                    if (adHocGuardar && onUpdateProducto) {
+                                        toast.promise(
+                                            onUpdateProducto(productoTemp.id, { nombre: productoTemp.nombre, precioVenta: precio, categoria: 'Otros' }),
+                                            { loading: 'Guardando...', success: 'Guardado en catálogo', error: 'No se pudo guardar' }
+                                        );
+                                    }
+                                    setShowAdHocModal(false);
+                                    toast.success(`${adHocNombre.trim()} agregado al ticket`);
+                                }}
+                                className="flex-[2] h-11 rounded-xl bg-violet-600 hover:bg-violet-700 text-white font-black text-sm"
+                            >
+                                Agregar al ticket
+                            </Button>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>

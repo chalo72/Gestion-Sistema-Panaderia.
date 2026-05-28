@@ -122,6 +122,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     const [configTemp, setConfigTemp] = useState(config);
     const [panelView, setPanelView] = useState<'ticket' | 'cuenta'>('ticket');
     const [facturasSeleccionadas, setFacturasSeleccionadas] = useState<Set<string>>(new Set());
+    const [showMobilePOSCart, setShowMobilePOSCart] = useState(false);
 
     // ── Rescate de Historial Local a BD Real ──
     useEffect(() => {
@@ -1665,7 +1666,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 <div className="flex flex-col lg:flex-row flex-1 gap-0 min-h-0 overflow-hidden">
 
                     {/* ── PANEL IZQUIERDO: Productos ── */}
-                    <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+                    <div className={cn("flex-1 p-4 space-y-4 overflow-y-auto", showMobilePOSCart && "hidden lg:block")}>
                         {/* Buscador siempre visible + filtro categoría compacto */}
                         <div className="flex flex-col gap-2">
                             <div className="relative">
@@ -2162,7 +2163,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     </div>
 
                     {/* ── PANEL DERECHO: Ticket / Créditos ── */}
-                    <div className="w-full lg:w-[360px] bg-slate-50 dark:bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden shrink-0">
+                    <div className={cn(
+                        "w-full lg:w-[360px] bg-slate-50 dark:bg-slate-900 border-t lg:border-t-0 lg:border-l border-slate-200 dark:border-slate-800 flex flex-col h-full overflow-hidden shrink-0",
+                        !showMobilePOSCart && "hidden lg:flex"
+                    )}>
                         {/* TABS DEL PANEL DERECHO */}
                         <div className="flex bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
                             <button
@@ -2791,6 +2795,45 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             </div>
                         )}
                     </div>
+                </div>
+
+                {/* ── Navegación móvil mini-POS ── */}
+                <div className="lg:hidden shrink-0 bg-white dark:bg-slate-900 safe-area-bottom">
+                    {showMobilePOSCart ? (
+                        <div className="border-t border-slate-200 dark:border-slate-800 p-2">
+                            <button
+                                onClick={() => setShowMobilePOSCart(false)}
+                                className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest"
+                            >
+                                <ShoppingCart className="w-4 h-4" />
+                                ← Volver a productos
+                            </button>
+                        </div>
+                    ) : carritoPos.length > 0 ? (
+                        <div className="p-3 pb-4">
+                            <button
+                                onClick={() => setShowMobilePOSCart(true)}
+                                className="w-full h-16 flex items-center justify-between px-5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition-all shadow-lg shadow-indigo-500/30 text-white"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                                        <span className="text-base font-black">
+                                            {carritoPos.reduce((s, i) => s + i.cantidad, 0)}
+                                        </span>
+                                    </div>
+                                    <span className="text-sm font-black uppercase tracking-wide">Ver ticket</span>
+                                </div>
+                                <p className="text-xl font-black tabular-nums">{formatCurrency(totalCarrito)}</p>
+                            </button>
+                        </div>
+                    ) : (
+                        <div className="border-t border-slate-200 dark:border-slate-800 p-2">
+                            <div className="h-12 flex items-center justify-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                                <ShoppingCart className="w-4 h-4" />
+                                Agrega productos al ticket
+                            </div>
+                        </div>
+                    )}
                 </div>
 
             {/* 🔥 BOTÓN MÁGICO TEMPORAL PARA INYECTAR DICTADO */}
