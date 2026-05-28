@@ -217,11 +217,10 @@ export default function CreditosClientes({
     const [formTrab, setFormTrab] = useState({
         trabajadorId: '',
         descripcion: '',
+        monto: '',
         fecha: new Date().toISOString().split('T')[0],
         descontarDeSalario: true,
     });
-    const [itemsTrab, setItemsTrab] = useState<ItemCredito[]>([]);
-    const [buscarProductoTrab, setBuscarProductoTrab] = useState('');
     const [fotoEvidenciaTrab, setFotoEvidenciaTrab] = useState<string | undefined>(undefined);
     const [formPagoTrab, setFormPagoTrab] = useState({
         monto: '',
@@ -531,66 +530,28 @@ export default function CreditosClientes({
         } catch { toast.error('Error al capturar foto'); }
     };
 
-    const montoTotalTrab = useMemo(() => itemsTrab.reduce((s, i) => s + i.subtotal, 0), [itemsTrab]);
-
-    const productosFiltradosTrab = useMemo(() => {
-        const q = buscarProductoTrab.toLowerCase();
-        return q ? productos.filter(p => p.nombre.toLowerCase().includes(q)).slice(0, 8) : [];
-    }, [productos, buscarProductoTrab]);
-
-    const agregarProductoTrab = (p: Producto) => {
-        setItemsTrab(prev => {
-            const existe = prev.find(i => i.productoId === p.id);
-            if (existe) {
-                return prev.map(i => i.productoId === p.id
-                    ? { ...i, cantidad: i.cantidad + 1, subtotal: (i.cantidad + 1) * i.precioUnitario }
-                    : i);
-            }
-            return [...prev, { productoId: p.id, nombre: p.nombre, cantidad: 1, precioUnitario: p.precioVenta, subtotal: p.precioVenta }];
-        });
-        setBuscarProductoTrab('');
-    };
-
-    const cambiarCantidadTrab = (productoId: string, cantidad: number) => {
-        if (cantidad <= 0) {
-            setItemsTrab(prev => prev.filter(i => i.productoId !== productoId));
-        } else {
-            setItemsTrab(prev => prev.map(i => i.productoId === productoId
-                ? { ...i, cantidad, subtotal: cantidad * i.precioUnitario } : i));
-        }
-    };
-
-    const cambiarPrecioTrab = (productoId: string, nuevoPrecio: number) => {
-        const precio = Math.max(0, nuevoPrecio);
-        setItemsTrab(prev => prev.map(i => i.productoId === productoId
-            ? { ...i, precioUnitario: precio, subtotal: i.cantidad * precio } : i));
-    };
-
     const resetFormTrab = () => {
-        setFormTrab({ trabajadorId: '', descripcion: '', fecha: new Date().toISOString().split('T')[0], descontarDeSalario: true });
-        setItemsTrab([]);
-        setBuscarProductoTrab('');
+        setFormTrab({ trabajadorId: '', descripcion: '', monto: '', fecha: new Date().toISOString().split('T')[0], descontarDeSalario: true });
         setFotoEvidenciaTrab(undefined);
     };
 
     const handleGuardarCreditoTrab = async () => {
         if (!formTrab.trabajadorId) { toast.error('Selecciona un trabajador'); return; }
-        if (itemsTrab.length === 0) { toast.error('Agrega al menos un producto al crédito'); return; }
-        if (!fotoEvidenciaTrab) { toast.error('La foto de evidencia es obligatoria'); return; }
-        const monto = montoTotalTrab;
+        const monto = parseFloat(formTrab.monto);
+        if (isNaN(monto) || monto <= 0) { toast.error('Ingresa un monto válido'); return; }
+        if (!formTrab.descripcion.trim()) { toast.error('La descripción es obligatoria'); return; }
         setIsSavingTrab(true);
         try {
-            const descripcionAuto = formTrab.descripcion.trim() || itemsTrab.map(i => `${i.cantidad}x ${i.nombre}`).join(', ');
             await onAddCreditoTrabajador({
                 trabajadorId: formTrab.trabajadorId,
                 trabajadorNombre: trabajadorSeleccionado?.nombre || '',
                 trabajadorRol: trabajadorSeleccionado?.rol,
                 monto,
                 saldo: monto,
-                descripcion: descripcionAuto,
+                descripcion: formTrab.descripcion.trim(),
                 fecha: formTrab.fecha,
                 estado: 'activo',
-                items: itemsTrab,
+                items: [],
                 fotoEvidencia: fotoEvidenciaTrab,
                 descontarDeSalario: formTrab.descontarDeSalario,
                 pagos: [],
@@ -598,7 +559,7 @@ export default function CreditosClientes({
             });
             setShowCreditoTrabModal(false);
             resetFormTrab();
-            toast.success(`Crédito de ${formatCurrency(monto)} registrado — inventario actualizado`);
+            toast.success(`Crédito de ${formatCurrency(monto)} registrado para ${trabajadorSeleccionado?.nombre}`);
         } catch { toast.error('Error al registrar crédito'); }
         finally { setIsSavingTrab(false); }
     };
