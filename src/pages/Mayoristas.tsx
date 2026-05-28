@@ -2045,78 +2045,67 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         {items.map(d => {
                                     const enCarrito = carritoPos.find(i => i.productoId === d.producto.id);
                                     return (
-                                        <Card
+                                        <div
                                             key={d.producto.id}
                                             onClick={() => !enCarrito && agregarAlCarrito(d.producto.id, d.producto.nombre, d.precioMayorista)}
                                             className={cn(
-                                                'rounded-2xl border cursor-pointer transition-all hover:shadow-md active:scale-95 flex flex-col',
-                                                enCarrito ? 'border-indigo-400 bg-indigo-50/30' : 'border-slate-100 bg-white'
+                                                'group rounded-xl border cursor-pointer transition-all hover:shadow-lg active:scale-[0.97] flex flex-col overflow-hidden',
+                                                enCarrito ? 'border-indigo-400 bg-indigo-50/30 dark:bg-indigo-900/20' : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800 hover:border-indigo-300/50'
                                             )}
                                         >
-                                            <CardContent className="p-0 flex flex-col h-full relative overflow-hidden">
+                                            {/* Imagen compacta */}
+                                            <div className="h-20 relative shrink-0 overflow-hidden">
+                                                <ProductAvatar
+                                                    imagen={(d.producto as any).imagen}
+                                                    nombre={d.producto.nombre}
+                                                    categoria={d.producto.categoria || ''}
+                                                    className="w-full h-full"
+                                                />
                                                 {enCarrito && (
-                                                   <div className="absolute top-0 right-0 bg-indigo-600 text-white font-black text-[10px] px-2 py-1 rounded-bl-xl z-10 shadow-sm">
-                                                      EN TICKET
-                                                   </div>
+                                                    <div className="absolute top-1.5 right-1.5 bg-indigo-600 text-white font-black text-[7px] px-1.5 py-0.5 rounded-md z-10 shadow">
+                                                        EN TICKET
+                                                    </div>
                                                 )}
-                                                {/* Avatar profesional */}
-                                                <div className="w-full aspect-square rounded-t-2xl overflow-hidden">
-                                                    <ProductAvatar
-                                                        imagen={(d.producto as any).imagen}
-                                                        nombre={d.producto.nombre}
-                                                        categoria={d.producto.categoria || ''}
-                                                        className="w-full h-full"
-                                                    />
-                                                </div>
-                                                <div className="flex-1 p-3">
-                                                   <h4 className="font-black text-[11px] uppercase tracking-tight text-[#1a1c2e] dark:text-slate-200 leading-snug line-clamp-2 mb-2 pr-4 break-words">
-                                                       {d.producto.nombre}
-                                                   </h4>
-                                                   {d.producto.descripcion && (
-                                                       <p className="text-[9px] font-medium text-slate-500 dark:text-slate-400 line-clamp-2 leading-tight mb-2">
-                                                           {d.producto.descripcion}
-                                                       </p>
-                                                   )}
-                                                </div>
-                                                <div className="flex flex-col gap-1.5 mt-auto px-3 pb-3">
-                                                   <div className="flex items-end justify-between">
-                                                      <p className="text-xl font-black text-slate-900 dark:text-white tabular-nums leading-none tracking-tighter">
+                                                {(d.producto as any).descuentoMayorista > 0 && (
+                                                    <div className="absolute top-1.5 left-1.5 bg-rose-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-md z-10 shadow">
+                                                        -{(d.producto as any).descuentoMayorista}%
+                                                    </div>
+                                                )}
+                                            </div>
+                                            {/* Info compacta */}
+                                            <div className="px-2 py-1.5 flex flex-col border-t border-slate-50 dark:border-slate-700">
+                                                <h4 className="font-black text-[10px] uppercase tracking-tight text-slate-800 dark:text-slate-100 leading-tight line-clamp-1">
+                                                    {d.producto.nombre}
+                                                </h4>
+                                                {d.producto.descripcion && (
+                                                    <p className="text-[8px] font-bold text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 line-clamp-1 mt-0.5 leading-tight transition-colors">
+                                                        {d.producto.descripcion}
+                                                    </p>
+                                                )}
+                                                <div className="mt-1 flex items-center justify-between border-t border-slate-50 dark:border-slate-700 pt-1">
+                                                    <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 tabular-nums">
                                                         {formatCurrency(d.precioMayorista)}
-                                                      </p>
-                                                      {(d.producto as any).descuentoMayorista > 0 ? (
-                                                          <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest bg-rose-50 px-1.5 py-0.5 rounded-md border border-rose-100">
-                                                            -{(d.producto as any).descuentoMayorista}%
-                                                          </span>
-                                                      ) : (
-                                                          <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200">
-                                                            Sin Desc.
-                                                          </span>
-                                                      )}
-                                                   </div>
-                                                   {enCarrito ? (
-                                                      <div className="flex items-center justify-between bg-indigo-600 rounded-xl px-2 py-1.5 mt-2 shadow-inner" onClick={e => e.stopPropagation()}>
-                                                          <button
-                                                              onClick={e => { e.preventDefault(); e.stopPropagation(); actualizarCantidadPos(d.producto.id, -1); }}
-                                                              className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center hover:bg-white/30 active:scale-95 transition-all"
-                                                          >
-                                                              <Minus className="w-4 h-4" />
-                                                          </button>
-                                                          <span className="text-sm font-black text-white tabular-nums w-8 text-center">{enCarrito.cantidad}</span>
-                                                          <button
-                                                              onClick={e => { e.preventDefault(); e.stopPropagation(); actualizarCantidadPos(d.producto.id, 1); }}
-                                                              className="w-7 h-7 rounded-lg bg-white/20 text-white flex items-center justify-center hover:bg-white/30 active:scale-95 transition-all"
-                                                          >
-                                                              <Plus className="w-4 h-4" />
-                                                          </button>
-                                                      </div>
-                                                  ) : (
-                                                      <div className="flex items-center justify-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-widest mt-2 py-1.5 bg-slate-50 rounded-xl group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                                                          <Plus className="w-3 h-3" /> Toca para agregar
-                                                      </div>
-                                                  )}
+                                                    </span>
+                                                    {enCarrito ? (
+                                                        <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                                            <button onClick={e => { e.preventDefault(); e.stopPropagation(); actualizarCantidadPos(d.producto.id, -1); }}
+                                                                className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 active:scale-95 transition-all">
+                                                                <Minus className="w-2.5 h-2.5" />
+                                                            </button>
+                                                            <span className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 tabular-nums w-4 text-center">{enCarrito.cantidad}</span>
+                                                            <button onClick={e => { e.preventDefault(); e.stopPropagation(); actualizarCantidadPos(d.producto.id, 1); }}
+                                                                className="w-5 h-5 rounded-md bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 active:scale-95 transition-all">
+                                                                <Plus className="w-2.5 h-2.5" />
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <div className="w-5 h-5 rounded-md bg-slate-50 dark:bg-slate-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-colors">
+                                                            <Plus className="w-2.5 h-2.5" />
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            </CardContent>
-                                        </Card>
+                                            </div>
+                                        </div>
                                     );
                                 })}
                                                     </div>

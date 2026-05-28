@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload } from 'lucide-react';
 import { db } from '@/lib/database';
+import { SupabaseDatabase } from '@/lib/supabase-db';
 import {
   guardarSnapshot, leerTodos, eliminarSnapshot,
   exportarSnapshotJSON, importarSnapshotJSON,
@@ -387,6 +388,56 @@ function Configuracion(props: ConfiguracionProps) {
                 >
                   <RefreshCw className="w-4 h-4" />
                   Sincronizar Ahora
+                </Button>
+              </div>
+
+              {/* SUBIR DATOS LOCALES A SUPABASE */}
+              <div className="mt-4 p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5 space-y-3">
+                <div className="flex items-center gap-2 text-emerald-600 font-black text-xs uppercase tracking-tighter">
+                  <CloudUpload className="w-4 h-4" />
+                  Subir datos de este dispositivo a la nube
+                </div>
+                <p className="text-[10px] text-muted-foreground leading-relaxed">
+                  Si usas la app en <strong>otro navegador o dispositivo</strong> y no ves tus productos,
+                  primero pulsa este botón en el dispositivo donde <em>sí</em> aparecen.
+                  Sube todos tus productos, proveedores y precios a Supabase para que los demás puedan descargarlos.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full h-10 font-black uppercase text-[10px] tracking-widest hover:scale-[1.02] transition-transform border-emerald-500/40 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+                  onClick={async () => {
+                    if (!confirm('¿Subir todos los productos, proveedores y precios de este dispositivo a la nube?\n\nEsto no borra nada — solo sube lo que tienes aquí para que otros navegadores puedan descargarlo.')) return;
+                    const id = toast.loading('Subiendo datos locales a Supabase...');
+                    try {
+                      const supaDB = new SupabaseDatabase();
+                      const [productos, proveedores, precios] = await Promise.all([
+                        db.getAllProductos(),
+                        db.getAllProveedores(),
+                        db.getAllPrecios(),
+                      ]);
+                      let ok = 0;
+                      let fail = 0;
+                      for (const p of productos) {
+                        try { await supaDB.addProducto(p as any); ok++; } catch { fail++; }
+                      }
+                      for (const p of proveedores) {
+                        try { await supaDB.addProveedor(p as any); ok++; } catch { fail++; }
+                      }
+                      for (const p of precios) {
+                        try { await supaDB.addPrecio(p as any); ok++; } catch { fail++; }
+                      }
+                      if (fail === 0) {
+                        toast.success(`¡Listo! ${ok} registros subidos a la nube. Ahora en el otro navegador pulsa "Sincronizar Ahora".`, { id });
+                      } else {
+                        toast.warning(`${ok} subidos, ${fail} con error. Revisa tu conexión a Supabase.`, { id });
+                      }
+                    } catch (e) {
+                      toast.error('Error al subir: ' + (e as Error).message, { id });
+                    }
+                  }}
+                >
+                  Subir este dispositivo a la nube
                 </Button>
               </div>
 
