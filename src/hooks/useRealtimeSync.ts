@@ -228,9 +228,42 @@ export function useRealtimeSync() {
     const { supabaseDB } = await import('@/lib/supabase-sync-bridge');
 
     // Push: sube datos locales clave a Supabase
+    // Para productos y proveedores: push inteligente con comparación de timestamps.
+    // Solo sube si el item NO existe en Supabase O si la versión local es MÁS NUEVA.
+    // Esto evita que un dispositivo con datos viejos sobreescriba ediciones recientes
+    // y evita resurrecciones de productos eliminados que otro dispositivo tenía.
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const [supabaseProductos, supabaseProveedores] = await Promise.all([
+      _sdb.getAllProductos().catch(() => [] as any[]),
+      _sdb.getAllProveedores().catch(() => [] as any[]),
+    ]);
+    const sProdsMap = new Map(supabaseProductos.map((i: any) => [i.id, i.updatedAt ?? i.createdAt ?? '']));
+    const sProvsMap = new Map(supabaseProveedores.map((i: any) => [i.id, i.updatedAt ?? i.createdAt ?? '']));
+
     const pushTasks: [string, () => Promise<any[]>, (d: any) => Promise<void>][] = [
-      ['productos',   () => db.getAllProductos().then(items => items.filter((i: any) => i.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(i.id))), (d) => supabaseDB.addProducto(d)],
-      ['proveedores', () => db.getAllProveedores(),      (d) => supabaseDB.addProveedor(d)],
+      ['productos', async () => {
+        const tombstones = await db.getTombstones('productos').catch(() => [] as string[]);
+        const tombSet = new Set(tombstones);
+        const items = await db.getAllProductos().then(all => all.filter((i: any) => i.id && UUID.test(i.id)));
+        return items.filter((local: any) => {
+          if (tombSet.has(local.id)) return false; // eliminado localmente, no subir
+          const remoteTs = sProdsMap.get(local.id);
+          if (remoteTs === undefined) return true; // nuevo en local
+          // Solo subir si la versión local es más reciente
+          return new Date(local.updatedAt ?? local.createdAt ?? 0) > new Date(remoteTs);
+        });
+      }, (d) => supabaseDB.addProducto(d)],
+      ['proveedores', async () => {
+        const tombstones = await db.getTombstones('proveedores').catch(() => [] as string[]);
+        const tombSet = new Set(tombstones);
+        const items = await db.getAllProveedores();
+        return items.filter((local: any) => {
+          if (tombSet.has(local.id)) return false;
+          const remoteTs = sProvsMap.get(local.id);
+          if (remoteTs === undefined) return true;
+          return new Date(local.updatedAt ?? local.createdAt ?? 0) > new Date(remoteTs);
+        });
+      }, (d) => supabaseDB.addProveedor(d)],
       ['precios',     () => db.getAllPrecios(),          (d) => supabaseDB.addPrecio(d)],
       ['ventas',      () => db.getAllVentas(),           (d) => supabaseDB.addVenta(d)],
       ['gastos',      () => db.getAllGastos(),           (d) => supabaseDB.addGasto(d)],
@@ -297,27 +330,29 @@ export function useRealtimeSync() {
       ]);
 
       const localIds     = new Set(localItems.map((i: any) => i.id));
+      const localTsMap   = new Map(localItems.map((i: any) => [i.id, i.updatedAt ?? i.createdAt ?? '']));
       const tombstoneSet = new Set(tombstones);
 
-      // Items nuevos (no existen localmente ni están tombstoneados)
-      const nuevos    = supabaseItems.filter((i: any) =>
+      // Items que no existen localmente y no están tombstoneados → descargar
+      const nuevos = supabaseItems.filter((i: any) =>
         i.id && !localIds.has(i.id) && !tombstoneSet.has(i.id),
       );
-      // Fix 5: Items que están en Supabase pero tombstoneados localmente
-      // → se restauran automáticamente (otro dispositivo los subió de nuevo)
-      const restaurar = supabaseItems.filter((i: any) =>
-        i.id && tombstoneSet.has(i.id),
-      );
+      // Items que YA existen localmente pero Supabase tiene versión MÁS NUEVA → actualizar
+      // (solo para tablas con updatedAt — productos, proveedores, precios)
+      const actualizados = (['productos', 'proveedores', 'precios'].includes(table))
+        ? supabaseItems.filter((remote: any) => {
+            if (!remote.id || !localIds.has(remote.id) || tombstoneSet.has(remote.id)) return false;
+            const localTs  = new Date(localTsMap.get(remote.id) ?? 0).getTime();
+            const remoteTs = new Date(remote.updatedAt ?? remote.createdAt ?? 0).getTime();
+            return remoteTs > localTs; // Supabase más nuevo → actualizar local
+          })
+        : [];
 
-      for (const item of restaurar) {
-        await db.removeTombstone(handler.localTableName, item.id).catch(() => {});
-        await handler.writeToLocal(item).catch(() => {});
-      }
-      for (const item of nuevos) {
-        await handler.writeToLocal(item).catch(() => {});
-      }
+      for (const item of nuevos)        await handler.writeToLocal(item).catch(() => {});
+      for (const item of actualizados)  await handler.writeToLocal(item).catch(() => {});
 
-      if (nuevos.length > 0) {
+      const hayNuevos = nuevos.length > 0 || actualizados.length > 0;
+      if (hayNuevos) {
         setPendingChanges(prev => {
           const sin = prev.filter(e => e.table !== table);
           return [...sin, {
