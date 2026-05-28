@@ -1694,8 +1694,8 @@ export default function HistorialVentas({
                                     {selectedVenta?.vendedoraNombre || selectedVenta?.usuarioId || 'Sistema'}
                                 </span>
                                 <span className="text-[10px] text-slate-400 font-bold mt-1">
-                                    {isValid(selectedVenta ? parseISO(selectedVenta.fecha) : new Date())
-                                        ? format(parseISO(selectedVenta!.fecha), "dd MMM yyyy · HH:mm", { locale: es })
+                                    {selectedVenta?.fecha
+                                        ? format(parseISO(selectedVenta.fecha), "dd MMM yyyy · HH:mm", { locale: es })
                                         : '—'}
                                 </span>
                             </div>

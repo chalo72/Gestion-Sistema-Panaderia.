@@ -254,7 +254,7 @@ export default function CreditosClientes({
         const map = new Map<string, ClienteAgrupado>();
         
         // Inicializar con todos los clientes del CRM
-        clientes.forEach(c => {
+        (clientes || []).forEach(c => {
             map.set(c.id, {
                 id: c.id,
                 nombre: c.nombre,
@@ -302,7 +302,7 @@ export default function CreditosClientes({
         });
 
         // Sumar las ventas de contado
-        ventas.forEach(v => {
+        (ventas || []).forEach(v => {
             if (v.clienteId && map.has(v.clienteId)) {
                 const g = map.get(v.clienteId)!;
                 g.ventasContado.push(v);

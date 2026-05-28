@@ -285,10 +285,12 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
     const todasLasIds = [...cajas.map(c => c.id), ...cajasExtra.map(c => c.id)];
 
     // Calcular balance esperado por caja del sistema
+    // IMPORTANTE: usar totalVentasEfectivo (solo efectivo) — los créditos NO entran al cajón físico
     const getEsperado = (caja: CajaSesion) => {
         const ent = (caja.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
         const sal = (caja.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
-        return caja.montoApertura + caja.totalVentas + ent - sal;
+        const ventasEf = (caja as any).totalVentasEfectivo ?? caja.totalVentas;
+        return caja.montoApertura + ventasEf + ent - sal;
     };
 
     // Calcular total desde denominaciones de una caja
@@ -997,7 +999,7 @@ export function ControlCaja({
 
     const ventasHoy = useMemo(() => {
         const hoy = new Date().toISOString().split('T')[0];
-        return ventas.filter(v => v.fecha.startsWith(hoy));
+        return ventas.filter(v => v.fecha?.startsWith(hoy));
     }, [ventas]);
 
     const totalVentasHoy = useMemo(() =>
@@ -1083,7 +1085,8 @@ export function ControlCaja({
             if (!caja) continue;
             const ent = (caja.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
             const sal = (caja.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
-            const esperado = caja.montoApertura + caja.totalVentas + ent - sal;
+            const ventasEf = (caja as any).totalVentasEfectivo ?? caja.totalVentas;
+            const esperado = caja.montoApertura + ventasEf + ent - sal;
             const diff     = cierre.montoCierre - esperado;
             if (diff < -5000) alertas++;
 
@@ -1336,6 +1339,29 @@ export function ControlCaja({
                         </div>
                     )}
 
+                    {/* ── GUÍA RÁPIDA PARA VENDEDORAS ── */}
+                    {cajasAbiertas.length > 0 && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-2xl px-5 py-4">
+                            <p className="text-xs font-black text-blue-700 dark:text-blue-300 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                <CheckCircle className="w-4 h-4" /> ¿Cómo hago el cierre de mi caja?
+                            </p>
+                            <ol className="space-y-1.5">
+                                {[
+                                    { n: '1', txt: 'Cuenta el efectivo físico que tienes en tu caja.' },
+                                    { n: '2', txt: 'Busca tu caja aquí abajo (aparece con tu nombre).' },
+                                    { n: '3', txt: 'Toca el botón negro "Registrar Entrega de Turno".' },
+                                    { n: '4', txt: 'Escribe el total de efectivo que estás entregando.' },
+                                    { n: '5', txt: 'Toca "Confirmar Entrega" — ¡listo, turno cerrado!' },
+                                ].map(step => (
+                                    <li key={step.n} className="flex items-start gap-2.5">
+                                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-black flex items-center justify-center shrink-0 mt-0.5">{step.n}</span>
+                                        <span className="text-xs font-semibold text-blue-800 dark:text-blue-200">{step.txt}</span>
+                                    </li>
+                                ))}
+                            </ol>
+                        </div>
+                    )}
+
                     {/* Grilla de cajas */}
                     {cajasAbiertas.length > 0 && (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -1346,7 +1372,8 @@ export function ControlCaja({
                                 const tiempoActivo = `${h}h ${String(m).padStart(2, '0')}m`;
                                 const ent = (caja.movimientos || []).filter(x => x.tipo === 'entrada').reduce((a, x) => a + x.monto, 0);
                                 const sal = (caja.movimientos || []).filter(x => x.tipo === 'salida').reduce((a, x) => a + x.monto, 0);
-                                const balance = caja.montoApertura + caja.totalVentas + ent - sal;
+                                const ventasEf = (caja as any).totalVentasEfectivo ?? caja.totalVentas;
+                                const balance = caja.montoApertura + ventasEf + ent - sal;
                                 const turnoEmoji = caja.turno === 'Mañana' ? '☀️' : caja.turno === 'Tarde' ? '🌆' : '🌙';
                                 const esPrincipal = caja.id === cajaActiva?.id;
                                 return (
