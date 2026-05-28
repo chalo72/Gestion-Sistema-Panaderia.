@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import {
-    UserCircle2, Plus, Search, Trash2, Edit2,
+    UserCircle2, Users, Plus, Search, Trash2, Edit2,
     CreditCard, DollarSign, Camera, X, Package,
     CheckCircle, Clock, Scissors, ChevronDown, ChevronUp, Image
 } from 'lucide-react';
@@ -726,45 +726,82 @@ export default function Trabajadores({
 
             {/* Modal: Crear / Editar Trabajador */}
             <Dialog open={showModal} onOpenChange={setShowModal}>
-                <DialogContent className="rounded-3xl max-w-lg">
-                    <DialogHeader>
-                        <DialogTitle className="font-black uppercase tracking-tight">
-                            {editando ? `Editar: ${editando.nombre}` : 'Nuevo Trabajador'}
-                        </DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-3 py-2 max-h-[65vh] overflow-y-auto pr-2 sm:pr-3">
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="col-span-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest">Nombre completo *</Label>
+                <DialogContent className="max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
+                    {/* Header colorido */}
+                    <div className="bg-violet-600 p-6 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-white/20 rounded-2xl">
+                                <Users className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h2 className="font-black text-lg leading-tight">
+                                    {editando ? 'Editar Trabajador' : 'Nuevo Trabajador'}
+                                </h2>
+                                <p className="text-violet-200 text-xs font-medium mt-0.5">
+                                    {editando ? editando.nombre : 'Completa los datos del empleado'}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 bg-white dark:bg-slate-900 space-y-4 max-h-[65vh] overflow-y-auto">
+                        {/* Foto de perfil */}
+                        <input
+                            ref={fotoPerfilInputRef}
+                            type="file"
+                            accept="image/*"
+                            capture="user"
+                            className="hidden"
+                            onChange={handleFotoPerfil}
+                        />
+                        <div className="flex items-center gap-4">
+                            {formData.fotoPerfil ? (
+                                <div className="relative shrink-0">
+                                    <img src={formData.fotoPerfil} alt="Perfil" className="w-20 h-20 rounded-2xl object-cover border-4 border-violet-100 dark:border-violet-900 shadow-lg" />
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData(p => ({ ...p, fotoPerfil: undefined }))}
+                                        className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-md hover:bg-red-600 transition-colors"
+                                    >
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            ) : (
+                                <button
+                                    type="button"
+                                    onClick={() => fotoPerfilInputRef.current?.click()}
+                                    className="w-20 h-20 shrink-0 rounded-2xl border-2 border-dashed border-violet-200 dark:border-violet-800 flex flex-col items-center justify-center gap-1 text-violet-400 hover:text-violet-600 hover:border-violet-400 transition-colors bg-violet-50/50 dark:bg-violet-950/20"
+                                >
+                                    <Camera className="w-6 h-6" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest">Foto</span>
+                                </button>
+                            )}
+                            <div className="flex-1">
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Nombre completo *</Label>
                                 <Input
                                     placeholder="ej: Carlos Rodríguez"
                                     value={formData.nombre}
                                     onChange={e => setFormData(p => ({ ...p, nombre: e.target.value }))}
-                                    className="mt-1"
+                                    className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
                                 />
+                                {formData.fotoPerfil && (
+                                    <button
+                                        type="button"
+                                        onClick={() => fotoPerfilInputRef.current?.click()}
+                                        className="mt-1.5 text-[10px] font-bold text-violet-500 hover:text-violet-700 flex items-center gap-1"
+                                    >
+                                        <Camera className="w-3 h-3" /> Cambiar foto
+                                    </button>
+                                )}
                             </div>
+                        </div>
+
+                        {/* Rol + Estado */}
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <Label className="text-xs font-bold uppercase tracking-widest">Cédula</Label>
-                                <Input
-                                    placeholder="ej: 12345678"
-                                    value={formData.cedula}
-                                    onChange={e => setFormData(p => ({ ...p, cedula: e.target.value }))}
-                                    className="mt-1"
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-xs font-bold uppercase tracking-widest">Teléfono</Label>
-                                <Input
-                                    placeholder="ej: 310 123 4567"
-                                    value={formData.telefono}
-                                    onChange={e => setFormData(p => ({ ...p, telefono: e.target.value }))}
-                                    className="mt-1"
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-xs font-bold uppercase tracking-widest">Rol *</Label>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Rol *</Label>
                                 <Select value={formData.rol} onValueChange={v => setFormData(p => ({ ...p, rol: v as TrabajadorRol }))}>
-                                    <SelectTrigger className="mt-1">
+                                    <SelectTrigger className="mt-1.5 rounded-xl">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -775,9 +812,9 @@ export default function Trabajadores({
                                 </Select>
                             </div>
                             <div>
-                                <Label className="text-xs font-bold uppercase tracking-widest">Estado</Label>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Estado</Label>
                                 <Select value={formData.estado} onValueChange={v => setFormData(p => ({ ...p, estado: v as TrabajadorEstado }))}>
-                                    <SelectTrigger className="mt-1">
+                                    <SelectTrigger className="mt-1.5 rounded-xl">
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -787,96 +824,88 @@ export default function Trabajadores({
                                     </SelectContent>
                                 </Select>
                             </div>
+                        </div>
+
+                        {/* Cédula + Teléfono */}
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <Label className="text-xs font-bold uppercase tracking-widest">Salario base</Label>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Cédula</Label>
+                                <Input
+                                    placeholder="ej: 12345678"
+                                    value={formData.cedula}
+                                    onChange={e => setFormData(p => ({ ...p, cedula: e.target.value }))}
+                                    className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Teléfono</Label>
+                                <Input
+                                    placeholder="ej: 310 123 4567"
+                                    value={formData.telefono}
+                                    onChange={e => setFormData(p => ({ ...p, telefono: e.target.value }))}
+                                    className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Salario + Fecha ingreso */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Salario base</Label>
                                 <Input
                                     type="number"
                                     placeholder="ej: 1300000"
                                     value={formData.salarioBase || ''}
                                     onChange={e => setFormData(p => ({ ...p, salarioBase: parseFloat(e.target.value) || 0 }))}
-                                    className="mt-1"
+                                    className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
                                 />
                             </div>
                             <div>
-                                <Label className="text-xs font-bold uppercase tracking-widest">Fecha de ingreso</Label>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Fecha de ingreso</Label>
                                 <Input
                                     type="date"
                                     value={formData.fechaIngreso}
                                     onChange={e => setFormData(p => ({ ...p, fechaIngreso: e.target.value }))}
-                                    className="mt-1"
+                                    className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
                                 />
-                            </div>
-                            <div className="col-span-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest">Horario</Label>
-                                <Input
-                                    placeholder="ej: Lun-Vie 6am-2pm"
-                                    value={formData.horario}
-                                    onChange={e => setFormData(p => ({ ...p, horario: e.target.value }))}
-                                    className="mt-1"
-                                />
-                            </div>
-                            <div className="col-span-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest">Observaciones</Label>
-                                <Input
-                                    placeholder="Notas adicionales..."
-                                    value={formData.observaciones}
-                                    onChange={e => setFormData(p => ({ ...p, observaciones: e.target.value }))}
-                                    className="mt-1"
-                                />
-                            </div>
-                            <div className="col-span-2">
-                                <Label className="text-xs font-bold uppercase tracking-widest">Foto de perfil</Label>
-                                <input
-                                    ref={fotoPerfilInputRef}
-                                    type="file"
-                                    accept="image/*"
-                                    capture="user"
-                                    className="hidden"
-                                    onChange={handleFotoPerfil}
-                                />
-                                {formData.fotoPerfil ? (
-                                    <div className="mt-1 flex items-center gap-3">
-                                        <img src={formData.fotoPerfil} alt="Perfil" className="w-16 h-16 rounded-xl object-cover border-2 border-violet-200 dark:border-violet-800" />
-                                        <div className="flex flex-col gap-1">
-                                            <button
-                                                type="button"
-                                                onClick={() => fotoPerfilInputRef.current?.click()}
-                                                className="text-xs font-bold text-violet-600 hover:text-violet-800 flex items-center gap-1"
-                                            >
-                                                <Camera className="w-3.5 h-3.5" /> Cambiar foto
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setFormData(p => ({ ...p, fotoPerfil: undefined }))}
-                                                className="text-xs font-bold text-red-400 hover:text-red-600 flex items-center gap-1"
-                                            >
-                                                <X className="w-3.5 h-3.5" /> Eliminar foto
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => fotoPerfilInputRef.current?.click()}
-                                        className="mt-1 w-full border-2 border-dashed border-violet-200 dark:border-violet-800 rounded-xl p-4 flex flex-col items-center gap-1 text-violet-400 hover:text-violet-600 hover:border-violet-400 transition-colors"
-                                    >
-                                        <Camera className="w-6 h-6" />
-                                        <span className="text-xs font-bold uppercase tracking-widest">Agregar foto de perfil</span>
-                                    </button>
-                                )}
                             </div>
                         </div>
+
+                        {/* Horario */}
+                        <div>
+                            <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Horario</Label>
+                            <Input
+                                placeholder="ej: Lun-Vie 6am-2pm"
+                                value={formData.horario}
+                                onChange={e => setFormData(p => ({ ...p, horario: e.target.value }))}
+                                className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
+                            />
+                        </div>
+
+                        {/* Observaciones */}
+                        <div>
+                            <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Observaciones</Label>
+                            <Input
+                                placeholder="Notas adicionales..."
+                                value={formData.observaciones}
+                                onChange={e => setFormData(p => ({ ...p, observaciones: e.target.value }))}
+                                className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
+                            />
+                        </div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="ghost" onClick={() => setShowModal(false)}>Cancelar</Button>
+
+                    <div className="p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-end gap-3">
+                        <Button variant="ghost" onClick={() => setShowModal(false)} className="rounded-xl font-bold">
+                            Cancelar
+                        </Button>
                         <Button
                             onClick={handleGuardar}
                             disabled={isSaving}
-                            className="bg-violet-600 hover:bg-violet-700 text-white"
+                            className="bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-black shadow-lg shadow-violet-500/30 px-6"
                         >
-                            {isSaving ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar'}
+                            {isSaving ? 'Guardando...' : editando ? 'Guardar cambios' : 'Registrar Trabajador'}
                         </Button>
-                    </DialogFooter>
+                    </div>
                 </DialogContent>
             </Dialog>
 
