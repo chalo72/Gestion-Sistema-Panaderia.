@@ -1,14 +1,16 @@
 import { useState, useMemo } from 'react';
-import { 
-  Search, 
-  Store, 
-  AlertTriangle, 
+import {
+  Search,
+  Store,
+  AlertTriangle,
   ShoppingCart,
   ArrowLeft,
   Package,
   Check,
   Minus,
-  Plus
+  Plus,
+  PackagePlus,
+  ChevronDown
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -123,6 +125,26 @@ export function ProveedorCatalogoTactico({
       return matchCat && matchSearch;
     });
   }, [activeProveedor, categoriaActiva, search]);
+
+  // Insumos sin precio: ingredientes que NO tienen precio en este proveedor
+  const [showInsumosSinPrecio, setShowInsumosSinPrecio] = useState(false);
+  const [searchInsumos, setSearchInsumos] = useState('');
+  const [qtyInsumos, setQtyInsumos] = useState<Record<string, number>>({});
+
+  const insumosSinPrecio = useMemo(() => {
+    if (!activeProveedor) return [];
+    const idsConPrecio = new Set(activeProveedor.productos.map(p => p.id));
+    return productos
+      .filter(p => {
+        const tipo = (p as any).tipo;
+        const cat = ((p as any).categoria || '').toLowerCase();
+        const esInsumo = tipo === 'ingrediente' || cat.startsWith('ins:') || cat === 'insumos';
+        const sinPrecio = !idsConPrecio.has(p.id);
+        const matchSearch = !searchInsumos || p.nombre.toLowerCase().includes(searchInsumos.toLowerCase());
+        return esInsumo && sinPrecio && matchSearch;
+      })
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [activeProveedor, productos, searchInsumos]);
 
   const updateQuantity = (id: string, delta: number, base: number) => {
     setQuantities(prev => {
@@ -376,6 +398,91 @@ export function ProveedorCatalogoTactico({
           })}
         </div>
       )}
+
+      {/* ── Sección: Insumos sin precio registrado ── */}
+      {insumosSinPrecio.length > 0 || showInsumosSinPrecio ? (
+        <div className="mt-6 border border-dashed border-amber-300 dark:border-amber-700 rounded-2xl overflow-hidden">
+          {/* Header colapsable */}
+          <button
+            onClick={() => setShowInsumosSinPrecio(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-3 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <PackagePlus className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span className="text-[11px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                Insumos sin precio registrado
+              </span>
+              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-300">
+                {insumosSinPrecio.length}
+              </span>
+            </div>
+            <ChevronDown className={cn("w-4 h-4 text-amber-600 transition-transform", showInsumosSinPrecio && "rotate-180")} />
+          </button>
+
+          {showInsumosSinPrecio && (
+            <div className="p-4 space-y-3 bg-white dark:bg-slate-900">
+              <p className="text-[10px] text-slate-500 font-bold">
+                Estos insumos no tienen precio asignado a este proveedor. Puedes agregarlos igualmente — el costo quedará en $0 y podrás actualizarlo en el módulo de Proveedores.
+              </p>
+              {/* Buscador */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  placeholder="Buscar insumo..."
+                  value={searchInsumos}
+                  onChange={e => setSearchInsumos(e.target.value)}
+                  className="w-full h-9 pl-9 pr-3 text-xs font-bold bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:ring-2 focus:ring-amber-400/30"
+                />
+              </div>
+
+              {insumosSinPrecio.length === 0 ? (
+                <p className="text-center text-xs text-slate-400 py-4">Sin resultados</p>
+              ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-72 overflow-y-auto pr-1">
+                  {insumosSinPrecio.map(insumo => {
+                    const qty = qtyInsumos[insumo.id] ?? 1;
+                    const isAdding = addingIds.has(insumo.id);
+                    return (
+                      <div key={insumo.id} className="flex flex-col gap-2 p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700">
+                        <p className="text-[11px] font-black uppercase text-slate-800 dark:text-slate-200 leading-tight line-clamp-2 min-h-[28px]">
+                          {insumo.nombre}
+                        </p>
+                        <span className="text-[9px] font-bold text-amber-600 uppercase tracking-widest">Sin precio</span>
+                        {/* Cantidad */}
+                        <div className="flex items-center justify-between bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600 p-1">
+                          <button
+                            onClick={() => setQtyInsumos(p => ({ ...p, [insumo.id]: Math.max(1, (p[insumo.id] ?? 1) - 1) }))}
+                            className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-rose-500 hover:bg-rose-50"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <span className="text-xs font-black tabular-nums">{qty}</span>
+                          <button
+                            onClick={() => setQtyInsumos(p => ({ ...p, [insumo.id]: (p[insumo.id] ?? 1) + 1 }))}
+                            className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-emerald-500 hover:bg-emerald-50"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <button
+                          onClick={() => handleAddWithFeedback(insumo.id, activeProveedor.id, qty, 0)}
+                          disabled={isAdding}
+                          className={cn(
+                            "w-full h-7 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95",
+                            isAdding ? "bg-emerald-500 text-white" : "bg-amber-500 hover:bg-amber-600 text-white"
+                          )}
+                        >
+                          {isAdding ? '✓ Listo' : 'Agregar'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

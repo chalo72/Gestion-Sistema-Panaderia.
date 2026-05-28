@@ -1,10 +1,9 @@
 import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect } from 'react';
-import { 
-  Users, UserPlus, Search, Phone, Mail, MapPin, 
-  CreditCard, Calendar, Filter, MoreVertical, 
-  Pencil, Trash2, CheckCircle2, Building2, 
-  User, Star, Info, ChevronRight, ArrowLeft,
+import {
+  Users, UserPlus, Search, Phone, Mail, MapPin,
+  CreditCard, Filter, Pencil, Trash2, Building2,
+  User, Star, Info, ChevronRight,
   Download, FileText, BadgeCheck, PhoneCall
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,8 +13,6 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { db } from '@/lib/database';

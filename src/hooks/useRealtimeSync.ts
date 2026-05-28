@@ -348,9 +348,9 @@ export function useRealtimeSync() {
           })
         : [];
       // Items tombstoneados localmente pero que Supabase tiene vivos → restaurar
-      // Solo aplica a tablas donde una eliminación accidental en un dispositivo no debe
-      // propagarse si el ítem sigue vivo en la nube (ej: proveedor "la 36" eliminado por error)
-      const restaurar = (['productos', 'proveedores', 'precios', 'creditos', 'prepedidos'].includes(table))
+      // SOLO proveedores: el caso "la 36 eliminada por error" justifica la restauración.
+      // Productos y precios NO se restauran: si el usuario los eliminó, la intención debe respetarse.
+      const restaurar = (table === 'proveedores')
         ? supabaseItems.filter((i: any) => i.id && tombstoneSet.has(i.id))
         : [];
 
