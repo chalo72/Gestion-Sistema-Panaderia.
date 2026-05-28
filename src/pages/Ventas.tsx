@@ -219,10 +219,10 @@ export function Ventas(props: VentasProps) {
                 categoriaLower === selectedCategory.toLowerCase().trim();
                 
             const precio = safeNumber(p.precioVenta);
-            // Solo mostrar productos elaborados (para venta) — nunca ingredientes de proveedor
-            const esElaborado = p.tipo === 'elaborado';
+            // Mostrar productos elaborados O sin tipo definido — excluir solo los marcados explícitamente como insumo
+            const esVendible = !p.tipo || p.tipo === 'elaborado';
 
-            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo && esElaborado;
+            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo && esVendible;
         });
     }, [productos, searchTerm, selectedCategory]);
 

@@ -319,7 +319,7 @@ export function Sidebar({
     return (
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="fixed top-4 left-4 z-50 md:hidden bg-background/80 backdrop-blur-md border shadow-sm">
+          <Button variant="ghost" size="icon" className="fixed top-4 left-4 z-50 md:hidden bg-[#0f172a] text-white hover:bg-slate-700 shadow-lg rounded-xl w-10 h-10">
             <Menu className="w-5 h-5" />
           </Button>
         </SheetTrigger>
