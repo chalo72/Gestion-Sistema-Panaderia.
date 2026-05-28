@@ -219,10 +219,9 @@ export function Ventas(props: VentasProps) {
                 categoriaLower === selectedCategory.toLowerCase().trim();
                 
             const precio = safeNumber(p.precioVenta);
-            // Mostrar productos elaborados O sin tipo definido — excluir solo los marcados explícitamente como insumo
-            const esVendible = !p.tipo || p.tipo === 'elaborado';
-
-            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo && esVendible;
+            // Mostrar cualquier producto que no sea insumo/ingrediente — no filtrar por tipo
+            // (tipo puede ser undefined en productos importados y eso no debe excluirlos del POS)
+            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo;
         });
     }, [productos, searchTerm, selectedCategory]);
 
