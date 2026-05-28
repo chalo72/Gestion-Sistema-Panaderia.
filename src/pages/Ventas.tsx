@@ -113,7 +113,7 @@ export function Ventas(props: VentasProps) {
     } = props;
 
     // ==========================================
-    // VENDEDORA ACTIVA — Por pestaña (no global)
+    // VENDEDORA ACTIVA — Lista disponible
     // ==========================================
     const { usuarios } = useAuth();
     const vendedorasDisponibles = useMemo<VendedoraOption[]>(() => {
@@ -122,31 +122,6 @@ export function Ventas(props: VentasProps) {
             .filter(u => u.activo !== false)
             .map(u => ({ id: u.id, nombre: u.nombre, rol: u.rol }));
     }, [usuarios]);
-
-    // Vendedora de la pestaña activa (derivada, no estado global)
-    const vendedoraActiva = useMemo<VendedoraOption | null>(() => {
-        const tab = tabCarts[activeTabId];
-        if (tab?.vendedoraId && tab?.vendedoraNombre) {
-            return { id: tab.vendedoraId, nombre: tab.vendedoraNombre };
-        }
-        // Fallback: usuario logueado
-        return usuario ? { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol } : null;
-    }, [tabCarts, activeTabId, usuario]);
-
-    // Cambiar vendedora de la pestaña activa
-    const setVendedoraActiva = useCallback((v: VendedoraOption | null) => {
-        setTabCarts(prev => {
-            const current = prev[activeTabId] || { cart: [], cliente: '' };
-            return {
-                ...prev,
-                [activeTabId]: {
-                    ...current,
-                    vendedoraId: v?.id,
-                    vendedoraNombre: v?.nombre,
-                }
-            };
-        });
-    }, [activeTabId]);
 
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
     const [searchTerm, setSearchTerm] = useState('');
@@ -177,6 +152,25 @@ export function Ventas(props: VentasProps) {
     const [tabCarts, setTabCarts] = useState<Record<string, TabCartState>>({
         [VENTA_RAPIDA_ID]: { cart: [], cliente: '' }
     });
+
+    // Vendedora de la pestaña activa — derivada DESPUÉS de tabCarts y activeTabId
+    const vendedoraActiva = useMemo<VendedoraOption | null>(() => {
+        const tab = tabCarts[activeTabId];
+        if (tab?.vendedoraId && tab?.vendedoraNombre) {
+            return { id: tab.vendedoraId, nombre: tab.vendedoraNombre };
+        }
+        return usuario ? { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol } : null;
+    }, [tabCarts, activeTabId, usuario]);
+
+    const setVendedoraActiva = useCallback((v: VendedoraOption | null) => {
+        setTabCarts(prev => {
+            const current = prev[activeTabId] || { cart: [], cliente: '' };
+            return {
+                ...prev,
+                [activeTabId]: { ...current, vendedoraId: v?.id, vendedoraNombre: v?.nombre }
+            };
+        });
+    }, [activeTabId]);
 
     // Obtener el estado actual del carrito/cliente de la pestaña activa
     const currentTabState = tabCarts[activeTabId] || { cart: [], cliente: '' };
