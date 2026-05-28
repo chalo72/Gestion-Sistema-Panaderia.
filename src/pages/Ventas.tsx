@@ -124,6 +124,7 @@ export function Ventas(props: VentasProps) {
     }, [usuarios]);
 
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
+    const [showMobileCart, setShowMobileCart] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
@@ -565,6 +566,7 @@ export function Ventas(props: VentasProps) {
 
             setShowPagoModal(false);
             setShowSuccessModal(true);
+            setShowMobileCart(false); // volver al catálogo en móvil tras cobrar
 
             // Si era una mesa, liberarla y cerrar la pestaña
             const activeTab = tabs.find(t => t.id === activeTabId);
@@ -648,8 +650,11 @@ export function Ventas(props: VentasProps) {
             </div>
 
             <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3">
-                {/* Panel izquierdo: Catálogo o Mesas */}
-                <div className="flex-1 flex flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden" style={{ minHeight: '0' }}>
+                {/* Panel izquierdo: Catálogo o Mesas — pantalla completa en móvil */}
+                <div className={cn(
+                    "flex-1 flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden",
+                    showMobileCart ? "hidden lg:flex" : "flex"
+                )} style={{ minHeight: '0' }}>
                     {viewMode === 'pos' ? (
                         <ProductCatalog
                             productos={productosVenta}
@@ -677,8 +682,11 @@ export function Ventas(props: VentasProps) {
                     )}
                 </div>
 
-                {/* Panel derecho: Carrito / Orden */}
-                <div className="w-full lg:w-[440px] xl:w-[480px] shrink-0 flex flex-col min-h-0 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden" style={{ minHeight: '0' }}>
+                {/* Panel derecho: Carrito — pantalla completa en móvil cuando showMobileCart */}
+                <div className={cn(
+                    "w-full lg:w-[440px] xl:w-[480px] shrink-0 flex-col min-h-0 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden",
+                    showMobileCart ? "flex" : "hidden lg:flex"
+                )} style={{ minHeight: '0' }}>
                     <CartDetail
                         cart={cart}
                         onUpdateQuantity={updateQuantity}
@@ -695,6 +703,51 @@ export function Ventas(props: VentasProps) {
                         onLiberarMesa={handleLiberarMesa}
                     />
                 </div>
+            </div>
+
+            {/* ── Barra de navegación móvil: Catálogo ↔ Ticket ── */}
+            {/* Solo visible en móvil (oculta en lg+). El desktop usa el layout lado a lado. */}
+            <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 safe-area-bottom">
+                {/* Botón Catálogo */}
+                <button
+                    onClick={() => setShowMobileCart(false)}
+                    className={cn(
+                        'flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-colors',
+                        !showMobileCart
+                            ? 'text-primary border-t-2 border-primary bg-orange-50/60 dark:bg-orange-900/10'
+                            : 'text-slate-400 hover:text-slate-600'
+                    )}
+                >
+                    <ShoppingCart className="w-5 h-5" />
+                    Catálogo
+                </button>
+
+                {/* Botón Ticket — muestra total y cantidad */}
+                <button
+                    onClick={() => setShowMobileCart(true)}
+                    className={cn(
+                        'flex-[2] flex items-center justify-center gap-2 py-2.5 transition-colors relative',
+                        showMobileCart
+                            ? 'bg-emerald-500 text-white'
+                            : cart.length > 0
+                                ? 'bg-emerald-500 text-white hover:bg-emerald-600 active:scale-95'
+                                : 'text-slate-400 border-l border-slate-200 dark:border-slate-700'
+                    )}
+                >
+                    {cart.length > 0 ? (
+                        <>
+                            <span className="w-6 h-6 rounded-full bg-white/25 text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                                {cart.reduce((s, i) => s + i.cantidad, 0)}
+                            </span>
+                            <span className="text-sm font-black">{formatCurrency(totalCart)}</span>
+                            <span className="text-[10px] font-bold opacity-80">
+                                {showMobileCart ? '← Catálogo' : '→ Ver ticket'}
+                            </span>
+                        </>
+                    ) : (
+                        <span className="text-[10px] font-black uppercase tracking-widest">Ticket vacío</span>
+                    )}
+                </button>
             </div>
 
             {/* Modal de Pago Profesional */}

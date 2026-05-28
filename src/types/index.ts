@@ -748,6 +748,30 @@ export interface ReporteFinanciero {
   ventasPorMetodoPago: Record<MetodoPago, number>;
 }
 
+// ── Ventas manuales (mientras el POS no arranca) ──────────────
+export interface VentaDiaria {
+  id: string;
+  fecha: string; // YYYY-MM-DD
+  totalEfectivo: number;
+  totalNequi: number;
+  totalTransferencia: number;
+  totalCredito: number;
+  total: number;
+  notas?: string;
+}
+
+// ── Compromisos fijos del negocio ─────────────────────────────
+export interface CompromisoFijo {
+  id: string;
+  nombre: string;
+  monto: number;
+  categoria: GastoCategoria;
+  diaDeCobro: number; // día del mes (1–30)
+  activo: boolean;
+  esPropietario?: boolean; // true = pago de salario al dueño
+  persona?: string; // "Yo" | "Esposa" | nombre
+}
+
 // ============================================================
 // CRÉDITOS — TIPOS COMPARTIDOS
 // ============================================================

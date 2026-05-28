@@ -64,29 +64,37 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
     );
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const [isSavingUser, setIsSavingUser] = useState(false);
 
-    if (editingUser) {
-      const updates: any = { ...formData };
-      if (!updates.password) delete updates.password; // No borrar contraseña si dejó vacío
-      const success = await updateUsuario(editingUser.id, updates);
-      if (success) {
-        toast.success('Usuario actualizado');
-        setIsDialogOpen(false);
-        setEditingUser(null);
+  const handleGuardarUsuario = async () => {
+    if (!formData.email.trim()) { toast.error('El identificador de usuario es obligatorio.'); return; }
+    if (!formData.nombre.trim()) { toast.error('El nombre es obligatorio.'); return; }
+    if (!editingUser && !formData.password) { toast.error('Debes asignar una contraseña.'); return; }
+
+    setIsSavingUser(true);
+    try {
+      if (editingUser) {
+        const updates: any = { ...formData };
+        if (!updates.password) delete updates.password;
+        const success = await updateUsuario(editingUser.id, updates);
+        if (success) {
+          toast.success(`${formData.nombre} actualizado correctamente`);
+          setIsDialogOpen(false);
+          setEditingUser(null);
+        }
+      } else {
+        const success = await addUsuario(formData);
+        if (success) {
+          toast.success(`Usuario ${formData.nombre} creado`);
+          setIsDialogOpen(false);
+          setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true, password: '' });
+        }
       }
-    } else {
-      if (!formData.password) {
-        toast.error('Debes asignar una contraseña al usuario.');
-        return;
-      }
-      const success = await addUsuario(formData);
-      if (success) {
-        toast.success('Usuario creado');
-        setIsDialogOpen(false);
-        setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true, password: '' });
-      }
+    } catch (err) {
+      console.error('[Usuarios] Error al guardar:', err);
+      toast.error('Error al guardar. Revisa la consola.');
+    } finally {
+      setIsSavingUser(false);
     }
   };
 
@@ -172,20 +180,19 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
                 Completa los datos del usuario
               </DialogDescription>
             </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 py-3">
+            <div className="space-y-4 py-3">
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1">Email</Label>
+                  <Label htmlFor="email" className="text-[10px] font-black uppercase tracking-widest opacity-60 ml-1">Usuario / Email</Label>
                   <div className="relative">
                     <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-indigo-500/50" />
                     <Input
                       id="email"
-                      type="email"
+                      type="text"
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="h-10 pl-12 rounded-xl border border-slate-200 dark:border-slate-700 mt-1"
-                      placeholder="usuario@dulceplacer.com"
-                      required
+                      placeholder="gabriela@dulceplacer.com"
                     />
                   </div>
                 </div>
@@ -197,7 +204,6 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
                       value={formData.nombre}
                       onChange={(e) => setFormData({ ...formData, nombre: e.target.value })}
                       className="h-10 rounded-xl border border-slate-200 dark:border-slate-700 mt-1"
-                      required
                     />
                   </div>
                   <div className="space-y-2">
@@ -260,11 +266,16 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" className="w-full h-10 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm">
-                  {editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
+                <Button
+                  type="button"
+                  onClick={handleGuardarUsuario}
+                  disabled={isSavingUser}
+                  className="w-full h-10 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm"
+                >
+                  {isSavingUser ? 'Guardando...' : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
                 </Button>
               </DialogFooter>
-            </form>
+            </div>
           </DialogContent>
         </Dialog>
 

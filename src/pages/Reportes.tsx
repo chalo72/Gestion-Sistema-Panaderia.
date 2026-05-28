@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
     BarChart,
     Bar,
@@ -29,15 +29,32 @@ import {
     Zap,
     Target,
     ShoppingBag,
-    Percent
+    Percent,
+    Brain,
+    CalendarCheck,
+    Plus,
+    Trash2,
+    CheckCircle2,
+    AlertTriangle,
+    XCircle,
+    User
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import type { Venta, Gasto, ReporteFinanciero, Producto, Categoria } from '@/types';
+import type { Venta, Gasto, ReporteFinanciero, Producto, Categoria, CompromisoFijo, GastoCategoria } from '@/types';
 import { cn } from '@/lib/utils';
 import { HistorialVentasCategoria } from '@/components/ventas/HistorialVentasCategoria';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import {
+    getCompromisos, saveCompromisos, addCompromiso, deleteCompromiso, updateCompromiso,
+    getVentasDiarias, addVentaDiaria, deleteVentaDiaria,
+    calcularProyeccionQuincena, generarConsejo
+} from '@/lib/finanzas-personales';
+import type { VentaDiaria } from '@/types';
 
 interface ReportesProps {
     ventas: Venta[];
@@ -156,6 +173,82 @@ export default function Reportes({
     const ratioGastoAnt = reporteMesAnterior.totalVentas > 0
         ? (reporteMesAnterior.totalGastos / reporteMesAnterior.totalVentas) * 100
         : 0;
+
+    // ── Estado: Compromisos y Ventas Diarias ──────────────────────
+    const [compromisos, setCompromisos] = useState<CompromisoFijo[]>(() => getCompromisos());
+    const [ventasDiarias, setVentasDiarias] = useState<VentaDiaria[]>(() => getVentasDiarias());
+
+    const [formCompromiso, setFormCompromiso] = useState({
+        nombre: '', monto: '', categoria: 'Otros' as GastoCategoria,
+        diaDeCobro: '', esPropietario: false, persona: ''
+    });
+    const [formVenta, setFormVenta] = useState({
+        fecha: new Date().toISOString().slice(0, 10),
+        totalEfectivo: '', totalNequi: '', totalTransferencia: '', totalCredito: '', notas: ''
+    });
+
+    const proyeccionQuincena = useMemo(() => calcularProyeccionQuincena({
+        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total })),
+        ventasDiarias,
+        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria })),
+        compromisos,
+    }), [ventas, ventasDiarias, gastos, compromisos]);
+
+    const consejo = useMemo(() => generarConsejo({
+        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total })),
+        ventasDiarias,
+        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria, descripcion: g.descripcion })),
+        compromisos,
+    }), [ventas, ventasDiarias, gastos, compromisos]);
+
+    const handleAddCompromiso = () => {
+        const monto = parseFloat(formCompromiso.monto);
+        const dia = parseInt(formCompromiso.diaDeCobro);
+        if (!formCompromiso.nombre || isNaN(monto) || monto <= 0) {
+            toast.error('Nombre y monto son obligatorios'); return;
+        }
+        const nuevo = addCompromiso({
+            nombre: formCompromiso.nombre, monto,
+            categoria: formCompromiso.categoria,
+            diaDeCobro: isNaN(dia) ? 1 : Math.min(31, Math.max(1, dia)),
+            activo: true,
+            esPropietario: formCompromiso.esPropietario,
+            persona: formCompromiso.persona || undefined,
+        });
+        setCompromisos(prev => [...prev, nuevo]);
+        setFormCompromiso({ nombre: '', monto: '', categoria: 'Otros', diaDeCobro: '', esPropietario: false, persona: '' });
+        toast.success('Compromiso guardado');
+    };
+
+    const handleToggleCompromiso = (id: string) => {
+        updateCompromiso(id, { activo: !compromisos.find(c => c.id === id)?.activo });
+        setCompromisos(getCompromisos());
+    };
+
+    const handleDeleteCompromiso = (id: string) => {
+        deleteCompromiso(id);
+        setCompromisos(getCompromisos());
+    };
+
+    const handleAddVentaDiaria = () => {
+        const ef = parseFloat(formVenta.totalEfectivo) || 0;
+        const nq = parseFloat(formVenta.totalNequi) || 0;
+        const tr = parseFloat(formVenta.totalTransferencia) || 0;
+        const cr = parseFloat(formVenta.totalCredito) || 0;
+        if (ef + nq + tr + cr <= 0) { toast.error('Ingresa al menos un monto'); return; }
+        const nueva = addVentaDiaria({
+            fecha: formVenta.fecha, totalEfectivo: ef, totalNequi: nq,
+            totalTransferencia: tr, totalCredito: cr, notas: formVenta.notas || undefined
+        });
+        setVentasDiarias(getVentasDiarias());
+        setFormVenta({ fecha: new Date().toISOString().slice(0, 10), totalEfectivo: '', totalNequi: '', totalTransferencia: '', totalCredito: '', notas: '' });
+        toast.success(`Venta del día registrada: ${formatCurrency(nueva.total)}`);
+    };
+
+    const handleDeleteVentaDiaria = (id: string) => {
+        deleteVentaDiaria(id);
+        setVentasDiarias(getVentasDiarias());
+    };
 
     const cardsData = [
         {
@@ -298,6 +391,14 @@ export default function Reportes({
                     <TabsTrigger value="historico-categorias" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <Layers className="w-4 h-4 mr-2" />
                         Por Categoría
+                    </TabsTrigger>
+                    <TabsTrigger value="quincena" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+                        <CalendarCheck className="w-4 h-4 mr-2" />
+                        Mi Quincena
+                    </TabsTrigger>
+                    <TabsTrigger value="consejero-ia" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-violet-600 data-[state=active]:text-white">
+                        <Brain className="w-4 h-4 mr-2" />
+                        Consejero IA
                     </TabsTrigger>
                 </TabsList>
 

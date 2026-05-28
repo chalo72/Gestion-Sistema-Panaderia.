@@ -151,12 +151,13 @@ export function Login({ onLoginSuccess }: LoginProps) {
 
             <div className="space-y-2">
               <Label htmlFor="email" className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                Correo electrónico
+                Usuario / Correo
               </Label>
               <Input
                 id="email"
-                type="email"
-                placeholder="tu@email.com"
+                type="text"
+                autoComplete="username"
+                placeholder="usuario@dulceplacer.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
