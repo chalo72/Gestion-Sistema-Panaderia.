@@ -36,6 +36,7 @@ import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
 
 import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion } from '@/types';
 import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo } from '@/lib/ocr-service';
+import { getCompromisos } from '@/lib/finanzas-personales';
 
 interface GastosProps {
     gastos: Gasto[];
@@ -64,6 +65,7 @@ export default function Gastos({
     const [scanResult, setScanResult] = useState<Partial<Gasto> | null>(null);
     const [showAddModal, setShowAddModal] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const salarioCompromisos = getCompromisos().filter(c => c.activo && c.esPropietario);
 
     const [newGasto, setNewGasto] = useState<Partial<Gasto>>({
         descripcion: '',
@@ -211,6 +213,32 @@ export default function Gastos({
                 className="hidden"
                 onChange={handleFileUpload}
             />
+
+            {/* Pagos rápidos de nómina propietarios */}
+            {salarioCompromisos.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground self-center">Pago rápido:</span>
+                    {salarioCompromisos.map(c => (
+                        <button
+                            key={c.id}
+                            onClick={() => {
+                                setNewGasto({
+                                    descripcion: `Salario quincena${c.persona ? ` — ${c.persona}` : ''}`,
+                                    monto: c.monto,
+                                    categoria: 'Nómina',
+                                    fecha: new Date().toISOString().split('T')[0],
+                                    metodoPago: 'efectivo'
+                                });
+                                setScanResult(null);
+                                setShowAddModal(true);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-black hover:bg-amber-500/20 transition-all"
+                        >
+                            💰 {c.persona || c.nombre} — ${c.monto.toLocaleString('es-CO')}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             <ExpenseKPIs
                 totalMensual={stats.total}

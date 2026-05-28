@@ -704,6 +704,256 @@ export default function Reportes({
                         formatCurrency={formatCurrency}
                     />
                 </TabsContent>
+
+                {/* ══════════════════════════════════════════════════
+                    TAB 4: MI QUINCENA
+                ══════════════════════════════════════════════════ */}
+                <TabsContent value="quincena" className="space-y-6 mt-0">
+                    {/* Banner proyección */}
+                    <Card className={cn(
+                        "rounded-3xl border-2",
+                        proyeccionQuincena.alcanza
+                            ? "border-emerald-500/40 bg-emerald-500/5"
+                            : "border-rose-500/40 bg-rose-500/5"
+                    )}>
+                        <CardContent className="p-6">
+                            <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+                                <div className={cn(
+                                    "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 text-2xl",
+                                    proyeccionQuincena.alcanza ? "bg-emerald-500/20" : "bg-rose-500/20"
+                                )}>
+                                    {proyeccionQuincena.alcanza ? '✅' : '⚠️'}
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Proyección de quincena</p>
+                                    <h3 className={cn("text-2xl font-black", proyeccionQuincena.alcanza ? "text-emerald-500" : "text-rose-500")}>
+                                        {proyeccionQuincena.alcanza
+                                            ? `Te alcanza — sobran ${formatCurrency(proyeccionQuincena.saldoProyectado)}`
+                                            : `Déficit proyectado: ${formatCurrency(proyeccionQuincena.deficit)}`}
+                                    </h3>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        Promedio diario: {formatCurrency(proyeccionQuincena.promedioVentaDiaria)} ·
+                                        Ingreso esperado: {formatCurrency(proyeccionQuincena.ingresoEsperado)} ·
+                                        {proyeccionQuincena.diasRestantes} días restantes
+                                    </p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 shrink-0">
+                                    <div className="text-center bg-card/60 rounded-2xl p-3 border border-white/5">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Compromisos</p>
+                                        <p className="text-lg font-black text-rose-400">{formatCurrency(proyeccionQuincena.totalCompromisos)}</p>
+                                    </div>
+                                    <div className="text-center bg-card/60 rounded-2xl p-3 border border-white/5">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Salarios</p>
+                                        <p className="text-lg font-black text-amber-400">{formatCurrency(proyeccionQuincena.totalSalarios)}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {/* Columna izq — Compromisos fijos */}
+                        <Card className="rounded-3xl border-white/5 bg-card/30">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base font-black">Compromisos Fijos</CardTitle>
+                                <CardDescription className="text-xs">Arriendo, préstamos, servicios, salarios</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                {/* Formulario nuevo compromiso */}
+                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-2 border border-white/5">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Input placeholder="Nombre (Ej: Arriendo)" value={formCompromiso.nombre}
+                                            onChange={e => setFormCompromiso(p => ({ ...p, nombre: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                        <Input placeholder="Monto ($)" type="number" value={formCompromiso.monto}
+                                            onChange={e => setFormCompromiso(p => ({ ...p, monto: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                    </div>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        <Input placeholder="Día cobro (1-31)" type="number" value={formCompromiso.diaDeCobro}
+                                            onChange={e => setFormCompromiso(p => ({ ...p, diaDeCobro: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                        <select value={formCompromiso.categoria}
+                                            onChange={e => setFormCompromiso(p => ({ ...p, categoria: e.target.value as GastoCategoria }))}
+                                            className="h-9 text-sm rounded-xl border border-input bg-background px-2">
+                                            {(['Arriendo','Servicios','Nómina','Materia Prima','Mantenimiento','Otros'] as GastoCategoria[]).map(c => (
+                                                <option key={c} value={c}>{c}</option>
+                                            ))}
+                                        </select>
+                                        <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer">
+                                            <input type="checkbox" checked={formCompromiso.esPropietario}
+                                                onChange={e => setFormCompromiso(p => ({ ...p, esPropietario: e.target.checked }))}
+                                                className="rounded" />
+                                            <User className="w-3.5 h-3.5 text-amber-500" /> Mi salario
+                                        </label>
+                                    </div>
+                                    {formCompromiso.esPropietario && (
+                                        <Input placeholder="Persona (Yo / Esposa / ...)" value={formCompromiso.persona}
+                                            onChange={e => setFormCompromiso(p => ({ ...p, persona: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                    )}
+                                    <Button onClick={handleAddCompromiso} size="sm" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs h-9">
+                                        <Plus className="w-4 h-4 mr-1" /> Agregar compromiso
+                                    </Button>
+                                </div>
+
+                                {/* Lista de compromisos */}
+                                {compromisos.length === 0 && (
+                                    <p className="text-center text-xs text-muted-foreground py-4">Sin compromisos registrados aún</p>
+                                )}
+                                {compromisos.map(c => (
+                                    <div key={c.id} className={cn(
+                                        "flex items-center gap-3 rounded-2xl p-3 border transition-all",
+                                        c.activo ? "bg-card/40 border-white/5" : "bg-slate-500/5 border-white/3 opacity-50"
+                                    )}>
+                                        <button onClick={() => handleToggleCompromiso(c.id)} className="shrink-0">
+                                            {c.activo
+                                                ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                                                : <XCircle className="w-4 h-4 text-slate-400" />}
+                                        </button>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                {c.esPropietario && <User className="w-3 h-3 text-amber-500 shrink-0" />}
+                                                <p className="text-sm font-bold truncate">{c.nombre}</p>
+                                                {c.persona && <span className="text-[10px] text-amber-500 font-black">({c.persona})</span>}
+                                            </div>
+                                            <p className="text-[10px] text-muted-foreground">Día {c.diaDeCobro} · {c.categoria}</p>
+                                        </div>
+                                        <p className="text-sm font-black text-rose-400 shrink-0">{formatCurrency(c.monto)}</p>
+                                        <button onClick={() => handleDeleteCompromiso(c.id)} className="shrink-0 text-muted-foreground hover:text-rose-400 transition-colors">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </CardContent>
+                        </Card>
+
+                        {/* Columna der — Registro de ventas del día */}
+                        <Card className="rounded-3xl border-white/5 bg-card/30">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base font-black">Ventas del Día</CardTitle>
+                                <CardDescription className="text-xs">Registro manual mientras el POS arranca</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-3">
+                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-2 border border-white/5">
+                                    <Input type="date" value={formVenta.fecha}
+                                        onChange={e => setFormVenta(p => ({ ...p, fecha: e.target.value }))}
+                                        className="h-9 text-sm rounded-xl" />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Input placeholder="Efectivo ($)" type="number" value={formVenta.totalEfectivo}
+                                            onChange={e => setFormVenta(p => ({ ...p, totalEfectivo: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                        <Input placeholder="Nequi ($)" type="number" value={formVenta.totalNequi}
+                                            onChange={e => setFormVenta(p => ({ ...p, totalNequi: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                        <Input placeholder="Transferencia ($)" type="number" value={formVenta.totalTransferencia}
+                                            onChange={e => setFormVenta(p => ({ ...p, totalTransferencia: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                        <Input placeholder="Crédito ($)" type="number" value={formVenta.totalCredito}
+                                            onChange={e => setFormVenta(p => ({ ...p, totalCredito: e.target.value }))}
+                                            className="h-9 text-sm rounded-xl" />
+                                    </div>
+                                    <Input placeholder="Notas (opcional)" value={formVenta.notas}
+                                        onChange={e => setFormVenta(p => ({ ...p, notas: e.target.value }))}
+                                        className="h-9 text-sm rounded-xl" />
+                                    <Button onClick={handleAddVentaDiaria} size="sm" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs h-9">
+                                        <Plus className="w-4 h-4 mr-1" /> Registrar cierre del día
+                                    </Button>
+                                </div>
+
+                                {ventasDiarias.length === 0 && (
+                                    <p className="text-center text-xs text-muted-foreground py-4">Sin ventas registradas manualmente aún</p>
+                                )}
+                                <div className="max-h-64 overflow-y-auto space-y-2">
+                                    {ventasDiarias.slice(0, 30).map(v => (
+                                        <div key={v.id} className="flex items-center gap-3 rounded-2xl p-3 bg-card/40 border border-white/5">
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-bold">{new Date(v.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                                                <p className="text-[10px] text-muted-foreground">
+                                                    Ef: {formatCurrency(v.totalEfectivo)} · Nequi: {formatCurrency(v.totalNequi)}
+                                                    {v.totalTransferencia > 0 && ` · Transf: ${formatCurrency(v.totalTransferencia)}`}
+                                                    {v.totalCredito > 0 && ` · Cred: ${formatCurrency(v.totalCredito)}`}
+                                                </p>
+                                            </div>
+                                            <p className="text-sm font-black text-emerald-400 shrink-0">{formatCurrency(v.total)}</p>
+                                            <button onClick={() => handleDeleteVentaDiaria(v.id)} className="shrink-0 text-muted-foreground hover:text-rose-400 transition-colors">
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                </TabsContent>
+
+                {/* ══════════════════════════════════════════════════
+                    TAB 5: CONSEJERO IA
+                ══════════════════════════════════════════════════ */}
+                <TabsContent value="consejero-ia" className="space-y-4 mt-0">
+                    <Card className={cn(
+                        "rounded-3xl border-2",
+                        consejo.nivel === 'critico' ? "border-rose-500/50 bg-rose-500/5"
+                        : consejo.nivel === 'alerta' ? "border-amber-500/50 bg-amber-500/5"
+                        : "border-emerald-500/50 bg-emerald-500/5"
+                    )}>
+                        <CardContent className="p-6">
+                            <div className="flex items-start gap-4">
+                                <div className={cn(
+                                    "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
+                                    consejo.nivel === 'critico' ? "bg-rose-500/20"
+                                    : consejo.nivel === 'alerta' ? "bg-amber-500/20"
+                                    : "bg-emerald-500/20"
+                                )}>
+                                    {consejo.nivel === 'critico'
+                                        ? <XCircle className="w-6 h-6 text-rose-500" />
+                                        : consejo.nivel === 'alerta'
+                                        ? <AlertTriangle className="w-6 h-6 text-amber-500" />
+                                        : <CheckCircle2 className="w-6 h-6 text-emerald-500" />}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Brain className="w-4 h-4 text-violet-400" />
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-violet-400">Consejero IA · Análisis financiero</p>
+                                    </div>
+                                    <h3 className={cn(
+                                        "text-xl font-black mb-4",
+                                        consejo.nivel === 'critico' ? "text-rose-400"
+                                        : consejo.nivel === 'alerta' ? "text-amber-400"
+                                        : "text-emerald-400"
+                                    )}>{consejo.titulo}</h3>
+                                    <div className="space-y-3">
+                                        {consejo.puntos.map((p, i) => (
+                                            <div key={i} className="flex gap-3 items-start">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
+                                                <p className="text-sm text-foreground leading-relaxed">{p}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Card className="rounded-3xl border-white/5 bg-card/30">
+                        <CardContent className="p-6">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-3">Resumen numérico</p>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                {[
+                                    { label: 'Ingreso esperado quincena', value: formatCurrency(proyeccionQuincena.ingresoEsperado), color: 'text-emerald-400' },
+                                    { label: 'Total compromisos fijos', value: formatCurrency(proyeccionQuincena.totalCompromisos), color: 'text-rose-400' },
+                                    { label: 'Total salarios propietarios', value: formatCurrency(proyeccionQuincena.totalSalarios), color: 'text-amber-400' },
+                                    { label: 'Saldo proyectado', value: formatCurrency(proyeccionQuincena.saldoProyectado), color: proyeccionQuincena.alcanza ? 'text-emerald-400' : 'text-rose-400' },
+                                ].map((item, i) => (
+                                    <div key={i} className="bg-card/40 rounded-2xl p-4 border border-white/5">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
+                                        <p className={cn("text-xl font-black", item.color)}>{item.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
             </Tabs>
         </div>
     );
