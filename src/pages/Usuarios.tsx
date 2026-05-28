@@ -71,6 +71,17 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
     if (!formData.nombre.trim()) { toast.error('El nombre es obligatorio.'); return; }
     if (!editingUser && !formData.password) { toast.error('Debes asignar una contraseña.'); return; }
 
+    // Verificar duplicado de email/usuario al crear (no al editar)
+    if (!editingUser) {
+      const duplicado = usuarios.find(
+        u => (u.email || '').toLowerCase().trim() === formData.email.toLowerCase().trim()
+      );
+      if (duplicado) {
+        toast.error(`Ya existe un usuario con ese identificador: ${duplicado.nombre}`);
+        return;
+      }
+    }
+
     setIsSavingUser(true);
     try {
       if (editingUser) {

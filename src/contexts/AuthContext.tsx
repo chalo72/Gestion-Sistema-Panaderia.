@@ -207,9 +207,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (!localUser) {
       setIsLoading(false);
-      console.warn(`[Login] Correo no encontrado: "${emailLower}". Usuarios disponibles:`, localUserList.map(u => u.email));
-      toast.error('No existe un usuario con ese correo.');
-      return { success: false, error: 'Correo no registrado.' };
+      console.warn(`[Login] Usuario no encontrado: "${emailLower}". Usuarios disponibles:`, localUserList.map(u => u.email));
+      toast.error('No existe un usuario con ese identificador.');
+      return { success: false, error: 'Usuario no registrado.' };
     }
 
     if (!localUser.activo) {

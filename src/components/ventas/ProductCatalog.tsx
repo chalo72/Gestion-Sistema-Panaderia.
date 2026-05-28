@@ -267,10 +267,10 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
     const catColor = categoria?.color || '#10b981';
 
     return (
-        <div className="group bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-xl hover:shadow-emerald-900/5 transition-all cursor-pointer active:scale-[0.97] overflow-hidden flex flex-col"
+        <div className="group bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-900/5 transition-all cursor-pointer active:scale-[0.97] overflow-hidden flex flex-col"
             onClick={() => onAddToCart(producto)}>
-            {/* Imagen Estilo Pro — ProductAvatar */}
-            <div className="aspect-square overflow-hidden relative">
+            {/* Imagen compacta */}
+            <div className="h-20 overflow-hidden relative shrink-0">
                 <ProductAvatar
                     imagen={producto.imagen}
                     nombre={producto.nombre}
@@ -281,46 +281,48 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                     className="w-full h-full"
                 />
 
-                {/* Badge de Stock Premium */}
-                <div className="absolute top-2 right-2 flex items-center gap-1.5">
+                {/* Badge de Stock */}
+                <div className="absolute top-1.5 right-1.5">
                     <div className={cn(
-                        "px-2 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest text-white shadow-lg",
+                        "px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-wide text-white shadow",
                         stock <= 0 ? "bg-rose-500" : stock < 5 ? "bg-amber-500" : "bg-emerald-500"
                     )}>
-                        {stock <= 0 ? 'Agotado' : `Stock: ${stock}`}
+                        {stock <= 0 ? 'Agotado' : stock}
                     </div>
                 </div>
 
-                {/* Botón Editar Flotante - VISIBILIDAD MEJORADA */}
+                {/* Botón Editar */}
                 {onEdit && (
                     <button onClick={onEdit}
-                        className="absolute top-2 left-2 w-8 h-8 rounded-xl bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center opacity-60 group-hover:opacity-100 transition-all hover:bg-emerald-500 hover:text-white z-20">
-                        <Edit2 className="w-3.5 h-3.5" />
+                        className="absolute top-1.5 left-1.5 w-6 h-6 rounded-lg bg-white/90 dark:bg-slate-800/90 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-emerald-500 hover:text-white z-20">
+                        <Edit2 className="w-3 h-3" />
                     </button>
                 )}
 
-                {/* Overlay Hover + */}
+                {/* Overlay + */}
                 <div className="absolute inset-0 bg-emerald-600/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <div className="w-12 h-12 bg-emerald-600 rounded-3xl flex items-center justify-center shadow-2xl scale-50 group-hover:scale-100 transition-transform">
-                        <Plus className="w-6 h-6 text-white" />
+                    <div className="w-8 h-8 bg-emerald-600 rounded-2xl flex items-center justify-center shadow-xl scale-50 group-hover:scale-100 transition-transform">
+                        <Plus className="w-4 h-4 text-white" />
                     </div>
                 </div>
             </div>
 
-            {/* Info Refinada */}
-            <div className="p-3 flex flex-col gap-1 flex-1 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800">
-                <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em] mb-0.5 block truncate">
-                    {producto.categoria}
-                </span>
-                <h4 className="text-[11px] font-black leading-tight text-slate-800 dark:text-slate-100 uppercase tracking-tighter line-clamp-2 h-7">
+            {/* Info compacta */}
+            <div className="px-2 py-1.5 flex flex-col bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800">
+                <h4 className="text-[10px] font-black leading-tight text-slate-800 dark:text-slate-100 uppercase tracking-tighter line-clamp-1">
                     {producto.nombre}
                 </h4>
-                <div className="mt-2 flex items-center justify-between border-t border-slate-50 dark:border-white/5 pt-2">
-                    <span className="text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                {producto.descripcion && (
+                    <p className="text-[8px] text-slate-400 line-clamp-1 mt-0.5 leading-tight">
+                        {producto.descripcion}
+                    </p>
+                )}
+                <div className="mt-1 flex items-center justify-between border-t border-slate-50 dark:border-white/5 pt-1">
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {formatCurrency(safeNumber(producto.precioVenta))}
                     </span>
-                    <div className="w-6 h-6 rounded-lg bg-slate-50 dark:bg-slate-800 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                        <Plus className="w-3 h-3" />
+                    <div className="w-5 h-5 rounded-md bg-slate-50 dark:bg-slate-800 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                        <Plus className="w-2.5 h-2.5" />
                     </div>
                 </div>
             </div>
