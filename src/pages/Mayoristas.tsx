@@ -1,4 +1,5 @@
 import { generateUUID } from '@/lib/safe-utils';
+import { db } from '@/lib/database';
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
     Store, Users, TrendingUp, DollarSign, Package, AlertTriangle,
@@ -200,7 +201,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         if (found) setViendoPerfilCliente(found);
     }, [allClientes]);
 
+    // Carga tombstones al montar — capa defensiva anti-productos-fantasma
+    useEffect(() => {
+        db.getTombstones('productos').then(ids => setTombstoneIds(new Set(ids))).catch(() => {});
+    }, []);
+
     const [busquedaPerfil, setBusquedaPerfil] = useState('');
+    const [categoriaPerfil, setCategoriaPerfil] = useState('');
+    const [tombstoneIds, setTombstoneIds] = useState<Set<string>>(new Set());
     const [carritoPos, setCarritoPos] = useState<{ productoId: string; nombre: string; precio: number; cantidad: number }[]>([]);
 
     const agregarAlCarrito = (productoId: string, nombre: string, precio: number) => {
@@ -933,6 +941,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // para que la búsqueda principal no oculte productos en el mini-POS
     const tablaDatosTodos = useMemo(() => {
         return productos
+            .filter(p => !tombstoneIds.has(p.id))
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
                 let costo = calcularCosto(p, mejorPrecio);
@@ -966,7 +975,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride]);
+    }, [productos, tombstoneIds, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride]);
 
     // Stats del resumen
     const stats = useMemo(() => {
@@ -1094,7 +1103,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             ...h,
             fecha: dateOverrides[h.id] ?? h.fecha,
         }));
-        return [...localCash, ...centralCredits].sort((a, b) => b.fecha - a.fecha);
+        // Deduplicar por ID — centralCredits tiene prioridad (datos oficiales de Supabase)
+        const seen = new Set<string>();
+        const deduped = [...centralCredits, ...localCash].filter(h => {
+            if (seen.has(h.id)) return false;
+            seen.add(h.id);
+            return true;
+        });
+        return deduped.sort((a, b) => b.fecha - a.fecha);
     }, [historialMayoristas, creditosClientes, dateOverrides]);
 
     // Confirmar pago completo de un ticket de crédito (registra abono por el saldo restante)
@@ -1130,8 +1146,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     if (viendoPerfilCliente) {
         const cliente = viendoPerfilCliente;
         const tConf = TIPO_CONFIG[cliente.tipo] || TIPO_CONFIG.mayorista;
+        const categoriasPerfil = Array.from(new Set(tablaDatosTodos.map(d => d.producto.categoria || 'Sin categoría'))).sort();
         const productosPerfil = tablaDatosTodos
-            .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()));
+            .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()))
+            .filter(d => !categoriaPerfil || (d.producto.categoria || 'Sin categoría') === categoriaPerfil);
 
         // Créditos pendientes del cliente (para botón WA del header)
         const creditosPendientesHeader = historialUnificado.filter(h => {
@@ -1151,7 +1169,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 border-b border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-20">
                     <div className="flex items-center gap-3">
                         <Button
-                            onClick={() => { setViendoPerfilCliente(null); setBusquedaPerfil(''); setCarritoPos([]); }}
+                            onClick={() => { setViendoPerfilCliente(null); setBusquedaPerfil(''); setCarritoPos([]); setCategoriaPerfil(''); }}
                             variant="outline"
                             className="w-10 h-10 rounded-xl border-slate-200 text-slate-400 hover:text-indigo-600"
                         >
@@ -1570,6 +1588,37 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 className="h-9 pl-9 rounded-xl border-slate-200 bg-white text-xs font-bold"
                             />
                         </div>
+
+                        {/* Filtro por categoría */}
+                        {categoriasPerfil.length > 1 && (
+                            <div className="flex flex-wrap gap-2">
+                                <button
+                                    onClick={() => setCategoriaPerfil('')}
+                                    className={cn(
+                                        'px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-colors',
+                                        !categoriaPerfil
+                                            ? 'bg-indigo-600 text-white border-indigo-600'
+                                            : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                                    )}
+                                >
+                                    Todas
+                                </button>
+                                {categoriasPerfil.map(cat => (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setCategoriaPerfil(cat === categoriaPerfil ? '' : cat)}
+                                        className={cn(
+                                            'px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-colors',
+                                            categoriaPerfil === cat
+                                                ? 'bg-indigo-600 text-white border-indigo-600'
+                                                : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                                        )}
+                                    >
+                                        {cat}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
                         {/* Cuenta del cliente — ver sección superior */}
                         {false && (() => {
