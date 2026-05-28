@@ -1186,15 +1186,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
-                        <div className="relative w-56 hidden sm:block">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <Input
-                                placeholder="Buscar producto..."
-                                value={busquedaPerfil}
-                                onChange={e => setBusquedaPerfil(e.target.value)}
-                                className="h-9 pl-9 rounded-xl border-slate-200 bg-slate-50 text-xs font-bold"
-                            />
-                        </div>
+                        {/* Buscador movido al panel de productos para más espacio */}
                         <button
                             onClick={() => setVerHistorial(true)}
                             className="relative w-10 h-10 rounded-xl border border-slate-200 flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:border-indigo-300 transition-colors"
@@ -1578,47 +1570,49 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                     {/* ── PANEL IZQUIERDO: Productos ── */}
                     <div className="flex-1 p-4 space-y-4 overflow-y-auto">
-                        {/* Búsqueda mobile */}
-                        <div className="relative sm:hidden">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <Input
-                                placeholder="Buscar producto..."
-                                value={busquedaPerfil}
-                                onChange={e => setBusquedaPerfil(e.target.value)}
-                                className="h-9 pl-9 rounded-xl border-slate-200 bg-white text-xs font-bold"
-                            />
-                        </div>
+                        {/* Buscador siempre visible + filtro categoría compacto */}
+                        <div className="flex flex-col gap-2">
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <Input
+                                    placeholder="Buscar producto por nombre..."
+                                    value={busquedaPerfil}
+                                    onChange={e => setBusquedaPerfil(e.target.value)}
+                                    className="h-10 pl-9 rounded-xl border-slate-200 bg-white text-xs font-bold"
+                                />
+                            </div>
 
-                        {/* Filtro por categoría */}
-                        {categoriasPerfil.length > 1 && (
-                            <div className="flex flex-wrap gap-2">
-                                <button
-                                    onClick={() => setCategoriaPerfil('')}
-                                    className={cn(
-                                        'px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-colors',
-                                        !categoriaPerfil
-                                            ? 'bg-indigo-600 text-white border-indigo-600'
-                                            : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
-                                    )}
-                                >
-                                    Todas
-                                </button>
-                                {categoriasPerfil.map(cat => (
+                            {/* Filtro por categoría — scroll horizontal, sin wrap */}
+                            {categoriasPerfil.length > 1 && (
+                                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
                                     <button
-                                        key={cat}
-                                        onClick={() => setCategoriaPerfil(cat === categoriaPerfil ? '' : cat)}
+                                        onClick={() => setCategoriaPerfil('')}
                                         className={cn(
-                                            'px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-colors',
-                                            categoriaPerfil === cat
+                                            'shrink-0 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors whitespace-nowrap',
+                                            !categoriaPerfil
                                                 ? 'bg-indigo-600 text-white border-indigo-600'
                                                 : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
                                         )}
                                     >
-                                        {cat}
+                                        Todas
                                     </button>
-                                ))}
-                            </div>
-                        )}
+                                    {categoriasPerfil.map(cat => (
+                                        <button
+                                            key={cat}
+                                            onClick={() => setCategoriaPerfil(cat === categoriaPerfil ? '' : cat)}
+                                            className={cn(
+                                                'shrink-0 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors whitespace-nowrap',
+                                                categoriaPerfil === cat
+                                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                                    : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600'
+                                            )}
+                                        >
+                                            {cat}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
 
                         {/* Cuenta del cliente — ver sección superior */}
                         {false && (() => {
