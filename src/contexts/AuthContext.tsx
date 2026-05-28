@@ -84,10 +84,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .map(d => d.data() as Usuario)
             .filter(u => !legacyEmails.has((u.email || '').toLowerCase()));
 
-          // Mezcla: nube gana por email, local agrega los que no están en nube
+          // Re-leer localStorage DESPUÉS del await para capturar usuarios creados durante la espera
+          let freshLocalList: Usuario[] = baseList;
+          try {
+            const freshStr = localStorage.getItem('pricecontrol_local_user_list');
+            if (freshStr) {
+              const parsed: Usuario[] = JSON.parse(freshStr);
+              if (Array.isArray(parsed) && parsed.length > 0) freshLocalList = parsed;
+            }
+          } catch { /* usar baseList como fallback */ }
+
+          // LOCAL SIEMPRE GANA: nube solo agrega usuarios que no existen localmente
           const mergedMap = new Map<string, Usuario>();
-          baseList.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
-          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
+          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // nube — prioridad baja
+          freshLocalList.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // local gana siempre
           // Los usuarios base siempre presentes
           USUARIOS_PRUEBA.forEach(up => {
             if (!mergedMap.has(up.email.toLowerCase())) mergedMap.set(up.email.toLowerCase(), up);
