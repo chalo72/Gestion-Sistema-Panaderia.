@@ -1,27 +1,38 @@
-import { useState } from 'react';
-import { 
+import { useState, useMemo } from 'react';
+import {
   Pin, Send, Users, ShieldCheck, Activity, Terminal, Shield, Rocket,
   Loader2, X, MessageSquare as MsgIcon,
   TrendingUp, Wallet, Utensils, Package, Megaphone,
-  Truck, CheckCircle, Wrench, MessageSquare, 
-  Leaf, Scale, FileText, Target, Instagram, 
-  Lightbulb, Clipboard, Brain, Building, ShieldAlert, Eye
+  Truck, CheckCircle, Wrench, MessageSquare,
+  Leaf, Scale, FileText, Target, Instagram,
+  Lightbulb, Clipboard, Brain, Building, ShieldAlert, Eye,
+  BarChart3, Zap, RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import type { UserRole } from '@/types';
+import type { UserRole, Venta, Producto, CajaSesion, CreditoCliente, Gasto } from '@/types';
 import { cn } from '@/lib/utils';
 import { 
   type AgenteId, AGENTES_CONFIG, consultarAgente 
 } from '@/constants/agentes';
 import { AccesoGlobalCard } from '@/components/layout/AccesoGlobalCard';
 
+interface InventarioItem { productoId: string; stock: number; stockMinimo?: number; }
+
 interface OficinaProps {
   publicAppUrl?: string;
   onViewChange: (view: any) => void;
+  // Datos reales del negocio
+  ventas?: Venta[];
+  productos?: Producto[];
+  inventario?: InventarioItem[];
+  sesionesCaja?: CajaSesion[];
+  creditosClientes?: CreditoCliente[];
+  gastos?: Gasto[];
+  formatCurrency?: (v: number) => string;
 }
 
 const ROLE_CONFIG: Record<UserRole, { label: string; emoji: string; color: string; bg: string; borderColor: string; shadow: string }> = {

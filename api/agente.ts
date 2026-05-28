@@ -74,14 +74,15 @@ const PROMPTS: Record<string, string> = {
 export default async function handler(req: Request) {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   
-  const { tipo, mensaje, imagen, soberania, aiMode } = await req.json() as { 
-    tipo: string; 
+  const { tipo, mensaje, imagen, soberania, aiMode, contexto } = await req.json() as {
+    tipo: string;
     mensaje: string;
-    imagen?: string; // Base64
+    imagen?: string;
     aiMode?: 'local' | 'hybrid' | 'off';
-    soberania?: { 
-      directiva?: string; 
-      restricciones?: string[]; 
+    contexto?: string; // Datos reales del negocio inyectados desde la app
+    soberania?: {
+      directiva?: string;
+      restricciones?: string[];
       conocimiento?: string;
       autonomia?: number;
     }
@@ -102,6 +103,11 @@ export default async function handler(req: Request) {
     soberaniaPrompt += `NIVEL DE AUTONOMÍA: ${soberania.autonomia || 50}/100\n`;
     soberaniaPrompt += "===============================================\n\n";
     systemPrompt = soberaniaPrompt + systemPrompt;
+  }
+
+  // Inyectar datos reales del negocio si vienen del frontend
+  if (contexto) {
+    systemPrompt += `\n\n=== DATOS REALES DEL NEGOCIO HOY (${new Date().toLocaleDateString('es-CO')}) ===\n${contexto}\n=== FIN DE DATOS ===\n\nAnáliza los datos anteriores para responder con información precisa y real del negocio. No inventes cifras.`;
   }
 
   if (!PROMPTS[tipo] && !soberania) return new Response('Agente desconocido', { status: 400 });

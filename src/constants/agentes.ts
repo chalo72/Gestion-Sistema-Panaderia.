@@ -36,10 +36,11 @@ export const AGENTES_CONFIG: Record<AgenteId, { nombre: string; cargo: string; e
 };
 
 export async function consultarAgente(
-  tipo: AgenteId, 
-  mensaje: string, 
+  tipo: AgenteId,
+  mensaje: string,
   onChunk: (text: string) => void,
-  imagen?: string // Base64 de la imagen
+  imagen?: string,
+  contexto?: string // Datos reales del negocio (ventas, caja, stock, créditos)
 ): Promise<string> {
   const [config, sysConfig] = await Promise.all([
     db.getAgenteConfig(tipo),
@@ -49,10 +50,11 @@ export async function consultarAgente(
   const res = await fetch('/api/agente', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      tipo, 
+    body: JSON.stringify({
+      tipo,
       mensaje,
       imagen,
+      contexto,
       aiMode: sysConfig?.aiMode || 'hybrid',
       soberania: config ? {
         directiva: config.directivaPrimaria,
