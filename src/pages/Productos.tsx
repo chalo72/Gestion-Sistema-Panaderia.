@@ -62,6 +62,7 @@ export default function Productos({
     const [vistaActual, setVistaActual] = useState<'lista' | 'cuadricula'>('lista');
     const [isIceCreamAssistantOpen, setIsIceCreamAssistantOpen] = useState(false);
     const [isBeverageAssistantOpen, setIsBeverageAssistantOpen] = useState(false);
+    const [isAvatarConfiguratorOpen, setIsAvatarConfiguratorOpen] = useState(false);
     const { check } = useCan();
     const [addingPrecioForProducto, setAddingPrecioForProducto] = useState<string | null>(null);
     const [selectedProveedorId, setSelectedProveedorId] = useState('');
