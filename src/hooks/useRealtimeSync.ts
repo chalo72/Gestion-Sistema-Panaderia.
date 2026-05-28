@@ -347,9 +347,19 @@ export function useRealtimeSync() {
             return remoteTs > localTs; // Supabase más nuevo → actualizar local
           })
         : [];
+      // Items tombstoneados localmente pero que Supabase tiene vivos → restaurar
+      // Solo aplica a tablas donde una eliminación accidental en un dispositivo no debe
+      // propagarse si el ítem sigue vivo en la nube (ej: proveedor "la 36" eliminado por error)
+      const restaurar = (['productos', 'proveedores', 'precios', 'creditos', 'prepedidos'].includes(table))
+        ? supabaseItems.filter((i: any) => i.id && tombstoneSet.has(i.id))
+        : [];
 
       for (const item of nuevos)        await handler.writeToLocal(item).catch(() => {});
       for (const item of actualizados)  await handler.writeToLocal(item).catch(() => {});
+      for (const item of restaurar) {
+        await db.removeTombstone(handler.localTableName, item.id).catch(() => {});
+        await handler.writeToLocal(item).catch(() => {});
+      }
 
       const hayNuevos = nuevos.length > 0 || actualizados.length > 0;
       if (hayNuevos) {
