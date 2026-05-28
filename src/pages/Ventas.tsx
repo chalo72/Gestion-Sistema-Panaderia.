@@ -717,53 +717,53 @@ export function Ventas(props: VentasProps) {
                 </div>
             </div>
 
-            {/* ── Navegación móvil ── */}
-            <div className="lg:hidden shrink-0 bg-white dark:bg-slate-900 safe-area-bottom">
-                {showMobileCart ? (
-                    /* Cuando el carrito está abierto: botón simple para volver al catálogo */
-                    <div className="border-t border-slate-200 dark:border-slate-800 p-2">
-                        <button
-                            onClick={() => setShowMobileCart(false)}
-                            className="w-full h-12 flex items-center justify-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-black text-xs uppercase tracking-widest"
-                        >
-                            <ShoppingCart className="w-4 h-4" />
-                            ← Volver al catálogo
-                        </button>
-                    </div>
-                ) : cart.length > 0 ? (
-                    /* Botón flotante prominente cuando hay productos en el carrito */
-                    <div className="p-3 pb-4">
-                        <button
-                            onClick={() => setShowMobileCart(true)}
-                            className="w-full h-16 flex items-center justify-between px-5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-[0.98] transition-all shadow-lg shadow-emerald-500/30 text-white"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                                    <span className="text-base font-black">
-                                        {cart.reduce((s, i) => s + i.cantidad, 0)}
-                                    </span>
-                                </div>
-                                <span className="text-sm font-black uppercase tracking-wide">Ver ticket</span>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-xl font-black tabular-nums">
+            {/* ── Navegación móvil: dos botones siempre visibles ── */}
+            <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+                {/* Catálogo */}
+                <button
+                    onClick={() => setShowMobileCart(false)}
+                    className={cn(
+                        'flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-black uppercase tracking-widest transition-colors',
+                        !showMobileCart
+                            ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/10'
+                            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+                    )}
+                >
+                    <ShoppingCart className="w-5 h-5" />
+                    Catálogo
+                </button>
+
+                {/* Divisor */}
+                <div className="w-px bg-slate-200 dark:bg-slate-700 self-stretch" />
+
+                {/* Ticket */}
+                <button
+                    onClick={() => setShowMobileCart(true)}
+                    className={cn(
+                        'flex-[2] flex items-center justify-center gap-2 py-3 transition-all relative',
+                        showMobileCart
+                            ? 'bg-emerald-500 text-white'
+                            : cart.length > 0
+                                ? 'bg-emerald-500 text-white'
+                                : 'text-slate-400'
+                    )}
+                >
+                    {cart.length > 0 ? (
+                        <>
+                            <span className="w-6 h-6 rounded-full bg-white/25 text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                                {cart.reduce((s, i) => s + i.cantidad, 0)}
+                            </span>
+                            <div className="flex flex-col items-start leading-none">
+                                <span className="text-[11px] font-black">
                                     {formatCurrency(Math.max(0, totalCart - descuento))}
-                                </p>
-                                {descuento > 0 && (
-                                    <p className="text-[10px] line-through opacity-60">{formatCurrency(totalCart)}</p>
-                                )}
+                                </span>
+                                <span className="text-[9px] opacity-70 font-bold uppercase">Ver ticket</span>
                             </div>
-                        </button>
-                    </div>
-                ) : (
-                    /* Sin productos: barra mínima con acceso al catálogo */
-                    <div className="border-t border-slate-200 dark:border-slate-800 p-2">
-                        <div className="h-12 flex items-center justify-center gap-2 text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                            <ShoppingCart className="w-4 h-4" />
-                            Agrega productos al ticket
-                        </div>
-                    </div>
-                )}
+                        </>
+                    ) : (
+                        <span className="text-[10px] font-black uppercase tracking-widest">Ticket vacío</span>
+                    )}
+                </button>
             </div>
 
             {/* Modal de Pago Profesional */}
