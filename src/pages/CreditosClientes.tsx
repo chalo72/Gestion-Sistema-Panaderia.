@@ -337,7 +337,7 @@ export default function CreditosClientes({
     }, [creditosClientes, searchCliente, filtroEstadoCliente]);
 
     const statsCliente = useMemo(() => {
-        const activos = creditosClientes.filter(c => c.estado === 'activo');
+        const activos = creditosClientes.filter(c => c.estado === 'activo' || (c.estado as any) === 'pendiente');
         const vencidos = creditosClientes.filter(c => c.estado === 'vencido');
         const totalPendiente = [...activos, ...vencidos].reduce((s, c) => s + c.saldo, 0);
         return { activos: activos.length, vencidos: vencidos.length, totalPendiente };
