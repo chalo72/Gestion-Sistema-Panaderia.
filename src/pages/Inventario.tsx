@@ -468,6 +468,31 @@ export function Inventario({
         inventarioConProducto.filter(i => i.stockActual > 0 && i.stockActual <= i.stockMinimo),
     [inventarioConProducto]);
 
+    // ── Carga masiva 100 unidades ────────────────────────────────────────────
+    const [confirmCien, setConfirmCien] = useState(false);
+    const [cargandoCien, setCargandoCien] = useState(false);
+
+    const cargarCienUnidades = async () => {
+        if (!canEdit) { toast.error('Sin permisos para editar inventario'); return; }
+        setCargandoCien(true);
+        let ajustados = 0;
+        for (const prod of productos) {
+            const inv = inventario.find(i => i.productoId === prod.id);
+            const stockActual = inv?.stockActual ?? 0;
+            const diferencia = 100 - stockActual;
+            if (diferencia > 0) {
+                onAjustarStock(prod.id, diferencia, 'entrada', 'Carga inicial 100 uds');
+                ajustados++;
+            } else if (diferencia < 0) {
+                onAjustarStock(prod.id, Math.abs(diferencia), 'salida', 'Ajuste a 100 uds');
+                ajustados++;
+            }
+        }
+        setCargandoCien(false);
+        setConfirmCien(false);
+        toast.success(`✅ ${ajustados} producto(s) ajustados a 100 unidades. ¡Ya pueden vender!`);
+    };
+
     // ── Acciones ─────────────────────────────────────────────────────────────
 
     const iniciarRonda = () => {
@@ -626,6 +651,34 @@ export function Inventario({
                         variant="outline" className="h-10 px-4 rounded-xl font-black text-xs uppercase tracking-widest gap-2">
                         <Zap className="w-4 h-4 text-amber-500" /> Reponer con IA
                     </Button>
+
+                    {/* Botón carga masiva 100 uds */}
+                    {!confirmCien ? (
+                        <Button
+                            onClick={() => setConfirmCien(true)}
+                            disabled={!canEdit || productos.length === 0}
+                            variant="outline"
+                            className="h-10 px-4 rounded-xl font-black text-xs uppercase tracking-widest gap-2 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                        >
+                            <PlusCircle className="w-4 h-4" /> Cargar 100 uds
+                        </Button>
+                    ) : (
+                        <div className="flex gap-2 items-center bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-700 rounded-xl px-3 py-1">
+                            <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 whitespace-nowrap">
+                                ¿Cargar 100 uds a {productos.length} productos?
+                            </span>
+                            <Button
+                                onClick={cargarCienUnidades}
+                                disabled={cargandoCien}
+                                className="h-7 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-black text-[10px] uppercase tracking-widest border-none"
+                            >
+                                {cargandoCien ? '...' : 'Sí, cargar'}
+                            </Button>
+                            <button onClick={() => setConfirmCien(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
