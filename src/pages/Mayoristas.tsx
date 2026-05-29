@@ -233,6 +233,26 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         setCarritoPos(prev => prev.filter(i => i.productoId !== productoId));
     };
 
+    // ── Monto libre (ítems sin producto del catálogo) ────────────────────────
+    const [montoLibreOpen, setMontoLibreOpen] = useState(false);
+    const [montoLibreDesc, setMontoLibreDesc] = useState('');
+    const [montoLibreMonto, setMontoLibreMonto] = useState('');
+
+    const agregarMontoLibre = () => {
+        const monto = parseFloat(montoLibreMonto.replace(/[^0-9.]/g, ''));
+        if (isNaN(monto) || monto <= 0) return;
+        const desc = montoLibreDesc.trim() || 'Pedido sin detallar';
+        setCarritoPos(prev => [...prev, {
+            productoId: `__libre__-${generateUUID()}`,
+            nombre: desc,
+            precio: monto,
+            cantidad: 1,
+        }]);
+        setMontoLibreDesc('');
+        setMontoLibreMonto('');
+        setMontoLibreOpen(false);
+    };
+
     // ── Tickets pendientes (guardados sin cobrar) ────────────────────────────
     const [ticketsPendientes, setTicketsPendientes] = useState<TicketPendiente[]>(() => {
         try { return JSON.parse(localStorage.getItem('ag_tickets_pendientes') || '[]'); } catch { return []; }
@@ -2239,8 +2259,52 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                              </div>
                              <div className="bg-white/5 rounded-xl px-4 py-2 flex items-center justify-between border border-white/10">
                                 <span className="text-[10px] font-black uppercase text-slate-300">Items agregados</span>
-                                <span className="text-xs font-black text-white bg-indigo-600 px-2.5 py-0.5 rounded-lg shadow-inner">{carritoPos.length}</span>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setMontoLibreOpen(o => !o)}
+                                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/30 text-amber-300 text-[9px] font-black uppercase tracking-wide transition-colors"
+                                        title="Agregar monto sin producto del catálogo"
+                                    >
+                                        <Plus className="w-3 h-3" /> Monto libre
+                                    </button>
+                                    <span className="text-xs font-black text-white bg-indigo-600 px-2.5 py-0.5 rounded-lg shadow-inner">{carritoPos.length}</span>
+                                </div>
                              </div>
+                             {/* Formulario monto libre */}
+                             {montoLibreOpen && (
+                                 <div className="bg-white/5 rounded-xl p-3 border border-amber-400/30 flex flex-col gap-2">
+                                     <p className="text-[9px] font-black uppercase tracking-widest text-amber-300">Agregar monto libre</p>
+                                     <input
+                                         type="text"
+                                         placeholder="Descripción (ej: Pedido sin detallar)"
+                                         value={montoLibreDesc}
+                                         onChange={e => setMontoLibreDesc(e.target.value)}
+                                         className="w-full text-xs bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400/60"
+                                     />
+                                     <div className="flex gap-2">
+                                         <input
+                                             type="number"
+                                             placeholder="Monto $"
+                                             value={montoLibreMonto}
+                                             onChange={e => setMontoLibreMonto(e.target.value)}
+                                             onKeyDown={e => e.key === 'Enter' && agregarMontoLibre()}
+                                             className="flex-1 text-xs bg-white/10 border border-white/20 rounded-lg px-3 py-1.5 text-white placeholder-slate-400 focus:outline-none focus:border-amber-400/60"
+                                         />
+                                         <button
+                                             onClick={agregarMontoLibre}
+                                             className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-black uppercase tracking-wide transition-colors"
+                                         >
+                                             Agregar
+                                         </button>
+                                         <button
+                                             onClick={() => { setMontoLibreOpen(false); setMontoLibreDesc(''); setMontoLibreMonto(''); }}
+                                             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-all"
+                                         >
+                                             <X className="w-4 h-4" />
+                                         </button>
+                                     </div>
+                                 </div>
+                             )}
                         </div>
 
                         {/* Tickets pendientes de este cliente */}
@@ -2344,15 +2408,19 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             ) : (
                                 <div className="p-4 space-y-2">
                                     {carritoPos.map(item => {
-                                        const descCarrito = tablaDatosTodos.find(d => d.producto.id === item.productoId)?.producto.descripcion;
+                                        const esLibre = item.productoId.startsWith('__libre__');
+                                        const descCarrito = esLibre ? null : tablaDatosTodos.find(d => d.producto.id === item.productoId)?.producto.descripcion;
                                         return (
-                                        <div key={item.productoId} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/60 rounded-xl px-2 py-1.5">
+                                        <div key={item.productoId} className={`flex items-center gap-2 rounded-xl px-2 py-1.5 ${esLibre ? 'bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-700/40' : 'bg-slate-50 dark:bg-slate-800/60'}`}>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-[10px] font-black text-slate-900 dark:text-white truncate">{item.nombre}</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="text-[10px] font-black text-slate-900 dark:text-white truncate">{item.nombre}</p>
+                                                    {esLibre && <span className="text-[8px] font-black uppercase tracking-wide bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-300 px-1 py-0.5 rounded shrink-0">libre</span>}
+                                                </div>
                                                 {descCarrito && (
                                                     <p className="text-[9px] font-bold text-indigo-500 dark:text-indigo-400 truncate leading-tight">{descCarrito}</p>
                                                 )}
-                                                <p className="text-[9px] font-bold text-slate-400">{formatCurrency(item.precio)} c/u</p>
+                                                {!esLibre && <p className="text-[9px] font-bold text-slate-400">{formatCurrency(item.precio)} c/u</p>}
                                             </div>
                                             {/* Controles de cantidad */}
                                             <div className="flex items-center gap-1 shrink-0">
