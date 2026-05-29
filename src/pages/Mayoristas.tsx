@@ -150,7 +150,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             descripcion: 'Venta Mayorista (Rescate Histórico)',
                             items: h.items,
                             usuarioId: 'admin',
-                            estado: saldo <= 0 ? 'pagado' : 'pendiente',
+                            estado: saldo <= 0 ? 'pagado' : 'activo',
                             pagos: (h.abonos || []).map(a => ({
                                 id: a.id,
                                 monto: a.monto,
@@ -391,7 +391,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         descripcion: 'Venta Mayorista',
                         items: nuevo.items,
                         usuarioId: 'admin',
-                        estado: 'pendiente',
+                        estado: 'activo',
                         pagos: []
                     });
                     creditoGuardadoEnNube = true;

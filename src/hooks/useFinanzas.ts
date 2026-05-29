@@ -73,9 +73,15 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
 
   // --- Créditos Clientes ---
   const addCreditoCliente = useCallback(async (c: Omit<CreditoCliente, 'id' | 'createdAt'>) => {
-    const nuevo: CreditoCliente = { ...c, id: generateUUID(), createdAt: new Date().toISOString() };
+    // Preservar el ID si el caller lo pasa (ej: Mayoristas pasa su propio historialId
+    // para que DB y localStorage usen el mismo ID y los abonos se conecten).
+    const id = (c as any).id ?? generateUUID();
+    const nuevo: CreditoCliente = { ...c, id, createdAt: new Date().toISOString() };
     await db.addCreditoCliente(nuevo);
-    setCreditosClientes(prev => [nuevo, ...prev]);
+    setCreditosClientes(prev => {
+      if (prev.some(x => x.id === id)) return prev; // evitar duplicado si ya existe
+      return [nuevo, ...prev];
+    });
   }, []);
 
   const updateCreditoCliente = useCallback(async (id: string, updates: Partial<CreditoCliente>) => {

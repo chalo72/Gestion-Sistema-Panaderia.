@@ -288,11 +288,13 @@ export default function CreditosClientes({
             if (!g.telefono && c.clienteTelefono) g.telefono = c.clienteTelefono;
             if (c.categoriaCliente) g.categoria = c.categoriaCliente;
 
-            if (c.estado === 'activo') g.creditosActivos.push(c);
-            else if (c.estado === 'vencido') g.creditosVencidos.push(c);
-            else if (c.estado === 'pagado') g.creditosPagados.push(c);
+            // 'pendiente' es un estado legacy de Mayoristas — tratarlo como 'activo'
+            const estadoNorm = (c.estado as any) === 'pendiente' ? 'activo' : c.estado;
+            if (estadoNorm === 'activo') g.creditosActivos.push(c);
+            else if (estadoNorm === 'vencido') g.creditosVencidos.push(c);
+            else if (estadoNorm === 'pagado') g.creditosPagados.push(c);
 
-            if (c.estado !== 'pagado') {
+            if (estadoNorm !== 'pagado') {
                 g.saldoTotal += c.saldo;
             }
         });
