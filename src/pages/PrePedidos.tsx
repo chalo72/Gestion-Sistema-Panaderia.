@@ -41,6 +41,18 @@ import { ProveedorCatalogoTactico } from '@/components/prepedidos/ProveedorCatal
 import { ComparadorPrecios } from '@/components/prepedidos/ComparadorPrecios';
 import type { PrePedido, Producto, Proveedor, PrecioProveedor, InventarioItem, OrdenProduccion, Receta } from '@/types';
 
+// Convierte cualquier fecha (string ISO, timestamp numérico, Date) a string legible sin lanzar excepción
+const safeDate = (val: string | number | undefined | null, opts?: Intl.DateTimeFormatOptions): string => {
+  if (!val) return '';
+  try {
+    const d = new Date(val);
+    if (isNaN(d.getTime())) return String(val);
+    return d.toLocaleDateString('es-CO', opts ?? { day: '2-digit', month: 'short', year: 'numeric' });
+  } catch {
+    return String(val);
+  }
+};
+
 // [Nexus-Volt] Speed Booster Utils
 const debounceMap = new Map<string, any>();
 const debounceUpdate = (id: string, fn: Function, ms: number) => {
@@ -218,7 +230,7 @@ export default function PrePedidos({
     let msg = `📦 *ORDEN DE COMPRA - DULCE PLACER* 🍞\n\n`;
     if (pedido.numeroOrden) msg += `*Orden:* ${pedido.numeroOrden}\n`;
     msg += `*Fecha:* ${new Date().toLocaleDateString('es-CO')}\n`;
-    if (pedido.fechaEntregaEsperada) msg += `*Entrega esperada:* ${new Date(pedido.fechaEntregaEsperada).toLocaleDateString('es-CO')}\n`;
+    if (pedido.fechaEntregaEsperada) msg += `*Entrega esperada:* ${safeDate(pedido.fechaEntregaEsperada)}\n`;
     msg += `\n*Detalle de Productos:*\n`;
     pedido.items.forEach(item => {
       const p = getProductoById(item.productoId);
@@ -461,7 +473,7 @@ export default function PrePedidos({
                         <div>
                           <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
-                            {p.numeroOrden || 'ORD'} • {new Date(p.fechaCreacion || Date.now()).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                            {p.numeroOrden || 'ORD'} • {safeDate(p.fechaCreacion || new Date().toISOString(), { day: '2-digit', month: 'short', year: 'numeric' })}
                           </span>
                           <h3 className="font-black text-sm uppercase tracking-tight text-slate-900 dark:text-white mt-0.5">{p.nombre}</h3>
                           <p className="text-[10px] text-slate-400 font-bold mt-0.5">{proveedor?.nombre || 'Sin proveedor'}</p>
@@ -485,7 +497,7 @@ export default function PrePedidos({
                         <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/20 rounded-xl px-3 py-2 border border-amber-100">
                           <Calendar className="w-3.5 h-3.5 text-amber-600" />
                           <span className="text-[10px] font-black text-amber-700 uppercase">
-                            Entrega: {new Date(p.fechaEntregaEsperada).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}
+                            Entrega: {(() => { try { const d = new Date(p.fechaEntregaEsperada!); return isNaN(d.getTime()) ? p.fechaEntregaEsperada : d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }); } catch { return p.fechaEntregaEsperada; } })()}
                           </span>
                         </div>
                       )}
@@ -565,13 +577,14 @@ export default function PrePedidos({
                       <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">
                          {getProveedorById(verDetallePedido.proveedorId)?.nombre} • ORDEN {verDetallePedido.numeroOrden || '#000'} • 
                       </p>
-                      <Input 
-                         type="datetime-local" 
-                         value={new Date(verDetallePedido.fechaCreacion - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)} 
+                      <Input
+                         type="datetime-local"
+                         value={(() => { try { const d = new Date(verDetallePedido.fechaCreacion); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16); } catch { return ''; } })()}
                          onChange={(e) => {
                              const localDate = new Date(e.target.value);
-                             onUpdatePrePedido(verDetallePedido.id, { fechaCreacion: localDate.getTime() });
-                             setVerDetallePedido({ ...verDetallePedido, fechaCreacion: localDate.getTime() });
+                             if (isNaN(localDate.getTime())) return;
+                             onUpdatePrePedido(verDetallePedido.id, { fechaCreacion: localDate.toISOString() });
+                             setVerDetallePedido({ ...verDetallePedido, fechaCreacion: localDate.toISOString() });
                              toast.success('Fecha actualizada');
                          }}
                          className="h-7 w-40 text-[10px] font-black bg-white dark:bg-slate-900 border-slate-200"
@@ -1017,7 +1030,7 @@ export default function PrePedidos({
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex items-center gap-1 mb-0.5">
                                                           <p className="text-[10px] font-black text-slate-700 dark:text-slate-300">
-                                                              {new Date(h.fechaCreacion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                              {safeDate(h.fechaCreacion, { day: 'numeric', month: 'short', year: 'numeric' })}
                                                           </p>
                                                         </div>
                                                         <p className="text-[11px] font-black uppercase text-indigo-600 truncate">{h.nombre}</p>
@@ -1043,7 +1056,7 @@ export default function PrePedidos({
                                                     <div className="pl-7 space-y-0.5">
                                                         {(h.abonos ?? []).map(a => (
                                                             <div key={a.id} className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 rounded p-1">
-                                                                <span className="text-[8px] text-slate-400">{new Date(a.fecha).toLocaleDateString('es-CO')}</span>
+                                                                <span className="text-[8px] text-slate-400">{safeDate(a.fecha)}</span>
                                                                 <span className="text-[9px] font-bold text-slate-600 dark:text-slate-300">{formatCurrency(a.monto)} <span className="uppercase text-[8px] opacity-60">({a.metodoPago})</span></span>
                                                             </div>
                                                         ))}
