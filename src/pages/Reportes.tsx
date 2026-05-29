@@ -1213,6 +1213,8 @@ export default function Reportes({
                     TAB 5: CONSEJERO IA
                 ══════════════════════════════════════════════════ */}
                 <TabsContent value="consejero-ia" className="space-y-4 mt-0">
+
+                    {/* ── Diagnóstico principal ── */}
                     <Card className={cn(
                         "rounded-3xl border-2",
                         consejo.nivel === 'critico' ? "border-rose-500/50 bg-rose-500/5"
@@ -1236,7 +1238,7 @@ export default function Reportes({
                                 <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                         <Brain className="w-4 h-4 text-violet-400" />
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-violet-400">Consejero IA · Análisis financiero</p>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-violet-400">Consejero IA · Quincena actual</p>
                                     </div>
                                     <h3 className={cn(
                                         "text-xl font-black mb-4",
@@ -1257,21 +1259,109 @@ export default function Reportes({
                         </CardContent>
                     </Card>
 
-                    <Card className="rounded-3xl border-white/5 bg-card/30">
-                        <CardContent className="p-6">
-                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-3">Resumen numérico</p>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                {[
-                                    { label: 'Ingreso esperado quincena', value: formatCurrency(proyeccionQuincena.ingresoEsperado), color: 'text-emerald-400' },
-                                    { label: 'Total compromisos fijos', value: formatCurrency(proyeccionQuincena.totalCompromisos), color: 'text-rose-400' },
-                                    { label: 'Total salarios propietarios', value: formatCurrency(proyeccionQuincena.totalSalarios), color: 'text-amber-400' },
-                                    { label: 'Saldo proyectado', value: formatCurrency(proyeccionQuincena.saldoProyectado), color: proyeccionQuincena.alcanza ? 'text-emerald-400' : 'text-rose-400' },
-                                ].map((item, i) => (
-                                    <div key={i} className="bg-card/40 rounded-2xl p-4 border border-white/5">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
-                                        <p className={cn("text-xl font-black", item.color)}>{item.value}</p>
+                    {/* ── Panorama completo del negocio ── */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                        {[
+                            { label: 'Ventas reales quincena', val: quincenaReal.ventasTotal, color: 'text-emerald-400', icon: TrendingUp },
+                            { label: 'Compromisos totales activos', val: totalCompromisosActivos, color: 'text-violet-400', icon: CalendarCheck },
+                            { label: 'Prom. insumos/mes', val: promedioInsumos, color: 'text-amber-400', icon: Package },
+                            { label: 'Total obligaciones mes', val: totalObligaciones, color: 'text-rose-400', icon: Shield },
+                            { label: 'Saldo proyectado quincena', val: proyeccionQuincena.saldoProyectado, color: proyeccionQuincena.alcanza ? 'text-emerald-400' : 'text-rose-400', icon: DollarSign },
+                            { label: 'Margen neto mes', val: null, strVal: `${margenActual.toFixed(1)}%`, color: margenActual >= 25 ? 'text-emerald-400' : margenActual >= 15 ? 'text-amber-400' : 'text-rose-400', icon: Percent },
+                        ].map((item, i) => (
+                            <div key={i} className="bg-card/40 rounded-2xl p-3 border border-white/5">
+                                <item.icon className="w-3.5 h-3.5 text-muted-foreground mb-2" />
+                                <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground mb-1 leading-tight">{item.label}</p>
+                                <p className={cn("text-base font-black tabular-nums", item.color)}>
+                                    {item.val !== null ? formatCurrency(item.val) : item.strVal}
+                                </p>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* ── Alertas activas del Tablero Total ── */}
+                    {alertasAutomaticas.length > 0 && (
+                        <Card className="rounded-3xl border-white/5 bg-card/30">
+                            <CardHeader className="pb-2 px-5 pt-5">
+                                <CardTitle className="text-xs font-black uppercase tracking-tight flex items-center gap-2">
+                                    <BadgeAlert className="w-4 h-4 text-rose-400" />
+                                    Alertas activas del negocio
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-5 pb-5 space-y-2">
+                                {alertasAutomaticas.map((a, i) => (
+                                    <div key={i} className={cn(
+                                        "rounded-xl p-3 flex gap-3 items-start border",
+                                        a.nivel === 'critico' ? 'border-rose-500/20 bg-rose-500/5'
+                                        : a.nivel === 'advertencia' ? 'border-amber-500/20 bg-amber-500/5'
+                                        : 'border-emerald-500/20 bg-emerald-500/5'
+                                    )}>
+                                        <span className="text-base shrink-0">{a.icon}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={cn(
+                                                "text-xs font-black",
+                                                a.nivel === 'critico' ? 'text-rose-400' : a.nivel === 'advertencia' ? 'text-amber-400' : 'text-emerald-400'
+                                            )}>{a.titulo}</p>
+                                            <p className="text-[11px] text-muted-foreground mt-0.5">{a.msg}</p>
+                                            <p className="text-[11px] font-bold text-foreground mt-1">→ {a.accion}</p>
+                                        </div>
                                     </div>
                                 ))}
+                            </CardContent>
+                        </Card>
+                    )}
+
+                    {/* ── ¿Qué hacer esta semana? ── */}
+                    <Card className="rounded-3xl border-white/5 bg-gradient-to-br from-violet-950/50 to-slate-900 overflow-hidden">
+                        <CardHeader className="pb-2 px-5 pt-5">
+                            <CardTitle className="text-xs font-black uppercase tracking-tight flex items-center gap-2">
+                                <Flame className="w-4 h-4 text-orange-400" />
+                                Acciones recomendadas esta semana
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="px-5 pb-5">
+                            <div className="space-y-2">
+                                {(() => {
+                                    const acciones: { prioridad: 'alta' | 'media' | 'info'; texto: string }[] = [];
+
+                                    if (!proyeccionQuincena.alcanza)
+                                        acciones.push({ prioridad: 'alta', texto: `Necesitas ${formatCurrency(proyeccionQuincena.deficit)} más para cubrir la quincena — enfócate en ventas y no en gastos esta semana.` });
+
+                                    if (coberturaActual < 100 && totalObligaciones > 0)
+                                        acciones.push({ prioridad: 'alta', texto: `Tus ventas del mes solo cubren el ${coberturaActual.toFixed(0)}% de tus obligaciones totales. Meta diaria necesaria: ${formatCurrency(ventasNecesariasDiarias)}.` });
+
+                                    if (margenActual < 20 && reporteActual.totalVentas > 0)
+                                        acciones.push({ prioridad: 'alta', texto: `Margen del ${margenActual.toFixed(1)}% — revisa qué productos vendes a pérdida o con margen muy bajo y sube su precio entre 5-10%.` });
+
+                                    if (compromisos.filter(c => c.activo).length === 0)
+                                        acciones.push({ prioridad: 'alta', texto: 'Registra tus compromisos fijos en "Mi Quincena" — sin eso el sistema no puede calcular si el negocio te alcanza.' });
+
+                                    if (compromisos.filter(c => c.activo && c.esPropietario).length === 0)
+                                        acciones.push({ prioridad: 'media', texto: 'No tienes registrado tu salario ni el de tu esposa. Agrégalos como compromiso marcando "Mi salario" para que la proyección sea real.' });
+
+                                    if (promedioInsumos === 0 && gastos.length === 0)
+                                        acciones.push({ prioridad: 'media', texto: 'Registra tus gastos de materia prima en el módulo Finanzas — necesitas al menos 1 mes de historial para que el Tablero Total sea preciso.' });
+
+                                    if (proyeccionQuincena.promedioVentaDiaria > 0 && coberturaActual >= 120)
+                                        acciones.push({ prioridad: 'info', texto: `Buen ritmo — vendiendo ${formatCurrency(proyeccionQuincena.promedioVentaDiaria)}/día. Considera guardar el excedente de ${formatCurrency(reporteActual.totalVentas - totalObligaciones)} como fondo de emergencia.` });
+
+                                    if (acciones.length === 0)
+                                        acciones.push({ prioridad: 'info', texto: 'Ingresa más datos del negocio para que el consejero pueda darte recomendaciones personalizadas.' });
+
+                                    return acciones.map((a, i) => (
+                                        <div key={i} className="flex gap-3 items-start">
+                                            <div className={cn(
+                                                "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-black",
+                                                a.prioridad === 'alta' ? 'bg-rose-500/20 text-rose-400' :
+                                                a.prioridad === 'media' ? 'bg-amber-500/20 text-amber-400' :
+                                                'bg-violet-500/20 text-violet-400'
+                                            )}>
+                                                {i + 1}
+                                            </div>
+                                            <p className="text-[12px] text-foreground leading-relaxed">{a.texto}</p>
+                                        </div>
+                                    ));
+                                })()}
                             </div>
                         </CardContent>
                     </Card>
