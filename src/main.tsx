@@ -48,8 +48,24 @@ if (typeof window !== 'undefined') {
 })();
 
 // [Nexus-Shield] Interceptor Global de ChunkLoadError
-// Captura errores de imports dinámicos fallidos ANTES de que lleguen al ErrorBoundary
-// Esto protege casos donde el error ocurre fuera del árbol de React
+// vite:preloadError se dispara ANTES de que React falle → evita que el ErrorBoundary lo capture
+window.addEventListener('vite:preloadError', (event) => {
+  (event as Event).preventDefault();
+  console.warn('⚡ [Nexus-Shield] vite:preloadError — purgando caché SW y recargando...');
+  if ('caches' in window) {
+    caches.keys().then(keys => {
+      Promise.all(
+        keys
+          .filter(k => !k.includes('data') && !k.includes('idb'))
+          .map(k => caches.delete(k))
+      ).then(() => window.location.reload());
+    });
+  } else {
+    window.location.reload();
+  }
+});
+
+// Fallback: unhandledrejection para casos donde vite:preloadError no aplica
 window.addEventListener('unhandledrejection', (event) => {
   const error = event.reason;
   const msg = error?.message || String(error) || '';
@@ -61,17 +77,18 @@ window.addEventListener('unhandledrejection', (event) => {
     msg.includes('Loading chunk');
 
   if (isChunk) {
-    console.warn('⚡ [Nexus-Shield] ChunkLoadError global detectado — purgando caché y recargando...');
-    event.preventDefault(); // No mostrar en consola como error no manejado
+    console.warn('⚡ [Nexus-Shield] ChunkLoadError fallback — purgando caché y recargando...');
+    event.preventDefault();
     if ('caches' in window) {
       caches.keys().then(keys => {
-        keys
-          .filter(k => !k.includes('data') && !k.includes('idb'))
-          .forEach(k => caches.delete(k));
-        setTimeout(() => window.location.reload(), 600);
+        Promise.all(
+          keys
+            .filter(k => !k.includes('data') && !k.includes('idb'))
+            .map(k => caches.delete(k))
+        ).then(() => window.location.reload());
       });
     } else {
-      setTimeout(() => window.location.reload(), 600);
+      window.location.reload();
     }
   }
 });
