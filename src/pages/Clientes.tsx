@@ -38,6 +38,9 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
   const [loading, setLoading] = useState(!clientesExternos);
   
+  // Estado perfil de cliente
+  const [clientePerfil, setClientePerfil] = useState<Cliente | null>(null);
+
   // Estado para el Modal
   const [showModal, setShowModal] = useState(false);
   const [editando, setEditando] = useState<Cliente | null>(null);
@@ -358,7 +361,7 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
                           {new Date(cliente.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}
                         </span>
                       </div>
-                      <Button variant="ghost" className="h-8 gap-1 text-[10px] font-black text-indigo-600 uppercase tracking-widest p-0 px-3 hover:bg-indigo-50 rounded-xl">
+                      <Button variant="ghost" onClick={() => setClientePerfil(cliente)} className="h-8 gap-1 text-[10px] font-black text-indigo-600 uppercase tracking-widest p-0 px-3 hover:bg-indigo-50 rounded-xl">
                         Ver Perfil <ChevronRight className="w-3 h-3" />
                       </Button>
                     </div>
@@ -369,6 +372,82 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
           })}
         </div>
       )}
+
+      {/* ── Modal: Perfil de Cliente ── */}
+      {clientePerfil && (() => {
+        const cp = clientePerfil;
+        const conf = TIPO_CLIENTE_CONFIG[cp.tipo] || TIPO_CLIENTE_CONFIG.particular;
+        const Icon = conf.icon;
+        return (
+          <Dialog open={!!clientePerfil} onOpenChange={v => { if (!v) setClientePerfil(null); }}>
+            <DialogContent className="max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl max-h-[90vh] flex flex-col">
+              {/* Banner */}
+              <div className={cn('p-6 text-white shrink-0', 'bg-indigo-600')}>
+                <DialogHeader>
+                  <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center">
+                      <Icon className="w-7 h-7 text-white" />
+                    </div>
+                    <div>
+                      <DialogTitle className="text-xl font-black uppercase tracking-tight text-white">{cp.nombre}</DialogTitle>
+                      <span className="text-[10px] font-black uppercase tracking-widest text-white/70">{conf.label}</span>
+                    </div>
+                  </div>
+                </DialogHeader>
+              </div>
+
+              {/* Datos */}
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                {[
+                  { icon: CreditCard, label: 'Identificación', value: cp.identificacion },
+                  { icon: Phone, label: 'Teléfono', value: cp.telefono },
+                  { icon: Mail, label: 'Correo', value: cp.email },
+                  { icon: MapPin, label: 'Dirección', value: cp.direccion ? `${cp.direccion}${cp.ciudad ? `, ${cp.ciudad}` : ''}` : null },
+                ].map(({ icon: FieldIcon, label, value }) => value ? (
+                  <div key={label} className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                      <FieldIcon className="w-4 h-4 text-slate-400" />
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{value}</p>
+                    </div>
+                  </div>
+                ) : null)}
+
+                {cp.notas && (
+                  <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1 flex items-center gap-1.5">
+                      <Info className="w-3 h-3" /> Notas
+                    </p>
+                    <p className="text-xs text-slate-600 dark:text-slate-300 italic">"{cp.notas}"</p>
+                  </div>
+                )}
+
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2 text-slate-400">
+                  <FileText className="w-3.5 h-3.5" />
+                  <span className="text-[10px] font-bold">Registrado el {new Date(cp.createdAt).toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</span>
+                </div>
+              </div>
+
+              {/* Acciones */}
+              <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex gap-2 shrink-0">
+                {cp.telefono && (
+                  <a href={`tel:${cp.telefono}`} className="flex-1 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-black uppercase flex items-center justify-center gap-2 transition-colors">
+                    <PhoneCall className="w-4 h-4" /> Llamar
+                  </a>
+                )}
+                <Button onClick={() => { setClientePerfil(null); handleOpenModal(cp); }} className="flex-1 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase gap-2">
+                  <Pencil className="w-4 h-4" /> Editar
+                </Button>
+                <Button variant="ghost" onClick={() => setClientePerfil(null)} className="h-10 px-4 rounded-xl text-slate-400 text-xs font-black uppercase">
+                  Cerrar
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* ── Modal de Registro / Edición ── */}
       <Dialog open={showModal} onOpenChange={setShowModal}>
