@@ -3626,13 +3626,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
             {/* ── Modal: Nuevo / Editar Cliente ───────────────────────────── */}
             <Dialog open={showModalCliente} onOpenChange={setShowModalCliente}>
-                <DialogContent className="max-w-md rounded-3xl">
-                    <DialogHeader>
+                <DialogContent className="max-w-md rounded-3xl max-h-[90vh] flex flex-col">
+                    <DialogHeader className="shrink-0">
                         <DialogTitle className="font-black uppercase tracking-tight">
                             {editandoCliente ? 'Editar Cliente' : 'Nuevo Cliente Mayorista'}
                         </DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4 py-2">
+                    <div className="space-y-4 py-2 overflow-y-auto flex-1 pr-1">
                         <div>
                             <Label className="text-[10px] font-black uppercase tracking-widest">Nombre *</Label>
                             <Input
@@ -3698,7 +3698,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             />
                         </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="shrink-0 pt-2 border-t border-slate-100">
                         <Button variant="ghost" onClick={() => setShowModalCliente(false)}>Cancelar</Button>
                         <Button onClick={handleGuardarCliente} className="bg-indigo-600 hover:bg-indigo-700 text-white font-black">
                             {editandoCliente ? 'Guardar cambios' : 'Agregar cliente'}
