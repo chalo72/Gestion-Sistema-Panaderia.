@@ -173,7 +173,7 @@ export function ExpenseList({
                                 {items.map(gasto => {
                                     const catInfo = CATEGORIAS_GASTOS.find(c => c.value === gasto.categoria) ?? CATEGORIAS_GASTOS[5];
                                     const Icon = catInfo.icon;
-                                    const metodo = METODO_CONFIG[gasto.metodoPago] ?? metodaFallback;
+                                    const metodo = METODO_CONFIG[gasto.metodoPago] ?? metodoFallback;
                                     const MetIcon = metodo.icon;
                                     const prov = provNombre(gasto.proveedorId);
                                     const esIngreso = !!gasto.esIngreso;
