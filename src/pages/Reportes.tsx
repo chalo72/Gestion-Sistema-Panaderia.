@@ -491,9 +491,14 @@ export default function Reportes({
                         <Layers className="w-4 h-4 mr-2" />
                         Por Categoría
                     </TabsTrigger>
-                    <TabsTrigger value="quincena" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-                        <CalendarCheck className="w-4 h-4 mr-2" />
+                    <TabsTrigger value="quincena" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-2">
+                        <CalendarCheck className="w-4 h-4" />
                         Mi Quincena
+                        {totalCompromisosActivos > 0 && (
+                            <span className="text-[9px] font-black bg-violet-500/20 text-violet-600 dark:text-violet-400 px-1.5 py-0.5 rounded-full">
+                                {compromisos.filter(c => c.activo).length}
+                            </span>
+                        )}
                     </TabsTrigger>
                     <TabsTrigger value="consejero-ia" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-violet-600 data-[state=active]:text-white">
                         <Brain className="w-4 h-4 mr-2" />
@@ -505,24 +510,33 @@ export default function Reportes({
                     TAB 1: RESUMEN GENERAL
                 ══════════════════════════════════════════════════ */}
                 <TabsContent value="resumen" className="space-y-6 mt-0">
-                    {/* KPI Grid — 6 tarjetas */}
-                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+                    {/* KPI Grid — 7 tarjetas */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3">
                         {cardsData.map((card, i) => (
-                            <Card key={i} className="rounded-3xl border-white/5 bg-card/30 backdrop-blur-md overflow-hidden group hover:scale-[1.02] transition-all duration-500">
-                                <CardContent className="p-5">
-                                    <div className="flex justify-between items-start mb-3">
-                                        <div className={cn("p-2.5 rounded-xl transition-transform group-hover:rotate-12 duration-500", card.bg, card.color)}>
-                                            <card.icon className="w-5 h-5" />
+                            <Card
+                                key={i}
+                                onClick={(card as any).onClick}
+                                className={cn(
+                                    "rounded-2xl border-white/5 bg-card/30 backdrop-blur-md overflow-hidden group transition-all duration-300",
+                                    (card as any).onClick
+                                        ? "cursor-pointer hover:scale-[1.04] hover:shadow-lg hover:border-violet-300 dark:hover:border-violet-700"
+                                        : "hover:scale-[1.02]"
+                                )}
+                            >
+                                <CardContent className="p-4">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className={cn("p-2 rounded-xl transition-transform group-hover:rotate-12 duration-500", card.bg, card.color)}>
+                                            <card.icon className="w-4 h-4" />
                                         </div>
                                         <Badge variant="outline" className={cn("text-[8px] font-black border-none px-1.5", card.color, card.bg)}>
                                             {card.trend}
                                         </Badge>
                                     </div>
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{card.title}</p>
-                                    <h3 className="text-xl font-black tracking-tighter text-foreground group-hover:text-indigo-400 transition-colors">
+                                    <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground mb-1">{card.title}</p>
+                                    <h3 className="text-lg font-black tracking-tighter text-foreground group-hover:text-indigo-400 transition-colors">
                                         {typeof card.value === 'number' ? formatCurrency(card.value) : card.value}
                                     </h3>
-                                    <p className="text-[9px] text-muted-foreground mt-1 truncate">{card.sub}</p>
+                                    <p className="text-[8px] text-muted-foreground mt-0.5 truncate">{card.sub}</p>
                                 </CardContent>
                             </Card>
                         ))}
