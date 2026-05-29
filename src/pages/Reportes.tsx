@@ -224,6 +224,45 @@ export default function Reportes({
         compromisos,
     }), [ventas, ventasDiarias, gastos, compromisos]);
 
+    // ── DATOS REALES DE LA QUINCENA ACTUAL ──────────────────────
+    const quincenaReal = useMemo(() => {
+        const hoy = new Date();
+        const dia = hoy.getDate();
+        const inicio = dia <= 15
+            ? new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+            : new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+        const fin = dia <= 15
+            ? new Date(hoy.getFullYear(), hoy.getMonth(), 15)
+            : new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+        const inicioStr = inicio.toISOString().slice(0, 10);
+        const finStr = fin.toISOString().slice(0, 10);
+        const hoyStr = hoy.toISOString().slice(0, 10);
+
+        const ventasPOS = ventas
+            .filter(v => v.fecha.slice(0, 10) >= inicioStr && v.fecha.slice(0, 10) <= finStr)
+            .reduce((s, v) => s + v.total, 0);
+
+        const ventasManuales = ventasDiarias
+            .filter(v => v.fecha >= inicioStr && v.fecha <= finStr)
+            .reduce((s, v) => s + v.total, 0);
+
+        const ventasTotalDia = ventasDiarias
+            .filter(v => v.fecha === hoyStr)
+            .reduce((s, v) => s + v.total, 0);
+
+        const totalVentasManualesHistorico = ventasDiarias.reduce((s, v) => s + v.total, 0);
+
+        return {
+            inicioStr, finStr, hoyStr,
+            ventasPOS,
+            ventasManuales,
+            ventasTotal: ventasPOS + ventasManuales,
+            ventasTotalDia,
+            totalVentasManualesHistorico,
+            label: dia <= 15 ? '1ª quincena' : '2ª quincena',
+        };
+    }, [ventas, ventasDiarias]);
+
     // ── TABLERO DE OBLIGACIONES TOTALES ──────────────────────────
     const promedioGastosMensuales = useMemo(() => {
         const meses: Record<string, Record<string, number>> = {};
@@ -917,6 +956,81 @@ export default function Reportes({
                     TAB 4: MI QUINCENA
                 ══════════════════════════════════════════════════ */}
                 <TabsContent value="quincena" className="space-y-6 mt-0">
+
+                    {/* ── RESUMEN REAL — 4 cajas prominentes ── */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                            {
+                                label: `Ventas POS ${quincenaReal.label}`,
+                                val: quincenaReal.ventasPOS,
+                                color: 'text-emerald-500',
+                                border: 'border-emerald-200 dark:border-emerald-800',
+                                sub: `${ventas.filter(v => v.fecha.slice(0, 10) >= quincenaReal.inicioStr && v.fecha.slice(0, 10) <= quincenaReal.finStr).length} transacciones`,
+                            },
+                            {
+                                label: 'Ventas manuales',
+                                val: quincenaReal.ventasManuales,
+                                color: 'text-indigo-500',
+                                border: 'border-indigo-200 dark:border-indigo-800',
+                                sub: `${ventasDiarias.filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr).length} cierres de caja`,
+                            },
+                            {
+                                label: 'Total ingresos reales',
+                                val: quincenaReal.ventasTotal,
+                                color: 'text-cyan-500',
+                                border: 'border-cyan-200 dark:border-cyan-800',
+                                sub: 'POS + cierre manual',
+                                highlight: true,
+                            },
+                            {
+                                label: 'Total compromisos activos',
+                                val: totalCompromisosActivos,
+                                color: totalCompromisosActivos > quincenaReal.ventasTotal ? 'text-rose-500' : 'text-violet-500',
+                                border: totalCompromisosActivos > quincenaReal.ventasTotal ? 'border-rose-200 dark:border-rose-800' : 'border-violet-200 dark:border-violet-800',
+                                sub: `${compromisos.filter(c => c.activo).length} compromisos activos`,
+                            },
+                        ].map(item => (
+                            <div key={item.label} className={cn(
+                                "bg-white dark:bg-slate-900 rounded-2xl border px-4 py-3 flex flex-col gap-1",
+                                item.border,
+                                item.highlight && "ring-2 ring-cyan-400/30"
+                            )}>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                                <span className={cn("text-xl font-black tabular-nums", item.color)}>
+                                    {formatCurrency(item.val)}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-bold">{item.sub}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Saldo neto real */}
+                    {(() => {
+                        const saldo = quincenaReal.ventasTotal - totalCompromisosActivos;
+                        return (
+                            <div className={cn(
+                                "rounded-2xl border-2 px-5 py-3 flex items-center justify-between gap-4 flex-wrap",
+                                saldo >= 0 ? "border-emerald-400/40 bg-emerald-500/5" : "border-rose-400/40 bg-rose-500/5"
+                            )}>
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo real de la quincena hasta hoy</p>
+                                    <p className={cn("text-2xl font-black", saldo >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                        {saldo >= 0 ? `+${formatCurrency(saldo)}` : formatCurrency(saldo)}
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                                        Ingresos reales {formatCurrency(quincenaReal.ventasTotal)} — Compromisos {formatCurrency(totalCompromisosActivos)}
+                                    </p>
+                                </div>
+                                {quincenaReal.ventasTotalDia > 0 && (
+                                    <div className="text-right bg-card/60 rounded-xl px-4 py-2 border border-white/5">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ventas registradas hoy</p>
+                                        <p className="text-xl font-black text-amber-400">{formatCurrency(quincenaReal.ventasTotalDia)}</p>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+
                     {/* Banner proyección */}
                     <Card className={cn(
                         "rounded-3xl border-2",
@@ -1167,6 +1281,71 @@ export default function Reportes({
                     TAB 6: TABLERO DE OBLIGACIONES TOTALES
                 ══════════════════════════════════════════════════ */}
                 <TabsContent value="tablero-total" className="space-y-6 mt-0">
+
+                    {/* ── Fuente de datos — transparencia ── */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {[
+                            {
+                                label: 'Ventas del mes (POS)',
+                                val: reporteActual.totalVentas,
+                                sub: 'Fuente: transacciones reales del sistema',
+                                color: 'text-emerald-500',
+                                border: 'border-emerald-200 dark:border-emerald-800',
+                                empty: reporteActual.totalVentas === 0,
+                            },
+                            {
+                                label: 'Compromisos fijos activos',
+                                val: totalCompromisosActivos,
+                                sub: `${compromisos.filter(c=>c.activo).length} registrados · Fuente: tab Mi Quincena`,
+                                color: 'text-violet-500',
+                                border: 'border-violet-200 dark:border-violet-800',
+                                empty: totalCompromisosActivos === 0,
+                            },
+                            {
+                                label: 'Prom. insumos/mes',
+                                val: promedioInsumos,
+                                sub: `Basado en ${Object.keys(promedioGastosMensuales).length > 0 ? 'gastos históricos reales' : 'sin gastos registrados'}`,
+                                color: 'text-amber-500',
+                                border: 'border-amber-200 dark:border-amber-800',
+                                empty: promedioInsumos === 0,
+                            },
+                            {
+                                label: 'Total obligaciones',
+                                val: totalObligaciones,
+                                sub: 'Compromisos + Insumos + Otros gastos',
+                                color: totalObligaciones > reporteActual.totalVentas ? 'text-rose-500' : 'text-cyan-500',
+                                border: totalObligaciones > reporteActual.totalVentas ? 'border-rose-200 dark:border-rose-800' : 'border-cyan-200 dark:border-cyan-800',
+                                empty: totalObligaciones === 0,
+                            },
+                        ].map(item => (
+                            <div key={item.label} className={cn(
+                                "bg-white dark:bg-slate-900 rounded-2xl border px-4 py-3 flex flex-col gap-1",
+                                item.border
+                            )}>
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                                {item.empty
+                                    ? <span className="text-sm font-black text-slate-400">Sin datos aún</span>
+                                    : <span className={cn("text-xl font-black tabular-nums", item.color)}>{formatCurrency(item.val)}</span>
+                                }
+                                <span className="text-[9px] text-slate-400 font-bold leading-tight">{item.sub}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Aviso si faltan datos clave */}
+                    {(totalCompromisosActivos === 0 || totalObligaciones === 0) && (
+                        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4 flex items-start gap-3">
+                            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-sm font-black text-amber-400">Completa tus datos para ver el tablero real</p>
+                                <ul className="text-[11px] text-muted-foreground mt-1 space-y-0.5 list-disc ml-4">
+                                    {totalCompromisosActivos === 0 && <li>Ve a <strong>Mi Quincena</strong> y registra tus compromisos fijos (arriendo, servicios, préstamos, salarios)</li>}
+                                    {promedioInsumos === 0 && <li>Registra gastos de <strong>Materia Prima</strong> en el módulo Finanzas para que el promedio de insumos sea real</li>}
+                                    {reporteActual.totalVentas === 0 && <li>Las ventas del mes aún no se han registrado en el POS</li>}
+                                </ul>
+                            </div>
+                        </div>
+                    )}
 
                     {/* ── Cobertura gauge principal ── */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
