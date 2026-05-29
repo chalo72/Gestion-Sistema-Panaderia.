@@ -1194,10 +1194,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // ── Consolidar Historial Local y Centralizado para la UI ──
     const historialUnificado = useMemo(() => {
+        // Normaliza cualquier fecha (number | ISO string | legacy) a timestamp ms
+        const toMs = (f: number | string | undefined): number => {
+            if (!f) return 0;
+            if (typeof f === 'number') return f;
+            const t = new Date(f).getTime();
+            return isNaN(t) ? 0 : t;
+        };
+
         // 1. Efectivo / otros métodos — siempre vienen de localStorage
         const localCash = historialMayoristas.filter(h => h.metodoPago !== 'credito').map(h => ({
             ...h,
-            fecha: dateOverrides[h.id] ?? h.fecha,
+            fecha: dateOverrides[h.id] ?? toMs(h.fecha),
         }));
 
         // 2. Créditos de la BD central (Supabase / IndexedDB) — fuente autoritativa
@@ -1205,14 +1213,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             id: c.id,
             clienteId: c.clienteId,
             clienteNombre: c.clienteNombre,
-            fecha: dateOverrides[c.id] ?? new Date(c.fecha).getTime(),
+            fecha: dateOverrides[c.id] ?? toMs(c.fecha),
             total: c.monto,
             items: c.items || [],
             metodoPago: 'credito' as MetodoPago,
             abonos: (c.pagos || []).map((p: any) => ({
                 id: p.id,
                 monto: p.monto,
-                fecha: new Date(p.fecha).getTime(),
+                fecha: toMs(p.fecha),
                 metodoPago: (p.metodoPago || 'efectivo') as MetodoPago
             })),
             fotoFactura: undefined
@@ -1225,7 +1233,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             .filter(h => h.metodoPago === 'credito' && !centralIds.has(h.id))
             .map(h => ({
                 ...h,
-                fecha: dateOverrides[h.id] ?? h.fecha,
+                fecha: dateOverrides[h.id] ?? toMs(h.fecha),
             }));
 
         // 4. Deduplicar por ID — centralCredits > localCreditHuerfanos > localCash
@@ -1235,6 +1243,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             seen.add(h.id);
             return true;
         });
+        // Siempre más reciente primero — toMs garantiza que no haya NaN
         return deduped.sort((a, b) => b.fecha - a.fecha);
     }, [historialMayoristas, creditosClientes, dateOverrides]);
 
@@ -1340,17 +1349,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                 {/* ── CUENTA DEL CLIENTE: Créditos / Pagados ── */}
                 {(() => {
+                    const byDateDesc = (a: {fecha: number}, b: {fecha: number}) => b.fecha - a.fecha;
                     const histCliente = historialUnificado.filter(h => h.clienteId === cliente.id);
                     const creditosPendientes = histCliente.filter(h => {
                         if (h.metodoPago !== 'credito') return false;
                         const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                         return h.total - ab > 0;
-                    });
+                    }).sort(byDateDesc);
                     const ticketsPagados = histCliente.filter(h => {
                         if (h.metodoPago !== 'credito') return true;
                         const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                         return h.total - ab <= 0;
-                    });
+                    }).sort(byDateDesc);
                     const totalDeuda = creditosPendientes.reduce((s, h) => {
                         const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
                         return s + (h.total - ab);
