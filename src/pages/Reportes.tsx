@@ -179,6 +179,24 @@ export default function Reportes({
     const [compromisos, setCompromisos] = useState<CompromisoFijo[]>(() => getCompromisos());
     const [ventasDiarias, setVentasDiarias] = useState<VentaDiaria[]>(() => getVentasDiarias());
     const [pinModal, setPinModal] = useState<{ ventaId: string; pin: string; error: string } | null>(null);
+    const [activeTab, setActiveTab] = useState('resumen');
+
+    // ── Métricas de compromisos ──────────────────────────────────
+    const totalCompromisosActivos = useMemo(
+        () => compromisos.filter(c => c.activo).reduce((s, c) => s + c.monto, 0),
+        [compromisos]
+    );
+    const ratioCompromisosVsVentas = reporteActual.totalVentas > 0
+        ? (totalCompromisosActivos / reporteActual.totalVentas) * 100 : 0;
+    const saludFinanciera = (() => {
+        if (reporteActual.totalVentas === 0) return { label: 'Sin datos', color: 'text-slate-400', bg: 'bg-slate-400/10', barra: 'bg-slate-400', pct: 0 };
+        const margen = (reporteActual.utilidadBruta / reporteActual.totalVentas) * 100;
+        const cobertura = totalCompromisosActivos > 0 ? (reporteActual.totalVentas / totalCompromisosActivos) : 99;
+        const score = Math.min(100, (margen * 0.5) + (Math.min(cobertura, 3) / 3 * 50));
+        if (score >= 60) return { label: 'Saludable', color: 'text-emerald-500', bg: 'bg-emerald-500/10', barra: 'bg-emerald-500', pct: score };
+        if (score >= 35) return { label: 'Moderado', color: 'text-amber-500', bg: 'bg-amber-500/10', barra: 'bg-amber-500', pct: score };
+        return { label: 'Crítico', color: 'text-rose-500', bg: 'bg-rose-500/10', barra: 'bg-rose-500', pct: score };
+    })();
 
     const [formCompromiso, setFormCompromiso] = useState({
         nombre: '', monto: '', categoria: 'Otros' as GastoCategoria,
@@ -317,7 +335,18 @@ export default function Reportes({
             color: ratioGasto > 70 ? 'text-rose-500' : ratioGasto > 50 ? 'text-amber-500' : 'text-emerald-500',
             bg: ratioGasto > 70 ? 'bg-rose-500/10' : ratioGasto > 50 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
             trend: ratioGastoAnt === 0 ? '—' : `${ratioGasto <= ratioGastoAnt ? '' : '+'}${(ratioGasto - ratioGastoAnt).toFixed(1)}pp`,
-            sub: ratioGasto > 70 ? 'Alto — revisar' : ratioGasto > 50 ? 'Moderado' : 'Eficiente ✓'
+            sub: ratioGasto > 70 ? 'Alto — revisar' : ratioGasto > 50 ? 'Moderado' : 'Eficiente ✓',
+            onClick: undefined,
+        },
+        {
+            title: 'Compromisos Fijos',
+            value: totalCompromisosActivos,
+            icon: CalendarCheck,
+            color: ratioCompromisosVsVentas > 80 ? 'text-rose-500' : ratioCompromisosVsVentas > 50 ? 'text-amber-500' : 'text-violet-500',
+            bg: ratioCompromisosVsVentas > 80 ? 'bg-rose-500/10' : ratioCompromisosVsVentas > 50 ? 'bg-amber-500/10' : 'bg-violet-500/10',
+            trend: `${ratioCompromisosVsVentas.toFixed(0)}% de ventas`,
+            sub: `${compromisos.filter(c => c.activo).length} activos — clic para ver`,
+            onClick: () => setActiveTab('quincena'),
         },
     ];
 
@@ -392,7 +421,63 @@ export default function Reportes({
                 </div>
             </header>
 
-            <Tabs defaultValue="resumen" className="w-full">
+            {/* ── PULSO FINANCIERO ── Banner siempre visible */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                    { label: 'Ventas mes', val: reporteActual.totalVentas, color: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
+                    { label: 'Gastos mes', val: reporteActual.totalGastos, color: 'text-rose-600 dark:text-rose-400', border: 'border-rose-200 dark:border-rose-800' },
+                    { label: 'Utilidad bruta', val: reporteActual.utilidadBruta, color: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-800' },
+                    { label: 'Total compromisos', val: totalCompromisosActivos, color: 'text-violet-600 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', cta: true },
+                ].map(item => (
+                    <div
+                        key={item.label}
+                        onClick={item.cta ? () => setActiveTab('quincena') : undefined}
+                        className={cn(
+                            "bg-white dark:bg-slate-900 rounded-2xl border px-4 py-3 flex flex-col gap-1",
+                            item.border,
+                            item.cta && "cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all"
+                        )}
+                    >
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
+                        <span className={cn("text-xl font-black tabular-nums", item.color)}>
+                            {formatCurrency(item.val)}
+                        </span>
+                        {item.cta && (
+                            <span className="text-[9px] font-bold text-violet-400 uppercase tracking-widest">
+                                {compromisos.filter(c => c.activo).length} activos · Ver →
+                            </span>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            {/* ── SALUD FINANCIERA ── */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 px-5 py-4">
+                <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4 text-slate-400" />
+                        <span className="text-xs font-black uppercase tracking-widest text-slate-500">Salud financiera del mes</span>
+                    </div>
+                    <span className={cn("text-sm font-black uppercase tracking-widest px-3 py-1 rounded-full", saludFinanciera.bg, saludFinanciera.color)}>
+                        {saludFinanciera.label} · {saludFinanciera.pct.toFixed(0)}/100
+                    </span>
+                </div>
+                <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                    <div
+                        className={cn("h-full rounded-full transition-all duration-1000", saludFinanciera.barra)}
+                        style={{ width: `${saludFinanciera.pct}%` }}
+                    />
+                </div>
+                <div className="flex justify-between mt-1.5">
+                    <span className="text-[9px] text-slate-400 font-bold">Crítico</span>
+                    <span className="text-[9px] text-slate-400 font-bold">
+                        Compromisos: {formatCurrency(totalCompromisosActivos)} · Margen: {margenActual.toFixed(1)}%
+                    </span>
+                    <span className="text-[9px] text-slate-400 font-bold">Saludable</span>
+                </div>
+            </div>
+
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-14 p-1 mb-6 flex items-center justify-start flex-wrap gap-1">
                     <TabsTrigger value="resumen" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <Activity className="w-4 h-4 mr-2" />

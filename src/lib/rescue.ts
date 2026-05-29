@@ -7,7 +7,7 @@ export const RESCUE_DATA = {
       "updatedAt": "2026-05-22T20:19:07.083Z",
       "descripcion": "Caja x12",
       "precioVenta": 3000,
-      "categoria": "Postobon",
+      "categoria": "Postobón",
       "tipo": "elaborado",
       "margenUtilidad": 27,
       "createdAt": "2026-03-06T23:38:39.635+00:00"
@@ -136,7 +136,7 @@ export const RESCUE_DATA = {
       "id": "513ddea8-72c6-4708-a5d9-735bd85d64bb",
       "updatedAt": "2026-05-22T20:19:06.727Z",
       "costoBase": 2200,
-      "categoria": "Postobon",
+      "categoria": "Postobón",
       "tipo": "elaborado",
       "margenUtilidad": 39,
       "createdAt": "2026-03-29T18:05:06.836+00:00",
@@ -165,7 +165,7 @@ export const RESCUE_DATA = {
       "precioVenta": 8000,
       "margenUtilidad": 30,
       "createdAt": "2026-05-22T20:19:05.573Z",
-      "categoria": "Postobon",
+      "categoria": "Postobón",
       "tipo": "elaborado"
     },
     {
@@ -188,7 +188,7 @@ export const RESCUE_DATA = {
       "precioVenta": 6000,
       "descripcion": "Caja x12",
       "tipo": "elaborado",
-      "categoria": "Postobon",
+      "categoria": "Postobón",
       "margenUtilidad": 72,
       "createdAt": "2026-05-22T20:15:15.864Z"
     },
@@ -424,7 +424,7 @@ export const RESCUE_DATA = {
       "id": "d3b2643f-def2-4c4a-9bf8-14d1def9c702",
       "createdAt": "2026-03-29T18:05:05.042+00:00",
       "margenUtilidad": 44,
-      "categoria": "Postobon",
+      "categoria": "Postobón",
       "tipo": "elaborado",
       "precioVenta": 4000,
       "descripcion": "Caja x12",
@@ -440,7 +440,7 @@ export const RESCUE_DATA = {
       "precioVenta": 6000,
       "margenUtilidad": 63,
       "createdAt": "2026-03-30T17:49:52.316+00:00",
-      "categoria": "Postobon",
+      "categoria": "Postobón",
       "tipo": "elaborado",
       "nombre": "Bretaña 1.5 liytro"
     },
@@ -451,7 +451,7 @@ export const RESCUE_DATA = {
       "costoBase": 2400,
       "createdAt": "2026-03-29T18:05:05.324+00:00",
       "margenUtilidad": 48,
-      "categoria": "Postobon",
+      "categoria": "Postobón",
       "tipo": "elaborado",
       "precioVenta": 3500,
       "descripcion": "Caja x12"
@@ -831,17 +831,6 @@ export const RESCUE_DATA = {
       "proveedorId": "e342374d-a988-42f5-9621-6b9e03d9365b",
       "notas": "Unidad x1",
       "fechaActualizacion": "2026-05-21T21:35:52.612Z"
-    },
-    {
-      "id": "7afb3dd0-9996-4f6a-8a33-35fc3ef7fc4f",
-      "precioCosto": 1300,
-      "notas": "Unidad x1",
-      "fechaActualizacion": "2026-05-21T21:35:52.491Z",
-      "proveedorId": "e342374d-a988-42f5-9621-6b9e03d9365b",
-      "destino": "venta",
-      "cantidadEmbalaje": 1,
-      "tipoEmbalaje": "unidad",
-      "productoId": "13951a34-efd1-4cea-8a49-592db6c81c12"
     },
     {
       "id": "83318351-4ee5-4efc-93d8-2e710955d710",

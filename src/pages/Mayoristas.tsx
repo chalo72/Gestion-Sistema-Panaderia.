@@ -1050,6 +1050,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             });
     }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, preciosOverride]);
 
+    // Helper: normaliza categoría para comparaciones sin importar tildes/mayúsculas
+    const normCat = (c: string | undefined) => (c || 'Sin categoría').toLowerCase().trim();
+
     // Mismo cálculo pero SIN filtro de busqueda — usado en catálogo de perfil cliente
     // para que la búsqueda principal no oculte productos en el mini-POS
     // tombstoneIds NO se aplica aquí: si el producto está en state, es porque no fue borrado.
@@ -1280,10 +1283,17 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     if (viendoPerfilCliente) {
         const cliente = viendoPerfilCliente;
         const tConf = TIPO_CONFIG[cliente.tipo] || TIPO_CONFIG.mayorista;
-        const categoriasPerfil = Array.from(new Set(tablaDatosTodos.map(d => d.producto.categoria || 'Sin categoría'))).sort();
+        // Deduplica categorías normalizando mayúsculas/tildes para evitar "Postobon" y "Postobón" como dos botones separados
+        const catMapPerfil = new Map<string, string>();
+        tablaDatosTodos.forEach(d => {
+            const cat = d.producto.categoria || 'Sin categoría';
+            const key = normCat(cat);
+            if (!catMapPerfil.has(key)) catMapPerfil.set(key, cat);
+        });
+        const categoriasPerfil = Array.from(catMapPerfil.values()).sort();
         const productosPerfil = tablaDatosTodos
             .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()))
-            .filter(d => !categoriaPerfil || (d.producto.categoria || 'Sin categoría') === categoriaPerfil);
+            .filter(d => !categoriaPerfil || normCat(d.producto.categoria) === normCat(categoriaPerfil));
 
         // Créditos pendientes del cliente (para botón WA del header)
         const creditosPendientesHeader = historialUnificado.filter(h => {

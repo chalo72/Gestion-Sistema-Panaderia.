@@ -428,6 +428,8 @@ export function usePriceControl() {
         finanzas.setCreditosClientes(creditosClientes as any);
       }
 
+      finanzas.setCreditosTrabajadores(creditosTrabajadoresData as any);
+      finanzas.setTrabajadores(trabajadores as any);
 
     } catch (error) {
       console.error('Error cargando datos secundarios:', error);
