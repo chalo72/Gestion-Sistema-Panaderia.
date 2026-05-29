@@ -54,6 +54,7 @@ import {
     getVentasDiarias, addVentaDiaria, deleteVentaDiaria,
     calcularProyeccionQuincena, generarConsejo
 } from '@/lib/finanzas-personales';
+import { getConfigSeguridad } from '@/lib/security-agent';
 import type { VentaDiaria } from '@/types';
 
 interface ReportesProps {
@@ -177,6 +178,7 @@ export default function Reportes({
     // ── Estado: Compromisos y Ventas Diarias ──────────────────────
     const [compromisos, setCompromisos] = useState<CompromisoFijo[]>(() => getCompromisos());
     const [ventasDiarias, setVentasDiarias] = useState<VentaDiaria[]>(() => getVentasDiarias());
+    const [pinModal, setPinModal] = useState<{ ventaId: string; pin: string; error: string } | null>(null);
 
     const [formCompromiso, setFormCompromiso] = useState({
         nombre: '', monto: '', categoria: 'Otros' as GastoCategoria,
@@ -246,8 +248,20 @@ export default function Reportes({
     };
 
     const handleDeleteVentaDiaria = (id: string) => {
-        deleteVentaDiaria(id);
+        setPinModal({ ventaId: id, pin: '', error: '' });
+    };
+
+    const confirmarDeleteConPin = () => {
+        if (!pinModal) return;
+        const cfg = getConfigSeguridad();
+        if (pinModal.pin !== cfg.pinGerente) {
+            setPinModal(prev => prev ? { ...prev, error: 'PIN incorrecto' } : null);
+            return;
+        }
+        deleteVentaDiaria(pinModal.ventaId);
         setVentasDiarias(getVentasDiarias());
+        setPinModal(null);
+        toast.success('Venta eliminada');
     };
 
     const cardsData = [
@@ -955,6 +969,43 @@ export default function Reportes({
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Modal PIN — Eliminar venta diaria */}
+            {pinModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-xs p-6 space-y-4">
+                        <div className="text-center space-y-1">
+                            <div className="w-12 h-12 rounded-full bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center mx-auto mb-2">
+                                <Trash2 className="w-6 h-6 text-rose-600 dark:text-rose-400" />
+                            </div>
+                            <h3 className="text-base font-black text-slate-900 dark:text-white">Eliminar venta</h3>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400">Ingresa el PIN de gerente para continuar</p>
+                        </div>
+                        <Input
+                            type="password"
+                            inputMode="numeric"
+                            maxLength={8}
+                            placeholder="PIN gerente"
+                            value={pinModal.pin}
+                            onChange={e => setPinModal(prev => prev ? { ...prev, pin: e.target.value, error: '' } : null)}
+                            onKeyDown={e => e.key === 'Enter' && confirmarDeleteConPin()}
+                            className="text-center text-lg font-black tracking-[0.4em] h-12"
+                            autoFocus
+                        />
+                        {pinModal.error && (
+                            <p className="text-[11px] font-bold text-rose-500 text-center">{pinModal.error}</p>
+                        )}
+                        <div className="flex gap-2">
+                            <Button variant="outline" className="flex-1 h-10 text-sm" onClick={() => setPinModal(null)}>
+                                Cancelar
+                            </Button>
+                            <Button className="flex-1 h-10 text-sm bg-rose-600 hover:bg-rose-700 text-white" onClick={confirmarDeleteConPin}>
+                                Eliminar
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
