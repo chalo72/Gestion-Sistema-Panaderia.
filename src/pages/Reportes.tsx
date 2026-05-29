@@ -20,8 +20,6 @@ import {
     TrendingUp,
     TrendingDown,
     DollarSign,
-    ArrowUpRight,
-    ArrowDownRight,
     PieChart as PieChartIcon,
     Layers,
     Activity,
@@ -37,7 +35,12 @@ import {
     CheckCircle2,
     AlertTriangle,
     XCircle,
-    User
+    User,
+    Shield,
+    Flame,
+    LifeBuoy,
+    BadgeAlert,
+    Gauge,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -220,6 +223,89 @@ export default function Reportes({
         gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria, descripcion: g.descripcion })),
         compromisos,
     }), [ventas, ventasDiarias, gastos, compromisos]);
+
+    // ── TABLERO DE OBLIGACIONES TOTALES ──────────────────────────
+    const promedioGastosMensuales = useMemo(() => {
+        const meses: Record<string, Record<string, number>> = {};
+        gastos.forEach(g => {
+            const mes = g.fecha.slice(0, 7);
+            if (!meses[mes]) meses[mes] = {};
+            meses[mes][g.categoria] = (meses[mes][g.categoria] || 0) + g.monto;
+        });
+        const numMeses = Math.max(1, Object.keys(meses).length);
+        const totalesPorCat: Record<string, number> = {};
+        Object.values(meses).forEach(mes => {
+            Object.entries(mes).forEach(([cat, monto]) => {
+                totalesPorCat[cat] = (totalesPorCat[cat] || 0) + monto;
+            });
+        });
+        return Object.fromEntries(
+            Object.entries(totalesPorCat).map(([cat, total]) => [cat, total / numMeses])
+        );
+    }, [gastos]);
+
+    const promedioInsumos = useMemo(() =>
+        Object.entries(promedioGastosMensuales)
+            .filter(([cat]) => ['Materia Prima', 'Insumos'].includes(cat))
+            .reduce((s, [, v]) => s + v, 0),
+        [promedioGastosMensuales]
+    );
+
+    const promedioOtrosGastos = useMemo(() =>
+        Object.entries(promedioGastosMensuales)
+            .filter(([cat]) => !['Materia Prima', 'Insumos'].includes(cat))
+            .reduce((s, [, v]) => s + v, 0),
+        [promedioGastosMensuales]
+    );
+
+    const totalObligaciones = totalCompromisosActivos + promedioInsumos + promedioOtrosGastos;
+
+    const coberturaActual = totalObligaciones > 0
+        ? (reporteActual.totalVentas / totalObligaciones) * 100 : 100;
+
+    const ventasNecesariasDiarias = (() => {
+        const diasMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+        return totalObligaciones > 0 ? totalObligaciones / diasMes : 0;
+    })();
+
+    const obligacionesBreakdown = useMemo(() => {
+        const items: { name: string; value: number; color: string }[] = [];
+        if (totalCompromisosActivos > 0)
+            items.push({ name: 'Compromisos fijos', value: totalCompromisosActivos, color: '#8b5cf6' });
+        if (promedioInsumos > 0)
+            items.push({ name: 'Insumos / MP', value: promedioInsumos, color: '#f59e0b' });
+        if (promedioOtrosGastos > 0)
+            items.push({ name: 'Otros gastos', value: promedioOtrosGastos, color: '#f43f5e' });
+        return items;
+    }, [totalCompromisosActivos, promedioInsumos, promedioOtrosGastos]);
+
+    const alertasAutomaticas = useMemo(() => {
+        const alerts: { nivel: 'critico' | 'advertencia' | 'ok'; icon: string; titulo: string; msg: string; accion: string }[] = [];
+        if (totalObligaciones > 0 && coberturaActual < 80)
+            alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Cobertura insuficiente', msg: `Tus ventas cubren solo el ${coberturaActual.toFixed(0)}% de tus obligaciones totales.`, accion: 'Necesitas vender más o reducir gastos urgentemente.' });
+        else if (coberturaActual < 120)
+            alerts.push({ nivel: 'advertencia', icon: '🟡', titulo: 'Margen de seguridad bajo', msg: `Cubres el ${coberturaActual.toFixed(0)}% — quedas ajustado sin colchón.`, accion: 'Intenta aumentar ventas un 20% o recortar un gasto fijo.' });
+        else
+            alerts.push({ nivel: 'ok', icon: '🟢', titulo: 'Cobertura saludable', msg: `Tus ventas cubren el ${coberturaActual.toFixed(0)}% de todas tus obligaciones.`, accion: 'Sigue así. Considera guardar el excedente.' });
+
+        if (margenActual < 15 && reporteActual.totalVentas > 0)
+            alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Margen peligrosamente bajo', msg: `Margen actual: ${margenActual.toFixed(1)}%. Menos del 15% pone en riesgo el negocio.`, accion: 'Revisa precios de venta o negocia insumos más baratos.' });
+        else if (margenActual < 25 && reporteActual.totalVentas > 0)
+            alerts.push({ nivel: 'advertencia', icon: '🟡', titulo: 'Margen por debajo del ideal', msg: `Margen: ${margenActual.toFixed(1)}%. El ideal para panadería es 25-40%.`, accion: 'Considera subir precios entre 5-10% para mejorar la rentabilidad.' });
+
+        if (promedioInsumos > 0 && reporteActual.totalVentas > 0) {
+            const pctInsumos = (promedioInsumos / reporteActual.totalVentas) * 100;
+            if (pctInsumos > 50)
+                alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Insumos consumen más del 50% de ventas', msg: `Gastas ${pctInsumos.toFixed(0)}% de tus ingresos en materia prima.`, accion: 'Busca proveedores alternativos o ajusta los precios de venta.' });
+            else if (pctInsumos > 35)
+                alerts.push({ nivel: 'advertencia', icon: '🟡', titulo: 'Costo de insumos elevado', msg: `Los insumos representan ${pctInsumos.toFixed(0)}% de tus ventas.`, accion: 'Revisa qué productos tienen menor margen y considera ajustar precios.' });
+        }
+
+        if (ratioCompromisosVsVentas > 60)
+            alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Compromisos fijos muy altos', msg: `Tus compromisos fijos son el ${ratioCompromisosVsVentas.toFixed(0)}% de las ventas.`, accion: 'Evalúa renegociar arriendos o eliminar compromisos no esenciales.' });
+
+        return alerts;
+    }, [coberturaActual, margenActual, promedioInsumos, ratioCompromisosVsVentas, reporteActual.totalVentas, totalObligaciones]);
 
     const handleAddCompromiso = () => {
         const monto = parseFloat(formCompromiso.monto);
@@ -503,6 +589,15 @@ export default function Reportes({
                     <TabsTrigger value="consejero-ia" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-violet-600 data-[state=active]:text-white">
                         <Brain className="w-4 h-4 mr-2" />
                         Consejero IA
+                    </TabsTrigger>
+                    <TabsTrigger value="tablero-total" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-rose-600 data-[state=active]:text-white gap-2">
+                        <Shield className="w-4 h-4" />
+                        Tablero Total
+                        {alertasAutomaticas.filter(a => a.nivel === 'critico').length > 0 && (
+                            <span className="text-[9px] font-black bg-rose-500 text-white px-1.5 py-0.5 rounded-full">
+                                {alertasAutomaticas.filter(a => a.nivel === 'critico').length}
+                            </span>
+                        )}
                     </TabsTrigger>
                 </TabsList>
 
@@ -1061,6 +1156,232 @@ export default function Reportes({
                                     <div key={i} className="bg-card/40 rounded-2xl p-4 border border-white/5">
                                         <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
                                         <p className={cn("text-xl font-black", item.color)}>{item.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                {/* ══════════════════════════════════════════════════
+                    TAB 6: TABLERO DE OBLIGACIONES TOTALES
+                ══════════════════════════════════════════════════ */}
+                <TabsContent value="tablero-total" className="space-y-6 mt-0">
+
+                    {/* ── Cobertura gauge principal ── */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <Card className="lg:col-span-2 rounded-3xl border-white/5 bg-card/30 overflow-hidden">
+                            <CardHeader className="pb-3 px-6 pt-5">
+                                <div className="flex items-center gap-2">
+                                    <Gauge className="w-5 h-5 text-rose-400" />
+                                    <CardTitle className="text-base font-black uppercase tracking-tight">Cobertura de Obligaciones</CardTitle>
+                                </div>
+                                <CardDescription className="text-[11px]">¿Cuánto de tus obligaciones totales cubren las ventas de este mes?</CardDescription>
+                            </CardHeader>
+                            <CardContent className="px-6 pb-6 space-y-5">
+                                {/* Barra de cobertura */}
+                                <div>
+                                    <div className="flex justify-between mb-2">
+                                        <span className="text-[10px] font-black uppercase text-muted-foreground">
+                                            Ventas: {formatCurrency(reporteActual.totalVentas)}
+                                        </span>
+                                        <span className={cn(
+                                            "text-[10px] font-black uppercase",
+                                            coberturaActual >= 120 ? 'text-emerald-400' : coberturaActual >= 80 ? 'text-amber-400' : 'text-rose-400'
+                                        )}>
+                                            {coberturaActual.toFixed(0)}% cubierto
+                                        </span>
+                                    </div>
+                                    <div className="w-full h-5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                        <div
+                                            className={cn(
+                                                "h-full rounded-full transition-all duration-1000 flex items-center justify-end pr-2",
+                                                coberturaActual >= 120 ? 'bg-emerald-500' : coberturaActual >= 80 ? 'bg-amber-500' : 'bg-rose-500'
+                                            )}
+                                            style={{ width: `${Math.min(100, coberturaActual)}%` }}
+                                        >
+                                            {coberturaActual >= 30 && (
+                                                <span className="text-[9px] font-black text-white">{coberturaActual.toFixed(0)}%</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between mt-1">
+                                        <span className="text-[9px] text-slate-400 font-bold">Crítico</span>
+                                        <span className="text-[9px] text-slate-400 font-bold">Obligaciones: {formatCurrency(totalObligaciones)}</span>
+                                        <span className="text-[9px] text-slate-400 font-bold">Saludable &gt;120%</span>
+                                    </div>
+                                </div>
+
+                                {/* KPIs de obligaciones */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    {[
+                                        { label: 'Compromisos fijos', val: totalCompromisosActivos, color: 'text-violet-500', bg: 'bg-violet-500/10' },
+                                        { label: 'Prom. insumos/mes', val: promedioInsumos, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+                                        { label: 'Prom. otros gastos', val: promedioOtrosGastos, color: 'text-rose-500', bg: 'bg-rose-500/10' },
+                                    ].map(item => (
+                                        <div key={item.label} className={cn("rounded-2xl p-3 border border-white/5", item.bg)}>
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
+                                            <p className={cn("text-lg font-black", item.color)}>{formatCurrency(item.val)}</p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Ventas mínimas para sobrevivir */}
+                                <div className="rounded-2xl bg-slate-900/60 border border-white/5 p-4 flex items-center justify-between gap-4 flex-wrap">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-9 h-9 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
+                                            <LifeBuoy className="w-5 h-5 text-rose-400" />
+                                        </div>
+                                        <div>
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ventas mínimas para sobrevivir</p>
+                                            <p className="text-2xl font-black text-white">{formatCurrency(totalObligaciones)}</p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Necesitas vender al día</p>
+                                        <p className="text-xl font-black text-amber-400">{formatCurrency(ventasNecesariasDiarias)}</p>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Donut de breakdown */}
+                        <Card className="rounded-3xl border-white/5 bg-card/30 overflow-hidden">
+                            <CardHeader className="pb-2 px-5 pt-5">
+                                <CardTitle className="text-xs font-black uppercase tracking-tight flex items-center gap-2">
+                                    <PieChartIcon className="w-4 h-4 text-violet-400" /> Distribución de obligaciones
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="px-5 pb-5">
+                                {obligacionesBreakdown.length > 0 ? (
+                                    <>
+                                        <div className="h-[160px]">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <PieChart>
+                                                    <Pie data={obligacionesBreakdown} innerRadius={45} outerRadius={65} paddingAngle={5} dataKey="value">
+                                                        {obligacionesBreakdown.map((item, index) => (
+                                                            <Cell key={index} fill={item.color} stroke="rgba(255,255,255,0.05)" />
+                                                        ))}
+                                                    </Pie>
+                                                    <Tooltip
+                                                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none' }}
+                                                        itemStyle={{ fontSize: '10px', fontWeight: 900 }}
+                                                        formatter={(value: number) => formatCurrency(value)}
+                                                    />
+                                                </PieChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                        <div className="space-y-2 mt-2">
+                                            {obligacionesBreakdown.map((item, i) => (
+                                                <div key={i} className="flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2">
+                                                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                                                        <span className="text-[10px] font-bold text-muted-foreground truncate">{item.name}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-black text-foreground shrink-0">{formatCurrency(item.value)}</span>
+                                                </div>
+                                            ))}
+                                            <div className="border-t border-white/5 pt-2 flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase text-muted-foreground">Total obligaciones</span>
+                                                <span className="text-sm font-black text-foreground">{formatCurrency(totalObligaciones)}</span>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="h-[200px] flex items-center justify-center">
+                                        <p className="text-xs text-muted-foreground text-center">Sin datos de obligaciones registrados aún.<br />Agrega compromisos o registra gastos.</p>
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* ── Alertas automáticas ── */}
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                            <BadgeAlert className="w-4 h-4 text-rose-400" />
+                            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Alertas del sistema</h3>
+                            <div className={cn(
+                                "text-[9px] font-black px-2 py-0.5 rounded-full",
+                                alertasAutomaticas.some(a => a.nivel === 'critico') ? 'bg-rose-500/20 text-rose-400' :
+                                alertasAutomaticas.some(a => a.nivel === 'advertencia') ? 'bg-amber-500/20 text-amber-400' :
+                                'bg-emerald-500/20 text-emerald-400'
+                            )}>
+                                {alertasAutomaticas.filter(a => a.nivel === 'critico').length} críticas · {alertasAutomaticas.filter(a => a.nivel === 'advertencia').length} advertencias
+                            </div>
+                        </div>
+                        <div className="space-y-2">
+                            {alertasAutomaticas.map((alerta, i) => (
+                                <div key={i} className={cn(
+                                    "rounded-2xl border p-4 flex gap-3",
+                                    alerta.nivel === 'critico' ? 'border-rose-500/30 bg-rose-500/5' :
+                                    alerta.nivel === 'advertencia' ? 'border-amber-500/30 bg-amber-500/5' :
+                                    'border-emerald-500/30 bg-emerald-500/5'
+                                )}>
+                                    <span className="text-lg shrink-0 leading-none mt-0.5">{alerta.icon}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <p className={cn(
+                                                "text-xs font-black",
+                                                alerta.nivel === 'critico' ? 'text-rose-400' :
+                                                alerta.nivel === 'advertencia' ? 'text-amber-400' :
+                                                'text-emerald-400'
+                                            )}>{alerta.titulo}</p>
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground mt-0.5">{alerta.msg}</p>
+                                        <div className="flex items-center gap-1.5 mt-1.5">
+                                            <Flame className="w-3 h-3 text-orange-400 shrink-0" />
+                                            <p className="text-[11px] font-bold text-foreground">{alerta.accion}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* ── Resumen estratégico ── */}
+                    <Card className="rounded-3xl border-white/5 bg-gradient-to-br from-violet-950/40 to-slate-900 overflow-hidden">
+                        <CardContent className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-9 h-9 rounded-xl bg-violet-500/20 flex items-center justify-center">
+                                    <Brain className="w-5 h-5 text-violet-400" />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-black uppercase tracking-widest text-violet-400">Diagnóstico rápido</p>
+                                    <p className="text-[10px] text-muted-foreground">Basado en datos reales de tu negocio</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                {[
+                                    {
+                                        label: 'Situación actual',
+                                        valor: coberturaActual >= 120 ? 'Solvente' : coberturaActual >= 80 ? 'Ajustado' : 'En riesgo',
+                                        desc: coberturaActual >= 120
+                                            ? 'Tus ventas superan tus obligaciones. Tienes excedente.'
+                                            : coberturaActual >= 80
+                                            ? 'Cubres lo básico pero sin margen de seguridad.'
+                                            : 'Las ventas actuales no alcanzan a cubrir todas las obligaciones.',
+                                        color: coberturaActual >= 120 ? 'text-emerald-400' : coberturaActual >= 80 ? 'text-amber-400' : 'text-rose-400',
+                                    },
+                                    {
+                                        label: 'Meta mensual recomendada',
+                                        valor: formatCurrency(totalObligaciones * 1.3),
+                                        desc: 'Obligaciones × 1.3 — el 30% extra es tu colchón de ahorro y emergencias.',
+                                        color: 'text-indigo-400',
+                                    },
+                                    {
+                                        label: 'Excedente / Déficit mes',
+                                        valor: formatCurrency(reporteActual.totalVentas - totalObligaciones),
+                                        desc: reporteActual.totalVentas >= totalObligaciones
+                                            ? 'Tienes excedente este mes. Considera guardarlo como fondo de emergencia.'
+                                            : 'Hay déficit. Cada peso que puedas ahorrar en gastos ayuda a cerrar esta brecha.',
+                                        color: reporteActual.totalVentas >= totalObligaciones ? 'text-emerald-400' : 'text-rose-400',
+                                    },
+                                ].map((item, i) => (
+                                    <div key={i} className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
+                                        <p className={cn("text-lg font-black mb-1", item.color)}>{item.valor}</p>
+                                        <p className="text-[10px] text-muted-foreground leading-relaxed">{item.desc}</p>
                                     </div>
                                 ))}
                             </div>
