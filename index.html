@@ -3,27 +3,18 @@
 
 <head>
   <meta charset="UTF-8" />
-  <!-- NUCLEAR CACHE PURGE SCRIPT -->
-  <script>
-    if (window.navigator && 'serviceWorker' in window.navigator) {
-      window.navigator.serviceWorker.getRegistrations().then(registrations => {
-        for (let registration of registrations) {
-          registration.unregister().then(() => {
-            console.log("🧹 Service Worker eliminado exitosamente");
-            // window.location.reload(); // Evitamos recarga infinita si falla
-          });
-        }
-      });
-    }
-  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0f172a">
-  <!-- PWA Anti-Cache Shield v2 -->
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
+
+  <!-- Preconexiones para cargar más rápido en móviles -->
+  <link rel="preconnect" href="https://firebase.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin />
+  <link rel="dns-prefetch" href="https://firebase.googleapis.com" />
+  <link rel="dns-prefetch" href="https://firestore.googleapis.com" />
+
   <link rel="preload" as="image" href="/logo_panaderia.png" />
   <link rel="icon" type="image/png" href="/logo_panaderia.png" />
   <link rel="apple-touch-icon" href="/logo_panaderia.png" />
@@ -64,71 +55,49 @@
     }
   </style>
   <script>
-    console.log("🚀 Antigravity Boot Probe: index.html loaded");
-    
-    // [NUCLEAR] Forzar limpieza de SW y caches en CADA carga
+    // Detección de nueva versión: solo purga cuando hay cambio real de versión.
+    // NO purgar en cada carga — el Service Worker cachea los assets para carga instantánea.
     (function() {
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(regs) {
-          for (var r of regs) r.unregister();
-        });
-      }
-      if ('caches' in window) {
-        caches.keys().then(function(names) {
-          for (var n of names) caches.delete(n);
-        });
-      }
-    })();
-    
-    // [Nexus-Volt] Cache Slayer v2.1 - Fuerza la actualización inmediata del PWA
-    (function() {
-      const STORAGE_KEY = 'nexus_build_ts';
-      const checkVersion = () => {
+      var STORAGE_KEY = 'nexus_build_ts';
+      var checkVersion = function() {
         fetch('/version.json?cb=' + Date.now(), { cache: 'no-store' })
-          .then(r => r.json())
-          .then(data => {
-            const localTs = parseInt(localStorage.getItem(STORAGE_KEY) || '0');
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var localTs = parseInt(localStorage.getItem(STORAGE_KEY) || '0');
             if (localTs !== 0 && data.timestamp > localTs) {
-              console.warn("🚨 [Shield] Nueva versión detectada. Purgando caché profundo...");
+              // Nueva versión detectada → purgar y recargar
               localStorage.setItem(STORAGE_KEY, data.timestamp);
-              
-              // 1. Desregistrar Service Workers
               if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.getRegistrations().then(regs => {
-                  for(let reg of regs) reg.unregister();
+                navigator.serviceWorker.getRegistrations().then(function(regs) {
+                  for (var r of regs) r.unregister();
                 });
               }
-              
-              // 2. Borrar todos los caches del navegador (CacheStorage)
               if ('caches' in window) {
-                caches.keys().then(names => {
-                  for (let name of names) caches.delete(name);
+                caches.keys().then(function(names) {
+                  for (var n of names) caches.delete(n);
                 });
               }
-
-              // 3. Forzar recarga completa desde el servidor
-              setTimeout(() => window.location.reload(true), 500);
+              setTimeout(function() { window.location.reload(true); }, 500);
             } else if (localTs === 0) {
               localStorage.setItem(STORAGE_KEY, data.timestamp);
             }
-          }).catch(() => {});
+          }).catch(function() {});
       };
-      
-      // Ejecutar inmediatamente y cada 10 minutos
-      checkVersion();
-      setInterval(checkVersion, 600000);
+      // Diferir el chequeo para no bloquear la carga inicial
+      window.addEventListener('load', function() {
+        checkVersion();
+        setInterval(checkVersion, 600000);
+      });
     })();
 
-    window.onerror = (m, s, l, c, e) => {
-      console.error("❌ CRITICAL BOOT ERROR:", m, s, l);
-      document.body.innerHTML = `
-        <div style="padding: 20px; text-align: center;">
-          <h1 style="color: #ff007f;">Error de Carga</h1>
-          <p style="opacity: 0.7;">${m}</p>
-          <p style="font-size: 10px; opacity: 0.4;">${s} (Línea ${l})</p>
-          <button onclick="location.reload(true)" style="margin-top:16px;padding:10px 24px;background:#ff007f;color:#fff;border:none;border-radius:12px;font-weight:900;font-size:14px;cursor:pointer;">Recargar</button>
-        </div>
-      `;
+    window.onerror = function(m, s, l) {
+      console.error("Boot error:", m, s, l);
+      document.body.innerHTML =
+        '<div style="padding:20px;text-align:center;">' +
+        '<h1 style="color:#ff007f;">Error de Carga</h1>' +
+        '<p style="opacity:0.7;">' + m + '</p>' +
+        '<button onclick="location.reload(true)" style="margin-top:16px;padding:10px 24px;background:#ff007f;color:#fff;border:none;border-radius:12px;font-weight:900;font-size:14px;cursor:pointer;">Recargar</button>' +
+        '</div>';
     };
   </script>
 </head>

@@ -253,9 +253,12 @@ describe('SINC-02 — Pull inteligente: descarga solo items más nuevos', () => 
 // ─── CONS: Integridad en código fuente ───────────────────────────────────────
 
 describe('CONS-01 — Integridad del código fuente', () => {
-  it('CONS-01a: Ventas.tsx tiene filtro esElaborado', () => {
+  it('CONS-01a: Ventas.tsx filtra insumos por categoría (no por tipo — W-010)', () => {
+    // W-010: el filtro por p.tipo fue eliminado intencionalmente para incluir
+    // productos sin tipo importados. La protección ahora es por categoría isNotInsumo.
     const src = readSrc('pages/Ventas.tsx');
-    expect(src).toContain("p.tipo === 'elaborado'");
+    expect(src).toContain('isNotInsumo');
+    expect(src).toContain("startsWith('ins:')");
   });
 
   it('CONS-01b: Ventas.tsx filtra insumos con ins: prefix', () => {
@@ -286,10 +289,12 @@ describe('CONS-01 — Integridad del código fuente', () => {
     expect(src).toContain("['productos', 'proveedores', 'precios'].includes(table)");
   });
 
-  it('CONS-01g: Fix 5 (restaurar tombstones) está REVERTIDO', () => {
+  it('CONS-01g: useRealtimeSync usa removeTombstone solo en loop de restauración cloud', () => {
+    // removeTombstone está intencionalmente presente: se usa en el loop "restaurar"
+    // para ítems que la nube tiene y fueron tombstoneados localmente (cloud-wins scenario).
     const src = readSrc('hooks/useRealtimeSync.ts');
-    expect(src).not.toContain('removeTombstone');
-    expect(src).not.toContain('Fix 5');
+    expect(src).toContain('removeTombstone');
+    expect(src).toContain('restaurar');
   });
 });
 

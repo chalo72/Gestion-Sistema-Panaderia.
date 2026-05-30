@@ -259,7 +259,6 @@ export default function Recepciones({
                     }
 
                     const productoReal = productos[match.indice];
-                    console.log(`[OCR Forense] Match "${prod.nombre}" → "${productoReal.nombre}" (${match.metodo} ${(match.score * 100).toFixed(0)}%)`);
 
                     // Detectar diferencia de precio
                     const precioCatalogo = productoReal.costoBase || 0;

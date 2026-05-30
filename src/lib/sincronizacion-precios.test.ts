@@ -90,8 +90,10 @@ describe('CAPA 2: addOrUpdatePrecio usa fórmula con costoUnitario', () => {
     expect(autoAjusteBlock).not.toBeNull();
   });
 
-  it('usePriceControl calcula nuevoPrecioVenta redondeado a centenas', () => {
-    expect(usePriceControlSrc).toContain('Math.round(costoUnitario * (1 + (producto.margenUtilidad || 0) / 100) / 100) * 100');
+  it('usePriceControl actualiza costoBase redondeado cuando cambia costo del proveedor', () => {
+    // El hook sincroniza costoBase del producto; la fórmula de precioVenta está en Proveedores.tsx
+    expect(usePriceControlSrc).toContain('costoBase: costoUnitario');
+    expect(usePriceControlSrc).toContain('safeNumber(cantidadEmbalaje) || 1)');
   });
 
   it('usePriceControl actualiza costoBase junto con precioVenta', () => {
@@ -149,8 +151,9 @@ describe('CAPA 4: Proveedores.tsx sincroniza con módulo de productos', () => {
     expect(proveedoresSrc).toContain('cantidadEmbalaje: Number(item.cantidadEmbalaje)');
   });
 
-  it('handleSubmit actualiza producto con precioVenta del formulario', () => {
-    expect(proveedoresSrc).toContain('precioVenta: Number(item.precioVenta)');
+  it('handleSubmit actualiza producto con precioVenta redondeado del formulario', () => {
+    // Se guarda con redondeo a centenas COP
+    expect(proveedoresSrc).toContain('precioVenta: Math.round((Number(item.precioVenta)');
   });
 
   it('handleSubmit actualiza producto con margenUtilidad', () => {

@@ -84,7 +84,11 @@ describe('CAPA 2 — CADENA: handleSubmit transmite todos los campos a DB', () =
   
   camposProducto.forEach(campo => {
     it(`Producto → DB: ${campo}`, () => {
-      expect(proveedoresPage).toContain(campo);
+      // precioVenta se guarda con redondeo a centenas COP: Math.round((Number(...) || 0) / 100) * 100
+      const campoReal = campo === 'precioVenta: Number(item.precioVenta)'
+        ? 'precioVenta: Math.round((Number(item.precioVenta)'
+        : campo;
+      expect(proveedoresPage).toContain(campoReal);
     });
   });
 
@@ -148,20 +152,21 @@ describe('CAPA 4 — PANTALLA: Dashboard muestra datos coherentes', () => {
     expect(proveedoresPage).toContain('getPreciosByProveedor(prov.id)');
   });
 
-  it('Tabla expanida: nombre producto viene de prodItem?.nombre', () => {
-    expect(proveedoresPage).toContain("prodItem?.nombre");
+  it('Tabla expanida: nombre producto viene de prodItem (variable extraída o optional chain)', () => {
+    // El código extrae prodItem.nombre a variable local tras guard "if (!prodItem) return null"
+    expect(proveedoresPage).toMatch(/prodItem[\?]?\.nombre/);
   });
 
   it('Tabla expandida: costo/u = precioCosto / cantidadEmbalaje', () => {
-    expect(proveedoresPage).toContain('precio.precioCosto / precio.cantidadEmbalaje');
+    expect(proveedoresPage).toContain('precioCosto / cantidadEmbalaje');
   });
 
-  it('Tabla expandida: p.venta viene de prodItem?.precioVenta', () => {
-    expect(proveedoresPage).toContain("prodItem?.precioVenta");
+  it('Tabla expandida: p.venta viene de prodItem (variable extraída o optional chain)', () => {
+    expect(proveedoresPage).toMatch(/prodItem[\?]?\.precioVenta/);
   });
 
-  it('Tabla expandida: empaque muestra ×N cuando cantidadEmbalaje > 1 (no depende de tipoEmbalaje)', () => {
-    expect(proveedoresPage).toContain('cantPack > 1');
+  it('Tabla expandida: empaque muestra ×N cuando cantidadEmbalaje > 1', () => {
+    expect(proveedoresPage).toContain('cantidadEmbalaje > 1');
   });
 
   it('Badge ventas filtra destino === venta', () => {
@@ -206,8 +211,11 @@ describe('CAPA 5 — CENTINELA: Fórmulas matemáticas blindadas', () => {
     expect(usePriceControl).toContain('safeNumber(cantidadEmbalaje) || 1)');
   });
 
-  it('Hook: nuevoPrecioVenta usa margenUtilidad del producto', () => {
-    expect(usePriceControl).toContain('(producto.margenUtilidad || 0) / 100');
+  it('Hook: sincronización actualiza costoBase cuando cambia el precio del proveedor', () => {
+    // El hook actualiza costoBase del producto cuando mejorPrecio cambia (costoDistinto).
+    // La recalculación de precioVenta se delega al formulario de Proveedores.
+    expect(usePriceControl).toContain('costoBase: costoUnitario');
+    expect(usePriceControl).toContain('costoDistinto');
   });
 
   it('Hook: precio de venta redondeado a centenas', () => {
