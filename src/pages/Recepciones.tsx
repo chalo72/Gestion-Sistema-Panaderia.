@@ -149,6 +149,57 @@ export default function Recepciones({
         });
     }, [proveedores, recepciones]);
 
+    // Estado para nueva recepción — debe declararse ANTES de los useMemos que lo usan
+    const [newRecepcion, setNewRecepcion] = useState<{
+        proveedorId: string;
+        prePedidoId?: string;
+        numeroFactura: string;
+        fechaFactura: string;
+        imagenFactura: string | null;
+        items: RecepcionItem[];
+        observaciones: string;
+    }>({
+        proveedorId: '',
+        prePedidoId: undefined,
+        numeroFactura: '',
+        fechaFactura: new Date().toISOString().split('T')[0],
+        imagenFactura: null,
+        items: [],
+        observaciones: ''
+    });
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const imagenFileRef = useRef<File | null>(null);
+
+    // === ESTADO PARA WIZARD (FLUJO GUIADO) ===
+    const [step, setStep] = useState(1);
+    const [isScanning, setIsScanning] = useState(false);
+    const [scanProgress, setScanProgress] = useState(0);
+    const [busquedaProveedor, setBusquedaProveedor] = useState('');
+    const [busquedaProducto, setBusquedaProducto] = useState('');
+    const [mostrarDropProducto, setMostrarDropProducto] = useState(false);
+    const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
+    const [draftRestorado, setDraftRestorado] = useState(false);
+    const [scanStep, setScanStep] = useState('');
+
+    // Cargar desde la última recepción del proveedor
+    const cargarUltimaRecepcion = (proveedorId: string) => {
+        const ultima = recepciones
+            .filter(r => r.proveedorId === proveedorId)
+            .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
+        if (!ultima) { toast.error('No hay recepciones anteriores para este proveedor'); return; }
+        const items: RecepcionItem[] = ultima.items.map(i => ({
+            ...i,
+            id: generateUUID(),
+            cantidadRecibida: i.cantidadRecibida,
+            precioFacturado: i.precioFacturado,
+            embalajeOk: true,
+            productoOk: true,
+        }));
+        setNewRecepcion(prev => ({ ...prev, items }));
+        toast.success(`${items.length} productos cargados desde última recepción`);
+    };
+
     // Proveedores filtrados por búsqueda en paso 1
     const proveedoresFiltrados = useMemo(() => {
         if (!busquedaProveedor.trim()) return proveedoresOrdenados;
@@ -178,59 +229,6 @@ export default function Recepciones({
             return Math.abs((item.precioFacturado - base) / base) > 0.02;
         });
     }, [newRecepcion.items, getProductoById]);
-
-    // Cargar desde la última recepción del proveedor
-    const cargarUltimaRecepcion = (proveedorId: string) => {
-        const ultima = recepciones
-            .filter(r => r.proveedorId === proveedorId)
-            .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
-        if (!ultima) { toast.error('No hay recepciones anteriores para este proveedor'); return; }
-        const items: RecepcionItem[] = ultima.items.map(i => ({
-            ...i,
-            id: generateUUID(),
-            cantidadRecibida: i.cantidadRecibida,
-            precioFacturado: i.precioFacturado,
-            embalajeOk: true,
-            productoOk: true,
-        }));
-        setNewRecepcion(prev => ({ ...prev, items }));
-        toast.success(`${items.length} productos cargados desde última recepción`);
-    };
-
-    // Estado para nueva recepción
-    const [newRecepcion, setNewRecepcion] = useState<{
-        proveedorId: string;
-        prePedidoId?: string;
-        numeroFactura: string;
-        fechaFactura: string;
-        imagenFactura: string | null;
-        items: RecepcionItem[];
-        observaciones: string;
-    }>({
-        proveedorId: '',
-        prePedidoId: undefined,
-        numeroFactura: '',
-        fechaFactura: new Date().toISOString().split('T')[0],
-        imagenFactura: null,
-        items: [],
-        observaciones: ''
-    });
-
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    // Ref para guardar el File original (necesario para OCR real)
-    const imagenFileRef = useRef<File | null>(null);
-
-    // === ESTADO PARA WIZARD (FLUJO GUIADO) ===
-    const [step, setStep] = useState(1);
-    const [isScanning, setIsScanning] = useState(false);
-    const [scanProgress, setScanProgress] = useState(0);
-    // Nuevos estados para redesign
-    const [busquedaProveedor, setBusquedaProveedor] = useState('');
-    const [busquedaProducto, setBusquedaProducto] = useState('');
-    const [mostrarDropProducto, setMostrarDropProducto] = useState(false);
-    const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
-    const [draftRestorado, setDraftRestorado] = useState(false);
-    const [scanStep, setScanStep] = useState('');
 
     const handleProductSaved = async (productoData: any) => {
         try {
