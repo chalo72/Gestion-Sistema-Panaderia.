@@ -12,7 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
 import { originalDbMethods } from '@/lib/supabase-sync-bridge';
-import { db } from '@/lib/database';
+import { db, localAdapter } from '@/lib/database';
 
 const _sdb = new SupabaseDatabase();
 
@@ -32,7 +32,10 @@ const HANDLERS: Record<string, Handler> = {
     localTableName:  'productos',
     getFromSupabase: () => _sdb.getAllProductos(),
     writeToLocal:    (d) => orig('updateProducto', db.updateProducto.bind(db))(d),
-    deleteFromLocal: (id) => orig('deleteProducto', db.deleteProducto.bind(db))(id),
+    // Borra solo del IndexedDB local — NO propaga a Firebase.
+    // Si propagáramos a Firebase, el siguiente sync Firebase->local no podría restaurarlo.
+    // La tombstone la agrega applyRemoteChange justo después de llamar este método.
+    deleteFromLocal: (id) => localAdapter.deleteDocument('productos', id),
   },
   proveedores: {
     localTableName:  'proveedores',

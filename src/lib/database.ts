@@ -263,10 +263,25 @@ async function hydratarDesdeNube(
         console.log(`🛡️ [NEXUS]: Filtrados ${datosNube.length - datosVivos.length} items zombies de '${col}'.`);
       }
 
-      if (datosVivos.length > 0) {
+      // force=true → Firebase es fuente de verdad: restaurar TODOS los items,
+      // incluidos los tombstoneados, y luego limpiar esos tombstones.
+      // Esto permite recuperar productos borrados accidentalmente via Firebase.
+      const itemsParaHidratar = force ? datosNube : datosVivos;
+
+      if (itemsParaHidratar.length > 0) {
         if (force || localCount === 0) {
           // Reset completo: reemplazar toda la colección local
-          await localDB.hydrateFromCloud(col, datosVivos);
+          await localDB.hydrateFromCloud(col, itemsParaHidratar);
+          // Limpiar tombstones de items restaurados desde Firebase
+          if (force) {
+            for (const item of datosNube) {
+              const tombKey = `${col}:${item.id}`;
+              if (deadKeys.has(tombKey)) {
+                await localDB.deleteDocument('tombstones', tombKey).catch(() => {});
+                console.log(`🔓 [NEXUS]: Tombstone limpiado para '${tombKey}' (restaurado por Firebase).`);
+              }
+            }
+          }
         } else {
           // Merge: obtener IDs locales y solo insertar/actualizar lo que vino de la nube
           const localItems = await localDB.getCollection<any>(col);
@@ -774,7 +789,9 @@ const hasFirebase =
   !!import.meta.env.VITE_FIREBASE_PROJECT_ID;
 
 // MOTOR LOCAL: IndexedDB — SIEMPRE activo, fuente de verdad offline
-const localAdapter = new IndexedDBAdapter();
+// Exportado para que useRealtimeSync pueda borrar directo en IndexedDB
+// sin propagar a Firebase (evita que Realtime DELETE cascade y borre Firebase también).
+export const localAdapter = new IndexedDBAdapter();
 
 // MOTOR NUBE: Firebase — activo solo si hay credenciales configuradas en .env
 const firebaseAdapter = hasFirebase ? new FirebaseAdapter(firebaseConfig) : null;
