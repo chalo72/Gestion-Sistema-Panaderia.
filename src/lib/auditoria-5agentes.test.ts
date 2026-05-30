@@ -210,20 +210,18 @@ describe('CAPA 1 — FORTALEZA: Errores corregidos no deben regresar', () => {
     });
   });
 
-  describe('FIX-9: Sync ingredientes redondeado COP', () => {
+  describe('FIX-9: Sync ingredientes — costoBase redondeado, precioVenta inmutable', () => {
     const src = readSrc('hooks/usePriceControl.ts');
 
-    it('nuevoPrecioVenta de ingredientes usa Math.round / 100 * 100', () => {
-      // Buscar la línea de sync de ingredientes
-      expect(src).toMatch(/nuevoPrecioVenta\s*=.*Math\.round\(nuevoCosto\s*\*.*\/\s*100\)\s*\*\s*100/);
+    it('costoUnitario de ingredientes se redondea al sincronizar', () => {
+      // PROTECCIÓN-PRECIO-003: costoBase se actualiza redondeado a 2 decimales
+      expect(src).toMatch(/costoUnitario\s*=.*Math\.round\(/);
     });
 
-    it('NO debe haber nuevoPrecioVenta sin redondeo', () => {
-      const lines = src.split('\n');
-      const precioLines = lines.filter(l => l.includes('nuevoPrecioVenta') && l.includes('nuevoCosto'));
-      for (const line of precioLines) {
-        expect(line).toContain('Math.round');
-      }
+    it('precioVenta NO se recalcula automáticamente en el sync de ingredientes', () => {
+      const lineas = src.split('\n');
+      const nuevoPrecioLines = lineas.filter(l => l.includes('nuevoPrecioVenta') && l.includes('nuevoCosto'));
+      expect(nuevoPrecioLines.length).toBe(0);
     });
   });
 });

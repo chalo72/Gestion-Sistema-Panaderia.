@@ -252,8 +252,8 @@ describe('CAPA 3: Service Worker con protección de datos', () => {
     expect(mainSrc).toContain('setTimeout');
   });
 
-  it('useAutoUpdate tiene delay antes de recargar por controllerchange', () => {
-    // No debe recargar inmediatamente al cambiar de SW
-    expect(useAutoUpdateSrc).toContain('setTimeout(() => recargar()');
+  it('useAutoUpdate usa nuclearReload en el handler de controllerchange', () => {
+    // nuclearReload limpia cachés SW antes de recargar — reemplaza el setTimeout simple
+    expect(useAutoUpdateSrc).toContain('nuclearReload()');
   });
 });

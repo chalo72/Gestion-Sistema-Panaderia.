@@ -110,8 +110,8 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
     expect(proveedoresPageSrc).toContain('destino: item.destino');
   });
 
-  it('handleSubmit actualiza producto con precioVenta del formulario', () => {
-    expect(proveedoresPageSrc).toContain('precioVenta: Number(item.precioVenta)');
+  it('handleSubmit actualiza producto con precioVenta del formulario (redondeado COP)', () => {
+    expect(proveedoresPageSrc).toContain('precioVenta: Math.round((Number(item.precioVenta)');
   });
 
   it('handleSubmit actualiza producto con costoBase unitario', () => {
@@ -179,8 +179,8 @@ describe('CAPA 3: Proveedores.tsx handleEdit — sincronización DB → Form', (
 // ============================================================
 describe('CAPA 4: Dashboard — tabla expandida muestra datos reales', () => {
 
-  it('Tabla tiene columna PRODUCTO que lee prodItem?.nombre', () => {
-    expect(proveedoresPageSrc).toContain("prodItem?.nombre");
+  it('Tabla tiene columna PRODUCTO que lee el nombre del producto', () => {
+    expect(proveedoresPageSrc).toContain("const nombre = prodItem.nombre");
   });
 
   it('Tabla tiene columna EMPAQUE que lee precio.tipoEmbalaje', () => {
@@ -192,12 +192,12 @@ describe('CAPA 4: Dashboard — tabla expandida muestra datos reales', () => {
     expect(proveedoresPageSrc).toContain('precio.precioCosto / precio.cantidadEmbalaje');
   });
 
-  it('Tabla muestra P.VENTA desde prodItem?.precioVenta', () => {
-    expect(proveedoresPageSrc).toContain("prodItem?.precioVenta");
+  it('Tabla muestra P.VENTA desde el precio de venta del producto', () => {
+    expect(proveedoresPageSrc).toContain("const precioVenta = prodItem.precioVenta");
   });
 
   it('Tabla muestra categoría del producto', () => {
-    expect(proveedoresPageSrc).toContain("prodItem?.categoria");
+    expect(proveedoresPageSrc).toContain("const categoria = prodItem.categoria");
   });
 
   it('Fila de proveedor muestra nombre: prov.nombre', () => {
@@ -216,12 +216,13 @@ describe('CAPA 4: Dashboard — tabla expandida muestra datos reales', () => {
     expect(proveedoresPageSrc).toContain("destino === 'venta'");
   });
 
-  it('Empaque muestra ×N basado en cantidadEmbalaje > 1 (no tipoEmbalaje)', () => {
-    expect(proveedoresPageSrc).toContain('cantPack > 1');
+  it('Empaque muestra P.U cuando cantidadEmbalaje > 1', () => {
+    expect(proveedoresPageSrc).toContain('cantidadEmbalaje > 1');
   });
 
-  it('Nombres de productos se muestran en uppercase', () => {
-    expect(proveedoresPageSrc).toContain('truncate uppercase');
+  it('Nombres de productos se muestran en uppercase con truncate', () => {
+    expect(proveedoresPageSrc).toContain('uppercase');
+    expect(proveedoresPageSrc).toContain('truncate');
   });
 
   it('Dashboard usa getPreciosByProveedor para obtener productos', () => {
@@ -239,8 +240,8 @@ describe('CAPA 5: KPIs Dashboard — cálculos correctos desde datos', () => {
     expect(proveedoresPageSrc).toContain('getPreciosByProveedor(p.id).length');
   });
 
-  it('conProductos cuenta proveedores con al menos 1 precio', () => {
-    expect(proveedoresPageSrc).toContain('getPreciosByProveedor(p.id).length > 0');
+  it('conProductos cuenta proveedores con al menos 1 insumo válido', () => {
+    expect(proveedoresPageSrc).toContain('getInsumosValidos(p.id).length > 0');
   });
 
   it('sinProductos = total - conProductos', () => {
@@ -253,9 +254,8 @@ describe('CAPA 5: KPIs Dashboard — cálculos correctos desde datos', () => {
     expect(proveedoresPageSrc).toContain('/ proveedores.length');
   });
 
-  it('KPIs dependen de proveedores y getPreciosByProveedor', () => {
-    // useMemo deps correctas
-    expect(proveedoresPageSrc).toContain('[proveedores, getPreciosByProveedor]');
+  it('KPIs dependen de proveedores y getInsumosValidos', () => {
+    expect(proveedoresPageSrc).toContain('[proveedores, getInsumosValidos]');
   });
 });
 
