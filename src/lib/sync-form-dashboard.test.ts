@@ -73,8 +73,9 @@ describe('CAPA 1: ProveedorForm — datos completos en ProductoCatalogo', () => 
     expect(proveedorFormSrc).toContain('precioVenta: Math.round(sellPrice / 100) * 100');
   });
 
-  it('handleSave llama onSubmit con formData y catalogoItems', () => {
-    expect(proveedorFormSrc).toContain('await onSubmit(formData, catalogoItems)');
+  it('handleSave llama onSubmit con formData e items guardados', () => {
+    // itemsParaGuardar puede incluir el ítem pendiente del formulario
+    expect(proveedorFormSrc).toContain('await onSubmit(formData, itemsParaGuardar)');
   });
 });
 

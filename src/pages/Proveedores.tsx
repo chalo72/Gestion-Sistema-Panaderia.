@@ -1206,7 +1206,7 @@ export function Proveedores({
                         const productosAnalisis = insumos.map(precio => {
                           const prod = getProductoById(precio.productoId);
                           const cantEmb = precio.cantidadEmbalaje || 1;
-                          const costoU = precio.precioCosto / cantEmb;
+                          const costoU = Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100;
                           const pventa = prod?.precioVenta || 0;
                           const gananciaU = pventa - costoU;
                           const margenPct = costoU > 0 && pventa > 0 ? ((pventa - costoU) / costoU) * 100 : 0;
