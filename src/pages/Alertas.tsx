@@ -1,24 +1,11 @@
 import { useState, useMemo } from 'react';
 import {
-  Bell,
-  TrendingUp,
-  TrendingDown,
-  Check,
-  Trash2,
-  Filter,
-  AlertTriangle,
-  Store,
-  DollarSign,
-  CheckCheck,
-  Zap,
-  ShieldAlert,
-  Info,
-  ArrowRight
+  Bell, TrendingUp, TrendingDown, Check, Trash2,
+  AlertTriangle, Store, CheckCheck, Zap, ShieldAlert,
+  ArrowRight, Clock, Package
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import type { AlertaPrecio, Producto, Proveedor } from '@/types';
 import { cn } from '@/lib/utils';
@@ -36,7 +23,6 @@ interface AlertasProps {
   formatCurrency: (value: number) => string;
 }
 
-// Calcula la prioridad según porcentaje de cambio
 function calcPrioridad(pct: number, tipo: 'subida' | 'bajada'): 'CRÍTICA' | 'ALTA' | 'NORMAL' {
   if (tipo === 'subida') {
     if (pct >= 20) return 'CRÍTICA';
@@ -45,11 +31,47 @@ function calcPrioridad(pct: number, tipo: 'subida' | 'bajada'): 'CRÍTICA' | 'AL
   return 'NORMAL';
 }
 
+function timeAgo(fecha: string): string {
+  const diff = Date.now() - new Date(fecha).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  if (days > 0) return `hace ${days}d`;
+  if (hrs > 0) return `hace ${hrs}h`;
+  if (mins > 0) return `hace ${mins}m`;
+  return 'ahora';
+}
+
 const PRIORIDAD_CONFIG = {
-  'CRÍTICA': { color: 'text-rose-500', bg: 'bg-rose-500/10', border: 'border-l-rose-500', badge: 'bg-rose-500/20 text-rose-500', icon: ShieldAlert },
-  'ALTA':    { color: 'text-amber-500', bg: 'bg-amber-500/10', border: 'border-l-amber-500', badge: 'bg-amber-500/20 text-amber-600', icon: AlertTriangle },
-  'NORMAL':  { color: 'text-slate-400', bg: 'bg-slate-500/10', border: 'border-l-slate-400', badge: 'bg-slate-500/10 text-slate-500', icon: Info },
+  CRÍTICA: {
+    color: 'text-rose-500',
+    bg: 'bg-rose-500/10',
+    borderLeft: 'border-l-rose-500',
+    topBar: 'bg-rose-500/10',
+    badge: 'bg-rose-500 text-white',
+    icon: ShieldAlert,
+  },
+  ALTA: {
+    color: 'text-amber-500',
+    bg: 'bg-amber-500/10',
+    borderLeft: 'border-l-amber-500',
+    topBar: 'bg-amber-500/10',
+    badge: 'bg-amber-500 text-white',
+    icon: AlertTriangle,
+  },
+  NORMAL: {
+    color: 'text-slate-400',
+    bg: 'bg-slate-500/10',
+    borderLeft: 'border-l-slate-400',
+    topBar: 'bg-muted/30',
+    badge: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-300',
+    icon: Bell,
+  },
 };
+
+type TabActiva = 'pendientes' | 'historial';
+type FiltroTipo = 'todas' | 'subida' | 'bajada';
+type FiltroPrioridad = 'todas' | 'CRÍTICA' | 'ALTA' | 'NORMAL';
 
 export function Alertas({
   alertas,
@@ -63,47 +85,50 @@ export function Alertas({
   getProveedorById,
   formatCurrency,
 }: AlertasProps) {
-  const [filtroTipo, setFiltroTipo] = useState<string>('todas');
-  const [filtroPrioridad, setFiltroPrioridad] = useState<string>('todas');
+  const [tabActiva, setTabActiva] = useState<TabActiva>('pendientes');
+  const [filtroTipo, setFiltroTipo] = useState<FiltroTipo>('todas');
+  const [filtroPrioridad, setFiltroPrioridad] = useState<FiltroPrioridad>('todas');
 
-  const alertasNoLeidas = alertas.filter(a => !a.leida);
-  const alertasLeidas = alertas.filter(a => a.leida);
+  const alertasNoLeidas = useMemo(() => alertas.filter(a => !a.leida), [alertas]);
+  const alertasLeidas   = useMemo(() => alertas.filter(a => a.leida), [alertas]);
 
-  // Enriquecer alertas con prioridad, ordenar por: no leídas primero + prioridad
   const alertasEnriquecidas = useMemo(() => {
-    const ordenPrioridad = { 'CRÍTICA': 0, 'ALTA': 1, 'NORMAL': 2 };
+    const orden = { CRÍTICA: 0, ALTA: 1, NORMAL: 2 } as const;
     return [...alertas]
-      .map(a => ({
-        ...a,
-        prioridad: calcPrioridad(a.porcentajeCambio, a.tipo),
-      }))
+      .map(a => ({ ...a, prioridad: calcPrioridad(a.porcentajeCambio, a.tipo) }))
       .sort((a, b) => {
         if (a.leida !== b.leida) return a.leida ? 1 : -1;
-        return ordenPrioridad[a.prioridad] - ordenPrioridad[b.prioridad];
+        return orden[a.prioridad] - orden[b.prioridad];
       });
   }, [alertas]);
 
-  // KPIs de impacto financiero global
-  const impactoStats = useMemo(() => {
-    const subidas = alertas.filter(a => a.tipo === 'subida' && !a.leida);
-    const bajadas = alertas.filter(a => a.tipo === 'bajada' && !a.leida);
-    const impactoNegativo = subidas.reduce((s, a) => s + Math.abs(a.diferencia), 0);
-    const impactoPositivo = bajadas.reduce((s, a) => s + Math.abs(a.diferencia), 0);
-    const criticas = alertas.filter(a => calcPrioridad(a.porcentajeCambio, a.tipo) === 'CRÍTICA' && !a.leida).length;
-    const altas = alertas.filter(a => calcPrioridad(a.porcentajeCambio, a.tipo) === 'ALTA' && !a.leida).length;
-    return { impactoNegativo, impactoPositivo, criticas, altas };
+  const alertasFiltradas = useMemo(() => {
+    const base = tabActiva === 'pendientes'
+      ? alertasEnriquecidas.filter(a => !a.leida)
+      : alertasEnriquecidas.filter(a => a.leida);
+    return base
+      .filter(a => filtroTipo === 'todas' || a.tipo === filtroTipo)
+      .filter(a => filtroPrioridad === 'todas' || a.prioridad === filtroPrioridad);
+  }, [alertasEnriquecidas, tabActiva, filtroTipo, filtroPrioridad]);
+
+  const stats = useMemo(() => {
+    const noLeidas = alertas.filter(a => !a.leida);
+    const subidas  = noLeidas.filter(a => a.tipo === 'subida');
+    const bajadas  = noLeidas.filter(a => a.tipo === 'bajada');
+    return {
+      total:           noLeidas.length,
+      criticas:        noLeidas.filter(a => calcPrioridad(a.porcentajeCambio, a.tipo) === 'CRÍTICA').length,
+      altas:           noLeidas.filter(a => calcPrioridad(a.porcentajeCambio, a.tipo) === 'ALTA').length,
+      impactoNegativo: subidas.reduce((s, a) => s + Math.abs(a.diferencia), 0),
+      impactoPositivo: bajadas.reduce((s, a) => s + Math.abs(a.diferencia), 0),
+    };
   }, [alertas]);
 
-  const alertasFiltradas = useMemo(() => {
-    let base = filtroTipo === 'todas'
-      ? (alertasNoLeidas.length > 0 ? alertasEnriquecidas.filter(a => !a.leida) : alertasEnriquecidas.filter(a => a.leida))
-      : alertasEnriquecidas.filter(a => a.tipo === filtroTipo);
-      
-    if (filtroPrioridad !== 'todas') {
-      base = base.filter(a => a.prioridad === filtroPrioridad);
-    }
-    return base;
-  }, [alertasEnriquecidas, alertasNoLeidas.length, filtroTipo, filtroPrioridad]);
+  const switchTab = (tab: TabActiva) => {
+    setTabActiva(tab);
+    setFiltroTipo('todas');
+    setFiltroPrioridad('todas');
+  };
 
   const handleMarcarTodas = () => {
     onMarcarTodasLeidas();
@@ -111,316 +136,403 @@ export function Alertas({
   };
 
   const handleClearAll = () => {
-    if (confirm('¿Estás seguro de eliminar todas las alertas?')) {
+    if (confirm('¿Eliminar todas las alertas del historial?')) {
       onClearAll();
-      toast.success('Todas las alertas eliminadas');
+      toast.success('Alertas eliminadas');
     }
   };
 
   return (
-    <>
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h2 className="text-4xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">
-            Alertas de Inteligencia
-          </h2>
-          <p className="text-muted-foreground mt-1 flex items-center gap-2">
-            <Bell className="w-4 h-4 text-primary animate-pulse" />
-            Vigilancia en tiempo real · Prioridad automática por impacto
+    <div className="space-y-5 pb-8">
+
+      {/* ── Header ───────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-3xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent">
+              Alertas
+            </h2>
+            {stats.total > 0 && (
+              <span className="inline-flex items-center justify-center min-w-[2rem] h-8 px-2 rounded-full bg-rose-500 text-white text-sm font-black shadow-lg">
+                {stats.total}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Vigilancia de precios · Prioridad automática por impacto
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+        <div className="flex items-center gap-2 shrink-0">
           {alertasNoLeidas.length > 0 && (
-            <Button variant="outline" onClick={handleMarcarTodas} className="glass-card hover:bg-primary/10 border-primary/20 transition-ag shadow-sm">
-              <CheckCheck className="w-4 h-4 mr-2 text-primary" />
-              <span className="hidden sm:inline">Marcar todas leídas</span>
-              <span className="sm:hidden">Todo leído</span>
+            <Button size="sm" variant="outline" onClick={handleMarcarTodas}
+              className="h-9 glass-card hover:bg-primary/10 border-primary/20 text-xs font-bold">
+              <CheckCheck className="w-3.5 h-3.5 mr-1.5 text-primary" />
+              <span className="hidden sm:inline">Marcar leídas</span>
+              <span className="sm:hidden">Leídas</span>
             </Button>
           )}
           {alertas.length > 0 && (
-            <Button variant="outline" onClick={handleClearAll} className="glass-card hover:bg-destructive/10 border-destructive/20 text-destructive transition-ag">
-              <Trash2 className="w-4 h-4 mr-2" />
-              Limpiar
+            <Button size="sm" variant="outline" onClick={handleClearAll}
+              className="h-9 w-9 p-0 glass-card hover:bg-destructive/10 border-destructive/20 text-destructive">
+              <Trash2 className="w-3.5 h-3.5" />
             </Button>
           )}
         </div>
       </div>
 
-      {/* Panel de impacto financiero global */}
-      {alertasNoLeidas.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-          {[
-            {
-              label: 'Alertas pendientes',
-              value: alertasNoLeidas.length,
-              icon: Bell,
-              color: 'text-indigo-500', bg: 'bg-indigo-500/10'
-            },
-            {
-              label: 'Impacto negativo',
-              value: formatCurrency(impactoStats.impactoNegativo),
-              icon: TrendingUp,
-              color: 'text-rose-500', bg: 'bg-rose-500/10',
-              sub: 'Subidas de precio'
-            },
-            {
-              label: 'Oportunidad',
-              value: formatCurrency(impactoStats.impactoPositivo),
-              icon: TrendingDown,
-              color: 'text-emerald-500', bg: 'bg-emerald-500/10',
-              sub: 'Bajadas detectadas'
-            },
-            {
-              label: 'Críticas / Altas',
-              value: `${impactoStats.criticas} / ${impactoStats.altas}`,
-              icon: ShieldAlert,
-              color: impactoStats.criticas > 0 ? 'text-rose-500' : 'text-amber-500',
-              bg: impactoStats.criticas > 0 ? 'bg-rose-500/10' : 'bg-amber-500/10',
-              sub: impactoStats.criticas > 0 ? 'Requieren atención inmediata' : 'Bajo control'
-            },
-          ].map((kpi, i) => (
-            <div key={i} className="glass-layer-2 rounded-2xl p-4 flex items-center gap-3">
-              <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', kpi.bg, kpi.color)}>
-                <kpi.icon className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground truncate">{kpi.label}</p>
-                <p className={cn('text-lg font-black leading-tight', kpi.color)}>{kpi.value}</p>
-                {kpi.sub && <p className="text-[9px] text-muted-foreground truncate">{kpi.sub}</p>}
-              </div>
+      {/* ── KPIs (solo si hay pendientes) ────────────────── */}
+      {stats.total > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {/* Pendientes */}
+          <div className="glass-layer-2 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
+              <Bell className="w-5 h-5 text-indigo-500" />
             </div>
-          ))}
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Pendientes</p>
+              <p className="text-2xl font-black text-indigo-500 leading-none mt-0.5">{stats.total}</p>
+            </div>
+          </div>
+
+          {/* Críticas */}
+          <div className="glass-layer-2 rounded-2xl p-4 flex items-center gap-3">
+            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0',
+              stats.criticas > 0 ? 'bg-rose-500/10' : 'bg-amber-500/10')}>
+              <ShieldAlert className={cn('w-5 h-5', stats.criticas > 0 ? 'text-rose-500' : 'text-amber-500')} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Críticas</p>
+              <p className={cn('text-2xl font-black leading-none mt-0.5',
+                stats.criticas > 0 ? 'text-rose-500' : 'text-amber-500')}>
+                {stats.criticas}
+              </p>
+            </div>
+          </div>
+
+          {/* Subidas (impacto) */}
+          <div className="glass-layer-2 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-5 h-5 text-rose-500" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Subidas</p>
+              <p className="text-sm font-black text-rose-500 leading-none mt-0.5 truncate">
+                {formatCurrency(stats.impactoNegativo)}
+              </p>
+              <p className="text-[9px] text-muted-foreground">impacto total</p>
+            </div>
+          </div>
+
+          {/* Bajadas (oportunidad) */}
+          <div className="glass-layer-2 rounded-2xl p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
+              <TrendingDown className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Bajadas</p>
+              <p className="text-sm font-black text-emerald-500 leading-none mt-0.5 truncate">
+                {formatCurrency(stats.impactoPositivo)}
+              </p>
+              <p className="text-[9px] text-muted-foreground">oportunidad</p>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Filtros */}
-      <div className="flex items-center gap-4 mb-6 bg-white/40 dark:bg-black/20 p-2 rounded-2xl backdrop-blur-md border border-white/20 shadow-sm flex-wrap">
-        <div className="flex items-center gap-2 px-3">
-          <Filter className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Filtrar:</span>
+      {/* ── Tabs + Filtros chip ───────────────────────────── */}
+      <div className="space-y-3">
+        {/* Tab selector */}
+        <div className="flex rounded-2xl bg-muted/50 p-1 gap-1">
+          <button
+            onClick={() => switchTab('pendientes')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all',
+              tabActiva === 'pendientes'
+                ? 'bg-white dark:bg-slate-800 shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <Bell className="w-4 h-4" />
+            Pendientes
+            {alertasNoLeidas.length > 0 && (
+              <span className="bg-rose-500 text-white text-xs font-black w-5 h-5 rounded-full flex items-center justify-center">
+                {alertasNoLeidas.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => switchTab('historial')}
+            className={cn(
+              'flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-bold transition-all',
+              tabActiva === 'historial'
+                ? 'bg-white dark:bg-slate-800 shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            )}
+          >
+            <CheckCheck className="w-4 h-4" />
+            Historial
+            {alertasLeidas.length > 0 && (
+              <span className="bg-muted text-muted-foreground text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                {alertasLeidas.length}
+              </span>
+            )}
+          </button>
         </div>
-        <Tabs defaultValue="pendientes" className="flex-1">
-          <TabsList className="bg-transparent h-9 p-0 gap-1">
-            <TabsTrigger value="pendientes" className="rounded-xl px-4 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-ag">
-              Pendientes ({alertasNoLeidas.length})
-            </TabsTrigger>
-            <TabsTrigger value="historial" className="rounded-xl px-4 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground transition-ag">
-              Historial ({alertasLeidas.length})
-            </TabsTrigger>
-          </TabsList>
-          <div className="hidden">
-            <TabsContent value="pendientes" />
-            <TabsContent value="historial" />
+
+        {/* Chips de filtro: Tipo */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1 bg-muted/40 rounded-xl p-1">
+            {(['todas', 'subida', 'bajada'] as const).map(t => (
+              <button key={t}
+                onClick={() => setFiltroTipo(t)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
+                  filtroTipo === t
+                    ? t === 'subida' ? 'bg-rose-500 text-white shadow-sm'
+                      : t === 'bajada' ? 'bg-emerald-500 text-white shadow-sm'
+                      : 'bg-white dark:bg-slate-800 text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}>
+                {t === 'todas' ? 'Todos' : t === 'subida' ? '↑ Subidas' : '↓ Bajadas'}
+              </button>
+            ))}
           </div>
-        </Tabs>
-        <div className="h-4 w-px bg-border/50 mx-2" />
-        <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-          <SelectTrigger className="w-32 border-none bg-transparent focus:ring-0 shadow-none h-8 font-medium">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent className="glass-layer-2 border-white/20">
-            <SelectItem value="todas" className="rounded-lg">Todas</SelectItem>
-            <SelectItem value="subida" className="rounded-lg text-destructive">Subidas</SelectItem>
-            <SelectItem value="bajada" className="rounded-lg text-ag-success">Bajadas</SelectItem>
-          </SelectContent>
-        </Select>
-        <div className="h-4 w-px bg-border/50 mx-2" />
-        <Select value={filtroPrioridad} onValueChange={setFiltroPrioridad}>
-          <SelectTrigger className="w-32 border-none bg-transparent focus:ring-0 shadow-none h-8 font-medium">
-            <SelectValue placeholder="Prioridad" />
-          </SelectTrigger>
-          <SelectContent className="glass-layer-2 border-white/20">
-            <SelectItem value="todas" className="rounded-lg">Todas</SelectItem>
-            <SelectItem value="CRÍTICA" className="rounded-lg text-rose-500">Crítica</SelectItem>
-            <SelectItem value="ALTA" className="rounded-lg text-amber-500">Alta</SelectItem>
-            <SelectItem value="NORMAL" className="rounded-lg text-slate-500">Normal</SelectItem>
-          </SelectContent>
-        </Select>
+
+          {/* Chips de filtro: Prioridad */}
+          <div className="flex items-center gap-1 bg-muted/40 rounded-xl p-1">
+            {(['todas', 'CRÍTICA', 'ALTA', 'NORMAL'] as const).map(p => (
+              <button key={p}
+                onClick={() => setFiltroPrioridad(p)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap',
+                  filtroPrioridad === p
+                    ? p === 'CRÍTICA' ? 'bg-rose-500 text-white shadow-sm'
+                      : p === 'ALTA' ? 'bg-amber-500 text-white shadow-sm'
+                      : p === 'NORMAL' ? 'bg-slate-500 text-white shadow-sm'
+                      : 'bg-white dark:bg-slate-800 text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}>
+                {p === 'todas' ? 'Todas' : p}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Lista de alertas */}
-      <div className="animate-ag-fade-in">
-        {alertasFiltradas.length > 0 ? (
-          <div className="grid grid-cols-1 gap-4">
-            {alertasFiltradas.map((alerta, index) => {
-              const producto = getProductoById(alerta.productoId);
-              const proveedor = getProveedorById(alerta.proveedorId);
-              const isSubida = alerta.tipo === 'subida';
-              const prioridad = alerta.prioridad;
-              const pConfig = PRIORIDAD_CONFIG[prioridad];
-              const PriorityIcon = pConfig.icon;
+      {/* ── Lista de alertas ─────────────────────────────── */}
+      <div className="space-y-3">
+        {alertasFiltradas.length > 0 ? alertasFiltradas.map((alerta, index) => {
+          const producto  = getProductoById(alerta.productoId);
+          const proveedor = getProveedorById(alerta.proveedorId);
+          const isSubida  = alerta.tipo === 'subida';
+          const pConfig   = PRIORIDAD_CONFIG[alerta.prioridad];
+          const PriorityIcon = pConfig.icon;
 
-              // Impacto en margen: si tenemos precio de venta, calculamos
-              const precioVenta = producto?.precioVenta || 0;
-              const margenAnterior = precioVenta > 0 && alerta.precioAnterior > 0
-                ? ((precioVenta - alerta.precioAnterior) / precioVenta) * 100
-                : null;
-              const margenNuevo = precioVenta > 0 && alerta.precioNuevo > 0
-                ? ((precioVenta - alerta.precioNuevo) / precioVenta) * 100
-                : null;
-              const deltaMargen = margenAnterior !== null && margenNuevo !== null
-                ? margenNuevo - margenAnterior
-                : null;
+          const precioVenta    = producto?.precioVenta || 0;
+          const margenAnterior = precioVenta > 0 && alerta.precioAnterior > 0
+            ? ((precioVenta - alerta.precioAnterior) / precioVenta) * 100 : null;
+          const margenNuevo    = precioVenta > 0 && alerta.precioNuevo > 0
+            ? ((precioVenta - alerta.precioNuevo) / precioVenta) * 100 : null;
+          const deltaMargen    = margenAnterior !== null && margenNuevo !== null
+            ? margenNuevo - margenAnterior : null;
 
-              return (
-                <div
-                  key={alerta.id}
-                  className={cn(
-                    'glass-layer-2 p-5 border-l-4 transition-ag group',
-                    `stagger-${(index % 6) + 1}`,
-                    !alerta.leida ? pConfig.border : 'border-l-muted',
-                    !alerta.leida ? '' : 'opacity-70'
+          return (
+            <div key={alerta.id}
+              className={cn(
+                'glass-layer-2 rounded-2xl border-l-4 overflow-hidden transition-ag',
+                `stagger-${(index % 6) + 1}`,
+                !alerta.leida ? pConfig.borderLeft : 'border-l-slate-300 dark:border-l-slate-700',
+                alerta.leida && 'opacity-60'
+              )}>
+
+              {/* ── Barra superior: prioridad · tipo · tiempo ── */}
+              <div className={cn(
+                'px-4 py-2 flex items-center justify-between gap-2',
+                !alerta.leida ? pConfig.topBar : 'bg-muted/20'
+              )}>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {!alerta.leida ? (
+                    <Badge className={cn('text-[9px] font-black uppercase tracking-wider h-5 px-2', pConfig.badge)}>
+                      <PriorityIcon className="w-2.5 h-2.5 mr-1" />
+                      {alerta.prioridad}
+                    </Badge>
+                  ) : (
+                    <span className="text-[10px] font-bold text-muted-foreground flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Revisada
+                    </span>
                   )}
-                >
-                  <div className="flex flex-col md:flex-row gap-5">
-                    {/* Ícono y estado */}
-                    <div className="flex items-center md:flex-col md:justify-start md:items-center gap-3 shrink-0">
-                      <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110', pConfig.bg, pConfig.color)}>
-                        {isSubida ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
-                      </div>
-                      <div className="flex flex-col items-center gap-1.5">
-                        {!alerta.leida && (
-                          <Badge className={cn('px-2 py-0 h-5 text-[9px] uppercase font-black tracking-wider', pConfig.badge)}>
-                            {prioridad}
-                          </Badge>
-                        )}
-                        {!alerta.leida && prioridad !== 'NORMAL' && (
-                          <div className={cn('flex items-center gap-1', pConfig.color)}>
-                            <PriorityIcon className="w-3 h-3" />
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                  <span className={cn(
+                    'text-xs font-bold px-2 py-0.5 rounded-full',
+                    isSubida
+                      ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+                      : 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+                  )}>
+                    {isSubida ? '↑ Subida de precio' : '↓ Bajada de precio'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {timeAgo(alerta.fecha)}
+                  </span>
+                  <button
+                    onClick={() => onDeleteAlerta(alerta.id)}
+                    className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-destructive/10 hover:text-destructive text-muted-foreground transition-ag">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
 
-                    {/* Información principal */}
-                    <div className="flex-1 space-y-3 min-w-0">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <h4 className="font-bold text-lg text-foreground flex items-center gap-2 flex-wrap">
-                            <span className="truncate">{producto?.nombre || 'Producto Desconocido'}</span>
-                            {producto?.categoria && (
-                              <span className="text-xs font-normal text-muted-foreground bg-muted px-2 py-0.5 rounded-full shrink-0">
-                                {producto.categoria}
-                              </span>
-                            )}
-                          </h4>
-                          <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                            <Store className="w-3.5 h-3.5 shrink-0" />
-                            {proveedor?.nombre || 'Proveedor Desconocido'}
-                          </p>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-xs text-muted-foreground uppercase font-semibold flex items-center justify-end gap-1">
-                            <DollarSign className="w-3 h-3 text-primary" />
-                            Variación precio
-                          </p>
-                          <p className={cn('text-xl font-black', isSubida ? 'text-destructive' : 'text-emerald-500')}>
-                            {isSubida ? '+' : '-'}{formatCurrency(Math.abs(alerta.diferencia))}
-                            <span className="text-sm ml-1 opacity-70">({alerta.porcentajeCambio.toFixed(1)}%)</span>
-                          </p>
-                        </div>
-                      </div>
+              {/* ── Cuerpo ────────────────────────────────────── */}
+              <div className="p-4 space-y-4">
 
-                      {/* Grilla de datos */}
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        <div className="p-3 rounded-xl bg-white/40 dark:bg-white/5 border border-white/40">
-                          <p className="text-[9px] uppercase text-muted-foreground font-bold mb-1">Precio Anterior</p>
-                          <p className="text-sm font-mono font-bold">{formatCurrency(alerta.precioAnterior)}</p>
-                        </div>
-                        <div className={cn('p-3 rounded-xl border', isSubida ? 'bg-destructive/5 border-destructive/20' : 'bg-emerald-50/50 border-emerald-200/50')}>
-                          <p className="text-[9px] uppercase text-muted-foreground font-bold mb-1">Precio Nuevo</p>
-                          <p className={cn('text-sm font-mono font-bold', isSubida ? 'text-destructive' : 'text-emerald-600')}>
-                            {formatCurrency(alerta.precioNuevo)}
-                          </p>
-                        </div>
-                        <div className="p-3 rounded-xl bg-primary/5 border border-primary/20">
-                          <p className="text-[9px] uppercase text-primary font-bold mb-1">P. Venta Actual</p>
-                          <p className="text-sm font-semibold text-foreground">
-                            {precioVenta > 0 ? formatCurrency(precioVenta) : '—'}
-                          </p>
-                        </div>
-                        {/* Impacto en margen */}
-                        <div className={cn('p-3 rounded-xl border relative overflow-hidden',
-                          deltaMargen !== null && deltaMargen < -3 ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/50' :
-                          deltaMargen !== null && deltaMargen > 0 ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50' :
-                          'bg-white/40 dark:bg-white/5 border-white/40'
-                        )}>
-                          <p className="text-[9px] uppercase text-muted-foreground font-bold mb-1 flex items-center gap-1">
-                            <Zap className="w-2.5 h-2.5" /> Impacto Margen
-                          </p>
-                          {deltaMargen !== null ? (
-                            <p className={cn('text-sm font-black',
-                              deltaMargen < -3 ? 'text-rose-500' :
-                              deltaMargen < 0 ? 'text-amber-500' :
-                              'text-emerald-500'
-                            )}>
-                              {deltaMargen >= 0 ? '+' : ''}{deltaMargen.toFixed(1)}pp
-                            </p>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">Sin P.V.</p>
-                          )}
-                          {deltaMargen !== null && deltaMargen < -3 && isSubida && (
-                            <AlertTriangle className="absolute top-1 right-1 w-3 h-3 text-rose-400 opacity-60" />
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Acción sugerida para alertas críticas */}
-                      {!alerta.leida && prioridad === 'CRÍTICA' && isSubida && (
-                        <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-200/50">
-                          <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
-                          <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                            Subida ≥20% — Revisar precio de venta o buscar proveedor alternativo urgente
-                          </p>
-                          <ArrowRight className="w-4 h-4 text-rose-400 shrink-0 ml-auto" />
-                        </div>
-                      )}
-                      {!alerta.leida && !isSubida && prioridad !== 'NORMAL' && (
-                        <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200/50">
-                          <TrendingDown className="w-4 h-4 text-emerald-500 shrink-0" />
-                          <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                            Bajada detectada — Oportunidad para comprar más stock a mejor precio
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Footer: fecha + acciones */}
-                      <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
-                        <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1">
-                          <Filter className="w-3 h-3" />
-                          {new Date(alerta.fecha).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {!alerta.leida && (
-                            <Button size="sm" variant="ghost" className="h-8 rounded-lg hover:bg-primary/10 hover:text-primary transition-ag" onClick={() => onMarcarLeida(alerta.id)}>
-                              <Check className="w-4 h-4 mr-1.5" />
-                              Entendido
-                            </Button>
-                          )}
-                          <Button size="sm" variant="ghost" className="h-8 w-8 p-0 rounded-lg hover:bg-destructive/10 hover:text-destructive transition-ag" onClick={() => onDeleteAlerta(alerta.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
+                {/* Producto + proveedor + % cambio destacado */}
+                <div className="flex items-start gap-3">
+                  <div className={cn('w-11 h-11 rounded-xl flex items-center justify-center shrink-0 mt-0.5', pConfig.bg)}>
+                    <Package className={cn('w-5 h-5', pConfig.color)} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-base text-foreground truncate leading-tight">
+                      {producto?.nombre || 'Producto Desconocido'}
+                    </p>
+                    <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                      <Store className="w-3.5 h-3.5 shrink-0" />
+                      {proveedor?.nombre || 'Proveedor Desconocido'}
+                    </p>
+                    {producto?.categoria && (
+                      <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full inline-block mt-1">
+                        {producto.categoria}
+                      </span>
+                    )}
+                  </div>
+                  {/* Porcentaje: dato más importante, bien visible */}
+                  <div className={cn(
+                    'shrink-0 text-center px-3 py-2 rounded-xl',
+                    isSubida ? 'bg-rose-500/10' : 'bg-emerald-500/10'
+                  )}>
+                    <p className={cn('text-2xl font-black leading-none', isSubida ? 'text-rose-500' : 'text-emerald-500')}>
+                      {isSubida ? '+' : '-'}{alerta.porcentajeCambio.toFixed(1)}%
+                    </p>
+                    <p className={cn('text-[10px] font-bold mt-0.5', isSubida ? 'text-rose-400' : 'text-emerald-400')}>
+                      {isSubida ? 'más caro' : 'más barato'}
+                    </p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-24 text-center glass-layer-1 border-dashed">
-            <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center mb-6 animate-ag-float">
-              <Bell className="w-10 h-10 text-muted-foreground/30" />
+
+                {/* Comparador Antes → Ahora */}
+                <div className="grid grid-cols-3 gap-2 items-center">
+                  <div className="bg-muted/40 rounded-xl p-3 text-center">
+                    <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider mb-1">Antes</p>
+                    <p className="font-mono font-black text-sm text-foreground">{formatCurrency(alerta.precioAnterior)}</p>
+                  </div>
+                  <div className="flex items-center justify-center">
+                    <div className={cn(
+                      'w-9 h-9 rounded-full flex items-center justify-center',
+                      isSubida ? 'bg-rose-500/15 text-rose-500' : 'bg-emerald-500/15 text-emerald-500'
+                    )}>
+                      <ArrowRight className="w-4 h-4" />
+                    </div>
+                  </div>
+                  <div className={cn(
+                    'rounded-xl p-3 text-center border',
+                    isSubida ? 'bg-rose-500/10 border-rose-500/20' : 'bg-emerald-500/10 border-emerald-500/20'
+                  )}>
+                    <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider mb-1">Ahora</p>
+                    <p className={cn('font-mono font-black text-sm', isSubida ? 'text-rose-500' : 'text-emerald-500')}>
+                      {formatCurrency(alerta.precioNuevo)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Diferencia + Impacto en margen */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-muted/30 rounded-xl p-3">
+                    <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider mb-1">Diferencia</p>
+                    <p className={cn('font-mono font-bold text-sm', isSubida ? 'text-rose-500' : 'text-emerald-500')}>
+                      {isSubida ? '+' : '-'}{formatCurrency(Math.abs(alerta.diferencia))}
+                    </p>
+                  </div>
+                  <div className={cn(
+                    'rounded-xl p-3 border',
+                    deltaMargen === null        ? 'bg-muted/30 border-transparent' :
+                    deltaMargen < -3            ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200/50' :
+                    deltaMargen < 0             ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/50' :
+                    'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50'
+                  )}>
+                    <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider mb-1 flex items-center gap-1">
+                      <Zap className="w-2.5 h-2.5" /> Impacto margen
+                    </p>
+                    {deltaMargen !== null ? (
+                      <p className={cn('font-bold text-sm',
+                        deltaMargen < -3 ? 'text-rose-500' :
+                        deltaMargen < 0  ? 'text-amber-500' : 'text-emerald-500'
+                      )}>
+                        {margenAnterior!.toFixed(0)}% → {margenNuevo!.toFixed(0)}%
+                        <span className="text-xs ml-1 opacity-75">
+                          ({deltaMargen >= 0 ? '+' : ''}{deltaMargen.toFixed(1)}pp)
+                        </span>
+                      </p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">Sin precio de venta</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sugerencia de acción */}
+                {!alerta.leida && alerta.prioridad === 'CRÍTICA' && isSubida && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/60">
+                    <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
+                    <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
+                      Subida mayor al 20% — Revisa tu precio de venta o busca proveedor alternativo urgente
+                    </p>
+                  </div>
+                )}
+                {!alerta.leida && !isSubida && alerta.prioridad !== 'NORMAL' && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/60">
+                    <TrendingDown className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                      Precio bajó — Buena oportunidad para comprar mas stock a mejor precio
+                    </p>
+                  </div>
+                )}
+
+                {/* Botón principal: marcar como leída */}
+                {!alerta.leida && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      onMarcarLeida(alerta.id);
+                      toast.success('Alerta marcada como leída');
+                    }}
+                    className="w-full h-10 rounded-xl bg-primary/8 hover:bg-primary/15 text-primary font-bold text-sm transition-ag">
+                    <Check className="w-4 h-4 mr-2" />
+                    Entendido, marcar como leída
+                  </Button>
+                )}
+              </div>
             </div>
-            <h3 className="text-xl font-bold">Todo bajo control</h3>
-            <p className="text-muted-foreground max-w-xs mx-auto mt-2">
-              No hay alertas pendientes. Te avisaremos cuando detectemos cambios de precios.
+          );
+        }) : (
+          /* Estado vacío */
+          <div className="flex flex-col items-center justify-center py-20 text-center glass-layer-1 border-dashed rounded-2xl">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4 animate-ag-float">
+              {tabActiva === 'pendientes'
+                ? <Bell className="w-8 h-8 text-muted-foreground/30" />
+                : <CheckCheck className="w-8 h-8 text-muted-foreground/30" />
+              }
+            </div>
+            <h3 className="text-lg font-bold">
+              {tabActiva === 'pendientes' ? 'Todo bajo control' : 'Sin historial aún'}
+            </h3>
+            <p className="text-sm text-muted-foreground max-w-xs mt-1">
+              {tabActiva === 'pendientes'
+                ? 'No hay alertas pendientes. Te avisaremos cuando detectemos cambios de precio.'
+                : 'Aquí aparecerán las alertas que ya revisaste.'
+              }
             </p>
           </div>
         )}
       </div>
-    </>
+    </div>
   );
 }
