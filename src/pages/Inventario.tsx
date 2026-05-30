@@ -1669,6 +1669,83 @@ export function Inventario({
                 </div>
             )}
 
+            {/* ── MODAL RESUMEN RONDA ── */}
+            {showResumenRonda && rondaActiva && (() => {
+                const contados = productosParaRonda.filter(i => conteoValues[i.productoId]?.trim());
+                const ok = contados.filter(i => {
+                    const d = getDiferenciaRonda(i.productoId, conteoValues[i.productoId]);
+                    return d && Math.abs(d.diferencia) < 1;
+                });
+                const faltantes = contados.filter(i => {
+                    const d = getDiferenciaRonda(i.productoId, conteoValues[i.productoId]);
+                    return d && d.diferencia < -0.5;
+                });
+                const sobrantes = contados.filter(i => {
+                    const d = getDiferenciaRonda(i.productoId, conteoValues[i.productoId]);
+                    return d && d.diferencia > 0.5;
+                });
+                return (
+                    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-end sm:items-center justify-center z-[100] p-4 animate-ag-fade-in">
+                        <div className="w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl shadow-2xl overflow-hidden">
+                            <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-5 text-white">
+                                <div className="flex items-center justify-between">
+                                    <p className="font-black uppercase tracking-widest text-sm">Resumen de la Ronda #{rondaActiva.numero}</p>
+                                    <button onClick={() => setShowResumenRonda(false)} className="text-white/60 hover:text-white"><X className="w-5 h-5" /></button>
+                                </div>
+                                <p className="text-xs text-indigo-200 mt-1">{contados.length} productos contados de {productosParaRonda.length}</p>
+                            </div>
+                            <div className="p-5 space-y-4">
+                                {/* Resumen en 3 cajas */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl p-3 text-center border border-emerald-200 dark:border-emerald-800">
+                                        <p className="text-2xl font-black text-emerald-600">{ok.length}</p>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-emerald-600 mt-0.5">Sin diferencia</p>
+                                    </div>
+                                    <div className="bg-red-50 dark:bg-red-950/30 rounded-2xl p-3 text-center border border-red-200 dark:border-red-800">
+                                        <p className="text-2xl font-black text-red-600">{faltantes.length}</p>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-red-600 mt-0.5">Con faltantes</p>
+                                    </div>
+                                    <div className="bg-blue-50 dark:bg-blue-950/30 rounded-2xl p-3 text-center border border-blue-200 dark:border-blue-800">
+                                        <p className="text-2xl font-black text-blue-600">{sobrantes.length}</p>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-blue-600 mt-0.5">Con sobrantes</p>
+                                    </div>
+                                </div>
+
+                                {/* Lista de diferencias */}
+                                {(faltantes.length > 0 || sobrantes.length > 0) && (
+                                    <div className="max-h-48 overflow-y-auto space-y-1.5">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Diferencias encontradas:</p>
+                                        {[...faltantes, ...sobrantes].map(i => {
+                                            const d = getDiferenciaRonda(i.productoId, conteoValues[i.productoId])!;
+                                            return (
+                                                <div key={i.id} className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800">
+                                                    <span className="text-xs font-bold truncate flex-1">{i.producto?.nombre}</span>
+                                                    <span className={`text-xs font-black shrink-0 ml-2 ${d.diferencia < 0 ? 'text-red-600' : 'text-blue-600'}`}>
+                                                        {d.diferencia > 0 ? `+${d.diferencia.toFixed(0)} de más` : `${d.diferencia.toFixed(0)} de menos`}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+
+                                <div className="flex gap-3 pt-1">
+                                    <Button variant="outline" onClick={() => setShowResumenRonda(false)}
+                                        className="flex-1 h-11 rounded-xl font-black uppercase text-xs">
+                                        Volver a revisar
+                                    </Button>
+                                    <Button onClick={() => { setShowResumenRonda(false); finalizarRonda(); }}
+                                        className="flex-[2] h-11 rounded-xl font-black uppercase text-xs bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-lg gap-2">
+                                        <CheckCircle2 className="w-4 h-4" />
+                                        Aplicar {contados.length} ajustes
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
             {/* ── MODAL AJUSTE MANUAL ── */}
             {ajusteModal && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-6 animate-ag-fade-in">
