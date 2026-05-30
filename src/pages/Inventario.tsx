@@ -1443,9 +1443,9 @@ export function Inventario({
                 TAB — ANALÍTICA (Inteligencia de Negocio Premium)
             ════════════════════════════════════════════════════════ */}
             {tab === 'analitica' && (
-                <div className="space-y-6 animate-ag-fade-in">
+                <div className="space-y-4 sm:space-y-6 animate-ag-fade-in">
                     {/* Resumen Ejecutivo */}
-                    <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-6 border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden relative">
+                    <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] p-4 sm:p-6 border border-slate-100 dark:border-slate-800 shadow-xl overflow-hidden relative">
                         <div className="absolute top-0 right-0 p-8 opacity-5">
                             <BarChart3 className="w-32 h-32 text-indigo-600" />
                         </div>
@@ -1504,10 +1504,10 @@ export function Inventario({
                     </div>
 
                     {/* Fugas Críticas y Detalles */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 leading-none">
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-6 leading-none">
                         {/* Top Fugas */}
-                        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm p-6">
-                            <div className="flex items-center justify-between mb-6">
+                        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm p-4 sm:p-6">
+                            <div className="flex items-center justify-between mb-4 sm:mb-6">
                                 <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Top Fugas de Dinero</h4>
                                 <AlertTriangle className="w-4 h-4 text-amber-500" />
                             </div>
@@ -1559,8 +1559,8 @@ export function Inventario({
                         </div>
 
                         {/* Listado de Precios y Márgenes */}
-                        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm p-6">
-                            <div className="flex items-center justify-between mb-6">
+                        <div className="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm p-4 sm:p-6">
+                            <div className="flex items-center justify-between mb-4 sm:mb-6">
                                 <div>
                                     <h4 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">Control de Márgenes</h4>
                                     <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">¿Qué tan rentable es cada producto?</p>

@@ -147,7 +147,7 @@ export default function Dashboard(props: DashboardProps) {
   ];
 
   return (
-    <div className="space-y-8 pb-12">
+    <div className="space-y-5 sm:space-y-8 pb-12">
       {/* Header Stitch Style */}
       <DashboardHeader
         onViewVentas={onViewVentas}
@@ -156,7 +156,7 @@ export default function Dashboard(props: DashboardProps) {
       />
 
       {/* ═══ KPI Cards Grid ═══ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
         {kpiCards.map((kpi, index) => {
           const Icon = kpi.icon;
           return (
@@ -226,7 +226,7 @@ export default function Dashboard(props: DashboardProps) {
           <FindingsFeed />
 
           {/* Otros Paneles debajo del Feed si es necesario */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6 mt-8 sm:mt-12">
              {/* Panel: Ahorro */}
             <GlassCard onClick={onViewAhorros} className="border-l-4 border-l-purple-500">
               <div className="flex items-center gap-3 mb-4">
@@ -305,7 +305,7 @@ export default function Dashboard(props: DashboardProps) {
           </GlassCard>
 
           {/* Accesos rápidos */}
-          <div className="bg-slate-900 dark:bg-slate-800 p-6 rounded-[2.5rem] border border-white/10 shadow-2xl">
+          <div className="bg-slate-900 dark:bg-slate-800 p-4 sm:p-6 rounded-[2.5rem] border border-white/10 shadow-2xl">
             <h4 className="text-xs font-black text-white mb-4 flex items-center gap-2 uppercase tracking-widest">
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
               Accesos Tácticos

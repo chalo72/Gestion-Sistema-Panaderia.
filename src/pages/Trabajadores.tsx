@@ -853,7 +853,7 @@ export default function Trabajadores({
             <Dialog open={showModal} onOpenChange={setShowModal}>
                 <DialogContent className="max-w-md rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
                     {/* Header colorido */}
-                    <div className="bg-violet-600 p-6 text-white">
+                    <div className="bg-violet-600 p-4 sm:p-6 text-white">
                         <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-white/20 rounded-2xl">
                                 <Users className="w-5 h-5" />
@@ -869,7 +869,7 @@ export default function Trabajadores({
                         </div>
                     </div>
 
-                    <div className="p-6 bg-white dark:bg-slate-900 space-y-4 max-h-[65vh] overflow-y-auto">
+                    <div className="p-4 sm:p-6 bg-white dark:bg-slate-900 space-y-4 max-h-[65vh] overflow-y-auto">
                         {/* Foto de perfil */}
                         <input
                             ref={fotoPerfilInputRef}

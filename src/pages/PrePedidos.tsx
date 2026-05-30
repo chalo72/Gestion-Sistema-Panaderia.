@@ -368,8 +368,8 @@ export default function PrePedidos({
 
   if (activeTab === 'gestion') {
     return (
-      <div className="min-h-screen p-8 bg-slate-50 dark:bg-slate-950">
-        <div className="max-w-7xl mx-auto space-y-8">
+      <div className="min-h-screen p-3 sm:p-6 lg:p-8 bg-slate-50 dark:bg-slate-950">
+        <div className="max-w-7xl mx-auto space-y-4 sm:space-y-8">
 
           {/* Header */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -378,7 +378,7 @@ export default function PrePedidos({
                 <ChevronLeft className="w-4 h-4" /> VOLVER
               </Button>
               <div>
-                <h2 className="text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Historial de Pedidos</h2>
+                <h2 className="text-xl sm:text-2xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Historial de Pedidos</h2>
                 <p className="text-xs text-slate-400 font-bold uppercase tracking-widest">{prepedidos.length} pedido{prepedidos.length !== 1 ? 's' : ''} en total</p>
               </div>
             </div>
@@ -459,7 +459,7 @@ export default function PrePedidos({
               <p className="text-xs mt-1">Crea tu primer pedido desde el panel</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
               {pedidosFiltrados.map(p => {
                 const cfg = estadoConfig(p.estado);
                 const proveedor = getProveedorById(p.proveedorId);
@@ -564,13 +564,13 @@ export default function PrePedidos({
         {verDetallePedido ? (
           <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-hidden min-h-0">
              {/* HEADER */}
-             <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-6 shrink-0 flex flex-wrap items-center gap-4">
+             <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-3 sm:p-6 shrink-0 flex flex-wrap items-center gap-3 sm:gap-4">
                 <Button variant="ghost" onClick={() => setVerDetallePedido(null)} className="h-12 w-12 rounded-full text-slate-500 hover:text-indigo-600 bg-slate-100 dark:bg-slate-800 hover:bg-indigo-50 shrink-0">
                    <ArrowLeft className="w-5 h-5" />
                 </Button>
                 <div className="flex-1 min-w-[200px]">
                    <div className="flex items-center gap-3">
-                      <h2 className="text-2xl font-black uppercase text-slate-900 dark:text-white tracking-tight">{verDetallePedido.nombre}</h2>
+                      <h2 className="text-lg sm:text-2xl font-black uppercase text-slate-900 dark:text-white tracking-tight">{verDetallePedido.nombre}</h2>
                       <Badge className="bg-indigo-100 text-indigo-700 border-none px-3 font-bold uppercase tracking-widest">{verDetallePedido.estado}</Badge>
                    </div>
                    <div className="flex items-center gap-2 mt-1">
@@ -619,7 +619,7 @@ export default function PrePedidos({
                 <div className="w-full max-w-4xl space-y-6 pb-20">
                    {/* ACCIONES DE ESTADO DE ENVÍO */}
                    {(verDetallePedido.estado === 'confirmado' || verDetallePedido.estado === 'enviado') && (
-                     <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-3xl p-6 border border-indigo-100 dark:border-indigo-800/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
+                     <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-3xl p-4 sm:p-6 border border-indigo-100 dark:border-indigo-800/50 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm">
                         <div>
                            <h4 className="font-black text-indigo-900 dark:text-indigo-200 text-lg uppercase tracking-tight">¿La mercancía ya viene en camino o ya llegó?</h4>
                            <p className="text-indigo-600 dark:text-indigo-400 text-sm font-semibold mt-1">Actualiza el estado para controlar tu inventario.</p>
@@ -679,7 +679,7 @@ export default function PrePedidos({
                       </div>
                       
                       {/* TOTALES */}
-                      <div className="bg-slate-50 dark:bg-slate-900/50 p-6 md:p-8 border-t border-slate-200 dark:border-slate-800">
+                      <div className="bg-slate-50 dark:bg-slate-900/50 p-4 sm:p-6 md:p-8 border-t border-slate-200 dark:border-slate-800">
                          <div className="flex justify-between items-center text-sm font-black text-slate-500 uppercase tracking-widest mb-2">
                              <span>Total de la Orden</span>
                              <span className="text-3xl text-slate-900 dark:text-white">{formatCurrency(verDetallePedido.total)}</span>
@@ -725,7 +725,7 @@ export default function PrePedidos({
             />
           </div>
         ) : (
-          <div className="flex-1 flex flex-col h-full overflow-hidden p-6 lg:p-8 min-h-0">
+          <div className="flex-1 flex flex-col h-full overflow-hidden p-3 sm:p-6 lg:p-8 min-h-0">
              {/* Header y Buscador estilo POS */}
              <div className="flex items-center gap-4 mb-6">
                 <div className="flex gap-2 shrink-0">
@@ -785,7 +785,7 @@ export default function PrePedidos({
                         }}
                         className="flex flex-col items-center justify-start p-5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1.5rem] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all active:scale-95 group gap-3 relative h-full"
                       >
-                         <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl transition-transform group-hover:scale-110 group-hover:rotate-3 shadow-inner shrink-0", colorClass)}>
+                         <div className={cn("w-11 h-11 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center font-black text-lg sm:text-2xl transition-transform group-hover:scale-110 group-hover:rotate-3 shadow-inner shrink-0", colorClass)}>
                             {prov.nombre ? prov.nombre.charAt(0) : 'P'}
                          </div>
                          <div className="text-center w-full flex flex-col flex-1">
@@ -932,16 +932,16 @@ export default function PrePedidos({
                   setShowProveedorPanel(false);
                 }}
                 title="Guardar para después"
-                className="w-14 h-14 rounded-2xl p-0 shrink-0 text-indigo-600 border-slate-200 dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 hover:border-indigo-200 transition-colors"
+                className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl p-0 shrink-0 text-indigo-600 border-slate-200 dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 hover:border-indigo-200 transition-colors"
               >
                 <Save className="w-5 h-5" />
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 disabled={!activeDraft || activeDraft.items.length === 0}
                 onClick={handleShareWhatsApp}
                 title="Enviar cotización por WhatsApp"
-                className="w-14 h-14 rounded-2xl p-0 shrink-0 text-emerald-600 border-slate-200 dark:border-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 hover:border-emerald-200 transition-colors"
+                className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl p-0 shrink-0 text-emerald-600 border-slate-200 dark:border-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 hover:border-emerald-200 transition-colors"
               >
                 <Share2 className="w-5 h-5" />
               </Button>

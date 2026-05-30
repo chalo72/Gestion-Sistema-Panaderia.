@@ -24,7 +24,7 @@ export function ProductHeader({
     checkPermission
 }: ProductHeaderProps) {
     return (
-        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8 animate-ag-fade-in">
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 sm:gap-6 mb-4 sm:mb-8 animate-ag-fade-in">
             <div>
                 <h2 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
                     Gestión de Productos

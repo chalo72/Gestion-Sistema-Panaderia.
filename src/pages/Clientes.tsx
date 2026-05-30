@@ -161,16 +161,16 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
   }, [clientes, busqueda, filtroTipo]);
 
   return (
-    <div className="min-h-full flex flex-col gap-6 p-6 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
-      
+    <div className="min-h-full flex flex-col gap-3 sm:gap-6 p-3 sm:p-6 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+
       {/* ── Header Principal ── */}
-      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
-        <div className="flex items-center gap-4">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-            <Users className="w-7 h-7 text-white" />
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-slate-900 p-4 sm:p-6 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm">
+        <div className="flex items-center gap-3 sm:gap-4">
+          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
+            <Users className="w-5 h-5 sm:w-7 sm:h-7 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Soberanía de Clientes</h1>
+            <h1 className="text-lg sm:text-2xl font-black text-slate-900 dark:text-white tracking-tight uppercase">Soberanía de Clientes</h1>
             <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-2">
               <BadgeCheck className="w-3.5 h-3.5 text-indigo-500" /> 
               Gestión Maestra de Base de Datos Personal
@@ -191,7 +191,7 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
       </header>
 
       {/* ── Filtros y Estadísticas ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-6">
         
         {/* Filtros */}
         <Card className="lg:col-span-3 rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden bg-white/50 dark:bg-slate-900/50 backdrop-blur-xl">
@@ -205,27 +205,28 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
                 className="h-12 pl-12 bg-white dark:bg-slate-800 border-slate-200 rounded-2xl text-sm font-bold placeholder:text-slate-400"
               />
             </div>
-            <div className="flex items-center gap-2 w-full md:w-auto">
-              <Filter className="w-5 h-5 text-slate-400 shrink-0" />
-              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger className="h-12 w-full md:w-48 bg-white dark:bg-slate-800 border-slate-200 rounded-2xl font-black uppercase text-[10px] tracking-widest">
-                  <SelectValue placeholder="Tipo de Cliente" />
-                </SelectTrigger>
-                <SelectContent className="rounded-2xl border-slate-100">
-                  <SelectItem value="todos" className="font-bold">Todos los Tipos</SelectItem>
-                  <SelectItem value="particular" className="font-bold">Particular</SelectItem>
-                  <SelectItem value="frecuente" className="font-bold">Frecuente</SelectItem>
-                  <SelectItem value="mayorista" className="font-bold">Mayorista</SelectItem>
-                  <SelectItem value="empresa" className="font-bold">Empresa</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="overflow-x-auto flex gap-2 pb-1 w-full md:w-auto shrink-0">
+              {(['todos', 'particular', 'frecuente', 'mayorista', 'empresa'] as const).map(tipo => (
+                <button
+                  key={tipo}
+                  onClick={() => setFiltroTipo(tipo)}
+                  className={cn(
+                    "shrink-0 h-9 px-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border",
+                    filtroTipo === tipo
+                      ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20"
+                      : "bg-white dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-300"
+                  )}
+                >
+                  {tipo === 'todos' ? 'Todos' : tipo.charAt(0).toUpperCase() + tipo.slice(1)}
+                </button>
+              ))}
             </div>
           </CardContent>
         </Card>
 
         {/* Resumen */}
         <Card className="rounded-3xl border-slate-200 dark:border-slate-800 shadow-sm bg-indigo-600 text-white">
-          <CardContent className="p-6 flex items-center justify-between">
+          <CardContent className="p-4 sm:p-5 flex items-center justify-between">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">Total Clientes</p>
               <h2 className="text-4xl font-black mt-1 tracking-tighter">{clientesFiltrados.length}</h2>
@@ -259,7 +260,7 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 sm:gap-6">
           {clientesFiltrados.map(cliente => {
             const config = TIPO_CLIENTE_CONFIG[cliente.tipo] || TIPO_CLIENTE_CONFIG.particular;
             const Icon = config.icon;
@@ -273,11 +274,11 @@ export default function Clientes({ clientesExternos, onAddCliente, onUpdateClien
                   {/* Banner Superior */}
                   <div className={cn("h-2 w-full", config.bg.replace('/30', ''))} />
                   
-                  <div className="p-6">
-                    <div className="flex items-start justify-between gap-4 mb-6">
-                      <div className="flex items-center gap-4">
-                        <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner", config.bg)}>
-                          <Icon className={cn("w-7 h-7", config.color)} />
+                  <div className="p-4 sm:p-5">
+                    <div className="flex items-start justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
+                      <div className="flex items-center gap-3">
+                        <div className={cn("w-11 h-11 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shadow-inner shrink-0", config.bg)}>
+                          <Icon className={cn("w-5 h-5 sm:w-7 sm:h-7", config.color)} />
                         </div>
                         <div>
                           <h3 className="text-lg font-black text-slate-900 dark:text-white leading-tight uppercase tracking-tight group-hover:text-indigo-600 transition-colors">

@@ -79,7 +79,7 @@ export function ProductCard({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-2 gap-3 sm:gap-6">
                     <div className="p-5 rounded-[2rem] bg-indigo-50/50 dark:bg-indigo-900/10 border border-indigo-100/50 dark:border-indigo-800/20 shadow-inner group/val">
                         <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest block mb-2">PVP Actual</span>
                         <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 tabular-nums tracking-tighter block group-hover/val:scale-105 transition-transform">{formatCurrency(producto.precioVenta)}</span>
@@ -91,7 +91,7 @@ export function ProductCard({
                 </div>
 
                 {mejorPrecio && (
-                    <div className="mt-8 flex items-center justify-between p-6 rounded-[2rem] bg-slate-900 dark:bg-black/40 text-white shadow-2xl relative overflow-hidden group/rent">
+                    <div className="mt-6 sm:mt-8 flex items-center justify-between p-4 sm:p-6 rounded-[2rem] bg-slate-900 dark:bg-black/40 text-white shadow-2xl relative overflow-hidden group/rent">
                         <div className="absolute inset-0 bg-gradient-to-r from-emerald-600/20 to-transparent opacity-0 group-hover/rent:opacity-100 transition-opacity" />
                         <div className="flex items-center gap-3 relative z-10">
                             <div className={cn(

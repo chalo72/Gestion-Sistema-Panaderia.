@@ -118,7 +118,7 @@ export function ProductFormModal({
 
                 {/* ── HEADER con color dinámico por tipo ── */}
                 <div className={cn(
-                    "p-6 text-white relative",
+                    "p-4 sm:p-6 text-white relative",
                     tipoActual === 'elaborado'
                         ? "bg-gradient-to-r from-orange-500 to-orange-600"
                         : "bg-gradient-to-r from-blue-500 to-blue-600"
@@ -145,7 +145,7 @@ export function ProductFormModal({
                     </Button>
                 </div>
 
-                <form onSubmit={onSubmit} className="p-6 space-y-6">
+                <form onSubmit={onSubmit} className="p-4 sm:p-6 space-y-5 sm:space-y-6">
 
                     {/* ── TIPO ── */}
                     <div className="space-y-2">

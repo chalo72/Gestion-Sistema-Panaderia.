@@ -214,7 +214,7 @@ export default function Productos({
     };
 
     return (
-        <div className="space-y-6 pb-12">
+        <div className="space-y-4 sm:space-y-6 pb-12">
             <ProductHeader vistaActual={vistaActual} setVistaActual={setVistaActual}
                 onManageCategories={() => setIsCategoriaDialogOpen(true)}
                 onAddProduct={() => { resetForm(); setIsDialogOpen(true); }}
@@ -319,7 +319,7 @@ export default function Productos({
 
                     </div>
                 ) : vistaActual === 'cuadricula' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-6">
                         {filteredProductos.map(producto => {
                             const mp = getMejorPrecio(producto.id);
                             // Costo unitario: preferir costoBase del producto; si no, calcular desde proveedor
