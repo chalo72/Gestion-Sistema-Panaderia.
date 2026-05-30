@@ -163,7 +163,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     }
                 }
                 if (rescatados > 0) {
-                    console.log(`[Rescate] ${rescatados} créditos mayoristas migrados a DB central.`);
+                    // rescatados créditos migrados a DB central
                 }
                 localStorage.setItem('ag_mayoristas_rescued', 'true');
             };

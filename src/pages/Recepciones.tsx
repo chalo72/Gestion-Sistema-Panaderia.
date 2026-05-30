@@ -211,7 +211,6 @@ export default function Recepciones({
         setIsScanning(true);
         setScanProgress(0);
         setScanStep('Leyendo información...');
-        console.log("DULCE PLACER: Iniciando lectura de imagen...", imagenFileRef.current.name);
 
         try {
             const resultado = await procesarImagenFactura(
@@ -237,7 +236,6 @@ export default function Recepciones({
                 );
                 if (mProv.indice >= 0) {
                     proveedorMatchId = proveedores[mProv.indice].id;
-                    console.log(`[OCR Forense] Proveedor: "${resultado.proveedor.nombre}" → "${proveedores[mProv.indice].nombre}" (score: ${(mProv.score * 100).toFixed(0)}%)`);
                 }
             }
 

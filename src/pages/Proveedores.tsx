@@ -521,7 +521,6 @@ export function Proveedores({
 
       // Guardar productos del catálogo
       if (items.length > 0) {
-        console.log(`📦 [Nexus-Volt] Iniciando guardado de ${items.length} productos...`);
         for (const item of items) {
           try {
             let productoId = item.productoId;
@@ -539,7 +538,6 @@ export function Proveedores({
               const nombreNorm = item.nombre.trim().toLowerCase();
               const productoHomonimo = _productos.find(p => p.nombre.trim().toLowerCase() === nombreNorm);
               if (productoHomonimo) {
-                console.log(`🔁 [Nexus] Reutilizando producto existente por nombre: ${item.nombre} (ID: ${productoHomonimo.id})`);
                 productoId = productoHomonimo.id;
               }
             }
@@ -547,7 +545,6 @@ export function Proveedores({
             // Crear producto solo si después de la búsqueda por nombre todavía no hay un ID válido
             const productoIdFinal = productoId ? !!getProductoById(productoId) : false;
             if (!productoId || !productoIdFinal) {
-              console.log(`🆕 [Nexus] Creando nuevo producto: ${item.nombre}`);
               const tipo: ProductoTipo = item.destino === 'venta' ? 'elaborado' : 'ingrediente';
               const np = await onAddProducto({
                 nombre: item.nombre,
@@ -562,7 +559,6 @@ export function Proveedores({
             }
 
             if (productoId) {
-              console.log(`🔗 [Nexus] Vinculando precio para: ${item.nombre} (ID: ${productoId})`);
               await onAddOrUpdatePrecio({
                 productoId,
                 proveedorId: provId,
