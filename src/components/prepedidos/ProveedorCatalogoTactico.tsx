@@ -26,7 +26,7 @@ import type {
   Receta
 } from '@/types';
 
-// insumos = ingredientes (tipo === 'ingrediente' o categoría empieza con 'ins:')
+// insumos = ingredientes: tipo==='ingrediente' | cat ins: | destino==='insumo' del PrecioProveedor
 // ventas  = todo lo demás del catálogo del proveedor
 type ViewMode = 'insumos' | 'ventas';
 
@@ -48,7 +48,8 @@ interface ProveedorCatalogoTacticoProps {
 const esInsumo = (p: any): boolean => {
   const tipo = p.tipo;
   const cat = ((p.categoria || '') as string).toLowerCase();
-  return tipo === 'ingrediente' || cat.startsWith('ins:') || cat === 'insumos';
+  const destino = p.destino; // campo del PrecioProveedor propagado al objeto
+  return tipo === 'ingrediente' || cat.startsWith('ins:') || cat === 'insumos' || destino === 'insumo';
 };
 
 export function ProveedorCatalogoTactico({
@@ -98,6 +99,7 @@ export function ProveedorCatalogoTactico({
           nombre: prod?.nombre || 'Producto',
           id: pr.productoId,
           precioCosto: pr.precioCosto,
+          destino: pr.destino, // 'insumo' | 'venta' — necesario para esInsumo()
           tipoEmbalaje: pr.tipoEmbalaje || 'UNIDAD',
           cantidadEmbalaje: pr.cantidadEmbalaje || 1,
           stockActual,
@@ -360,21 +362,29 @@ export function ProveedorCatalogoTactico({
           <h3 className="font-black text-lg uppercase tracking-tight text-slate-700 dark:text-slate-300">
             Sin {viewMode === 'insumos' ? 'Insumos' : 'Productos de Venta'}
           </h3>
-          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-2 mb-6">
-            {activeProveedor.nombre} no tiene {viewMode === 'insumos' ? 'insumos' : 'productos de venta'} con precio registrado.
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-2 mb-1">
+            {activeProveedor.nombre} no tiene {viewMode === 'insumos' ? 'insumos' : 'productos de venta'} registrados.
           </p>
-          <button
-            onClick={() => setViewMode(viewMode === 'insumos' ? 'ventas' : 'insumos')}
-            className={cn(
-              "flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all shadow-md active:scale-95",
-              viewMode === 'insumos'
-                ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
-                : 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
-            )}
-          >
-            {viewMode === 'insumos' ? <ShoppingBag className="w-4 h-4" /> : <FlaskConical className="w-4 h-4" />}
-            Ver {viewMode === 'insumos' ? `Catálogo de Ventas (${catalogoVentas.length})` : `Catálogo de Insumos (${catalogoInsumos.length})`}
-          </button>
+          {viewMode === 'insumos' && (
+            <p className="text-[10px] text-slate-400 mb-5 max-w-xs">
+              Para agregar insumos (harina, azúcar, etc.) ve a <strong>Proveedores → editar proveedor → Catálogo</strong> y agrega los productos con destino "Insumo 🧪".
+            </p>
+          )}
+          {viewMode === 'ventas' && <div className="mb-5" />}
+          {(viewMode === 'insumos' ? catalogoVentas.length : catalogoInsumos.length) > 0 && (
+            <button
+              onClick={() => setViewMode(viewMode === 'insumos' ? 'ventas' : 'insumos')}
+              className={cn(
+                "flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all shadow-md active:scale-95",
+                viewMode === 'insumos'
+                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
+              )}
+            >
+              {viewMode === 'insumos' ? <ShoppingBag className="w-4 h-4" /> : <FlaskConical className="w-4 h-4" />}
+              Ver {viewMode === 'insumos' ? `Catálogo de Ventas (${catalogoVentas.length})` : `Catálogo de Insumos (${catalogoInsumos.length})`}
+            </button>
+          )}
         </div>
       ) : productosFiltrados.length === 0 ? (
         /* Sin resultados de búsqueda */
