@@ -413,7 +413,18 @@ export function ProductFormModal({
                                         type="number" step="0.01" min="0"
                                         readOnly={formData.useHeladeriaCalc}
                                         value={formData.precioCosto}
-                                        onChange={e => setFormData({ ...formData, precioCosto: e.target.value })}
+                                        onChange={e => {
+                                            const newCosto = e.target.value;
+                                            const costoNum = parseFloat(newCosto);
+                                            const precioNum = parseFloat(formData.precioVenta);
+                                            // Si hay precio de venta, recalcular el margen
+                                            if (!isNaN(costoNum) && costoNum > 0 && !isNaN(precioNum) && precioNum > 0) {
+                                                const nuevoMargen = ((precioNum - costoNum) / costoNum) * 100;
+                                                setFormData({ ...formData, precioCosto: newCosto, margenUtilidad: nuevoMargen.toFixed(1) });
+                                            } else {
+                                                setFormData({ ...formData, precioCosto: newCosto });
+                                            }
+                                        }}
                                         className={cn(
                                             "h-11 pl-9 text-base font-bold rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
                                             formData.useHeladeriaCalc && "bg-slate-50 text-indigo-600 border-indigo-200 cursor-not-allowed"
@@ -482,13 +493,26 @@ export function ProductFormModal({
                             <div className="grid grid-cols-2 gap-4">
                                 {/* Precio de Venta */}
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Precio de Venta</Label>
+                                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                        Precio de Venta
+                                        {costoReal > 0 && <span className="ml-1 text-orange-400 font-bold">↔ margen</span>}
+                                    </Label>
                                     <div className="relative">
                                         <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" />
                                         <Input
-                                            type="number" step="0.01" min="0"
+                                            type="number" step="100" min="0"
                                             value={formData.precioVenta}
-                                            onChange={e => setFormData({ ...formData, precioVenta: e.target.value })}
+                                            onChange={e => {
+                                                const newPrecio = e.target.value;
+                                                const precioNum = parseFloat(newPrecio);
+                                                // Si hay costo base, recalcular el margen automáticamente
+                                                if (costoReal > 0 && !isNaN(precioNum) && precioNum > 0) {
+                                                    const nuevoMargen = ((precioNum - costoReal) / costoReal) * 100;
+                                                    setFormData({ ...formData, precioVenta: newPrecio, margenUtilidad: nuevoMargen.toFixed(1) });
+                                                } else {
+                                                    setFormData({ ...formData, precioVenta: newPrecio });
+                                                }
+                                            }}
                                             className="h-12 pl-9 text-lg font-bold rounded-xl border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900 focus:border-orange-400"
                                             placeholder="0.00"
                                         />
@@ -497,12 +521,25 @@ export function ProductFormModal({
 
                                 {/* Margen con ícono % */}
                                 <div className="space-y-1.5">
-                                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Margen Utilidad</Label>
+                                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                        Margen Utilidad
+                                        {costoReal > 0 && <span className="ml-1 text-orange-400 font-bold">↔ precio</span>}
+                                    </Label>
                                     <div className="relative">
                                         <Input
-                                            type="number" min="0" max="999"
+                                            type="number" min="0" max="999" step="1"
                                             value={formData.margenUtilidad}
-                                            onChange={e => setFormData({ ...formData, margenUtilidad: e.target.value })}
+                                            onChange={e => {
+                                                const newMargen = e.target.value;
+                                                const margenNum = parseFloat(newMargen);
+                                                // Si hay costo base, recalcular el precio automáticamente
+                                                if (costoReal > 0 && !isNaN(margenNum)) {
+                                                    const nuevoPrecio = Math.round(costoReal * (1 + margenNum / 100) / 100) * 100;
+                                                    setFormData({ ...formData, margenUtilidad: newMargen, precioVenta: nuevoPrecio > 0 ? nuevoPrecio.toString() : formData.precioVenta });
+                                                } else {
+                                                    setFormData({ ...formData, margenUtilidad: newMargen });
+                                                }
+                                            }}
                                             className="h-12 pr-9 text-base font-bold text-center rounded-xl border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900 focus:border-orange-400"
                                             placeholder="30"
                                         />
