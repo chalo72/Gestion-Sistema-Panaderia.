@@ -135,6 +135,68 @@ export default function Recepciones({
         prepedidos.filter(p => p.estado === 'confirmado'),
         [prepedidos]);
 
+    // Proveedores ordenados por última recepción (el más reciente primero)
+    const proveedoresOrdenados = useMemo(() => {
+        return [...proveedores].sort((a, b) => {
+            const lastA = recepciones.filter(r => r.proveedorId === a.id)
+                .sort((x, y) => new Date(y.fechaRecepcion).getTime() - new Date(x.fechaRecepcion).getTime())[0]?.fechaRecepcion;
+            const lastB = recepciones.filter(r => r.proveedorId === b.id)
+                .sort((x, y) => new Date(y.fechaRecepcion).getTime() - new Date(x.fechaRecepcion).getTime())[0]?.fechaRecepcion;
+            if (!lastA && !lastB) return a.nombre.localeCompare(b.nombre);
+            if (!lastA) return 1;
+            if (!lastB) return -1;
+            return new Date(lastB).getTime() - new Date(lastA).getTime();
+        });
+    }, [proveedores, recepciones]);
+
+    // Proveedores filtrados por búsqueda en paso 1
+    const proveedoresFiltrados = useMemo(() => {
+        if (!busquedaProveedor.trim()) return proveedoresOrdenados;
+        return proveedoresOrdenados.filter(p =>
+            p.nombre.toLowerCase().includes(busquedaProveedor.toLowerCase())
+        );
+    }, [proveedoresOrdenados, busquedaProveedor]);
+
+    // Productos filtrados para autocomplete en paso 3
+    const productosFiltradosAutocomplete = useMemo(() => {
+        const idsEnRecepcion = new Set(newRecepcion.items.map(i => i.productoId));
+        const base = productos.filter(p => !idsEnRecepcion.has(p.id));
+        if (!busquedaProducto.trim()) return base.slice(0, 8);
+        return base.filter(p =>
+            p.nombre.toLowerCase().includes(busquedaProducto.toLowerCase()) ||
+            (p.categoria || '').toLowerCase().includes(busquedaProducto.toLowerCase())
+        ).slice(0, 10);
+    }, [productos, busquedaProducto, newRecepcion.items]);
+
+    // Cambios de precio detectados (para paso 4)
+    const cambiosPrecio = useMemo(() => {
+        return newRecepcion.items.filter(item => {
+            const prod = getProductoById(item.productoId);
+            if (!prod || !item.precioFacturado) return false;
+            const base = prod.costoBase || 0;
+            if (!base) return false;
+            return Math.abs((item.precioFacturado - base) / base) > 0.02;
+        });
+    }, [newRecepcion.items, getProductoById]);
+
+    // Cargar desde la última recepción del proveedor
+    const cargarUltimaRecepcion = (proveedorId: string) => {
+        const ultima = recepciones
+            .filter(r => r.proveedorId === proveedorId)
+            .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
+        if (!ultima) { toast.error('No hay recepciones anteriores para este proveedor'); return; }
+        const items: RecepcionItem[] = ultima.items.map(i => ({
+            ...i,
+            id: generateUUID(),
+            cantidadRecibida: i.cantidadRecibida,
+            precioFacturado: i.precioFacturado,
+            embalajeOk: true,
+            productoOk: true,
+        }));
+        setNewRecepcion(prev => ({ ...prev, items }));
+        toast.success(`${items.length} productos cargados desde última recepción`);
+    };
+
     // Estado para nueva recepción
     const [newRecepcion, setNewRecepcion] = useState<{
         proveedorId: string;
@@ -162,6 +224,12 @@ export default function Recepciones({
     const [step, setStep] = useState(1);
     const [isScanning, setIsScanning] = useState(false);
     const [scanProgress, setScanProgress] = useState(0);
+    // Nuevos estados para redesign
+    const [busquedaProveedor, setBusquedaProveedor] = useState('');
+    const [busquedaProducto, setBusquedaProducto] = useState('');
+    const [mostrarDropProducto, setMostrarDropProducto] = useState(false);
+    const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
+    const [draftRestorado, setDraftRestorado] = useState(false);
     const [scanStep, setScanStep] = useState('');
 
     const handleProductSaved = async (productoData: any) => {
@@ -200,6 +268,15 @@ export default function Recepciones({
             }
         }
     }, [productos.length, isCreatingNewFromAction]);
+
+    // Auto-borrador: guarda en localStorage al editar
+    useEffect(() => {
+        if (view !== 'new') return;
+        if (!newRecepcion.proveedorId && newRecepcion.items.length === 0) return;
+        try {
+            localStorage.setItem('rec_draft_v2', JSON.stringify({ form: newRecepcion, step }));
+        } catch {}
+    }, [newRecepcion, step, view]);
 
     // === FUNCIÓN DE ESCANEO OCR REAL (Tesseract.js) ===
     const handleScanFactura = async () => {
@@ -795,425 +872,455 @@ export default function Recepciones({
         const totalItems = newRecepcion.items.length;
         const totalUnidades = newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0);
         const totalDinero = newRecepcion.items.reduce((s, i) => s + (i.cantidadRecibida * i.precioFacturado), 0);
+        const proveedorActual = proveedores.find(p => p.id === newRecepcion.proveedorId);
+        const prepedidosPendientes = prepedidosConfirmados.filter(p => p.proveedorId === newRecepcion.proveedorId);
+        const ultimaRecepcionProv = recepciones
+            .filter(r => r.proveedorId === newRecepcion.proveedorId)
+            .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
 
         return (
-            <div className="space-y-6 animate-ag-fade-in pb-24">
-                {/* Cabecera con Pasos */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 bg-white dark:bg-slate-900 p-6 rounded-[2rem] border shadow-sm">
-                    <div className="flex items-center gap-4">
-                        <Button 
-                            variant="ghost" 
-                            size="icon"
-                            onClick={() => {
-                                if (step > 1) setStep(step - 1);
-                                else setView('list');
-                            }} 
-                            className="rounded-full bg-slate-100 hover:bg-slate-200"
+            <div className="space-y-4 animate-ag-fade-in pb-24">
+                {/* ─── CABECERA CON PASOS ─────────────────────────────────── */}
+                <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-10">
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => { if (step > 1) setStep(step - 1); else setView('list'); }}
+                            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors shrink-0"
                         >
-                            <ArrowLeft className="w-5 h-5" />
-                        </Button>
+                            <ArrowLeft className="w-4 h-4" />
+                        </button>
                         <div>
-                            <h1 className="text-2xl font-black uppercase tracking-tighter">Entrada de Mercancía</h1>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                                Paso {step} de 4: {
-                                    step === 1 ? 'Quién trae la mercancía' :
-                                    step === 2 ? 'Información de factura' :
-                                    step === 3 ? 'Lista de productos' : 'Confirmar entrada'
-                                }
+                            <h1 className="text-base font-black uppercase tracking-tight leading-none">Entrada de Mercancía</h1>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                                {step === 1 ? '① Proveedor' : step === 2 ? '② Factura' : step === 3 ? '③ Productos' : '④ Confirmar'}
+                                {proveedorActual && step > 1 && <span className="text-indigo-500 ml-2">· {proveedorActual.nombre}</span>}
                             </p>
                         </div>
                     </div>
-
-                    {/* Indicador visual de pasos */}
-                    <div className="flex items-center gap-2">
-                        {[1, 2, 3, 4].map((s) => (
-                            <div 
-                                key={s} 
-                                className={cn(
-                                    "h-2 rounded-full transition-all duration-500",
-                                    step === s ? "w-8 bg-indigo-600" : 
-                                    step > s ? "w-4 bg-emerald-500" : "w-4 bg-slate-200"
+                    {/* Barra de progreso */}
+                    <div className="flex items-center gap-1.5">
+                        {[1, 2, 3, 4].map(s => (
+                            <button key={s} onClick={() => s < step && setStep(s)}
+                                className={cn('h-2 rounded-full transition-all duration-300',
+                                    step === s ? 'w-8 bg-indigo-600' :
+                                    step > s ? 'w-5 bg-emerald-500 cursor-pointer' : 'w-3 bg-slate-200'
                                 )}
                             />
                         ))}
                     </div>
+                    {/* Total flotante en pasos 3-4 */}
+                    {step >= 3 && totalItems > 0 && (
+                        <div className="hidden sm:flex flex-col items-end shrink-0">
+                            <span className="text-xs font-black text-indigo-600 tabular-nums">{formatCurrency(totalDinero)}</span>
+                            <span className="text-[9px] text-slate-400 font-bold uppercase">{totalItems} productos · {totalUnidades} uds</span>
+                        </div>
+                    )}
                 </div>
-
-                {/* --- PASO 1: SELECCIONAR PROVEEDOR --- */}
+                {/* ─── PASO 1: PROVEEDOR ─────────────────────────────────── */}
                 {step === 1 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-ag-fade-in">
-                        <div className="space-y-6">
-                            <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">¿Quién trae la mercancía hoy?</h2>
-                            
-                            {/* Favoritos / Frecuentes */}
-                            <div className="grid grid-cols-2 gap-4">
-                                {proveedores.slice(0, 4).map(p => (
-                                    <button 
+                    <div className="space-y-4 animate-ag-fade-in max-w-2xl mx-auto w-full">
+                        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">¿Quién llega hoy?</h2>
+
+                        {/* Buscador */}
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Buscar proveedor..."
+                                value={busquedaProveedor}
+                                onChange={e => setBusquedaProveedor(e.target.value)}
+                                autoFocus
+                                className="w-full h-12 pl-9 pr-4 rounded-xl border-2 border-indigo-100 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
+                            />
+                        </div>
+
+                        {/* Lista de proveedores */}
+                        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                            {proveedoresFiltrados.length === 0 && (
+                                <div className="text-center py-8 text-slate-400 text-sm font-bold">Sin resultados</div>
+                            )}
+                            {proveedoresFiltrados.map((p, idx) => {
+                                const lastRec = recepciones
+                                    .filter(r => r.proveedorId === p.id)
+                                    .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
+                                const pedidosPend = prepedidosConfirmados.filter(pp => pp.proveedorId === p.id).length;
+                                return (
+                                    <button
                                         key={p.id}
                                         onClick={() => {
                                             setNewRecepcion(prev => ({ ...prev, proveedorId: p.id }));
+                                            setBusquedaProveedor('');
                                             setStep(2);
                                         }}
                                         className={cn(
-                                            "p-6 rounded-[2rem] border-2 transition-all flex flex-col items-center gap-3 group",
-                                            newRecepcion.proveedorId === p.id 
-                                                ? "border-indigo-500 bg-indigo-50/50 shadow-lg" 
-                                                : "border-slate-100 hover:border-indigo-200 bg-white hover:shadow-md"
+                                            "w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all hover:border-indigo-300 hover:shadow-sm bg-white dark:bg-slate-800",
+                                            newRecepcion.proveedorId === p.id ? "border-indigo-500 bg-indigo-50" : "border-slate-100"
                                         )}
                                     >
-                                        <div className="w-14 h-14 rounded-2xl bg-indigo-100 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                            <Package className="w-8 h-8 text-indigo-600" />
+                                        <div className={cn(
+                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0",
+                                            idx === 0 ? "bg-indigo-600 text-white" :
+                                            idx === 1 ? "bg-violet-100 text-violet-700" :
+                                            "bg-slate-100 text-slate-600"
+                                        )}>
+                                            {p.nombre.charAt(0).toUpperCase()}
                                         </div>
-                                        <span className="font-black text-sm text-center line-clamp-1">{p.nombre}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-black text-sm text-slate-900 dark:text-white truncate">{p.nombre}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold">
+                                                {lastRec
+                                                    ? `Últ. recepción: ${new Date(lastRec.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}`
+                                                    : 'Sin recepciones'}
+                                            </p>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {pedidosPend > 0 && (
+                                                <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                                    {pedidosPend} pedido{pedidosPend > 1 ? 's' : ''}
+                                                </span>
+                                            )}
+                                            <ArrowRight className="w-4 h-4 text-slate-300" />
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
+
+                {/* ─── PASO 2: FACTURA ───────────────────────────────────── */}
+                {step === 2 && (
+                    <div className="space-y-4 animate-ag-fade-in max-w-2xl mx-auto w-full">
+                        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">Datos de la factura</h2>
+
+                        {/* Pre-pedido pendiente — destacado */}
+                        {prepedidosPendientes.length > 0 && (
+                            <div className="p-4 rounded-2xl bg-blue-600 text-white space-y-3">
+                                <div className="flex items-center gap-2">
+                                    <GitCompareArrows className="w-4 h-4" />
+                                    <span className="text-xs font-black uppercase tracking-widest">
+                                        {prepedidosPendientes.length} pedido{prepedidosPendientes.length > 1 ? 's' : ''} pendiente{prepedidosPendientes.length > 1 ? 's' : ''}
+                                    </span>
+                                </div>
+                                {prepedidosPendientes.map(p => (
+                                    <button
+                                        key={p.id}
+                                        onClick={() => { handleVincularPrePedido(p.id); setStep(3); }}
+                                        className="w-full flex items-center justify-between bg-white/15 hover:bg-white/25 rounded-xl px-4 py-3 transition-colors"
+                                    >
+                                        <div className="text-left">
+                                            <p className="font-black text-sm">{p.nombre}</p>
+                                            <p className="text-xs text-blue-200">{p.items.length} productos · {formatCurrency(p.total)}</p>
+                                        </div>
+                                        <span className="text-xs font-black bg-white text-blue-600 px-3 py-1 rounded-lg">Cargar</span>
                                     </button>
                                 ))}
                             </div>
+                        )}
 
-                            <div className="space-y-2 p-6 rounded-[2rem] bg-slate-50 border border-slate-200">
-                                <Label className="text-[11px] font-black uppercase text-slate-400">O busca otro de la lista:</Label>
-                                <select
-                                    className="w-full h-14 p-4 rounded-xl border-none shadow-sm font-bold text-lg outline-none focus:ring-2 focus:ring-indigo-500"
-                                    value={newRecepcion.proveedorId}
-                                    onChange={e => {
-                                        setNewRecepcion(prev => ({ ...prev, proveedorId: e.target.value }));
-                                        if (e.target.value) setStep(2);
-                                    }}
-                                >
-                                    <option value="">Seleccionar de toda la lista...</option>
-                                    {proveedores.map(p => (
-                                        <option key={p.id} value={p.id}>{p.nombre}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
-
-                        <div className="bg-indigo-600 text-white p-8 rounded-[3rem] shadow-2xl shadow-indigo-500/30 flex flex-col justify-between overflow-hidden relative">
-                            <Bot className="absolute -right-10 -top-10 w-48 h-48 opacity-10 rotate-12" />
-                            <div className="space-y-4">
-                                <Badge className="bg-indigo-400/30 text-white border-none text-[10px] font-black uppercase tracking-widest px-3">Asistente Inteligente</Badge>
-                                <h3 className="text-3xl font-black leading-tight tracking-tight">Hola Jefe, seleccionemos el proveedor para registrar lo que llega.</h3>
-                                <p className="text-indigo-100 text-sm">Esto ayuda a mantener los precios de costo actualizados automáticamente.</p>
-                            </div>
-                            <div className="pt-8">
-                                <div className="p-4 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20">
-                                    <p className="text-[10px] font-bold uppercase tracking-widest text-indigo-200 mb-2">Consejo Dulce Placer</p>
-                                    <p className="text-xs">Si el proveedor es nuevo, puedes registrarlo después en el menú lateral.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* --- PASO 2: FACTURA O MODALIDAD --- */}
-                {step === 2 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 animate-ag-slide-up">
-                        <div className="space-y-6">
-                            <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">¿Trajeron factura impresa?</h2>
-                            
-                            <div className="grid grid-cols-1 gap-4">
-                                <Card 
-                                    className={cn(
-                                        "cursor-pointer hover:border-amber-400 border-2 transition-all overflow-hidden",
-                                        newRecepcion.imagenFactura ? "border-amber-400 bg-amber-50" : "border-slate-100"
-                                    )}
-                                    onClick={() => fileInputRef.current?.click()}
-                                >
-                                    <CardContent className="p-8 flex items-center gap-6">
-                                        <div className="w-20 h-20 rounded-[2rem] bg-amber-100 flex items-center justify-center shrink-0">
-                                            <Camera className="w-10 h-10 text-amber-600" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <h4 className="font-black text-lg text-slate-900">SÍ, Tomar Foto</h4>
-                                            <p className="text-sm text-slate-500">Ahorra tiempo: yo leo los productos por ti usando la cámara.</p>
-                                        </div>
-                                        {newRecepcion.imagenFactura && <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center text-white"><Check size={20} /></div>}
-                                    </CardContent>
-                                </Card>
-
-                                <Card 
-                                    className="cursor-pointer hover:border-indigo-400 border-2 transition-all"
-                                    onClick={() => setStep(3)}
-                                >
-                                    <CardContent className="p-8 flex items-center gap-6">
-                                        <div className="w-20 h-20 rounded-[2rem] bg-indigo-100 flex items-center justify-center shrink-0">
-                                            <ClipboardList className="w-10 h-10 text-indigo-600" />
-                                        </div>
-                                        <div className="flex-1">
-                                            <h4 className="font-black text-lg text-slate-900">NO, Ingreso Manual</h4>
-                                            <p className="text-sm text-slate-500">Perfecto para una entrada rápida de pocos productos.</p>
-                                        </div>
-                                        <ArrowRight className="w-6 h-6 text-slate-300" />
-                                    </CardContent>
-                                </Card>
-                            </div>
-
-                            {newRecepcion.imagenFactura && (
-                                <div className="p-6 rounded-[2rem] bg-indigo-50 border-2 border-indigo-200 animate-ag-fade-in space-y-4">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-black uppercase text-indigo-500">Foto de Factura Detectada</span>
-                                        <Button 
-                                            variant="ghost" 
-                                            size="sm" 
-                                            onClick={(e) => { e.stopPropagation(); setNewRecepcion(p => ({ ...p, imagenFactura: null })); }}
-                                            className="h-6 text-rose-500 hover:bg-rose-50"
-                                        >Eliminar</Button>
-                                    </div>
-                                    <div className="aspect-video rounded-xl overflow-hidden border">
-                                        <img src={newRecepcion.imagenFactura} className="w-full h-full object-cover" alt="Factura" />
-                                    </div>
-                                    <Button 
-                                        onClick={handleScanFactura} 
-                                        disabled={isScanning}
-                                        className="w-full h-14 bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest rounded-2xl shadow-xl shadow-indigo-600/30"
-                                    >
-                                        {isScanning ? (
-                                            <div className="flex items-center gap-3">
-                                                <Loader2 className="w-5 h-5 animate-spin" />
-                                                Leída al {scanProgress}%...
-                                            </div>
-                                        ) : (
-                                            <div className="flex items-center gap-3">
-                                                <Sparkles className="w-5 h-5" />
-                                                ¡Escanear Ahora!
-                                            </div>
-                                        )}
-                                    </Button>
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Número Factura</Label>
-                                    <Input 
-                                        value={newRecepcion.numeroFactura}
-                                        onChange={e => setNewRecepcion(p => ({ ...p, numeroFactura: e.target.value }))}
-                                        placeholder="Escribe el número aquí"
-                                        className="h-12 rounded-xl bg-slate-50 border-none font-bold"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Fecha Factura</Label>
-                                    <Input 
-                                        type="date"
-                                        value={newRecepcion.fechaFactura}
-                                        onChange={e => setNewRecepcion(p => ({ ...p, fechaFactura: e.target.value }))}
-                                        className="h-12 rounded-xl bg-slate-50 border-none font-bold"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Comparación Pre-Pedido */}
-                        <div className="space-y-6">
-                            {prepedidosConfirmados.some(p => p.proveedorId === newRecepcion.proveedorId) && (
-                                <div className="p-8 rounded-[3rem] bg-blue-600 text-white shadow-xl space-y-6">
-                                    <div>
-                                        <Badge className="bg-blue-400/50 border-none mb-3">Auditoría Activa</Badge>
-                                        <h3 className="text-2xl font-black leading-tight">Tienes un pedido pendiente con este proveedor.</h3>
-                                        <p className="text-blue-100 text-sm mt-2">¿Quieres cargarlo para comparar si trajeron lo que pediste?</p>
-                                    </div>
-                                    <div className="space-y-3">
-                                        {prepedidosConfirmados.filter(p => p.proveedorId === newRecepcion.proveedorId).map(p => (
-                                            <Button 
-                                                key={p.id}
-                                                variant="outline"
-                                                onClick={() => handleVincularPrePedido(p.id)}
-                                                className="w-full h-14 bg-white/10 hover:bg-white/20 border-white/30 text-white justify-between px-6 rounded-2xl"
-                                            >
-                                                <div className="text-left font-black">
-                                                    <p className="text-xs uppercase opacity-80">{p.nombre}</p>
-                                                    <p className="text-lg">{formatCurrency(p.total)}</p>
-                                                </div>
-                                                <GitCompareArrows className="w-6 h-6" />
-                                            </Button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
-                            
-                            <Button 
-                                onClick={() => setStep(3)}
-                                disabled={!newRecepcion.numeroFactura && !newRecepcion.imagenFactura}
-                                className="w-full h-16 bg-slate-900 hover:bg-black text-white rounded-[2rem] font-black text-lg uppercase tracking-tighter shadow-2xl transition-all hover:scale-[1.02]"
+                        {/* Cargar desde última recepción */}
+                        {ultimaRecepcionProv && (
+                            <button
+                                onClick={() => cargarUltimaRecepcion(newRecepcion.proveedorId)}
+                                className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all text-left"
                             >
-                                Siguiente Paso <ArrowRight className="ml-2 w-6 h-6" />
-                            </Button>
+                                <History className="w-5 h-5 text-slate-400 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black text-slate-700">Usar la última recepción como base</p>
+                                    <p className="text-[10px] text-slate-400">
+                                        {new Date(ultimaRecepcionProv.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}
+                                        · {ultimaRecepcionProv.items.length} productos · {formatCurrency(ultimaRecepcionProv.totalFactura)}
+                                    </p>
+                                </div>
+                                <ArrowRight className="w-4 h-4 text-slate-300 shrink-0" />
+                            </button>
+                        )}
+
+                        {/* Número + Fecha */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-slate-400">Nº Factura</Label>
+                                <Input
+                                    value={newRecepcion.numeroFactura}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, numeroFactura: e.target.value }))}
+                                    placeholder="Ej: F-2024-001"
+                                    className="h-12 rounded-xl bg-slate-50 border-slate-200 font-bold"
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase text-slate-400">Fecha Factura</Label>
+                                <Input
+                                    type="date"
+                                    value={newRecepcion.fechaFactura}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, fechaFactura: e.target.value }))}
+                                    className="h-12 rounded-xl bg-slate-50 border-slate-200 font-bold"
+                                />
+                            </div>
                         </div>
+
+                        {/* Foto de factura */}
+                        <div className={cn(
+                            "rounded-2xl border-2 overflow-hidden transition-all",
+                            newRecepcion.imagenFactura ? "border-amber-400" : "border-slate-100"
+                        )}>
+                            {newRecepcion.imagenFactura ? (
+                                <div className="p-4 bg-amber-50 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black uppercase text-amber-600 flex items-center gap-1.5">
+                                            <Camera className="w-3.5 h-3.5" /> Foto cargada
+                                        </span>
+                                        <button onClick={() => setNewRecepcion(p => ({ ...p, imagenFactura: null }))}
+                                            className="text-[10px] font-black text-rose-500 hover:text-rose-700">Quitar</button>
+                                    </div>
+                                    <img src={newRecepcion.imagenFactura} className="w-full max-h-40 object-contain rounded-xl" alt="Factura" />
+                                    <button
+                                        onClick={handleScanFactura}
+                                        disabled={isScanning}
+                                        className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
+                                    >
+                                        {isScanning ? <><Loader2 className="w-4 h-4 animate-spin" /> Escaneando {scanProgress}%...</> : <><Sparkles className="w-4 h-4" /> Escanear con IA</>}
+                                    </button>
+                                </div>
+                            ) : (
+                                <button onClick={() => fileInputRef.current?.click()}
+                                    className="w-full p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors"
+                                >
+                                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+                                        <Camera className="w-5 h-5 text-amber-600" />
+                                    </div>
+                                    <div className="text-left flex-1">
+                                        <p className="font-black text-sm text-slate-800">Tomar foto de la factura</p>
+                                        <p className="text-xs text-slate-400">Opcional · La IA puede leer los productos automáticamente</p>
+                                    </div>
+                                    <Plus className="w-4 h-4 text-slate-300 shrink-0" />
+                                </button>
+                            )}
+                        </div>
+
+                        {/* CTA */}
+                        <button
+                            onClick={() => setStep(3)}
+                            className="w-full h-13 py-3.5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg"
+                        >
+                            {newRecepcion.items.length > 0
+                                ? <><Package className="w-4 h-4" /> Ver lista de productos ({newRecepcion.items.length})</>
+                                : <><Plus className="w-4 h-4" /> Agregar productos</>
+                            } <ArrowRight className="w-4 h-4" />
+                        </button>
                     </div>
                 )}
 
-                {/* --- PASO 3: LISTA DE PRODUCTOS --- */}
+                {/* ─── PASO 3: LISTA DE PRODUCTOS (MODO RÁPIDO) ─────────── */}
                 {step === 3 && (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-ag-slide-up">
-                        <div className="lg:col-span-2 space-y-6">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                                    Lista de Mercancía 
-                                    <Badge className="bg-indigo-100 text-indigo-600 border-none">{newRecepcion.items.length} productos</Badge>
-                                </h2>
-                                <div className="flex gap-2">
-                                    <select
-                                        className="h-12 p-3 rounded-xl border-2 border-indigo-100 bg-white font-bold text-sm min-w-[200px]"
-                                        onChange={(e) => {
-                                            if (e.target.value) {
-                                                handleAddItem(e.target.value);
-                                                e.target.value = '';
-                                            }
-                                        }}
-                                    >
-                                        <option value="">+ Añadir Producto</option>
-                                        {productos.sort((a,b)=>a.nombre.localeCompare(b.nombre)).map(p => (
-                                            <option key={p.id} value={p.id}>{p.nombre}</option>
-                                        ))}
-                                    </select>
-                                    <Button 
-                                        variant="outline" 
-                                        onClick={() => setIsProductModalOpen(true)}
-                                        className="h-12 px-4 rounded-xl border-2 border-indigo-100 text-indigo-600 font-black uppercase text-[10px]"
-                                    >Nuevo Producto</Button>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                {newRecepcion.items.length === 0 ? (
-                                    <div className="p-16 border-4 border-dashed rounded-[3rem] bg-slate-50 text-center space-y-4">
-                                        <div className="w-20 h-20 rounded-[2rem] bg-white shadow-sm flex items-center justify-center mx-auto">
-                                            <Package className="w-10 h-10 text-slate-300" />
-                                        </div>
-                                        <p className="font-bold text-slate-500 uppercase tracking-widest text-sm">Empieza agregando lo que llegó</p>
-                                    </div>
-                                ) : (
-                                    newRecepcion.items.map((item) => {
-                                        const prod = getProductoById(item.productoId);
-                                        const inflacion = prod?.costoBase ? ((item.precioFacturado / prod.costoBase) - 1) * 100 : 0;
-                                        return (
-                                            <Card key={item.id} className="p-6 border-2 rounded-[2rem] hover:shadow-xl transition-all group overflow-hidden relative">
-                                                {inflacion > 5 && <div className="absolute top-0 right-0 p-2 bg-rose-500 text-white font-black text-[9px] px-3 rounded-bl-xl uppercase tracking-tighter animate-pulse">¡Subió de Precio!</div>}
-                                                <div className="flex flex-col md:flex-row gap-6">
-                                                    <div className="flex-1 space-y-4">
-                                                        <div className="flex items-center justify-between">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center font-black text-indigo-600">
-                                                                    {newRecepcion.items.indexOf(item) + 1}
-                                                                </div>
-                                                                <h4 className="font-black text-lg text-slate-900 dark:text-slate-100 uppercase tracking-tighter">{prod?.nombre}</h4>
-                                                            </div>
-                                                            <Button 
-                                                                variant="ghost" 
-                                                                size="icon" 
-                                                                onClick={() => setNewRecepcion(p => ({ ...p, items: p.items.filter(i => i.id !== item.id) }))}
-                                                                className="rounded-full text-slate-300 hover:text-rose-500 hover:bg-rose-50"
-                                                            >
-                                                                <X className="w-5 h-5" />
-                                                            </Button>
-                                                        </div>
-
-                                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                                            <div className="space-y-1.5">
-                                                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">¿Cuánto llegó?</Label>
-                                                                <Input 
-                                                                    type="number"
-                                                                    value={item.cantidadRecibida || ''}
-                                                                    onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseFloat(e.target.value) || 0 })}
-                                                                    className="h-12 rounded-xl bg-slate-50 border-none font-black text-lg text-center"
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1.5">
-                                                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Precio Unitario</Label>
-                                                                <Input 
-                                                                    type="number"
-                                                                    value={item.precioFacturado || ''}
-                                                                    onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
-                                                                    className={cn(
-                                                                        "h-12 rounded-xl border-none font-black text-lg text-center",
-                                                                        inflacion > 5 ? "bg-rose-100 text-rose-700" : "bg-emerald-50 text-emerald-700"
-                                                                    )}
-                                                                />
-                                                            </div>
-                                                            <div className="flex flex-col justify-end">
-                                                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1 mb-1.5 text-center">Revisión Física</Label>
-                                                                <div className="flex gap-2 h-12">
-                                                                    <button 
-                                                                        onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
-                                                                        className={cn(
-                                                                            "flex-1 rounded-xl flex items-center justify-center transition-all",
-                                                                            item.productoOk ? "bg-emerald-500 text-white shadow-lg" : "bg-slate-100 text-slate-400"
-                                                                        )}
-                                                                    ><Check size={20} /></button>
-                                                                    <button 
-                                                                        onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
-                                                                        className={cn(
-                                                                            "flex-1 rounded-xl flex items-center justify-center transition-all",
-                                                                            !item.productoOk ? "bg-rose-500 text-white shadow-lg" : "bg-slate-100 text-slate-400"
-                                                                        )}
-                                                                    ><AlertTriangle size={20}/></button>
-                                                                </div>
-                                                            </div>
-                                                            <div className="space-y-1.5">
-                                                                <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">Subtotal</Label>
-                                                                <div className="h-12 rounded-xl bg-slate-900 flex items-center justify-center font-black text-white text-md">
-                                                                    {formatCurrency(item.cantidadRecibida * item.precioFacturado)}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                        {!item.productoOk && (
-                                                            <div className="animate-ag-fade-in">
-                                                                <Input 
-                                                                    placeholder="Escribe aquí la novedad (ej: faltante, dañado)..."
-                                                                    value={item.observaciones || ''}
-                                                                    onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
-                                                                    className="h-10 rounded-xl bg-rose-50 border-rose-100 text-rose-600 text-xs font-bold"
-                                                                />
-                                                            </div>
-                                                        )}
-                                                    </div>
+                    <div className="space-y-3 animate-ag-slide-up">
+                        {/* Buscador de producto + botón nuevo */}
+                        <div className="flex gap-2">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar producto para agregar..."
+                                    value={busquedaProducto}
+                                    onChange={e => { setBusquedaProducto(e.target.value); setMostrarDropProducto(true); }}
+                                    onFocus={() => setMostrarDropProducto(true)}
+                                    className="w-full h-11 pl-9 pr-4 rounded-xl border-2 border-indigo-100 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
+                                />
+                                {/* Dropdown de sugerencias */}
+                                {mostrarDropProducto && productosFiltradosAutocomplete.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
+                                        {productosFiltradosAutocomplete.map(p => (
+                                            <button
+                                                key={p.id}
+                                                onMouseDown={e => e.preventDefault()}
+                                                onClick={() => {
+                                                    handleAddItem(p.id);
+                                                    setBusquedaProducto('');
+                                                    setMostrarDropProducto(false);
+                                                }}
+                                                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 text-left transition-colors"
+                                            >
+                                                <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
+                                                    <Package className="w-3.5 h-3.5 text-indigo-600" />
                                                 </div>
-                                            </Card>
-                                        )
-                                    })
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-black text-xs text-slate-800 truncate">{p.nombre}</p>
+                                                    <p className="text-[9px] text-slate-400 font-bold">{p.categoria || 'Sin categoría'}{p.costoBase ? ` · ${formatCurrency(p.costoBase)}` : ''}</p>
+                                                </div>
+                                                <Plus className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                                            </button>
+                                        ))}
+                                    </div>
                                 )}
                             </div>
+                            <button
+                                onClick={() => setIsProductModalOpen(true)}
+                                className="h-11 px-3 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 flex items-center gap-1.5 text-xs font-black transition-all shrink-0"
+                            >
+                                <Plus className="w-3.5 h-3.5" /> Nuevo
+                            </button>
                         </div>
 
-                        <div className="space-y-6">
-                            <Card className="p-8 rounded-[3rem] bg-indigo-600 text-white shadow-2xl border-none h-fit">
-                                <CardHeader className="p-0 mb-6">
-                                    <h3 className="text-2xl font-black uppercase tracking-tighter">Resumen Actual</h3>
-                                </CardHeader>
-                                <CardContent className="p-0 space-y-6">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="p-4 rounded-3xl bg-white/10 flex flex-col items-center">
-                                            <span className="text-[10px] font-black uppercase text-indigo-200">Productos</span>
-                                            <span className="text-3xl font-black">{totalItems}</span>
+                        {/* Leyenda de columnas (solo desktop) */}
+                        {newRecepcion.items.length > 0 && (
+                            <div className="hidden md:grid grid-cols-[24px_1fr_auto_100px_32px_32px_80px_28px] gap-2 px-3 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                                <span>#</span>
+                                <span>Producto</span>
+                                <span>Ant.</span>
+                                <span className="text-center">Cantidad</span>
+                                <span className="text-center">Prod</span>
+                                <span className="text-center">Emb</span>
+                                <span className="text-right">Subtotal</span>
+                                <span />
+                            </div>
+                        )}
+
+                        {/* Filas compactas */}
+                        <div className="space-y-1.5" onClick={() => setMostrarDropProducto(false)}>
+                            {newRecepcion.items.length === 0 ? (
+                                <div className="py-12 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center gap-3 text-slate-400">
+                                    <Package className="w-10 h-10 opacity-30" />
+                                    <p className="text-sm font-bold">Busca arriba o toca para agregar productos</p>
+                                </div>
+                            ) : (
+                                newRecepcion.items.map((item, idx) => {
+                                    const prod = getProductoById(item.productoId);
+                                    const precioAnt = prod?.costoBase || 0;
+                                    const diff = precioAnt > 0 ? ((item.precioFacturado - precioAnt) / precioAnt) * 100 : 0;
+                                    const subio = diff > 5;
+                                    const bajo = diff < -2;
+                                    return (
+                                        <div key={item.id} className={cn(
+                                            "flex flex-wrap md:flex-nowrap items-center gap-2 p-2.5 rounded-2xl border transition-all",
+                                            subio ? "bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-800" :
+                                            bajo ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800" :
+                                            !item.productoOk || !item.embalajeOk ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20" :
+                                            "bg-white dark:bg-slate-800 border-slate-100 hover:border-indigo-200"
+                                        )}>
+                                            {/* Número */}
+                                            <span className="w-6 text-xs font-black text-slate-400 text-center shrink-0">{idx + 1}</span>
+
+                                            {/* Nombre + precio anterior */}
+                                            <div className="flex-1 min-w-[110px]">
+                                                <p className="font-black text-sm text-slate-800 dark:text-white truncate leading-tight">{prod?.nombre || '??'}</p>
+                                                {precioAnt > 0 && (
+                                                    <p className={cn("text-[9px] font-bold tabular-nums",
+                                                        subio ? "text-rose-500" : bajo ? "text-emerald-600" : "text-slate-400"
+                                                    )}>
+                                                        Ant: {formatCurrency(precioAnt)}
+                                                        {Math.abs(diff) > 2 && <span className="ml-1 font-black">{diff > 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%</span>}
+                                                    </p>
+                                                )}
+                                            </div>
+
+                                            {/* Precio */}
+                                            <input
+                                                type="number"
+                                                value={item.precioFacturado || ''}
+                                                onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
+                                                placeholder="Precio"
+                                                className={cn(
+                                                    "w-24 h-9 rounded-xl px-2 text-center font-black text-sm outline-none border transition-colors",
+                                                    subio ? "bg-rose-100 border-rose-200 text-rose-700" :
+                                                    bajo ? "bg-emerald-100 border-emerald-200 text-emerald-700" :
+                                                    "bg-slate-50 border-slate-200"
+                                                )}
+                                            />
+
+                                            {/* Stepper cantidad */}
+                                            <div className="flex items-center bg-slate-100 dark:bg-slate-700 rounded-xl overflow-hidden shrink-0">
+                                                <button
+                                                    onClick={() => handleUpdateItem(item.id, { cantidadRecibida: Math.max(0, item.cantidadRecibida - 1) })}
+                                                    className="w-8 h-9 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 font-black transition-colors text-lg leading-none"
+                                                >−</button>
+                                                <input
+                                                    type="number"
+                                                    value={item.cantidadRecibida || ''}
+                                                    onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseFloat(e.target.value) || 0 })}
+                                                    className="w-10 h-9 bg-transparent text-center font-black text-sm outline-none"
+                                                />
+                                                <button
+                                                    onClick={() => handleUpdateItem(item.id, { cantidadRecibida: item.cantidadRecibida + 1 })}
+                                                    className="w-8 h-9 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 font-black transition-colors text-lg leading-none"
+                                                >+</button>
+                                            </div>
+
+                                            {/* Producto OK */}
+                                            <button
+                                                onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
+                                                className={cn(
+                                                    "w-8 h-9 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0",
+                                                    item.productoOk ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "bg-rose-100 text-rose-600 hover:bg-rose-200"
+                                                )}
+                                                title="Estado del producto"
+                                            >
+                                                {item.productoOk ? <Check className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                                            </button>
+
+                                            {/* Embalaje OK */}
+                                            <button
+                                                onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })}
+                                                className={cn(
+                                                    "w-8 h-9 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0",
+                                                    item.embalajeOk ? "bg-sky-100 text-sky-700 hover:bg-sky-200" : "bg-amber-100 text-amber-600 hover:bg-amber-200"
+                                                )}
+                                                title="Estado del embalaje"
+                                            >
+                                                <Package className="w-3.5 h-3.5" />
+                                            </button>
+
+                                            {/* Subtotal */}
+                                            <span className="w-20 text-right font-black text-sm tabular-nums shrink-0 hidden sm:block">
+                                                {item.precioFacturado > 0 && item.cantidadRecibida > 0
+                                                    ? formatCurrency(item.cantidadRecibida * item.precioFacturado)
+                                                    : '—'}
+                                            </span>
+
+                                            {/* Eliminar */}
+                                            <button
+                                                onClick={() => setNewRecepcion(p => ({ ...p, items: p.items.filter(i => i.id !== item.id) }))}
+                                                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all shrink-0"
+                                            ><X className="w-3.5 h-3.5" /></button>
+
+                                            {/* Novedad expandida */}
+                                            {(!item.productoOk || !item.embalajeOk) && (
+                                                <input
+                                                    placeholder={`Novedad: ${!item.productoOk ? 'producto' : ''}${!item.productoOk && !item.embalajeOk ? ' · ' : ''}${!item.embalajeOk ? 'embalaje' : ''}...`}
+                                                    value={item.observaciones || ''}
+                                                    onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
+                                                    className="w-full h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 px-3 text-xs font-bold outline-none col-span-full"
+                                                />
+                                            )}
                                         </div>
-                                        <div className="p-4 rounded-3xl bg-white/10 flex flex-col items-center">
-                                            <span className="text-[10px] font-black uppercase text-indigo-200">Unidades</span>
-                                            <span className="text-3xl font-black">{totalUnidades}</span>
-                                        </div>
-                                    </div>
-                                    <div className="p-6 rounded-3xl bg-white/10 border border-white/20 text-center">
-                                        <span className="text-[10px] font-black uppercase text-indigo-200 block mb-1">Inversión Total</span>
-                                        <span className="text-4xl font-black tabular-nums">{formatCurrency(totalDinero)}</span>
-                                    </div>
-                                    <div className="space-y-3 pt-4">
-                                        <Label className="text-[10px] font-black uppercase text-indigo-200 ml-1">Notas de Recepción</Label>
-                                        <textarea
-                                            value={newRecepcion.observaciones}
-                                            onChange={e => setNewRecepcion(p => ({ ...p, observaciones: e.target.value }))}
-                                            placeholder="Cualquier aclaración sobre la entrega..."
-                                            className="w-full min-h-[100px] p-4 rounded-2xl bg-white/10 border border-white/20 text-sm placeholder:text-white/40 outline-none"
-                                        />
-                                    </div>
-                                    <Button 
-                                        onClick={() => setStep(4)}
-                                        disabled={newRecepcion.items.length === 0}
-                                        className="w-full h-16 bg-white text-indigo-600 hover:bg-indigo-50 rounded-[2rem] font-black text-lg uppercase tracking-tighter shadow-xl transition-all"
-                                    >
-                                        Siguiente Paso <ArrowRight className="ml-2 w-6 h-6" />
-                                    </Button>
-                                </CardContent>
-                            </Card>
+                                    );
+                                })
+                            )}
                         </div>
+
+                        {/* Barra inferior sticky con totales + CTA */}
+                        {newRecepcion.items.length > 0 && (
+                            <div className="sticky bottom-4 bg-indigo-600 text-white rounded-2xl p-4 flex items-center justify-between gap-4 shadow-xl shadow-indigo-600/30">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase text-indigo-200">Total · {totalItems} prod · {totalUnidades} uds</p>
+                                    <p className="text-xl font-black tabular-nums">{formatCurrency(totalDinero)}</p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <textarea
+                                        value={newRecepcion.observaciones}
+                                        onChange={e => setNewRecepcion(p => ({ ...p, observaciones: e.target.value }))}
+                                        placeholder="Notas..."
+                                        rows={1}
+                                        className="hidden sm:block h-10 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-xs placeholder:text-white/40 outline-none resize-none w-40"
+                                    />
+                                    <button
+                                        onClick={() => { setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.id))); setStep(4); }}
+                                        className="h-10 px-5 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-colors"
+                                    >
+                                        Confirmar <ArrowRight className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
