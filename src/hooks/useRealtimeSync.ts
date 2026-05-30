@@ -341,10 +341,16 @@ export function useRealtimeSync() {
         i.id && !localIds.has(i.id) && !tombstoneSet.has(i.id),
       );
       // Items que YA existen localmente pero Supabase tiene versión MÁS NUEVA → actualizar
-      // (solo para tablas con updatedAt — productos, proveedores, precios)
-      const actualizados = (['productos', 'proveedores', 'precios'].includes(table))
+      const actualizados = (['productos', 'proveedores', 'precios', 'inventario'].includes(table))
         ? supabaseItems.filter((remote: any) => {
             if (!remote.id || !localIds.has(remote.id) || tombstoneSet.has(remote.id)) return false;
+            if (table === 'inventario') {
+              // Inventario no tiene updatedAt — comparar stockActual y stockMinimo
+              const localItem = localItems.find((l: any) => l.id === remote.id);
+              return !localItem
+                || remote.stockActual !== localItem.stockActual
+                || remote.stockMinimo  !== localItem.stockMinimo;
+            }
             const localTs  = new Date(localTsMap.get(remote.id) ?? 0).getTime();
             const remoteTs = new Date(remote.updatedAt ?? remote.createdAt ?? 0).getTime();
             return remoteTs > localTs; // Supabase más nuevo → actualizar local
@@ -373,6 +379,10 @@ export function useRealtimeSync() {
             eventType: 'MANUAL', id: 'manual', timestamp: Date.now(),
           }];
         });
+        // Notificar listeners locales (ej: useInventario recarga el estado de React)
+        window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+          detail: { table, eventType: 'MANUAL', id: 'manual' },
+        }));
       }
     }
     // Limpiar IDs de syncNow después de 30s — suficiente para que lleguen todos los ecos

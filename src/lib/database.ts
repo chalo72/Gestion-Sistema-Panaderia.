@@ -499,7 +499,12 @@ class NexusDatabase implements IDatabase {
   async getAllClientes() { return this.adapter.getCollection('clientes'); }
   async addCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
   async updateCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
-  async deleteCliente(id: string) { return this._delete('clientes', id); }
+  async deleteCliente(id: string) {
+    // No propagar a Firebase — Firebase conserva la copia como backup.
+    // Tombstone evita que el sync restaure al cliente eliminado.
+    await this.addTombstone('clientes', id).catch(() => {});
+    return localAdapter.deleteDocument('clientes', id);
+  }
 
   // Finanzas
 
