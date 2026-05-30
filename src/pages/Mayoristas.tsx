@@ -1215,6 +1215,90 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         toast.success(`Lista de precios exportada${clienteSeleccionado ? ` para ${clienteSeleccionado.nombre}` : ''}`);
     };
 
+    // ── Exportar historial del cliente a PDF ──────────────────────────────────
+    const exportarHistorialPDF = (nombreCliente: string, tickets: typeof historialUnificado) => {
+        const fmt = (n: number) => formatCurrency(n);
+        const fmtFecha = (ms: number) => new Date(ms).toLocaleDateString('es', {
+            weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+        });
+        const totalGeneral = tickets.reduce((s, t) => s + t.total, 0);
+        const totalAbonado = tickets.reduce((s, t) => s + (t.abonos ?? []).reduce((a, b) => a + b.monto, 0), 0);
+        const totalPendiente = totalGeneral - totalAbonado;
+        const metodoBadgeLabel: Record<string, string> = { efectivo: 'Efectivo', nequi: 'Nequi', credito: 'Crédito' };
+        const filas = tickets.map(h => {
+            const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+            const saldo = h.total - abonado;
+            const metodo = metodoBadgeLabel[h.metodoPago ?? 'efectivo'] ?? (h.metodoPago ?? '');
+            const items = h.items.map(i => `${i.cantidad}× ${i.nombre} &mdash; ${fmt(i.precio * i.cantidad)}`).join('<br>');
+            const estadoCred = h.metodoPago === 'credito'
+                ? (saldo > 0
+                    ? `<span style="color:#dc2626;font-weight:700">Debe: ${fmt(saldo)}</span>`
+                    : `<span style="color:#16a34a;font-weight:700">✓ Pagado</span>`)
+                : `<span style="color:#16a34a;font-weight:700">Pagado</span>`;
+            return `<tr>
+              <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#475569;white-space:nowrap">${fmtFecha(h.fecha)}</td>
+              <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:11px;line-height:1.5">${items || '—'}</td>
+              <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;font-weight:900;white-space:nowrap">${fmt(h.total)}</td>
+              <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:11px;text-align:center;white-space:nowrap">${metodo}</td>
+              <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:11px;text-align:right;white-space:nowrap">${estadoCred}</td>
+            </tr>`;
+        }).join('');
+        const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Historial — ${nombreCliente}</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,sans-serif;margin:24px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h1{font-size:20px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;margin:0}
+  .sub{font-size:11px;color:#64748b;margin-top:2px}
+  .kpi-row{display:flex;gap:12px;margin:14px 0;flex-wrap:wrap}
+  .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;flex:1;min-width:120px}
+  .kpi-label{font-size:9px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.08em}
+  .kpi-value{font-size:18px;font-weight:900;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-top:14px}
+  th{background:#1e293b;color:white;padding:8px 6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:left}
+  tr:nth-child(even) td{background:#f8fafc}
+  @media print{body{margin:10px}button{display:none}}
+</style>
+</head>
+<body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start">
+  <div>
+    <h1>Historial de Cliente</h1>
+    <p class="sub">Panadería Dulce Placer &middot; Módulo Mayoristas</p>
+  </div>
+  <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;border-radius:8px;padding:8px 18px;font-weight:700;font-size:12px;cursor:pointer">Imprimir / PDF</button>
+</div>
+<h2 style="font-size:16px;margin:14px 0 2px">${nombreCliente}</h2>
+<p class="sub">Generado el ${new Date().toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">Total facturado</div><div class="kpi-value">${fmt(totalGeneral)}</div></div>
+  <div class="kpi"><div class="kpi-label">Total abonado</div><div class="kpi-value" style="color:#16a34a">${fmt(totalAbonado)}</div></div>
+  <div class="kpi"><div class="kpi-label">Saldo pendiente</div><div class="kpi-value" style="color:${totalPendiente > 0 ? '#dc2626' : '#16a34a'}">${fmt(totalPendiente)}</div></div>
+  <div class="kpi"><div class="kpi-label">Tickets</div><div class="kpi-value">${tickets.length}</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>Fecha</th><th>Productos</th>
+    <th style="text-align:right">Total</th>
+    <th style="text-align:center">Método</th>
+    <th style="text-align:right">Estado</th>
+  </tr></thead>
+  <tbody>${filas}</tbody>
+</table>
+</body>
+</html>`;
+        const win = window.open('', '_blank', 'width=860,height=680');
+        if (!win) { toast.error('Habilita ventanas emergentes para exportar PDF'); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 400);
+    };
+
     // ── Consolidar Historial Local y Centralizado para la UI ──
     const historialUnificado = useMemo(() => {
         // Normaliza cualquier fecha (number | ISO string | legacy) a timestamp ms
@@ -2955,10 +3039,21 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             <Dialog open={verHistorial} onOpenChange={v => { setVerHistorial(v); if (!v) { setAbonandoId(null); setMontoAbono(''); } }}>
                 <DialogContent className="max-w-lg rounded-3xl max-h-[85vh] flex flex-col">
                     <DialogHeader className="shrink-0">
-                        <DialogTitle className="font-black uppercase tracking-tight flex items-center gap-2">
-                            <History className="w-5 h-5 text-indigo-600" />
-                            Historial — {cliente.nombre}
-                        </DialogTitle>
+                        <div className="flex items-center justify-between gap-2">
+                            <DialogTitle className="font-black uppercase tracking-tight flex items-center gap-2">
+                                <History className="w-5 h-5 text-indigo-600" />
+                                Historial — {cliente.nombre}
+                            </DialogTitle>
+                            {historialUnificado.filter(h => h.clienteId === cliente.id).length > 0 && (
+                                <button
+                                    onClick={() => exportarHistorialPDF(cliente.nombre, historialUnificado.filter(h => h.clienteId === cliente.id))}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-[10px] font-black uppercase tracking-widest transition-colors shrink-0"
+                                    title="Exportar a PDF"
+                                >
+                                    <Printer className="w-3.5 h-3.5" /> PDF
+                                </button>
+                            )}
+                        </div>
                     </DialogHeader>
                     <div className="overflow-y-auto flex-1 space-y-3 py-2 pr-1">
                         {historialUnificado.filter(h => h.clienteId === cliente.id).length === 0 ? (
