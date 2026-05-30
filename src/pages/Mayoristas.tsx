@@ -8,7 +8,7 @@ import {
     ShieldCheck, Percent, ArrowRight, ShoppingCart, ArrowLeft, Search, UserCheck,
     Minus, Receipt, Banknote, Clock, PlayCircle, Camera, History, ImageIcon,
     Smartphone, CreditCard, PlusCircle, ChevronRight, Folder, Building2, Edit2,
-    MessageCircle, StickyNote, Send, ChevronLeft, Star
+    MessageCircle, StickyNote, Send, ChevronLeft, Star, Printer
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
