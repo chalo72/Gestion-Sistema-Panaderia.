@@ -596,6 +596,15 @@ export default function Recepciones({
             const saved = await onAddRecepcion(recepcionData);
             await onConfirmarRecepcion(saved);
 
+            // === ACTUALIZAR COSTOS SELECCIONADOS EN EL CATÁLOGO ===
+            if (preciosAActualizar.size > 0) {
+                await Promise.all(
+                    newRecepcion.items
+                        .filter(item => preciosAActualizar.has(item.productoId))
+                        .map(item => onUpdateProducto(item.productoId, { costoBase: Math.round(item.precioFacturado * 100) / 100 }))
+                );
+            }
+
             // === GUARDAR FACTURA EN ARCHIVO SI HAY IMAGEN ===
             if (newRecepcion.imagenFactura) {
                 await guardarFacturaEnArchivo(saved, newRecepcion.imagenFactura);
@@ -613,7 +622,7 @@ export default function Recepciones({
                     <div className="text-xs text-muted-foreground space-y-0.5">
                         <p>✓ {newRecepcion.items.length} productos procesados</p>
                         <p>✓ {totalItems} unidades agregadas a inventario</p>
-                        <p>✓ Precios de costo actualizados</p>
+                        {preciosAActualizar.size > 0 && <p>✓ {preciosAActualizar.size} precios de costo actualizados</p>}
                         {newRecepcion.imagenFactura && <p>✓ Factura guardada en archivo</p>}
                         <p className="text-emerald-600 font-medium">→ Productos listos para vender</p>
                     </div>
@@ -1313,7 +1322,7 @@ export default function Recepciones({
                                         className="hidden sm:block h-10 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-xs placeholder:text-white/40 outline-none resize-none w-40"
                                     />
                                     <button
-                                        onClick={() => { setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.id))); setStep(4); }}
+                                        onClick={() => { setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.productoId))); setStep(4); }}
                                         className="h-10 px-5 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-colors"
                                     >
                                         Confirmar <ArrowRight className="w-3.5 h-3.5" />
@@ -1324,68 +1333,141 @@ export default function Recepciones({
                     </div>
                 )}
 
-                {/* --- PASO 4: CONFIRMAR TICKET --- */}
+                {/* --- PASO 4: CONFIRMAR Y SINCRONIZAR --- */}
                 {step === 4 && (
-                    <div className="max-w-2xl mx-auto animate-ag-slide-up">
-                        <Card className="rounded-[3rem] border-4 border-indigo-50 bg-white overflow-hidden shadow-2xl relative">
-                            <div className="absolute top-0 left-0 right-0 h-4 bg-indigo-600"></div>
-                            <CardHeader className="text-center p-12 pb-6">
-                                <div className="w-20 h-20 rounded-full bg-indigo-100 flex items-center justify-center mx-auto mb-6 text-indigo-600">
-                                    <CheckCircle size={48} />
-                                </div>
-                                <h3 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Confirmar Recibo</h3>
-                                <p className="text-sm text-slate-500 font-medium">Revisa que todo esté correcto antes de guardar en el inventario.</p>
-                            </CardHeader>
+                    <div className="max-w-2xl mx-auto animate-ag-slide-up space-y-4 pb-8">
 
-                            <CardContent className="p-12 pt-0 space-y-8">
-                                <div className="space-y-4 p-8 rounded-[2rem] bg-slate-50 border border-slate-100">
-                                    <div className="flex justify-between items-center text-sm border-b border-slate-200 pb-3">
-                                        <span className="font-bold text-slate-400 uppercase tracking-widest">Proveedor</span>
-                                        <span className="font-black text-slate-800">{proveedores.find(p => p.id === newRecepcion.proveedorId)?.nombre}</span>
+                        {/* Resumen de la recepción */}
+                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                            <div className="h-1.5 bg-indigo-600" />
+                            <div className="p-5 space-y-3">
+                                <p className="text-[10px] font-black uppercase text-indigo-500 tracking-[0.2em]">Resumen de Recepción</p>
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Proveedor</span>
+                                        <span className="font-black text-slate-800 truncate">{proveedorActual?.nombre ?? '—'}</span>
                                     </div>
-                                    <div className="flex justify-between items-center text-sm border-b border-slate-200 pb-3">
-                                        <span className="font-bold text-slate-400 uppercase tracking-widest">Nº Factura</span>
-                                        <span className="font-black text-slate-800">{newRecepcion.numeroFactura || 'Ingreso Rápido'}</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Nº Factura</span>
+                                        <span className="font-black text-slate-800">{newRecepcion.numeroFactura || <span className="text-slate-400 font-medium italic">Sin número</span>}</span>
                                     </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                        <span className="font-bold text-slate-400 uppercase tracking-widest">Fecha Recibido</span>
-                                        <span className="font-black text-slate-800">{new Date().toLocaleDateString('es-CO')}</span>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Fecha</span>
+                                        <span className="font-black text-slate-800">{newRecepcion.fechaRecepcion ? new Date(newRecepcion.fechaRecepcion + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('es-CO')}</span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Productos</span>
+                                        <span className="font-black text-slate-800">{newRecepcion.items.length} ítems · {newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0)} uds</span>
                                     </div>
                                 </div>
-
-                                <div className="space-y-3">
-                                    <span className="text-[10px] font-black uppercase text-indigo-500 tracking-[0.2em] ml-2">Resumen de Mercancía</span>
-                                    <div className="space-y-2">
-                                        {newRecepcion.items.map((item, idx) => (
-                                            <div key={idx} className="flex justify-between items-center p-3 px-4 bg-slate-50 rounded-xl">
-                                                <div className="flex gap-2 items-center">
-                                                    <span className="text-[10px] font-black text-indigo-600">{item.cantidadRecibida}x</span>
-                                                    <span className="text-xs font-bold uppercase truncate max-w-[200px]">{getProductoById(item.productoId)?.nombre}</span>
+                                {/* Mini-lista de ítems */}
+                                <div className="border-t border-slate-100 pt-3 space-y-1.5 max-h-40 overflow-y-auto">
+                                    {newRecepcion.items.map((item, idx) => {
+                                        const prod = getProductoById(item.productoId);
+                                        return (
+                                            <div key={idx} className="flex justify-between items-center text-xs">
+                                                <div className="flex gap-2 items-center min-w-0">
+                                                    <span className="font-black text-indigo-500 shrink-0">{item.cantidadRecibida}×</span>
+                                                    <span className="font-semibold text-slate-700 truncate">{prod?.nombre ?? item.productoId}</span>
                                                 </div>
-                                                <span className="text-xs font-black tabular-nums">{formatCurrency(item.cantidadRecibida * item.precioFacturado)}</span>
+                                                <span className="font-black tabular-nums text-slate-800 shrink-0 ml-2">{formatCurrency(item.cantidadRecibida * item.precioFacturado)}</span>
                                             </div>
-                                        ))}
+                                        );
+                                    })}
+                                </div>
+                                {/* Total */}
+                                <div className="border-t border-indigo-100 pt-3 flex justify-between items-center">
+                                    <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Total Facturado</span>
+                                    <span className="text-2xl font-black tabular-nums text-indigo-600">{formatCurrency(totalDinero)}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Cambios de precio detectados */}
+                        {cambiosPrecio.length > 0 && (
+                            <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+                                <div className="h-1.5 bg-amber-400" />
+                                <div className="p-5 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-amber-500">⚠️</span>
+                                            <p className="text-[10px] font-black uppercase text-amber-600 tracking-[0.2em]">Cambios de Precio Detectados</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.productoId)))}
+                                                className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                                            >Actualizar todos</button>
+                                            <button
+                                                onClick={() => setPreciosAActualizar(new Set())}
+                                                className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                                            >No actualizar</button>
+                                        </div>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500">Selecciona qué productos actualizan su costo base en el catálogo al confirmar.</p>
+                                    <div className="space-y-2">
+                                        {cambiosPrecio.map(item => {
+                                            const prod = getProductoById(item.productoId);
+                                            const costoBase = prod?.costoBase ?? 0;
+                                            const diff = costoBase > 0 ? ((item.precioFacturado - costoBase) / costoBase) * 100 : 0;
+                                            const subiendo = diff > 0;
+                                            const checked = preciosAActualizar.has(item.productoId);
+                                            return (
+                                                <label
+                                                    key={item.productoId}
+                                                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${checked ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50 border border-slate-100'}`}
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={checked}
+                                                        onChange={e => {
+                                                            setPreciosAActualizar(prev => {
+                                                                const next = new Set(prev);
+                                                                if (e.target.checked) next.add(item.productoId);
+                                                                else next.delete(item.productoId);
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        className="w-4 h-4 rounded accent-amber-500 shrink-0"
+                                                    />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-xs font-black text-slate-800 truncate">{prod?.nombre ?? item.productoId}</p>
+                                                        <p className="text-[10px] text-slate-500 tabular-nums">
+                                                            {formatCurrency(costoBase)} → <span className={`font-black ${subiendo ? 'text-rose-600' : 'text-emerald-600'}`}>{formatCurrency(item.precioFacturado)}</span>
+                                                        </p>
+                                                    </div>
+                                                    <span className={`text-[11px] font-black shrink-0 px-2 py-0.5 rounded-lg ${subiendo ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                        {subiendo ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}%
+                                                    </span>
+                                                </label>
+                                            );
+                                        })}
                                     </div>
                                 </div>
+                            </div>
+                        )}
 
-                                <div className="p-8 rounded-[2.5rem] bg-indigo-600 text-white text-center shadow-xl">
-                                    <span className="text-[11px] font-black uppercase text-indigo-200 tracking-[0.3em] block mb-2">Total Facturado</span>
-                                    <span className="text-4xl font-black tabular-nums">{formatCurrency(totalDinero)}</span>
-                                </div>
+                        {/* Notas finales */}
+                        {newRecepcion.observaciones && (
+                            <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4">
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Notas</p>
+                                <p className="text-xs text-slate-600">{newRecepcion.observaciones}</p>
+                            </div>
+                        )}
 
-                                <div className="grid grid-cols-2 gap-4">
-                                    <Button 
-                                        variant="outline" 
-                                        onClick={() => setStep(3)}
-                                        className="h-16 rounded-2xl font-black uppercase tracking-widest border-2 border-slate-200 hover:bg-slate-50 text-slate-500"
-                                    >Corregir</Button>
-                                    <Button 
-                                        onClick={handleSave}
-                                        className="h-16 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest shadow-xl shadow-indigo-600/30"
-                                    >Confirmar Todo</Button>
-                                </div>
-                            </CardContent>
-                        </Card>
+                        {/* Acciones */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                onClick={() => setStep(3)}
+                                className="h-14 rounded-2xl font-black uppercase tracking-widest text-sm border-2 border-slate-200 hover:bg-slate-50 text-slate-500 transition-colors"
+                            >← Corregir</button>
+                            <button
+                                onClick={handleSave}
+                                className="h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-sm shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 transition-colors"
+                            >
+                                <CheckCircle className="w-4 h-4" /> Confirmar y Sincronizar
+                            </button>
+                        </div>
                     </div>
                 )}
                 
