@@ -2,7 +2,7 @@ import { useState, useMemo, useRef } from 'react';
 import {
     UserCircle2, Users, Plus, Search, Trash2, Edit2,
     CreditCard, DollarSign, Camera, X, Package,
-    CheckCircle, Clock, Scissors, ChevronDown, ChevronUp, Image
+    CheckCircle, Clock, Scissors, ChevronDown, ChevronUp, Image, Printer
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -339,6 +339,119 @@ export default function Trabajadores({
         }
     };
 
+    // ── Exportar resumen mensual de nómina a PDF ────────────────────────────
+    const exportarResumenMensual = () => {
+        const fmt = (n: number) => formatCurrency(n);
+        const ahora = new Date();
+        const mesLabel = ahora.toLocaleDateString('es', { month: 'long', year: 'numeric' });
+        const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1).getTime();
+        const activos = trabajadores.filter(t => t.estado === 'activo');
+
+        const filas = activos.map(t => {
+            const creditosMes = creditosTrabajadores.filter(c =>
+                c.trabajadorId === t.id &&
+                new Date(c.fecha).getTime() >= inicioMes
+            );
+            const adelantosMes = creditosMes.filter(c => !c.descontarDeSalario);
+            const descuentosMes = creditosMes.filter(c => c.descontarDeSalario);
+            const totalAdelantos = adelantosMes.reduce((s, c) => s + c.monto, 0);
+            const totalDescuentos = descuentosMes.reduce((s, c) => s + c.monto, 0);
+            const saldoPendiente = creditosTrabajadores
+                .filter(c => c.trabajadorId === t.id && c.estado === 'activo')
+                .reduce((s, c) => s + c.saldo, 0);
+            const aPagar = Math.max(0, t.salarioBase - totalDescuentos);
+            const rolLabel = ROL_LABEL[t.rol] ?? t.rol;
+            return { t, rolLabel, totalAdelantos, totalDescuentos, saldoPendiente, aPagar };
+        });
+
+        const totalNomina = filas.reduce((s, r) => s + r.t.salarioBase, 0);
+        const totalDescuentosGlobal = filas.reduce((s, r) => s + r.totalDescuentos, 0);
+        const totalAPagar = filas.reduce((s, r) => s + r.aPagar, 0);
+        const totalPendiente = filas.reduce((s, r) => s + r.saldoPendiente, 0);
+
+        const tablasHTML = filas.map(r => `<tr>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:700">${r.t.nombre}</td>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b">${r.rolLabel}</td>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;font-weight:700">${fmt(r.t.salarioBase)}</td>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;color:#d97706">${r.totalAdelantos > 0 ? fmt(r.totalAdelantos) : '—'}</td>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;color:#dc2626">${r.totalDescuentos > 0 ? fmt(r.totalDescuentos) : '—'}</td>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;color:#7c3aed">${r.saldoPendiente > 0 ? fmt(r.saldoPendiente) : '<span style="color:#16a34a">✓</span>'}</td>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:13px;text-align:right;font-weight:900;color:#16a34a">${fmt(r.aPagar)}</td>
+        </tr>`).join('');
+
+        const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Resumen Nómina — ${mesLabel}</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:system-ui,sans-serif;margin:24px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  h1{font-size:20px;font-weight:900;text-transform:uppercase;letter-spacing:.05em;margin:0}
+  .sub{font-size:11px;color:#64748b;margin-top:2px}
+  .kpi-row{display:flex;gap:12px;margin:14px 0;flex-wrap:wrap}
+  .kpi{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;flex:1;min-width:110px}
+  .kpi-label{font-size:9px;font-weight:700;text-transform:uppercase;color:#94a3b8;letter-spacing:.08em}
+  .kpi-value{font-size:18px;font-weight:900;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-top:14px}
+  th{background:#1e293b;color:white;padding:8px 6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:left}
+  tr:nth-child(even) td{background:#f8fafc}
+  tfoot td{background:#1e293b;color:white;padding:8px 6px;font-size:12px;font-weight:900}
+  .firma{margin-top:40px;display:flex;gap:40px}
+  .firma-box{flex:1;border-top:1px solid #cbd5e1;padding-top:8px;font-size:11px;color:#475569}
+  @media print{body{margin:10px}button{display:none}}
+</style>
+</head>
+<body>
+<div style="display:flex;justify-content:space-between;align-items:flex-start">
+  <div>
+    <h1>Resumen Nómina Mensual</h1>
+    <p class="sub">Panadería Dulce Placer &middot; ${mesLabel}</p>
+  </div>
+  <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;border-radius:8px;padding:8px 18px;font-weight:700;font-size:12px;cursor:pointer">Imprimir / PDF</button>
+</div>
+<p class="sub" style="margin-top:8px">Generado el ${ahora.toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+<div class="kpi-row">
+  <div class="kpi"><div class="kpi-label">Empleados activos</div><div class="kpi-value">${activos.length}</div></div>
+  <div class="kpi"><div class="kpi-label">Nómina bruta</div><div class="kpi-value">${fmt(totalNomina)}</div></div>
+  <div class="kpi"><div class="kpi-label">Desc. nómina</div><div class="kpi-value" style="color:#dc2626">${fmt(totalDescuentosGlobal)}</div></div>
+  <div class="kpi"><div class="kpi-label">Total a pagar</div><div class="kpi-value" style="color:#16a34a">${fmt(totalAPagar)}</div></div>
+  <div class="kpi"><div class="kpi-label">Saldo pendiente</div><div class="kpi-value" style="color:#7c3aed">${fmt(totalPendiente)}</div></div>
+</div>
+<table>
+  <thead><tr>
+    <th>Empleado</th><th>Rol</th>
+    <th style="text-align:right">Salario</th>
+    <th style="text-align:right">Adelantos</th>
+    <th style="text-align:right">Desc. Nómina</th>
+    <th style="text-align:right">Saldo Pend.</th>
+    <th style="text-align:right">A Pagar</th>
+  </tr></thead>
+  <tbody>${tablasHTML}</tbody>
+  <tfoot><tr>
+    <td colspan="2">TOTAL</td>
+    <td style="text-align:right">${fmt(totalNomina)}</td>
+    <td style="text-align:right;color:#fcd34d">${fmt(filas.reduce((s,r)=>s+r.totalAdelantos,0))}</td>
+    <td style="text-align:right;color:#fca5a5">${fmt(totalDescuentosGlobal)}</td>
+    <td style="text-align:right;color:#c4b5fd">${fmt(totalPendiente)}</td>
+    <td style="text-align:right;color:#86efac">${fmt(totalAPagar)}</td>
+  </tr></tfoot>
+</table>
+<div class="firma">
+  <div class="firma-box">Elaborado por: _______________________</div>
+  <div class="firma-box">Aprobado por: _______________________</div>
+  <div class="firma-box">Fecha de pago: _______________________</div>
+</div>
+</body>
+</html>`;
+        const win = window.open('', '_blank', 'width=900,height=680');
+        if (!win) { toast.error('Habilita ventanas emergentes para exportar PDF'); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 400);
+    };
+
     return (
         <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
             {/* Header */}
@@ -421,6 +534,18 @@ export default function Trabajadores({
                             </Card>
                         ))}
                     </div>
+
+                    {/* Botón resumen mensual */}
+                    {stats.activos > 0 && (
+                        <div className="flex justify-end">
+                            <button
+                                onClick={exportarResumenMensual}
+                                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-50 hover:bg-violet-100 dark:bg-violet-950/20 dark:hover:bg-violet-900/30 text-violet-600 dark:text-violet-400 text-xs font-black uppercase tracking-widest transition-colors"
+                            >
+                                <Printer className="w-3.5 h-3.5" /> Resumen mensual PDF
+                            </button>
+                        </div>
+                    )}
 
                     {/* Filtros */}
                     <div className="flex gap-3 flex-wrap">
