@@ -42,6 +42,7 @@ interface ProveedorCatalogoTacticoProps {
   getProductoById: (id: string) => Producto | undefined;
   activeProveedorId: string | null;
   onShowBoard?: () => void;
+  draftItems?: { productoId: string; cantidad: number }[];
 }
 
 const esInsumo = (p: any): boolean => {
@@ -60,7 +61,8 @@ export function ProveedorCatalogoTactico({
   formatCurrency,
   onAddItemToDraft,
   activeProveedorId,
-  onShowBoard
+  onShowBoard,
+  draftItems = [],
 }: ProveedorCatalogoTacticoProps) {
   const [search, setSearch] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -393,23 +395,46 @@ export function ProveedorCatalogoTactico({
               ? (isAdding ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-amber-500 hover:bg-amber-600')
               : (isAdding ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-indigo-600 hover:bg-indigo-700');
 
+            // Cantidad ya agregada al borrador para este producto
+            const draftQty = draftItems.find(i => i.productoId === prod.id)?.cantidad ?? 0;
+            const enCarrito = draftQty > 0;
+
             return (
               <Card key={prod.id} className={cn(
                 "rounded-xl border transition-all duration-300 relative overflow-hidden shadow-sm hover:shadow-md flex flex-col",
-                prod.esCritico
-                  ? "border-rose-200 bg-rose-50/30"
-                  : viewMode === 'insumos'
-                    ? "border-amber-100 bg-amber-50/10 dark:bg-slate-900 dark:border-slate-800"
-                    : "border-slate-100 bg-white dark:bg-slate-900 dark:border-slate-800"
+                enCarrito
+                  ? viewMode === 'insumos'
+                    ? "border-amber-400 dark:border-amber-600 ring-1 ring-amber-300/50"
+                    : "border-indigo-400 dark:border-indigo-600 ring-1 ring-indigo-300/50"
+                  : prod.esCritico
+                    ? "border-rose-200 bg-rose-50/30"
+                    : viewMode === 'insumos'
+                      ? "border-amber-100 bg-amber-50/10 dark:bg-slate-900 dark:border-slate-800"
+                      : "border-slate-100 bg-white dark:bg-slate-900 dark:border-slate-800"
               )}>
-                {/* Indicador de tipo en la esquina */}
+                {/* Indicador de tipo en la esquina izquierda */}
                 <div className={cn(
                   "absolute top-0 left-0 w-1.5 h-full",
                   prod.esCritico ? "bg-rose-400" : viewMode === 'insumos' ? "bg-amber-400" : "bg-indigo-400"
                 )} />
+
+                {/* Badge de cantidad en borrador — esquina superior derecha */}
+                {enCarrito && (
+                  <div className={cn(
+                    "absolute top-2 right-2 z-10 flex items-center gap-1 px-2 py-1 rounded-lg text-white text-[10px] font-black shadow-md",
+                    viewMode === 'insumos' ? "bg-amber-500" : "bg-indigo-600"
+                  )}>
+                    <ShoppingCart className="w-2.5 h-2.5" />
+                    <span className="tabular-nums leading-none">{draftQty}</span>
+                  </div>
+                )}
+
                 <CardContent className="pl-4 pr-3 py-3 flex flex-col flex-1 gap-2">
                   <div>
-                    <h4 className="font-black uppercase text-[11px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[34px]">
+                    <h4 className={cn(
+                      "font-black uppercase text-[11px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[34px]",
+                      enCarrito && "pr-10"
+                    )}>
                       {prod.nombre}
                     </h4>
                   </div>

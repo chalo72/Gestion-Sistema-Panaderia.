@@ -281,6 +281,9 @@ export function Inventario({
     const [conteoValues, setConteoValues] = useState<Record<string, string>>({});
     const [rondaNumero, setRondaNumero] = useState(1);
     const [soloEsenciales, setSoloEsenciales] = useState(false);
+    const [soloElaborados, setSoloElaborados] = useState(true);
+    const [vistaRonda, setVistaRonda] = useState<'tarjetas' | 'tabla'>('tarjetas');
+    const [showResumenRonda, setShowResumenRonda] = useState(false);
     const [busquedaRonda, setBusquedaRonda] = useState('');
     const [timerTick, setTimerTick] = useState(0);
 
@@ -378,15 +381,15 @@ export function Inventario({
     // ── Productos para ronda (ordenados por urgencia) ────────────────────────
     const productosParaRonda = useMemo(() => {
         let lista = [...inventarioConProducto];
+        if (soloElaborados) {
+            lista = lista.filter(i => i.producto?.tipo === 'elaborado');
+        }
         if (catFiltroRonda) {
             lista = lista.filter(i => i.producto?.categoria === catFiltroRonda);
         }
         if (soloEsenciales) {
-            lista = lista.filter(i =>
-                i.status !== 'ok' ||
-                getFreshness(lastCounted[i.productoId]) === 'viejo' ||
-                getFreshness(lastCounted[i.productoId]) === 'nunca'
-            );
+            // "Solo sin contar": los que aún no tienen valor en conteoValues
+            lista = lista.filter(i => !conteoValues[i.productoId]?.trim());
         }
         if (busquedaRonda.trim()) {
             const q = busquedaRonda.toLowerCase();
@@ -400,7 +403,7 @@ export function Inventario({
             const orderStatus = { agotado: 0, bajo: 1, ok: 2 };
             return (orderStatus[a.status] || 0) - (orderStatus[b.status] || 0);
         });
-    }, [inventarioConProducto, lastCounted, soloEsenciales, busquedaRonda, catFiltroRonda]);
+    }, [inventarioConProducto, lastCounted, soloEsenciales, soloElaborados, conteoValues, busquedaRonda, catFiltroRonda]);
 
     // ── Filtro stock general ─────────────────────────────────────────────────
     const inventarioFiltrado = useMemo(() => {
@@ -982,41 +985,61 @@ export function Inventario({
                                 </div>
                             )}
 
-                            {/* Filtros */}
-                            <div className="flex gap-3 flex-wrap">
-                                <div className="relative flex-1 min-w-[200px]">
+                            {/* ── Barra de filtros ── */}
+                            <div className="flex gap-2 flex-wrap items-center">
+                                <div className="relative flex-1 min-w-[180px]">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                                     <Input placeholder="Buscar producto..." value={busquedaRonda}
                                         onChange={e => setBusquedaRonda(e.target.value)}
-                                        autoComplete="off"
-                                        className="pl-9 rounded-xl" />
+                                        autoComplete="off" className="pl-9 rounded-xl h-9" />
                                 </div>
-                                <button
-                                    onClick={() => setSoloEsenciales(!soloEsenciales)}
-                                    className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest border-2 transition-all ${
+
+                                {/* Toggle: Solo elaborados */}
+                                <button onClick={() => setSoloElaborados(!soloElaborados)}
+                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${
+                                        soloElaborados
+                                            ? 'bg-indigo-600 text-white border-indigo-600'
+                                            : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700'
+                                    }`}>
+                                    <ShoppingBag className="w-3.5 h-3.5" />
+                                    Solo ventas
+                                </button>
+
+                                {/* Toggle: Sin contar */}
+                                <button onClick={() => setSoloEsenciales(!soloEsenciales)}
+                                    className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest border-2 transition-all ${
                                         soloEsenciales
-                                            ? 'bg-amber-600 text-white border-amber-600'
-                                            : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-amber-400'
+                                            ? 'bg-amber-500 text-white border-amber-500'
+                                            : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700'
                                     }`}>
                                     <Target className="w-3.5 h-3.5" />
-                                    Solo críticos ({stats.urgentes})
+                                    Sin contar ({productosParaRonda.filter(i => !conteoValues[i.productoId]?.trim()).length})
                                 </button>
+
+                                {/* Vista: tarjetas / tabla */}
+                                <div className="flex rounded-xl border-2 border-slate-200 dark:border-slate-700 overflow-hidden ml-auto">
+                                    <button onClick={() => setVistaRonda('tarjetas')}
+                                        className={`px-3 py-2 text-xs font-black transition-all ${vistaRonda === 'tarjetas' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-400'}`}>
+                                        Tarjetas
+                                    </button>
+                                    <button onClick={() => setVistaRonda('tabla')}
+                                        className={`px-3 py-2 text-xs font-black transition-all ${vistaRonda === 'tabla' ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-400'}`}>
+                                        Tabla
+                                    </button>
+                                </div>
                             </div>
 
-                            {/* Chips de categoría para ronda */}
+                            {/* Chips de categoría */}
                             {categorias.length > 0 && (
                                 <div className="flex gap-2 flex-wrap">
-                                    <button
-                                        onClick={() => setCatFiltroRonda(null)}
+                                    <button onClick={() => setCatFiltroRonda(null)}
                                         className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${
                                             catFiltroRonda === null
                                                 ? 'bg-indigo-600 text-white border-transparent'
                                                 : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-400'
-                                        }`}>
-                                        Todas las categorías
-                                    </button>
+                                        }`}>Todas</button>
                                     {categorias.map(cat => {
-                                        const count = inventarioConProducto.filter(i => i.producto?.categoria === cat.nombre).length;
+                                        const count = productosParaRonda.filter(i => i.producto?.categoria === cat.nombre).length;
                                         if (count === 0) return null;
                                         return (
                                             <button key={cat.id}
@@ -1024,110 +1047,174 @@ export function Inventario({
                                                 className={`px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${
                                                     catFiltroRonda === cat.nombre
                                                         ? 'text-white border-transparent'
-                                                        : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-slate-400'
+                                                        : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700'
                                                 }`}
-                                                style={catFiltroRonda === cat.nombre ? { backgroundColor: cat.color, borderColor: cat.color } : {}}>
-                                                {cat.nombre} <span className="opacity-70">({count})</span>
+                                                style={catFiltroRonda === cat.nombre ? { backgroundColor: cat.color } : {}}>
+                                                {cat.nombre} ({count})
                                             </button>
                                         );
                                     })}
                                 </div>
                             )}
 
-                            {/* Leyenda de columnas */}
-                            <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground bg-slate-100 dark:bg-slate-800 rounded-xl">
-                                <div className="col-span-4">Producto</div>
-                                <div className="col-span-2 text-center">Sistema</div>
-                                <div className="col-span-2 text-center text-amber-600">Vendido</div>
-                                <div className="col-span-2 text-center text-indigo-600">Esperado</div>
-                                <div className="col-span-2 text-center text-emerald-600">Contar físico</div>
-                            </div>
+                            {/* ── VISTA TARJETAS (mobile-first) ── */}
+                            {vistaRonda === 'tarjetas' && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {productosParaRonda.map((item, idx) => {
+                                        const valorStr = conteoValues[item.productoId] || '';
+                                        const diff = getDiferenciaRonda(item.productoId, valorStr);
+                                        const vendidoDurante = ventasDuranteRonda[item.productoId] || 0;
+                                        const stockEsperado = Math.max(0, (rondaActiva.snapshot[item.productoId] ?? item.stockActual) - vendidoDurante);
+                                        const contado = valorStr.trim() !== '';
 
-                            {/* Lista de productos para contar */}
-                            <div className="space-y-2">
-                                {productosParaRonda.map(item => {
-                                    const fr = getFreshness(lastCounted[item.productoId]);
-                                    const cfg = FRESH[fr];
-                                    const valorStr = conteoValues[item.productoId] || '';
-                                    const diff = getDiferenciaRonda(item.productoId, valorStr);
-                                    const vendidoDurante = ventasDuranteRonda[item.productoId] || 0;
-                                    const stockEsperado = Math.max(0, (rondaActiva.snapshot[item.productoId] ?? item.stockActual) - vendidoDurante);
-                                    const contado = valorStr.trim() !== '';
+                                        const borderColor = contado
+                                            ? diff && Math.abs(diff.diferencia) >= 1
+                                                ? diff.diferencia > 0 ? 'border-blue-300 dark:border-blue-700' : 'border-red-300 dark:border-red-700'
+                                                : 'border-emerald-300 dark:border-emerald-700'
+                                            : 'border-slate-200 dark:border-slate-700';
 
-                                    return (
-                                        <div key={item.id}
-                                            className={`grid grid-cols-12 gap-2 items-center px-4 py-3 rounded-2xl border-2 transition-all ${
-                                                contado
-                                                    ? diff && Math.abs(diff.diferencia) >= 1
-                                                        ? diff.diferencia > 0
-                                                            ? 'border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800'
-                                                            : 'border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800'
-                                                        : 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800'
-                                                    : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900'
-                                            }`}>
-                                            {/* Nombre */}
-                                            <div className="col-span-4 flex items-center gap-2 min-w-0">
-                                                <span className="text-sm shrink-0">{cfg.icon}</span>
-                                                <div className="min-w-0">
-                                                    <p className="font-black text-xs text-slate-900 dark:text-white truncate">{item.producto?.nombre}</p>
-                                                    <p className="text-[9px] text-muted-foreground truncate">{item.producto?.categoria}</p>
+                                        const bgColor = contado
+                                            ? diff && Math.abs(diff.diferencia) >= 1
+                                                ? diff.diferencia > 0 ? 'bg-blue-50 dark:bg-blue-950/20' : 'bg-red-50 dark:bg-red-950/20'
+                                                : 'bg-emerald-50 dark:bg-emerald-950/20'
+                                            : 'bg-white dark:bg-slate-900';
+
+                                        return (
+                                            <div key={item.id} className={`rounded-2xl border-2 p-4 transition-all ${borderColor} ${bgColor}`}>
+                                                {/* Nombre + categoría */}
+                                                <div className="flex items-start justify-between gap-2 mb-3">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-black text-sm text-slate-900 dark:text-white leading-tight">{item.producto?.nombre}</p>
+                                                        <p className="text-[10px] text-muted-foreground mt-0.5">{item.producto?.categoria}</p>
+                                                    </div>
+                                                    {contado && diff && Math.abs(diff.diferencia) < 1 && (
+                                                        <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                                                    )}
+                                                </div>
+
+                                                {/* Datos del sistema */}
+                                                <div className="flex gap-3 text-center mb-3">
+                                                    <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-xl py-2">
+                                                        <p className="text-lg font-black text-slate-700 dark:text-slate-200">{rondaActiva.snapshot[item.productoId] ?? item.stockActual}</p>
+                                                        <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">en sistema</p>
+                                                    </div>
+                                                    {vendidoDurante > 0 && (
+                                                        <div className="flex-1 bg-amber-50 dark:bg-amber-950/30 rounded-xl py-2">
+                                                            <p className="text-lg font-black text-amber-600">-{vendidoDurante}</p>
+                                                            <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">vendido</p>
+                                                        </div>
+                                                    )}
+                                                    <div className="flex-1 bg-indigo-50 dark:bg-indigo-950/30 rounded-xl py-2">
+                                                        <p className="text-lg font-black text-indigo-600">{stockEsperado}</p>
+                                                        <p className="text-[9px] text-muted-foreground font-black uppercase tracking-widest">esperado</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Input grande */}
+                                                <div className="space-y-1">
+                                                    <Input
+                                                        type="number" min="0"
+                                                        inputMode="numeric"
+                                                        placeholder={`¿Cuántos ves? (esp. ${stockEsperado})`}
+                                                        value={valorStr}
+                                                        onChange={e => setConteoValues(prev => ({ ...prev, [item.productoId]: e.target.value }))}
+                                                        onKeyDown={e => {
+                                                            if (e.key === 'Enter') {
+                                                                const nextId = productosParaRonda[idx + 1]?.productoId;
+                                                                if (nextId) {
+                                                                    const next = document.getElementById(`input-ronda-${nextId}`);
+                                                                    next?.focus();
+                                                                }
+                                                            }
+                                                        }}
+                                                        id={`input-ronda-${item.productoId}`}
+                                                        className="h-12 text-center font-black text-xl rounded-xl border-2 border-indigo-200 dark:border-indigo-700 focus:border-indigo-500 w-full"
+                                                    />
+                                                    {/* Botón confirmar rápido (igual al esperado) */}
+                                                    {!contado && (
+                                                        <button
+                                                            onClick={() => setConteoValues(prev => ({ ...prev, [item.productoId]: String(stockEsperado) }))}
+                                                            className="w-full h-8 rounded-xl border border-slate-200 dark:border-slate-700 text-[10px] font-black text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-600 transition-all">
+                                                            ✓ Confirmar {stockEsperado} uds
+                                                        </button>
+                                                    )}
+                                                    {diff && (
+                                                        <p className={`text-center text-sm font-black ${
+                                                            Math.abs(diff.diferencia) < 1 ? 'text-emerald-600'
+                                                            : diff.diferencia > 0 ? 'text-blue-600' : 'text-red-600'
+                                                        }`}>
+                                                            {Math.abs(diff.diferencia) < 1
+                                                                ? '✓ Cuadra perfecto'
+                                                                : diff.diferencia > 0
+                                                                ? `+${diff.diferencia.toFixed(0)} de más`
+                                                                : `${diff.diferencia.toFixed(0)} de menos`}
+                                                        </p>
+                                                    )}
                                                 </div>
                                             </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
 
-                                            {/* Sistema (snapshot) */}
-                                            <div className="col-span-2 text-center">
-                                                <p className="font-black text-sm text-slate-700 dark:text-slate-300">
-                                                    {rondaActiva.snapshot[item.productoId] ?? item.stockActual}
-                                                </p>
-                                                <p className="text-[9px] text-muted-foreground">sistema</p>
-                                            </div>
+                            {/* ── VISTA TABLA (compacta) ── */}
+                            {vistaRonda === 'tabla' && (
+                                <>
+                                    <div className="hidden sm:grid grid-cols-12 gap-2 px-4 py-2 text-[9px] font-black uppercase tracking-widest text-muted-foreground bg-slate-100 dark:bg-slate-800 rounded-xl">
+                                        <div className="col-span-4">Producto</div>
+                                        <div className="col-span-2 text-center">Sistema</div>
+                                        <div className="col-span-2 text-center text-amber-600">Vendido</div>
+                                        <div className="col-span-2 text-center text-indigo-600">Esperado</div>
+                                        <div className="col-span-2 text-center text-emerald-600">Contar</div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {productosParaRonda.map(item => {
+                                            const valorStr = conteoValues[item.productoId] || '';
+                                            const diff = getDiferenciaRonda(item.productoId, valorStr);
+                                            const vendidoDurante = ventasDuranteRonda[item.productoId] || 0;
+                                            const stockEsperado = Math.max(0, (rondaActiva.snapshot[item.productoId] ?? item.stockActual) - vendidoDurante);
+                                            const contado = valorStr.trim() !== '';
+                                            return (
+                                                <div key={item.id} className={`grid grid-cols-12 gap-2 items-center px-4 py-3 rounded-2xl border-2 transition-all ${
+                                                    contado
+                                                        ? diff && Math.abs(diff.diferencia) >= 1
+                                                            ? diff.diferencia > 0 ? 'border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800' : 'border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-800'
+                                                            : 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800'
+                                                        : 'border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900'
+                                                }`}>
+                                                    <div className="col-span-4 min-w-0">
+                                                        <p className="font-black text-xs truncate">{item.producto?.nombre}</p>
+                                                        <p className="text-[9px] text-muted-foreground truncate">{item.producto?.categoria}</p>
+                                                    </div>
+                                                    <div className="col-span-2 text-center font-black text-sm">{rondaActiva.snapshot[item.productoId] ?? item.stockActual}</div>
+                                                    <div className={`col-span-2 text-center font-black text-sm ${vendidoDurante > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
+                                                        {vendidoDurante > 0 ? `-${vendidoDurante}` : '—'}
+                                                    </div>
+                                                    <div className="col-span-2 text-center font-black text-sm text-indigo-600">{stockEsperado}</div>
+                                                    <div className="col-span-2 flex flex-col items-center gap-1">
+                                                        <Input type="number" min="0" placeholder="0" value={valorStr}
+                                                            onChange={e => setConteoValues(prev => ({ ...prev, [item.productoId]: e.target.value }))}
+                                                            className="h-8 text-center font-black text-sm rounded-xl border-2 border-indigo-200 dark:border-indigo-800 w-full" />
+                                                        {diff && (
+                                                            <span className={`text-[9px] font-black ${Math.abs(diff.diferencia) < 1 ? 'text-emerald-600' : diff.diferencia > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                                                {Math.abs(diff.diferencia) < 1 ? '✓' : diff.diferencia > 0 ? `+${diff.diferencia.toFixed(0)}` : `${diff.diferencia.toFixed(0)}`}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
 
-                                            {/* Vendido durante */}
-                                            <div className="col-span-2 text-center">
-                                                <p className={`font-black text-sm ${vendidoDurante > 0 ? 'text-amber-600' : 'text-slate-400'}`}>
-                                                    {vendidoDurante > 0 ? `-${vendidoDurante}` : '—'}
-                                                </p>
-                                                <p className="text-[9px] text-muted-foreground">vendido</p>
-                                            </div>
-
-                                            {/* Esperado */}
-                                            <div className="col-span-2 text-center">
-                                                <p className="font-black text-sm text-indigo-600">{stockEsperado}</p>
-                                                <p className="text-[9px] text-muted-foreground">esperado</p>
-                                            </div>
-
-                                            {/* Input físico + diferencia */}
-                                            <div className="col-span-2 flex flex-col items-center gap-1">
-                                                <Input
-                                                    type="number" min="0"
-                                                    placeholder="0"
-                                                    value={valorStr}
-                                                    onChange={e => setConteoValues(prev => ({ ...prev, [item.productoId]: e.target.value }))}
-                                                    className="h-8 text-center font-black text-sm rounded-xl border-2 border-indigo-200 dark:border-indigo-800 focus:border-indigo-500 bg-white dark:bg-slate-800 w-full"
-                                                />
-                                                {diff && (
-                                                    <span className={`text-[9px] font-black ${
-                                                        Math.abs(diff.diferencia) < 1 ? 'text-emerald-600'
-                                                        : diff.diferencia > 0 ? 'text-blue-600' : 'text-red-600'
-                                                    }`}>
-                                                        {Math.abs(diff.diferencia) < 1 ? '✓ OK'
-                                                            : diff.diferencia > 0 ? `+${diff.diferencia.toFixed(0)} sobrante`
-                                                            : `${diff.diferencia.toFixed(0)} faltante`}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Botón finalizar abajo */}
+                            {/* Botón finalizar — abre resumen primero */}
                             {productosContados > 0 && (
                                 <div className="sticky bottom-4">
-                                    <Button onClick={finalizarRonda}
+                                    <Button onClick={() => setShowResumenRonda(true)}
                                         className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase tracking-widest text-sm border-none shadow-2xl shadow-emerald-600/30 gap-3">
                                         <CheckCircle2 className="w-5 h-5" />
-                                        Finalizar Ronda #{rondaActiva.numero} · {productosContados} productos contados
+                                        Ver resumen y finalizar · {productosContados} contados
                                     </Button>
                                 </div>
                             )}

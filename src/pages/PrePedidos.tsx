@@ -721,6 +721,7 @@ export default function PrePedidos({
               getProductoById={getProductoById}
               activeProveedorId={activeProveedorId}
               onShowBoard={() => setShowProveedorPanel(false)}
+              draftItems={activeDraft?.items?.map(i => ({ productoId: i.productoId, cantidad: i.cantidad })) ?? []}
             />
           </div>
         ) : (
