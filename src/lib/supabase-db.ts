@@ -1021,6 +1021,45 @@ export class SupabaseDatabase implements IDatabase {
         await supabase.from('creditos').delete().eq('id', id);
     }
 
+    // --- Clientes (CRM) ---
+    async getAllClientes(): Promise<any[]> {
+        const { data, error } = await supabase.from('clientes').select('*');
+        if (error) return [];
+        return data.map(this.mapClienteFromDB);
+    }
+    async addCliente(c: any): Promise<void> {
+        const { error } = await supabase.from('clientes').upsert(this.mapClienteToDB(c));
+        if (error) throw error;
+    }
+    async updateCliente(c: any): Promise<void> {
+        await this.addCliente(c);
+    }
+    async deleteCliente(id: string): Promise<void> {
+        await supabase.from('clientes').delete().eq('id', id);
+    }
+    private mapClienteFromDB(c: any): any {
+        return {
+            id: c.id,
+            nombre: c.nombre,
+            telefono: c.telefono ?? null,
+            tipo: c.tipo ?? 'mayorista',
+            direccion: c.direccion ?? null,
+            createdAt: c.created_at,
+            updatedAt: c.updated_at,
+        };
+    }
+    private mapClienteToDB(c: any): any {
+        return {
+            id: c.id,
+            nombre: c.nombre,
+            telefono: c.telefono ?? null,
+            tipo: c.tipo ?? 'mayorista',
+            direccion: c.direccion ?? null,
+            updated_at: new Date().toISOString(),
+            created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
+        };
+    }
+
     // --- Helpers (Mappers) ---
     public mapProductoFromDB(p: any): DBProducto {
         return {

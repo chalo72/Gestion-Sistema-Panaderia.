@@ -497,12 +497,19 @@ class NexusDatabase implements IDatabase {
 
   // Clientes (CRM)
   async getAllClientes() { return this.adapter.getCollection('clientes'); }
-  async addCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
-  async updateCliente(c: any) { return this.adapter.setDocument('clientes', c.id, c); }
+  async addCliente(c: any) {
+    await this.adapter.setDocument('clientes', c.id, c);
+    new SupabaseDatabase().addCliente(c).catch(() => {});
+  }
+  async updateCliente(c: any) {
+    await this.adapter.setDocument('clientes', c.id, c);
+    new SupabaseDatabase().updateCliente(c).catch(() => {});
+  }
   async deleteCliente(id: string) {
-    // No propagar a Firebase — Firebase conserva la copia como backup.
+    // Firebase conserva la copia como backup.
     // Tombstone evita que el sync restaure al cliente eliminado.
     await this.addTombstone('clientes', id).catch(() => {});
+    new SupabaseDatabase().deleteCliente(id).catch(() => {});
     return localAdapter.deleteDocument('clientes', id);
   }
 
@@ -590,6 +597,7 @@ class NexusDatabase implements IDatabase {
             { col: 'recepciones',        fn: () => supaDB.getAllRecepciones() },
             { col: 'pre_pedidos',        fn: () => supaDB.getAllPrePedidos() },
             { col: 'creditos_clientes',  fn: () => supaDB.getAllCreditosClientes() },
+            { col: 'clientes',           fn: () => supaDB.getAllClientes() },
             { col: 'recetas',            fn: () => supaDB.getAllRecetas() },
             { col: 'sesiones_caja',      fn: () => supaDB.getAllSesionesCaja() },
           ];
