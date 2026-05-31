@@ -2,15 +2,14 @@ import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useCan, useAuth } from '@/contexts/AuthContext';
 import {
-    Upload, CheckCircle, X, Plus, Calendar,
+    CheckCircle, X, Plus, Calendar,
     Search, Eye, Download, Image as ImageIcon,
-    ArrowLeft, Package, GitCompareArrows, AlertTriangle,
-    TrendingUp, TrendingDown, Scan, Sparkles, Loader2,
-    Camera, Zap, FileText, Check, FolderOpen, Grid3X3,
-    Trash2, ZoomIn, Filter, CalendarRange,
-    Fingerprint, Activity, Cpu, Layers, Database, History, Bot
+    ArrowLeft, ArrowRight, Package, GitCompareArrows, AlertTriangle,
+    TrendingUp, TrendingDown, Sparkles, Loader2,
+    Camera, Zap, Check, FolderOpen,
+    Trash2, ZoomIn, Filter, History,
+    Truck, Receipt, ClipboardCheck
 } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -546,8 +545,8 @@ export default function Recepciones({
             productoId,
             cantidadEsperada: 0,
             cantidadRecibida: 1,
-            precioEsperado: 0,
-            precioFacturado: 0,
+            precioEsperado: producto.costoBase || 0,
+            precioFacturado: producto.costoBase || 0,
             embalajeOk: true,
             productoOk: true,
             cantidadOk: true,
@@ -875,6 +874,13 @@ export default function Recepciones({
         );
     }
 
+    const STEP_INFO = [
+        { num: 1, label: 'Proveedor', Icon: Truck },
+        { num: 2, label: 'Factura',   Icon: Receipt },
+        { num: 3, label: 'Productos', Icon: Package },
+        { num: 4, label: 'Confirmar', Icon: ClipboardCheck },
+    ];
+
     if (view === 'new') {
         const totalItems = newRecepcion.items.length;
         const totalUnidades = newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0);
@@ -887,8 +893,9 @@ export default function Recepciones({
 
         return (
             <div className="space-y-4 animate-ag-fade-in pb-24">
-                {/* ─── CABECERA CON PASOS ─────────────────────────────────── */}
-                <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-10">
+                {/* ─── CABECERA CON PASOS (4-col grid innovador) ────────── */}
+                <div className="sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shadow-sm px-4 pt-3 pb-3 space-y-3">
+                    {/* Fila superior: back + título + total */}
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => { if (step > 1) setStep(step - 1); else setView('list'); }}
@@ -896,32 +903,46 @@ export default function Recepciones({
                         >
                             <ArrowLeft className="w-4 h-4" />
                         </button>
-                        <div>
-                            <h1 className="text-base font-black uppercase tracking-tight leading-none">Entrada de Mercancía</h1>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                                {step === 1 ? '① Proveedor' : step === 2 ? '② Factura' : step === 3 ? '③ Productos' : '④ Confirmar'}
-                                {proveedorActual && step > 1 && <span className="text-indigo-500 ml-2">· {proveedorActual.nombre}</span>}
-                            </p>
+                        <div className="flex-1 min-w-0">
+                            <h1 className="text-sm font-black uppercase tracking-tight leading-none truncate">Entrada de Mercancía</h1>
+                            {proveedorActual && step > 1 && (
+                                <p className="text-[10px] font-bold text-indigo-500 mt-0.5 truncate">{proveedorActual.nombre}</p>
+                            )}
                         </div>
+                        {step >= 3 && totalItems > 0 && (
+                            <div className="flex flex-col items-end shrink-0">
+                                <span className="text-xs font-black text-indigo-600 tabular-nums">{formatCurrency(totalDinero)}</span>
+                                <span className="text-[9px] text-slate-400 font-bold uppercase">{totalItems} prod · {totalUnidades} uds</span>
+                            </div>
+                        )}
                     </div>
-                    {/* Barra de progreso */}
-                    <div className="flex items-center gap-1.5">
-                        {[1, 2, 3, 4].map(s => (
-                            <button key={s} onClick={() => s < step && setStep(s)}
-                                className={cn('h-2 rounded-full transition-all duration-300',
-                                    step === s ? 'w-8 bg-indigo-600' :
-                                    step > s ? 'w-5 bg-emerald-500 cursor-pointer' : 'w-3 bg-slate-200'
-                                )}
-                            />
-                        ))}
+                    {/* Indicadores de paso: 4-col grid */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                        {STEP_INFO.map(({ num, label, Icon }) => {
+                            const isActive = step === num;
+                            const isDone = step > num;
+                            return (
+                                <button
+                                    key={num}
+                                    onClick={() => { if (isDone) setStep(num); }}
+                                    className={cn(
+                                        'flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all',
+                                        isActive
+                                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
+                                            : isDone
+                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 cursor-pointer'
+                                            : 'bg-slate-50 dark:bg-slate-800 text-slate-400 cursor-default'
+                                    )}
+                                >
+                                    {isDone
+                                        ? <Check className="w-3.5 h-3.5" />
+                                        : <Icon className="w-3.5 h-3.5" />
+                                    }
+                                    <span>{label}</span>
+                                </button>
+                            );
+                        })}
                     </div>
-                    {/* Total flotante en pasos 3-4 */}
-                    {step >= 3 && totalItems > 0 && (
-                        <div className="hidden sm:flex flex-col items-end shrink-0">
-                            <span className="text-xs font-black text-indigo-600 tabular-nums">{formatCurrency(totalDinero)}</span>
-                            <span className="text-[9px] text-slate-400 font-bold uppercase">{totalItems} productos · {totalUnidades} uds</span>
-                        </div>
-                    )}
                 </div>
                 {/* ─── PASO 1: PROVEEDOR ─────────────────────────────────── */}
                 {step === 1 && (
@@ -1351,7 +1372,7 @@ export default function Recepciones({
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-[10px] font-bold text-slate-400 uppercase">Fecha</span>
-                                        <span className="font-black text-slate-800">{newRecepcion.fechaRecepcion ? new Date(newRecepcion.fechaRecepcion + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('es-CO')}</span>
+                                        <span className="font-black text-slate-800">{newRecepcion.fechaFactura ? new Date(newRecepcion.fechaFactura + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('es-CO')}</span>
                                     </div>
                                     <div className="flex flex-col">
                                         <span className="text-[10px] font-bold text-slate-400 uppercase">Productos</span>
@@ -1830,59 +1851,62 @@ export default function Recepciones({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                <div className="space-y-2">
                     {filteredRecepciones.map(recepcion => {
                         const proveedor = getProveedorById(recepcion.proveedorId);
                         const itemsCount = recepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0);
                         const hasIssues = recepcion.items.some(i => !i.productoOk || !i.embalajeOk || i.defectuosos > 0);
+                        const iniciales = (proveedor?.nombre || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
                         return (
-                            <Card
+                            <button
                                 key={recepcion.id}
-                                className="group hover:scale-[1.02] transition-all cursor-pointer overflow-hidden border-l-4 border-l-primary"
+                                className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-200 dark:hover:border-indigo-700 hover:shadow-md transition-all text-left group"
                                 onClick={() => { setSelectedRecepcion(recepcion); setView('details'); }}
                             >
-                                <CardContent className="p-0">
-                                    <div className="p-4 space-y-3">
-                                        <div className="flex justify-between items-start">
-                                            <Badge variant="outline" className="bg-background/50">
-                                                {recepcion.numeroFactura}
-                                            </Badge>
-                                            <Badge className={`${hasIssues ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'} hover:bg-white`}>
-                                                {hasIssues ? 'Incidencias' : 'OK'}
-                                            </Badge>
-                                        </div>
+                                {/* Avatar */}
+                                <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                                    {recepcion.imagenFactura
+                                        ? <img src={recepcion.imagenFactura} className="w-full h-full object-cover" alt="" />
+                                        : <span className="text-base font-black text-indigo-600 dark:text-indigo-300">{iniciales}</span>
+                                    }
+                                </div>
 
-                                        <div>
-                                            <h3 className="font-semibold text-lg line-clamp-1">{proveedor?.nombre || 'Desconocido'}</h3>
-                                            <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                                <Calendar className="w-3 h-3" />
-                                                {new Date(recepcion.fechaRecepcion).toLocaleDateString()}
-                                            </p>
-                                        </div>
+                                {/* Info central */}
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-black text-sm text-slate-900 dark:text-white truncate leading-tight">{proveedor?.nombre || 'Sin proveedor'}</p>
+                                    <p className="text-[10px] font-bold text-slate-400 truncate mt-0.5">
+                                        {recepcion.numeroFactura || 'S/N'}
+                                        <span className="mx-1.5">·</span>
+                                        <Calendar className="inline w-3 h-3 mb-0.5" />{' '}
+                                        {new Date(recepcion.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                        <span className="mx-1.5">·</span>
+                                        {itemsCount} uds
+                                    </p>
+                                </div>
 
-                                        {recepcion.imagenFactura && (
-                                            <div className="relative h-24 bg-muted/30 rounded-lg overflow-hidden group-hover:bg-muted/50 transition-colors flex items-center justify-center">
-                                                <img src={recepcion.imagenFactura} className="w-full h-full object-cover opacity-50 blur-[1px] group-hover:blur-0 transition-all" />
-                                                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Eye className="w-6 h-6 text-foreground drop-shadow-md" />
-                                                </div>
-                                            </div>
-                                        )}
+                                {/* Total + estado */}
+                                <div className="flex flex-col items-end gap-1 shrink-0">
+                                    <span className="font-black text-sm tabular-nums text-indigo-600 dark:text-indigo-400">{formatCurrency(recepcion.totalFactura)}</span>
+                                    <span className={cn(
+                                        'text-[9px] font-black uppercase px-2 py-0.5 rounded-full',
+                                        hasIssues
+                                            ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                                            : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                                    )}>
+                                        {hasIssues ? '⚠ Incidencia' : '✓ Sin novedad'}
+                                    </span>
+                                </div>
 
-                                        <div className="pt-3 border-t flex justify-between items-center text-sm">
-                                            <span className="text-muted-foreground">{itemsCount} items</span>
-                                            <span className="font-bold text-primary">{formatCurrency(recepcion.totalFactura)}</span>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
+                                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 transition-colors shrink-0" />
+                            </button>
                         );
                     })}
 
                     {filteredRecepciones.length === 0 && (
-                        <div className="col-span-full py-12 text-center text-muted-foreground">
-                            No se encontraron recepciones
+                        <div className="py-16 text-center text-slate-400">
+                            <Package className="w-12 h-12 mx-auto mb-3 opacity-25" />
+                            <p className="font-bold text-sm">No se encontraron recepciones</p>
                         </div>
                     )}
                 </div>
