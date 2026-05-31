@@ -232,6 +232,7 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         onClick={handleSyncNow}
         disabled={isSyncingManual}
         title={syncConnected ? 'Realtime conectado - clic para sincronizar ahora' : 'Clic para sincronizar ahora'}
+        className="nexus-sync-fab"
         style={{
           position: 'fixed',
           bottom: 16, right: 16,
@@ -254,7 +255,12 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
           animation: isSyncingManual || (syncCountdown !== null && syncCountdown > 0)
             ? 'pulse 0.8s infinite' : 'none',
         }} />
-        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+        <style>{`
+          @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+          @media (max-width: 1023px) {
+            .nexus-sync-fab { bottom: 72px !important; }
+          }
+        `}</style>
         {isSyncingManual ? 'Sincronizando...' : 'NexusSync'}
       </button>
 

@@ -712,18 +712,18 @@ export function Ventas(props: VentasProps) {
             </div>
 
             {/* ── Navegación móvil: dos botones siempre visibles ── */}
-            <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+            <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
                 {/* Catálogo */}
                 <button
                     onClick={() => setShowMobileCart(false)}
                     className={cn(
-                        'flex-1 flex flex-col items-center justify-center gap-1 py-3 text-[10px] font-black uppercase tracking-widest transition-colors',
+                        'flex-1 flex flex-col items-center justify-center gap-1 py-4 text-[10px] font-black uppercase tracking-widest transition-colors',
                         !showMobileCart
                             ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/10'
                             : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
                     )}
                 >
-                    <ShoppingCart className="w-5 h-5" />
+                    <ShoppingCart className="w-6 h-6" />
                     Catálogo
                 </button>
 
@@ -734,12 +734,12 @@ export function Ventas(props: VentasProps) {
                 <button
                     onClick={() => setShowMobileCart(true)}
                     className={cn(
-                        'flex-[2] flex items-center justify-center gap-2 py-3 transition-all relative',
+                        'flex-[2] flex items-center justify-center gap-2 py-4 transition-all relative pr-28',
                         showMobileCart
-                            ? 'bg-emerald-500 text-white'
+                            ? 'bg-indigo-600 text-white'
                             : cart.length > 0
-                                ? 'bg-emerald-500 text-white'
-                                : 'text-slate-400'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500'
                     )}
                 >
                     {cart.length > 0 ? (
@@ -755,7 +755,10 @@ export function Ventas(props: VentasProps) {
                             </div>
                         </>
                     ) : (
-                        <span className="text-[10px] font-black uppercase tracking-widest">Ticket vacío</span>
+                        <>
+                            <ShoppingCart className="w-5 h-5 opacity-50" />
+                            <span className="text-[10px] font-black uppercase tracking-widest">Ver Ticket</span>
+                        </>
                     )}
                 </button>
             </div>
