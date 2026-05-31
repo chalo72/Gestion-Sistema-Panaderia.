@@ -24,7 +24,8 @@ import {
   UserCircle2,
   Store,
   Building2,
-  MessageCircle
+  MessageCircle,
+  CalendarCheck
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -148,8 +149,9 @@ export function Sidebar({
       emoji: '👥',
       items: [
         { id: 'oficina',       label: 'Oficina del Equipo',   icon: Building2,   permission: 'VER_USUARIOS' },
-        { id: 'trabajadores',  label: 'Trabajadores',         icon: UserCircle2, permission: 'VER_USUARIOS' },
-        { id: 'usuarios',      label: 'Equipo de Trabajo',    icon: Users,       permission: 'VER_USUARIOS' },
+        { id: 'trabajadores',  label: 'Trabajadores',         icon: UserCircle2,    permission: 'VER_USUARIOS' },
+        { id: 'asistencia',    label: 'Asistencia',           icon: CalendarCheck,  permission: 'VER_USUARIOS' },
+        { id: 'usuarios',      label: 'Equipo de Trabajo',    icon: Users,          permission: 'VER_USUARIOS' },
         { id: 'roles',         label: 'Seguridad y Roles',    icon: Shield,      permission: 'VER_USUARIOS' },
         { id: 'seguridad',     label: 'Agente Anti-Fraude',   icon: Shield,      permission: 'VER_FINANZAS' },
         { id: 'configuracion', label: 'Configuración',        icon: Settings,    permission: 'VER_CONFIGURACION' },

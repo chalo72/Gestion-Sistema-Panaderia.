@@ -120,6 +120,11 @@ export interface IDatabase {
 
   getBackup(key: string): Promise<any>;
   saveBackup(key: string, val: any): Promise<void>;
+
+  // Asistencia
+  getAllAsistencia(): Promise<any[]>;
+  addRegistroAsistencia(r: any): Promise<void>;
+  getAsistenciaByFecha(fecha: string): Promise<any[]>;
 }
 
 /**
@@ -459,6 +464,14 @@ class NexusDatabase implements IDatabase {
   async getBackup(key: string) { return this.adapter.getDocument('backups', key); }
   async saveBackup(key: string, val: any) {
     return this.adapter.setDocument('backups', key, { id: key, ...val });
+  }
+
+  // Asistencia
+  async getAllAsistencia() { return this.adapter.getCollection('asistencia'); }
+  async addRegistroAsistencia(r: any) { return this.adapter.setDocument('asistencia', r.id, r); }
+  async getAsistenciaByFecha(fecha: string) {
+    const all = await this.adapter.getCollection<any>('asistencia');
+    return all.filter((r: any) => r.fecha === fecha);
   }
 
   // Recetas

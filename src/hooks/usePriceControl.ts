@@ -15,6 +15,7 @@ import type {
   Receta,
   Recepcion,
   Cliente,
+  RegistroAsistencia,
 } from '@/types';
 import { toast } from 'sonner';
 
@@ -62,6 +63,7 @@ export function usePriceControl() {
 
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>([]);
   const [loaded, setLoaded] = useState(false);
   
   // 🛡️ PATRÓN: BACKUP PENDING (Trigger System)
@@ -338,7 +340,7 @@ export function usePriceControl() {
         alertas, inventario, movimientos, gastos, recepciones, historial, recetas, 
         ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, 
         produccion, creditosClientes, creditosTrabajadoresData, trabajadores, prepedidos,
-        clientesData
+        clientesData, asistenciaData
       ] = await Promise.all([
         db.getAllAlertas(),
         db.getAllInventario(),
@@ -359,6 +361,7 @@ export function usePriceControl() {
         db.getAllTrabajadores(),
         db.getAllPrePedidos(),
         db.getAllClientes(),
+        db.getAllAsistencia(),
       ]);
 
       setAlertas(alertas);
@@ -430,6 +433,7 @@ export function usePriceControl() {
 
       finanzas.setCreditosTrabajadores(creditosTrabajadoresData as any);
       finanzas.setTrabajadores(trabajadores as any);
+      setAsistencia(asistenciaData as RegistroAsistencia[]);
 
     } catch (error) {
       console.error('Error cargando datos secundarios:', error);
@@ -911,6 +915,18 @@ export function usePriceControl() {
     triggerBackup(`delete_cliente:${id}`);
   }, []);
 
+  // Asistencia
+  const addRegistroAsistencia = useCallback(async (registro: Omit<RegistroAsistencia, 'id' | 'createdAt'>) => {
+    const nuevo: RegistroAsistencia = {
+      ...registro,
+      id: generateUUID(),
+      createdAt: new Date().toISOString(),
+    };
+    await db.addRegistroAsistencia(nuevo);
+    setAsistencia(prev => [...prev, nuevo]);
+    return nuevo;
+  }, []);
+
   // Funciones de Alertas
   const marcarAlertaLeida = useCallback(async (id: string) => {
     const alerta = alertas.find(a => a.id === id);
@@ -1330,6 +1346,9 @@ export function usePriceControl() {
 
     // --- CRM: CLIENTES ---
     clientes, addCliente, updateCliente, deleteCliente,
+
+    // --- ASISTENCIA ---
+    asistencia, addRegistroAsistencia,
 
     // --- DELEGACIÓN A SUB-HOOK: PRODUCCIÓN ---
     ...produccionHook,

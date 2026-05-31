@@ -327,7 +327,17 @@ export interface Configuracion {
   pesoArrobaKg?: number;        // NUEVO: Peso de la arroba configurable
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia';
+
+export interface RegistroAsistencia {
+  id: string;
+  trabajadorId: string;
+  trabajadorNombre: string;
+  tipo: 'entrada' | 'salida';
+  fecha: string;       // YYYY-MM-DD
+  hora: string;        // HH:MM
+  createdAt: string;   // ISO
+}
 
 // ============================================
 // SISTEMA DE SEGURIDAD ANTI-FRAUDE

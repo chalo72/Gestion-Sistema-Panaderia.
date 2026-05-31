@@ -42,6 +42,7 @@ const AgentesIA          = lazy(() => import('@/pages/AgentesIA'));
 const HistorialVentas    = lazy(() => import('@/pages/HistorialVentas'));
 const Oficina            = lazy(() => import('@/pages/Oficina'));
 const Trabajadores       = lazy(() => import('@/pages/Trabajadores'));
+const Asistencia         = lazy(() => import('@/pages/Asistencia'));
 const Gastos             = lazy(() => import('@/pages/Gastos'));
 const Proveedores        = lazy(() => import('@/pages/Proveedores'));
 const Mayoristas         = lazy(() => import('@/pages/Mayoristas'));
@@ -169,6 +170,8 @@ const App = () => {
     addCliente,
     updateCliente,
     deleteCliente,
+    asistencia,
+    addRegistroAsistencia,
   } = usePriceControl();
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
@@ -462,7 +465,7 @@ const App = () => {
         );
       case 'trabajadores':
         return (
-          <Trabajadores 
+          <Trabajadores
             trabajadores={trabajadores}
             onAddTrabajador={addTrabajador}
             onUpdateTrabajador={updateTrabajador}
@@ -474,6 +477,14 @@ const App = () => {
             onRegistrarPagoCreditoTrabajador={registrarPagoCreditoTrabajador}
             usuario={user!}
             formatCurrency={formatCurrency}
+          />
+        );
+      case 'asistencia':
+        return (
+          <Asistencia
+            trabajadores={trabajadores}
+            asistencia={asistencia}
+            onAddRegistro={addRegistroAsistencia}
           />
         );
       case 'gastos':
