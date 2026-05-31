@@ -309,8 +309,15 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
     const catIcon = categoria?.icono || '📦';
     const catColor = categoria?.color || '#10b981';
 
+    const enCarrito = (cantidadEnCarrito ?? 0) > 0;
+
     return (
-        <div className="group bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-900/5 transition-all cursor-pointer active:scale-[0.97] overflow-hidden flex flex-col"
+        <div className={cn(
+            "group bg-white dark:bg-slate-800 rounded-xl border transition-all cursor-pointer active:scale-[0.97] overflow-hidden flex flex-col",
+            enCarrito
+                ? "border-emerald-400 dark:border-emerald-600 ring-2 ring-emerald-400/40 shadow-md shadow-emerald-500/10"
+                : "border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-900/5"
+        )}
             onClick={() => onAddToCart(producto)}>
             {/* Imagen compacta */}
             <div className="h-20 overflow-hidden relative shrink-0">
@@ -324,15 +331,8 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                     className="w-full h-full"
                 />
 
-                {/* Badge cantidad en carrito — número suspendido */}
-                {(cantidadEnCarrito ?? 0) > 0 && (
-                    <div className="absolute top-1 right-1 min-w-[20px] h-[20px] bg-emerald-500 text-white text-[10px] font-black rounded-full flex items-center justify-center px-1 shadow-lg z-20 border-2 border-white">
-                        {cantidadEnCarrito}
-                    </div>
-                )}
-
-                {/* Badge de Stock */}
-                <div className="absolute top-1.5 right-1.5">
+                {/* Badge de Stock — top-right */}
+                <div className="absolute top-1.5 right-1.5 z-10">
                     <div className={cn(
                         "px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-wide text-white shadow",
                         stock <= 0 ? "bg-rose-500" : stock < 5 ? "bg-amber-500" : "bg-emerald-500"
@@ -341,7 +341,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                     </div>
                 </div>
 
-                {/* Botón Editar */}
+                {/* Botón Editar — top-left */}
                 {onEdit && (
                     <button onClick={onEdit}
                         className="absolute top-1.5 left-1.5 w-6 h-6 rounded-lg bg-white/90 dark:bg-slate-800/90 shadow flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-emerald-500 hover:text-white z-20">
@@ -371,9 +371,16 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                     <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {formatCurrency(safeNumber(producto.precioVenta))}
                     </span>
-                    <div className="w-5 h-5 rounded-md bg-slate-50 dark:bg-slate-800 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                        <Plus className="w-2.5 h-2.5" />
-                    </div>
+                    {/* Cantidad en ticket — visible en celular sin ir al carrito */}
+                    {enCarrito ? (
+                        <span className="min-w-[22px] h-[22px] bg-emerald-500 text-white text-[11px] font-black rounded-full flex items-center justify-center px-1.5 shadow-sm">
+                            ×{cantidadEnCarrito}
+                        </span>
+                    ) : (
+                        <div className="w-5 h-5 rounded-md bg-slate-50 dark:bg-slate-800 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                            <Plus className="w-2.5 h-2.5" />
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
