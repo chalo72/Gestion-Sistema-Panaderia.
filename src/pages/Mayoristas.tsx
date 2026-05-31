@@ -1080,8 +1080,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // tombstoneIds NO se aplica aquí: si el producto está en state, es porque no fue borrado.
     // El tombstone solo guarda contra sync; filtrar por él aquí causa inconsistencias.
     const tablaDatosTodos = useMemo(() => {
-        return productos
-            .map(p => {
+        const mapped = productos.map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
                 let costo = calcularCosto(p, mejorPrecio);
                 if (costo <= 0 && p.precioVenta > 0) costo = p.precioVenta / 1.30;
@@ -1109,8 +1108,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const descuentoMonto = pvp - precioMayorista;
                 const descuentoPct = pvp > 0 ? (descuentoMonto / pvp) * 100 : 0;
                 return { producto: p, costo, precioMinPanaderia, precioMayoristaAuto, precioMayorista, tieneOverride, precioReventa, pvp, margenPanaderiaReal, margenRevendedorReal, gananciaPanaderiaPorUnidad, gananciRevendedorPorUnidad, reventaMenorQuePVP, panaderiaGana, revendedorGana, viabilidad, descuentoMonto, descuentoPct };
-            })
-            .sort((a, b) => {
+            });
+
+        // Cuando varios proveedores venden el mismo producto, mostrar solo el de mayor rentabilidad
+        const normNombre = (n: string) => n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+        const mejores = new Map<string, typeof mapped[0]>();
+        mapped.forEach(d => {
+            const key = normNombre(d.producto.nombre);
+            const prev = mejores.get(key);
+            if (!prev || d.margenPanaderiaReal > prev.margenPanaderiaReal) mejores.set(key, d);
+        });
+
+        return Array.from(mejores.values()).sort((a, b) => {
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });

@@ -214,23 +214,38 @@ export function Ventas(props: VentasProps) {
     // FILTRO DE PRODUCTOS
     // ==========================================
     const productosVenta = useMemo(() => {
-        return productos.filter(p => {
+        const filtered = productos.filter(p => {
             const matchesSearch = safeString(p.nombre).toLowerCase().includes(searchTerm.toLowerCase());
-            
+
             // 🔥 Filtro de Seguridad: Ocultar si pertenece a categoría de Insumos
             const categoriaLower = safeString(p.categoria).toLowerCase().trim();
-            const isNotInsumo = !categoriaLower.startsWith('ins:') && 
+            const isNotInsumo = !categoriaLower.startsWith('ins:') &&
                                !categoriaLower.startsWith('insumos');
 
             // Comparación insensible a mayúsculas y espacios para evitar invisibilidad por variaciones de nombre
             const matchesCategory = !selectedCategory ||
                 categoriaLower === selectedCategory.toLowerCase().trim();
-                
+
             const precio = safeNumber(p.precioVenta);
             // Mostrar cualquier producto que no sea insumo/ingrediente — no filtrar por tipo
             // (tipo puede ser undefined en productos importados y eso no debe excluirlos del POS)
             return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo;
         });
+
+        // Cuando varios proveedores venden el mismo producto, mostrar solo el de mayor rentabilidad
+        const norm = (n: string) => n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+        const mejores = new Map<string, Producto>();
+        filtered.forEach(p => {
+            const key = norm(p.nombre);
+            const prev = mejores.get(key);
+            if (!prev) { mejores.set(key, p); return; }
+            const costo = p.costoBase || 0;
+            const costoPrev = prev.costoBase || 0;
+            const margen = costo > 0 ? (p.precioVenta - costo) / costo : -1;
+            const margenPrev = costoPrev > 0 ? (prev.precioVenta - costoPrev) / costoPrev : -1;
+            if (margen > margenPrev) mejores.set(key, p);
+        });
+        return Array.from(mejores.values());
     }, [productos, searchTerm, selectedCategory]);
 
     const totalCart = useMemo(() => {
@@ -650,7 +665,7 @@ export function Ventas(props: VentasProps) {
                 )}
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3">
+            <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3 pb-[68px] lg:pb-3">
                 {/* Panel izquierdo: Catálogo o Mesas — pantalla completa en móvil */}
                 <div className={cn(
                     "flex-1 flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden",
@@ -711,8 +726,8 @@ export function Ventas(props: VentasProps) {
                 </div>
             </div>
 
-            {/* ── Navegación móvil: dos botones siempre visibles ── */}
-            <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
+            {/* ── Navegación móvil: fixed al fondo real del viewport ── */}
+            <div className="lg:hidden fixed bottom-0 left-0 right-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
                 {/* Catálogo */}
                 <button
                     onClick={() => setShowMobileCart(false)}
