@@ -651,10 +651,13 @@ export function Ventas(props: VentasProps) {
                     onCerrarCaja={() => setShowCierreModal(true)}
                     onMovimientoEntrada={() => setMovimientoCaja({ tipo: 'entrada' })}
                     onMovimientoSalida={() => setMovimientoCaja({ tipo: 'salida' })}
+                    vendedoras={vendedorasDisponibles}
+                    vendedoraActivaId={vendedoraActiva?.id ?? null}
+                    onSelectVendedora={setVendedoraActiva}
                 />
-                {/* ── Selector Rápido de Vendedora ── */}
+                {/* ── Selector Rápido de Vendedora — solo desktop (en móvil está en el panel) ── */}
                 {vendedorasDisponibles.length >= 1 && (
-                    <div className="flex items-center gap-3 px-4 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <div className="hidden lg:flex items-center gap-3 px-4 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800">
                         <VendedoraQuickPicker
                             vendedoras={vendedorasDisponibles}
                             activaId={vendedoraActiva?.id ?? null}
