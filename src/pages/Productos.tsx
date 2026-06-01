@@ -400,7 +400,13 @@ export default function Productos({
                                                 </td>
                                             </tr>
                                             {isExp && (
-                                                <tr><td colSpan={7} className="px-5 py-6 bg-slate-50/50 dark:bg-slate-900/30 animate-ag-fade-in">
+                                                <tr><td colSpan={7} className="px-5 pt-3 pb-6 bg-slate-50/50 dark:bg-slate-900/30 animate-ag-fade-in">
+                                                    <div className="flex justify-end mb-3">
+                                                        <button onClick={e => { e.stopPropagation(); setExpandedProducto(null); }}
+                                                            className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors px-3 py-1.5 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 active:scale-95">
+                                                            <ChevronUp className="w-3.5 h-3.5" /> Cerrar
+                                                        </button>
+                                                    </div>
                                                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                                         <div className="space-y-4">
                                                             <h4 className="text-sm font-bold uppercase tracking-wider text-primary flex items-center gap-2"><Info className="w-4 h-4" /> Descripción</h4>

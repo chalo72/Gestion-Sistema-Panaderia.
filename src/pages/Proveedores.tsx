@@ -22,6 +22,7 @@ import {
   Tag,
   FileText,
   ChevronDown,
+  ChevronUp,
   PhoneCall,
   AlertTriangle,
   Store,
@@ -979,6 +980,13 @@ export function Proveedores({
                   {/* ── Panel acordeón inline ── */}
                   {isSel && (
                     <div className="border-t-2 border-blue-100 dark:border-blue-800/40 bg-white dark:bg-slate-900">
+                      {/* ── Botón cerrar ── */}
+                      <div className="flex justify-end px-4 pt-2">
+                        <button onClick={e => { e.stopPropagation(); setSelectedProvId(null); }}
+                            className="flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors px-3 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95">
+                            <ChevronUp className="w-3.5 h-3.5" /> Cerrar
+                        </button>
+                      </div>
                       {/* ── Header: avatar + datos + acciones ── */}
                       <div className="px-6 py-5 bg-gradient-to-r from-blue-50 to-indigo-50/30 dark:from-blue-900/20 dark:to-indigo-900/10 border-b border-blue-100 dark:border-blue-800/30 flex items-start gap-5 flex-wrap">
                         <ProveedorAvatar proveedor={prov} size="lg" />
