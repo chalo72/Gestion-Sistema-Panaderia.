@@ -36,7 +36,8 @@ import {
 
 import type {
     Producto, OrdenProduccion, Receta, ProduccionEstado, InventarioItem,
-    FormulacionBase, ModeloPan, Proveedor, TipoLata, CapacidadLata
+    FormulacionBase, ModeloPan, Proveedor, TipoLata, CapacidadLata,
+    PlanSemanaItem, PlanSemana
 } from '@/types';
 
 interface ProduccionProps {
@@ -87,7 +88,11 @@ export function Produccion({
     configuracion
 }: ProduccionProps) {
     const [showPlanModal, setShowPlanModal] = useState(false);
-    const [activeTab, setActiveTab] = useState('ordenes');
+    const [activeTab, setActiveTab] = useState('plan-diario');
+    const [planSemanaKey, setPlanSemanaKey] = useState(0);
+
+    // usePlanSemana a nivel de Produccion para poder escribir desde PlanDiarioView
+    const { guardarPlan: guardarPlanSemana } = usePlanSemana();
 
     // Estado para el Asistente Paso a Paso
     const [ordenPasoAPaso, setOrdenPasoAPaso] = useState<OrdenProduccion | null>(null);
@@ -260,6 +265,21 @@ export function Produccion({
         toast.warning('Orden devuelta a Planeado.');
     };
 
+    const guardarComoPlantillaSemanal = (rows: any[]) => {
+        const items: PlanSemanaItem[] = rows
+            .filter(r => r?.formulacionId && r?.modeloId)
+            .map(r => ({ id: generateUUID(), formulacionId: r.formulacionId, modeloId: r.modeloId, arrobas: r.arrobas ?? 1 }));
+        if (items.length === 0) return;
+        const nuevoPlan: PlanSemana = {
+            dias: Array.from({ length: 7 }, () => items.map(i => ({ ...i, id: generateUUID() }))),
+            updatedAt: new Date().toISOString(),
+        };
+        guardarPlanSemana(nuevoPlan);
+        setPlanSemanaKey(k => k + 1);
+        setActiveTab('semana');
+        toast.success(`Plantilla aplicada a toda la semana (${items.length} masa${items.length > 1 ? 's' : ''} por día)`);
+    };
+
     const handleLanzarPlan = async (planItems: any[]) => {
         try {
             for (const item of planItems) {
@@ -333,82 +353,92 @@ export function Produccion({
                 )}
             </div>
     
-            {/* Guía Rápida: La Ruta del Maestro Panadero */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 border-y border-slate-200 dark:border-slate-800/50 py-8 bg-slate-50/20 dark:bg-slate-900/10 backdrop-blur-sm -mx-2 px-4 rounded-3xl mb-4">
+            {/* Flujo diario: 4 pasos */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-y border-slate-200 dark:border-slate-800/50 py-6 bg-slate-50/20 dark:bg-slate-900/10 -mx-2 px-4 rounded-3xl mb-4">
                 {[
-                    { step: '01', title: 'RECETAS (DNA)', desc: 'Crea tu masa base por arroba.', icon: FlaskConical, color: 'text-violet-500', bg: 'bg-violet-500/10' },
-                    { step: '02', title: 'MODELOS', desc: 'Define los panes y sus pesos.', icon: Croissant, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                    { step: '03', title: 'LANZAR', desc: '¡Hornea tus lotes del día!', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10' }
+                    { step: '01', title: 'PLANIFICAR', desc: 'Arma el plan del día: masas, arrobas y panes.', icon: CalendarDays, color: 'text-indigo-500', bg: 'bg-indigo-500/10', tab: 'plan-diario' },
+                    { step: '02', title: 'VER SEMANA', desc: 'Revisá la plantilla semanal y ajustá si hace falta.', icon: CalendarRange, color: 'text-violet-500', bg: 'bg-violet-500/10', tab: 'semana' },
+                    { step: '03', title: 'CONFIRMAR TURNO', desc: 'Seleccioná arrobas y lanzá las órdenes de hoy.', icon: SunMedium, color: 'text-amber-500', bg: 'bg-amber-500/10', tab: 'turno' },
+                    { step: '04', title: 'HORNEAR', desc: 'Seguí el kanban y finalizá cada lote.', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10', tab: 'ordenes' },
                 ].map((item, idx) => (
-                    <div key={idx} className="flex items-start gap-4 group">
-                        <div className="flex flex-col items-center">
+                    <button
+                        key={idx}
+                        onClick={() => setActiveTab(item.tab)}
+                        className="flex items-start gap-3 group text-left hover:opacity-100 transition-opacity"
+                    >
+                        <div className="flex flex-col items-center shrink-0">
                             <span className="text-[9px] font-black text-slate-300 dark:text-slate-700 tracking-tighter mb-1.5">{item.step}</span>
-                            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-all duration-500 border border-white dark:border-slate-800", item.bg, item.color)}>
-                                <item.icon className="w-6 h-6" />
+                            <div className={cn("w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-all duration-300 border border-white dark:border-slate-800", item.bg, item.color)}>
+                                <item.icon className="w-5 h-5" />
                             </div>
                         </div>
-                        <div className="space-y-1 pt-4">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/90">{item.title}</h4>
-                            <p className="text-[11px] text-muted-foreground font-medium leading-relaxed max-w-[160px]">{item.desc}</p>
+                        <div className="space-y-0.5 pt-4">
+                            <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-foreground/90">{item.title}</h4>
+                            <p className="text-[10px] text-muted-foreground font-medium leading-relaxed">{item.desc}</p>
                         </div>
-                        {idx < 2 && <ArrowRight className="hidden md:block w-5 h-5 text-slate-200 dark:text-slate-800 mt-8 ml-auto animate-pulse" />}
-                    </div>
+                    </button>
                 ))}
             </div>
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-12 w-full max-w-5xl mx-auto">
-                    <TabsTrigger value="turno" className="rounded-xl data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow gap-2">
-                        <SunMedium className="w-4 h-4" />
-                        <span className="hidden sm:inline font-black">Turno</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
-                        <ClipboardList className="w-4 h-4" />
-                        <span className="hidden sm:inline">Órdenes</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="semana" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
-                        <CalendarRange className="w-4 h-4" />
-                        <span className="hidden sm:inline">Semana</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="plan-diario" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                <TabsList className="bg-muted/40 p-1.5 rounded-2xl flex flex-wrap items-center gap-1 w-full max-w-5xl mx-auto h-auto min-h-[52px]">
+                    {/* ── Flujo operativo diario ── */}
+                    <TabsTrigger value="plan-diario" className="rounded-xl data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
                         <CalendarDays className="w-4 h-4" />
-                        <span className="hidden sm:inline">Plan Diario</span>
+                        <span className="hidden sm:inline font-black text-[11px]">Planificar</span>
                     </TabsTrigger>
-                    <TabsTrigger value="formulaciones" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                    <TabsTrigger value="semana" className="rounded-xl data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <CalendarRange className="w-4 h-4" />
+                        <span className="hidden sm:inline font-black text-[11px]">Semana</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="turno" className="rounded-xl data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <SunMedium className="w-4 h-4" />
+                        <span className="hidden sm:inline font-black text-[11px]">Turno</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <ClipboardList className="w-4 h-4" />
+                        <span className="hidden sm:inline font-black text-[11px]">Órdenes</span>
+                    </TabsTrigger>
+
+                    {/* Separador visual */}
+                    <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 rounded-full mx-1 self-center shrink-0" aria-hidden />
+
+                    {/* ── Configuración y herramientas ── */}
+                    <TabsTrigger value="formulaciones" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <FlaskConical className="w-4 h-4" />
-                        <span className="hidden sm:inline">Recetas</span>
+                        <span className="hidden sm:inline text-[11px]">Recetas</span>
                     </TabsTrigger>
-                    <TabsTrigger value="modelos" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                    <TabsTrigger value="modelos" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <Croissant className="w-4 h-4" />
-                        <span className="hidden sm:inline">Modelos</span>
+                        <span className="hidden sm:inline text-[11px]">Modelos</span>
                     </TabsTrigger>
-                    <TabsTrigger value="guias" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                    <TabsTrigger value="guias" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <Package className="w-4 h-4" />
-                        <span className="hidden sm:inline">Guías</span>
+                        <span className="hidden sm:inline text-[11px]">Guías</span>
                     </TabsTrigger>
-                    <TabsTrigger value="calculadora" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                    <TabsTrigger value="calculadora" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <Calculator className="w-4 h-4" />
-                        <span className="hidden sm:inline">Calculadora</span>
+                        <span className="hidden sm:inline text-[11px]">Calculadora</span>
                     </TabsTrigger>
-                    <TabsTrigger value="pedidos" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                    <TabsTrigger value="pedidos" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <ShoppingCart className="w-4 h-4" />
-                        <span className="hidden sm:inline">Pedidos</span>
+                        <span className="hidden sm:inline text-[11px]">Pedidos</span>
                     </TabsTrigger>
-                    <TabsTrigger value="mermas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2 relative">
+                    <TabsTrigger value="mermas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <TrendingDown className="w-4 h-4" />
-                        <span className="hidden sm:inline">Mermas</span>
+                        <span className="hidden sm:inline text-[11px]">Mermas</span>
                     </TabsTrigger>
-                    <TabsTrigger value="rotacion" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2 relative">
+                    <TabsTrigger value="rotacion" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5 relative">
                         <ArrowDownUp className="w-4 h-4" />
-                        <span className="hidden sm:inline">Rotación</span>
+                        <span className="hidden sm:inline text-[11px]">Rotación</span>
                         {lotesConProblema.length > 0 && (
                             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-rose-500 rounded-full" />
                         )}
                     </TabsTrigger>
-                    <TabsTrigger value="config-latas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                    <TabsTrigger value="config-latas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <Settings2 className="w-4 h-4" />
-                        <span className="hidden sm:inline">Config</span>
+                        <span className="hidden sm:inline text-[11px]">Config</span>
                     </TabsTrigger>
                 </TabsList>
 
@@ -580,18 +610,7 @@ export function Produccion({
                     </div>
                 </TabsContent>
 
-                {/* Tab: Semana — Planificador semanal + Vista panadero */}
-                <TabsContent value="semana">
-                    <PlanSemanaView
-                        formulaciones={formulaciones}
-                        modelos={modelosPan}
-                        configuracion={configuracion}
-                        produccion={produccion}
-                        onLanzarPlanHoy={handleLanzarPlan}
-                    />
-                </TabsContent>
-
-                {/* Tab: Plan Diario */}
+                {/* Tab: Plan Diario — punto de entrada */}
                 <TabsContent value="plan-diario">
                     <PlanDiarioView
                         formulaciones={formulaciones}
@@ -601,6 +620,19 @@ export function Produccion({
                         configuracion={configuracion}
                         formatCurrency={formatCurrency}
                         onLanzarPlan={handleLanzarPlan}
+                        onGuardarComoPlantilla={guardarComoPlantillaSemanal}
+                    />
+                </TabsContent>
+
+                {/* Tab: Semana — Planificador semanal + Vista panadero */}
+                <TabsContent value="semana">
+                    <PlanSemanaView
+                        key={planSemanaKey}
+                        formulaciones={formulaciones}
+                        modelos={modelosPan}
+                        configuracion={configuracion}
+                        produccion={produccion}
+                        onLanzarPlanHoy={handleLanzarPlan}
                     />
                 </TabsContent>
 
