@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import {
   ChevronLeft, ChevronRight, CheckCircle2, Clock, FileDown,
   Wallet, History, AlertCircle, X, Pencil, Trash2, Plus,
-  ShoppingBag, Eye, UserX
+  ShoppingBag, Eye, UserX, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import type {
@@ -177,7 +177,7 @@ interface LoanModal { trabajadorId: string; trabajadorNombre: string; credito?: 
 
 // ── Componente principal ───────────────────────────────────────────────────
 
-type Tab = 'liquidar' | 'historial' | 'liquidacion';
+type Tab = 'liquidar' | 'historial' | 'liquidacion' | 'acuerdos';
 
 export default function Nomina({
   trabajadores, asistencia, creditosTrabajadores, nominas,
@@ -201,6 +201,11 @@ export default function Nomina({
   const [loanSaving, setLoanSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<CreditoTrabajador | null>(null);
   const [selectedNomina, setSelectedNomina] = useState<NominaQuincenal | null>(null);
+
+  // ── Estado acuerdo de confidencialidad ────────────────────────────────
+  const [acTrabId, setAcTrabId]       = useState('');
+  const [acFecha, setAcFecha]         = useState(new Date().toISOString().split('T')[0]);
+  const [acRecetasExtra, setAcRecetasExtra] = useState('');
 
   // ── Estado liquidación ──────────────────────────────────────────────────
   const hoyStr = new Date().toISOString().split('T')[0];
@@ -376,6 +381,125 @@ export default function Nomina({
     catch { toast.error('Error al eliminar'); }
     finally { setConfirmDelete(null); }
   }, [onDeleteCreditoTrabajador]);
+
+  // ── PDF Acuerdo de Confidencialidad ────────────────────────────────────
+  function exportarAcuerdoPDF() {
+    const trab = trabajadores.find(t => t.id === acTrabId);
+    if (!trab) return;
+    const recetasClausula = acRecetasExtra.trim()
+      ? `<p>Entre las informaciones consideradas confidenciales se incluyen, de manera enunciativa más no limitativa: fórmulas de masas, proporciones de ingredientes, tiempos de fermentación, temperaturas de horneado, procesos de decoración, y especialmente: <em>${acRecetasExtra.trim()}</em>.</p>`
+      : `<p>Entre las informaciones consideradas confidenciales se incluyen, de manera enunciativa más no limitativa: fórmulas de masas, proporciones de ingredientes, tiempos de fermentación, temperaturas de horneado, procesos de decoración, y cualquier método, técnica o proceso productivo propio del establecimiento.</p>`;
+
+    const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<title>Acuerdo de Confidencialidad — ${trab.nombre}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Georgia', serif; padding: 40px 48px; color: #1e293b; font-size: 13px; line-height: 1.7; }
+  .header { text-align: center; border-bottom: 3px double #1e293b; padding-bottom: 14px; margin-bottom: 20px; }
+  .header h1 { font-size: 18px; font-weight: 900; letter-spacing: 1px; margin: 0 0 3px; text-transform: uppercase; }
+  .header h2 { font-size: 12px; font-weight: normal; color: #64748b; margin: 0; }
+  .title { text-align: center; font-size: 14px; font-weight: 900; text-transform: uppercase;
+           letter-spacing: 2px; border: 2px solid #1e293b; padding: 10px 16px; margin-bottom: 22px; }
+  .subtitle { text-align: center; font-size: 11px; color: #475569; margin: -14px 0 22px; letter-spacing: 1px; }
+  .partes { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 14px 16px; margin-bottom: 18px; }
+  .partes p { margin: 4px 0; font-size: 13px; }
+  .partes strong { font-weight: 900; }
+  h3 { font-size: 12px; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;
+       color: #475569; margin: 16px 0 6px; }
+  p { margin: 0 0 10px; text-align: justify; }
+  .clausula { margin-bottom: 14px; }
+  .clausula-num { font-weight: 900; }
+  .firmas { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 40px; }
+  .firma-box { text-align: center; }
+  .firma-linea { border-top: 1px solid #1e293b; padding-top: 6px; margin-top: 56px; }
+  .firma-label { font-size: 12px; font-weight: 900; text-transform: uppercase; }
+  .firma-sub { font-size: 11px; color: #64748b; margin-top: 3px; }
+  .huella { border: 1px dashed #cbd5e1; width: 64px; height: 80px; margin: 8px auto;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 9px; color: #94a3b8; text-align: center; }
+  .nota-final { margin-top: 28px; padding: 10px 14px; background: #fefce8; border: 1px solid #fde68a;
+                border-radius: 4px; font-size: 11px; color: #78350f; }
+  @media print { body { padding: 20px 28px; } }
+</style>
+</head><body>
+
+<div class="header">
+  <h1>Panadería Dulce Placer</h1>
+  <h2>Canalete, Córdoba · Establecimiento de Panadería Artesanal</h2>
+</div>
+
+<div class="title">Acuerdo de Confidencialidad y No Divulgación</div>
+<div class="subtitle">Protección de Recetas, Fórmulas y Procesos Productivos</div>
+
+<div class="partes">
+  <p>En <strong>Canalete, Córdoba</strong>, el día <strong>${acFecha}</strong>, entre las partes:</p>
+  <p><strong>EL ESTABLECIMIENTO:</strong> Panadería Dulce Placer, establecimiento de panadería artesanal ubicado en Canalete, Córdoba, en adelante <em>"El Establecimiento"</em>.</p>
+  <p><strong>EL TRABAJADOR(A):</strong> <strong>${trab.nombre}</strong>${trab.cedula ? `, identificado(a) con C.C. N° ${trab.cedula}` : ''}, quien se desempeña como <strong>${trab.rol}</strong>, en adelante <em>"El Trabajador"</em>.</p>
+</div>
+
+<h3>Antecedentes</h3>
+<p>El Establecimiento ha desarrollado a lo largo de su trayectoria un conjunto de recetas, fórmulas, procesos y métodos de producción artesanal que constituyen su ventaja competitiva y representan un activo de gran valor. En virtud de la relación laboral, El Trabajador tiene o tendrá acceso a dicha información confidencial.</p>
+
+<div class="clausula">
+  <p><span class="clausula-num">PRIMERA — OBJETO.</span> El presente acuerdo tiene por objeto establecer las obligaciones de El Trabajador en materia de confidencialidad y reserva respecto de toda la información privilegiada, técnica y comercial de Panadería Dulce Placer a la que tenga acceso con ocasión de su trabajo.</p>
+</div>
+
+<div class="clausula">
+  <p><span class="clausula-num">SEGUNDA — INFORMACIÓN CONFIDENCIAL.</span> ${recetasClausula}</p>
+</div>
+
+<div class="clausula">
+  <p><span class="clausula-num">TERCERA — OBLIGACIONES DEL TRABAJADOR.</span> El Trabajador se obliga a:</p>
+  <p>a) Mantener en estricta reserva toda la información confidencial del Establecimiento.<br>
+  b) No reproducir, copiar, transmitir ni divulgar dicha información por ningún medio.<br>
+  c) No utilizar las recetas, fórmulas o procesos del Establecimiento en beneficio propio o de terceros, ni en otros establecimientos de panadería o similares.<br>
+  d) No enseñar, capacitar ni instruir a terceras personas utilizando el conocimiento adquirido en el Establecimiento.<br>
+  e) Devolver o destruir cualquier material físico o digital que contenga información confidencial, al finalizar la relación laboral.</p>
+</div>
+
+<div class="clausula">
+  <p><span class="clausula-num">CUARTA — VIGENCIA.</span> Las obligaciones de confidencialidad establecidas en el presente acuerdo son indefinidas y permanecerán vigentes incluso una vez terminada la relación laboral entre las partes, sin limitación de tiempo.</p>
+</div>
+
+<div class="clausula">
+  <p><span class="clausula-num">QUINTA — CONSECUENCIAS DEL INCUMPLIMIENTO.</span> En caso de incumplimiento de las obligaciones aquí pactadas, El Trabajador será responsable de los perjuicios económicos, morales y reputacionales que se causen a Panadería Dulce Placer, y el Establecimiento podrá ejercer las acciones legales que estime pertinentes para la protección de sus derechos.</p>
+</div>
+
+<div class="clausula">
+  <p><span class="clausula-num">SEXTA — DECLARACIÓN DE COMPRENSIÓN.</span> El Trabajador declara haber leído y comprendido íntegramente el contenido del presente acuerdo, haberlo firmado de manera libre, voluntaria y sin presión alguna, y estar de acuerdo con cada una de las cláusulas aquí contenidas.</p>
+</div>
+
+<div class="firmas">
+  <div class="firma-box">
+    <div class="huella">Huella dactilar</div>
+    <div class="firma-linea">
+      <div class="firma-label">${trab.nombre}</div>
+      <div class="firma-sub">El Trabajador(a)</div>
+      <div class="firma-sub">C.C. ${trab.cedula || '___________________'}</div>
+      <div class="firma-sub" style="margin-top:6px">Firma: _______________________</div>
+    </div>
+  </div>
+  <div class="firma-box">
+    <div class="huella">Huella dactilar</div>
+    <div class="firma-linea">
+      <div class="firma-label">Representante Legal</div>
+      <div class="firma-sub">Panadería Dulce Placer</div>
+      <div class="firma-sub">C.C. ___________________</div>
+      <div class="firma-sub" style="margin-top:6px">Firma: _______________________</div>
+    </div>
+  </div>
+</div>
+
+<div class="nota-final">
+  ⚠️ Este documento ha sido firmado en dos (2) ejemplares del mismo tenor y valor, uno para cada parte. Fecha de suscripción: ${acFecha} · Canalete, Córdoba.
+</div>
+
+</body></html>`;
+    const win = window.open('', '_blank');
+    if (!win) { toast.error('Habilita ventanas emergentes'); return; }
+    win.document.write(html); win.document.close(); setTimeout(() => win.print(), 500);
+  }
 
   // ── PDF nómina ─────────────────────────────────────────────────────────
   function exportarPDF(n?: NominaQuincenal) {
@@ -598,6 +722,10 @@ export default function Nomina({
             <button onClick={() => setTab('liquidacion')}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${tab === 'liquidacion' ? 'bg-red-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
               <UserX className="w-4 h-4" /><span className="hidden sm:inline">Liquidación</span>
+            </button>
+            <button onClick={() => setTab('acuerdos')}
+              className={`flex items-center gap-1 px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${tab === 'acuerdos' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+              <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">Acuerdos</span>
             </button>
           </div>
         </div>
@@ -1006,6 +1134,74 @@ export default function Nomina({
           </div>
         </>)}
       </div>
+
+        {/* ── TAB ACUERDOS ─────────────────────────────────────────────── */}
+        {tab === 'acuerdos' && (<>
+
+          <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/40 rounded-2xl px-4 py-3">
+            <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Acuerdo de Confidencialidad de Recetas</p>
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">El trabajador se compromete a no divulgar recetas, fórmulas ni procesos a otras panaderías. El documento no genera obligaciones para el establecimiento.</p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-5 space-y-4">
+
+            <div>
+              <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Trabajador(a)</label>
+              <select value={acTrabId} onChange={e => setAcTrabId(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                <option value="">— Seleccionar trabajador(a) —</option>
+                {trabajadores.map(t => (
+                  <option key={t.id} value={t.id}>{t.nombre} — {t.rol}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">Fecha del acuerdo</label>
+              <input type="date" value={acFecha} onChange={e => setAcFecha(e.target.value)}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide block mb-1.5">
+                Recetas o productos específicos a mencionar <span className="font-normal normal-case text-gray-400">(opcional)</span>
+              </label>
+              <textarea value={acRecetasExtra} onChange={e => setAcRecetasExtra(e.target.value)}
+                placeholder="Ej: pan de queso, buñuelos, mogolla especial, bizcocho de cuajada… (se incluyen en la cláusula segunda)"
+                rows={2}
+                className="w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+              <p className="text-[11px] text-gray-400 mt-1">Si lo dejas vacío, el documento menciona todas las recetas y procesos del establecimiento de forma general.</p>
+            </div>
+
+            {/* Vista previa */}
+            {acTrabId && (
+              <div className="border border-emerald-200 dark:border-emerald-800/40 rounded-xl p-4 bg-emerald-50/50 dark:bg-emerald-900/10 space-y-2 text-sm">
+                <p className="font-bold text-emerald-800 dark:text-emerald-300 text-xs uppercase tracking-wide">Vista previa del documento</p>
+                <p className="text-gray-700 dark:text-gray-300">
+                  <span className="font-semibold">{trabajadores.find(t=>t.id===acTrabId)?.nombre}</span> firma el compromiso de no divulgar las recetas y procesos de <span className="font-semibold">Panadería Dulce Placer</span>.
+                </p>
+                <ul className="text-xs text-gray-500 dark:text-gray-400 space-y-1 list-none">
+                  <li>✓ Cláusula de confidencialidad indefinida (también post-empleo)</li>
+                  <li>✓ Prohibición de uso en otras panaderías o negocios similares</li>
+                  <li>✓ Prohibición de enseñar/transmitir a terceros</li>
+                  <li>✓ Responsabilidad por daños en caso de incumplimiento</li>
+                  <li>✓ Espacio para firma y huella dactilar de ambas partes</li>
+                  {acRecetasExtra.trim() && <li>✓ Recetas específicas incluidas en cláusula segunda</li>}
+                </ul>
+              </div>
+            )}
+
+            <button
+              onClick={exportarAcuerdoPDF}
+              disabled={!acTrabId}
+              className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg shadow-emerald-600/30 transition-all active:scale-95 disabled:opacity-40 disabled:pointer-events-none">
+              <FileDown className="w-5 h-5" /> Generar acuerdo de confidencialidad
+            </button>
+          </div>
+        </>)}
 
       {/* ── Modal detalle nómina ──────────────────────────────────────────── */}
       {selectedNomina && (
