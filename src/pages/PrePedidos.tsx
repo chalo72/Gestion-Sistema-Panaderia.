@@ -923,8 +923,32 @@ export default function PrePedidos({
             </div>
 
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
+              {/* Limpiar ticket */}
+              <Button
+                variant="outline"
+                disabled={!activeDraft || activeDraft.items.length === 0}
+                onClick={() => {
+                  if (!activeDraft) return;
+                  toast('¿Limpiar el ticket completo?', {
+                    description: `Se borrarán los ${activeDraft.items.length} producto${activeDraft.items.length !== 1 ? 's' : ''} del pedido.`,
+                    action: {
+                      label: 'Sí, limpiar',
+                      onClick: async () => {
+                        await onDeletePrePedido(activeDraft.id);
+                        setActiveProveedorId(null);
+                        setShowProveedorPanel(false);
+                        toast.success('Ticket limpiado — listo para un nuevo pedido');
+                      },
+                    },
+                  });
+                }}
+                title="Limpiar ticket"
+                className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl p-0 shrink-0 text-rose-500 border-slate-200 dark:border-slate-800 hover:bg-rose-50 dark:hover:bg-rose-900/50 hover:border-rose-200 transition-colors"
+              >
+                <Trash2 className="w-5 h-5" />
+              </Button>
+              <Button
+                variant="outline"
                 disabled={!activeDraft || activeDraft.items.length === 0}
                 onClick={() => {
                   toast.success('Borrador guardado');
