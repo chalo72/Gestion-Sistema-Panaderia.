@@ -62,6 +62,9 @@ const WRITES: WriteSpec[] = [
   { method: 'updatePedidoActivo',   table: 'pedidos_activos',    fn: (d) => supabaseDB.updatePedidoActivo(d) },
   { method: 'addCliente',           table: 'clientes',           fn: (d) => supabaseDB.addCliente(d) },
   { method: 'updateCliente',        table: 'clientes',           fn: (d) => supabaseDB.updateCliente(d) },
+  { method: 'saveConfiguracion',    table: 'configuracion',      fn: (d) => supabaseDB.saveConfiguracion(d) },
+  { method: 'addNomina',            table: 'nominas',            fn: (d) => supabaseDB.addNomina(d) },
+  { method: 'updateNomina',         table: 'nominas',            fn: (d) => supabaseDB.updateNomina(d) },
 ];
 
 const DELETES: DeleteSpec[] = [

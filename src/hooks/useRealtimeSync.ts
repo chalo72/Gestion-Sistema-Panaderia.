@@ -294,6 +294,7 @@ export function useRealtimeSync() {
       ['recetas',         () => db.getAllRecetas(),        (d) => supabaseDB.addReceta(d)],
       ['produccion',      () => db.getAllOrdenesProduccion(), (d) => supabaseDB.addOrdenProduccion(d)],
       ['clientes',        () => db.getAllClientes(),       (d) => supabaseDB.addCliente(d)],
+      ['nominas',         () => db.getAllNominas(),        (d) => supabaseDB.addNomina(d)],
     ];
     // Push todas las tablas en paralelo (antes era secuencial y tardaba mucho)
     await Promise.all(pushTasks.map(async ([tableName, getLocal, writeSupabase]) => {
@@ -354,21 +355,38 @@ export function useRealtimeSync() {
         i.id && !localIds.has(i.id) && !tombstoneSet.has(i.id),
       );
       // Items que YA existen localmente pero Supabase tiene versión MÁS NUEVA → actualizar
-      const actualizados = (['productos', 'proveedores', 'precios', 'inventario'].includes(table))
-        ? supabaseItems.filter((remote: any) => {
+      // Ventas son inmutables (no se editan después de creadas)
+      const TABLAS_INMUTABLES = ['ventas'];
+      const actualizados = TABLAS_INMUTABLES.includes(table)
+        ? []
+        : supabaseItems.filter((remote: any) => {
             if (!remote.id || !localIds.has(remote.id) || tombstoneSet.has(remote.id)) return false;
+
             if (table === 'inventario') {
-              // Inventario no tiene updatedAt — comparar stockActual y stockMinimo
               const localItem = localItems.find((l: any) => l.id === remote.id);
               return !localItem
                 || remote.stockActual !== localItem.stockActual
                 || remote.stockMinimo  !== localItem.stockMinimo;
             }
-            const localTs  = new Date(localTsMap.get(remote.id) ?? 0).getTime();
-            const remoteTs = new Date(remote.updatedAt ?? remote.createdAt ?? 0).getTime();
-            return remoteTs > localTs; // Supabase más nuevo → actualizar local
-          })
-        : [];
+
+            // Extraer timestamp de modificación del registro (varios nombres de campo posibles)
+            const remoteTs = new Date(
+              remote.updatedAt ?? remote.fechaActualizacion ?? remote.ultimoCambio ??
+              remote.updated_at ?? remote.createdAt ?? remote.created_at ?? 0
+            ).getTime();
+            const localItem = localItems.find((l: any) => l.id === remote.id);
+            const localTs = new Date(
+              localItem?.updatedAt ?? localItem?.fechaActualizacion ?? localItem?.ultimoCambio ??
+              localItem?.updated_at ?? localItem?.createdAt ?? localItem?.created_at ?? 0
+            ).getTime();
+
+            // Ambos tienen timestamp → solo actualizar si remoto es más nuevo
+            if (remoteTs > 0 && localTs > 0) return remoteTs > localTs;
+            // Local tiene timestamp pero remoto no → conservar local
+            if (localTs > 0 && remoteTs === 0) return false;
+            // Sin timestamps confiables → actualizar (push ya subió local a Supabase)
+            return true;
+          });
       // Items tombstoneados localmente pero que Supabase tiene vivos → restaurar
       // SOLO proveedores: el caso "la 36 eliminada por error" justifica la restauración.
       // Productos y precios NO se restauran: si el usuario los eliminó, la intención debe respetarse.
@@ -398,6 +416,54 @@ export function useRealtimeSync() {
         }));
       }
     }
+    // Sincronizar configuración del negocio (no está en HANDLERS porque es doc único)
+    try {
+      const [configRemota, configLocal] = await Promise.all([
+        _sdb.getConfiguracion().catch(() => null as any),
+        db.getConfiguracion().catch(() => null as any),
+      ]);
+      if (configRemota) {
+        const remoteTs = new Date(configRemota.updatedAt ?? configRemota.updated_at ?? 0).getTime();
+        const localTs  = new Date(configLocal?.updatedAt ?? configLocal?.updated_at ?? 0).getTime();
+        if (remoteTs > localTs || (!configLocal && configRemota)) {
+          await db.saveConfiguracion({ ...configRemota, id: 'main' }).catch(() => {});
+          window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+            detail: { table: 'configuracion', eventType: 'MANUAL', id: 'main' },
+          }));
+          console.log('✅ [syncNow] configuracion: actualizada desde Supabase');
+        } else if (configLocal) {
+          await _sdb.saveConfiguracion({ ...configLocal, id: 'main' }).catch(() => {});
+          console.log('✅ [syncNow] configuracion: subida a Supabase');
+        }
+      } else if (configLocal) {
+        await _sdb.saveConfiguracion({ ...configLocal, id: 'main' }).catch(() => {});
+        console.log('✅ [syncNow] configuracion: subida a Supabase (primera vez)');
+      }
+    } catch (e) {
+      console.warn('⚠️ [syncNow] configuracion: error en sync', e);
+    }
+
+    // Sincronizar nóminas (append-only, no está en HANDLERS)
+    try {
+      const [nominasRemota, nominasLocal] = await Promise.all([
+        _sdb.getAllNominas().catch(() => [] as any[]),
+        db.getAllNominas().catch(() => [] as any[]),
+      ]);
+      const localNominaIds = new Set(nominasLocal.map((n: any) => n.id));
+      const nuevasNominas = nominasRemota.filter((n: any) => n.id && !localNominaIds.has(n.id));
+      for (const n of nuevasNominas) {
+        await db.addNomina(n).catch(() => {});
+      }
+      if (nuevasNominas.length > 0) {
+        window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+          detail: { table: 'nominas', eventType: 'MANUAL', id: 'manual' },
+        }));
+        console.log(`✅ [syncNow] nominas: ${nuevasNominas.length} nuevas descargadas`);
+      }
+    } catch (e) {
+      console.warn('⚠️ [syncNow] nominas: error en sync', e);
+    }
+
     // Limpiar IDs de syncNow después de 30s — suficiente para que lleguen todos los ecos
     setTimeout(() => syncNowIds.current.clear(), 30_000);
   }, []);
@@ -424,7 +490,7 @@ export function useRealtimeSync() {
         }),
     );
 
-    // Fix 1: sincronizar al recuperar conexión
+    // Sincronizar al recuperar conexión de red
     const handleOnline = () => syncNow().catch(() => {});
     window.addEventListener('online', handleOnline);
 
@@ -432,12 +498,29 @@ export function useRealtimeSync() {
     const handleForceSync = () => syncNow().catch(() => {});
     window.addEventListener('dp-force-sync', handleForceSync);
 
+    // Sync al volver a la app (celular minimiza/maximiza, cambio de pestaña)
+    // Evitar sync si la app estuvo oculta menos de 30s (no vale la pena)
+    let hiddenAt = 0;
+    const handleVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (document.visibilityState === 'visible') {
+        const ausencia = Date.now() - hiddenAt;
+        if (hiddenAt > 0 && ausencia > 30_000) {
+          console.log(`📱 [NexusSync] App volvió a primer plano (${Math.round(ausencia / 1000)}s) — sincronizando...`);
+          syncNow().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
       channelsRef.current.forEach(ch => supabase.removeChannel(ch));
       channelsRef.current = [];
       setSyncConnected(false);
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('dp-force-sync', handleForceSync);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [applyRemoteChange, syncNow]);
 
