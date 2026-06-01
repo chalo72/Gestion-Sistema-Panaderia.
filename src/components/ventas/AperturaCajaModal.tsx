@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import {
@@ -6,6 +6,7 @@ import {
     ChevronDown, ChevronUp, Plus, Trash2, Pencil, Save, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { db } from '@/lib/database';
 
 // ─── Cajas por defecto ────────────────────────────────────────────────────────
 const CAJAS_DEFAULT = [
@@ -22,7 +23,6 @@ const LS_KEY = 'dp_cajas_config';
 
 interface CajaDefinicion { nombre: string; emoji: string; descripcion: string; }
 
-// Carga cajas desde localStorage (o usa las por defecto)
 function cargarCajasGuardadas(): CajaDefinicion[] {
     try {
         const raw = localStorage.getItem(LS_KEY);
@@ -43,12 +43,16 @@ const TURNOS = [
 
 const EMOJIS_RAPIDOS = ['🏪','🍦','🍟','🍺','🎂','☕','🎁','🛒','💰','🍕','🥤','🍰','🧁','🛍️','🏬'];
 
-interface CajaConfig { vendedoraNombre: string; montoApertura: number; incluida: boolean; }
+interface CajaConfig { vendedoras: string[]; montoApertura: number; incluida: boolean; }
 
 interface AperturaCajaModalProps {
     isOpen: boolean;
     onClose: () => void;
     onAbrir: (monto: number) => Promise<any>;
+}
+
+function configDefault(): CajaConfig {
+    return { vendedoras: [], montoApertura: 0, incluida: true };
 }
 
 export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModalProps) {
@@ -58,6 +62,20 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
     const [loading,         setLoading]         = useState(false);
     const [progreso,        setProgreso]        = useState<number>(0);
     const [expandida,       setExpandida]       = useState<string | null>(null);
+
+    // Lista de trabajadoras activas (cargada desde DB al abrir)
+    const [trabajadoras, setTrabajadoras] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        db.getTrabajadores().then(lista => {
+            const activas = lista
+                .filter(t => t.estado === 'activo')
+                .map(t => t.nombre)
+                .filter(Boolean);
+            setTrabajadoras(activas);
+        }).catch(() => {});
+    }, [isOpen]);
 
     // Lista de cajas (editable y persistida)
     const [cajasLista,  setCajasLista]  = useState<CajaDefinicion[]>(cargarCajasGuardadas);
@@ -72,7 +90,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
 
     // Config de apertura por caja
     const [configs, setConfigs] = useState<Record<string, CajaConfig>>(() =>
-        Object.fromEntries(cajasLista.map(c => [c.nombre, { vendedoraNombre: '', montoApertura: 0, incluida: true }]))
+        Object.fromEntries(cajasLista.map(c => [c.nombre, configDefault()]))
     );
 
     const cajasIncluidas = cajasLista.filter(c => configs[c.nombre]?.incluida);
@@ -80,13 +98,25 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         ? cajasIncluidas.length * montoGlobal
         : cajasIncluidas.reduce((sum, c) => sum + (configs[c.nombre]?.montoApertura || 0), 0);
 
-    const toggleCaja  = (nombre: string) => setConfigs(prev => ({ ...prev, [nombre]: { ...prev[nombre], incluida: !prev[nombre]?.incluida } }));
-    const setVendedora = (nombre: string, val: string) => setConfigs(prev => ({ ...prev, [nombre]: { ...prev[nombre], vendedoraNombre: val } }));
-    const setMontoCaja = (nombre: string, val: number)  => setConfigs(prev => ({ ...prev, [nombre]: { ...prev[nombre], montoApertura: val } }));
+    const toggleCaja = (nombre: string) =>
+        setConfigs(prev => ({ ...prev, [nombre]: { ...prev[nombre], incluida: !prev[nombre]?.incluida } }));
+
+    const toggleVendedora = (cajaNombre: string, nombre: string) => {
+        setConfigs(prev => {
+            const cfg = prev[cajaNombre] || configDefault();
+            const vendedoras = cfg.vendedoras.includes(nombre)
+                ? cfg.vendedoras.filter(v => v !== nombre)
+                : [...cfg.vendedoras, nombre];
+            return { ...prev, [cajaNombre]: { ...cfg, vendedoras } };
+        });
+    };
+
+    const setMontoCaja = (nombre: string, val: number) =>
+        setConfigs(prev => ({ ...prev, [nombre]: { ...prev[nombre], montoApertura: val } }));
 
     // ── Gestión de cajas ──
     const abrirNueva = () => {
-        setEditandoIdx(-1); // -1 = nueva
+        setEditandoIdx(-1);
         setEditNombre('');
         setEditEmoji('🏪');
         setEditDesc('');
@@ -107,19 +137,16 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         const nueva: CajaDefinicion = { nombre: editNombre.trim(), emoji: editEmoji, descripcion: editDesc.trim() };
         let nuevaLista: CajaDefinicion[];
         if (editandoIdx === -1) {
-            // Agregar
             nuevaLista = [...cajasLista, nueva];
-            setConfigs(prev => ({ ...prev, [nueva.nombre]: { vendedoraNombre: '', montoApertura: 0, incluida: true } }));
+            setConfigs(prev => ({ ...prev, [nueva.nombre]: configDefault() }));
         } else {
-            // Editar existente
             const nombreViejo = cajasLista[editandoIdx!].nombre;
             nuevaLista = cajasLista.map((c, i) => i === editandoIdx ? nueva : c);
-            // Migrar config
             setConfigs(prev => {
                 const vieja = prev[nombreViejo];
                 const next = { ...prev };
                 delete next[nombreViejo];
-                next[nueva.nombre] = vieja || { vendedoraNombre: '', montoApertura: 0, incluida: true };
+                next[nueva.nombre] = vieja || configDefault();
                 return next;
             });
         }
@@ -140,7 +167,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         if (!confirm('¿Restaurar la lista de cajas por defecto? Se perderán tus cambios.')) return;
         guardarCajas(CAJAS_DEFAULT);
         setCajasLista(CAJAS_DEFAULT);
-        setConfigs(Object.fromEntries(CAJAS_DEFAULT.map(c => [c.nombre, { vendedoraNombre: '', montoApertura: 0, incluida: true }])));
+        setConfigs(Object.fromEntries(CAJAS_DEFAULT.map(c => [c.nombre, configDefault()])));
     };
 
     // ── Iniciar jornada ──
@@ -150,13 +177,13 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         setProgreso(0);
         for (let i = 0; i < cajasIncluidas.length; i++) {
             const caja = cajasIncluidas[i];
-            const cfg  = configs[caja.nombre] || { vendedoraNombre: '', montoApertura: 0, incluida: true };
+            const cfg  = configs[caja.nombre] || configDefault();
             const monto = usarMontoGlobal ? montoGlobal : (cfg.montoApertura || 0);
             try {
                 localStorage.setItem('dp_caja_extras', JSON.stringify({
                     cajaNombre:      caja.nombre,
                     turno,
-                    vendedoraNombre: cfg.vendedoraNombre.trim() || undefined,
+                    vendedoraNombre: cfg.vendedoras.length > 0 ? cfg.vendedoras.join(', ') : undefined,
                 }));
             } catch { /* ignorar */ }
             await onAbrir(monto);
@@ -165,7 +192,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         setLoading(false);
         setProgreso(0);
         setMontoGlobal(0);
-        setConfigs(Object.fromEntries(cajasLista.map(c => [c.nombre, { vendedoraNombre: '', montoApertura: 0, incluida: true }])));
+        setConfigs(Object.fromEntries(cajasLista.map(c => [c.nombre, configDefault()])));
         onClose();
     };
 
@@ -218,17 +245,14 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                 </button>
                             </div>
 
-                            {/* Lista con edición */}
                             <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden divide-y divide-slate-50 dark:divide-slate-800">
                                 {cajasLista.map((caja, idx) => {
                                     const editandoEsta = editandoIdx === idx;
                                     return (
                                         <div key={idx} className="bg-white dark:bg-slate-900">
                                             {editandoEsta ? (
-                                                /* Formulario inline de edición */
                                                 <div className="p-3 space-y-2 bg-indigo-50 dark:bg-indigo-900/10">
                                                     <div className="flex gap-2">
-                                                        {/* Selector emoji */}
                                                         <div className="relative">
                                                             <button
                                                                 onClick={() => setShowEmojis(v => !v)}
@@ -245,7 +269,6 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                                                 </div>
                                                             )}
                                                         </div>
-                                                        {/* Nombre */}
                                                         <input
                                                             autoFocus
                                                             value={editNombre}
@@ -271,7 +294,6 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                                     </div>
                                                 </div>
                                             ) : (
-                                                /* Fila normal */
                                                 <div className="flex items-center gap-3 px-4 py-3">
                                                     <span className="text-xl shrink-0">{caja.emoji}</span>
                                                     <div className="flex-1 min-w-0">
@@ -293,7 +315,6 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                 })}
                             </div>
 
-                            {/* Formulario de nueva caja */}
                             {editandoIdx === -1 ? (
                                 <div className="p-3 space-y-2 rounded-2xl border-2 border-dashed border-indigo-300 bg-indigo-50 dark:bg-indigo-900/10">
                                     <p className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Nueva caja</p>
@@ -393,15 +414,15 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                     <Store className="w-3.5 h-3.5" /> Puntos de venta ({cajasIncluidas.length}/{cajasLista.length})
                                 </label>
                                 <div className="flex gap-1.5">
-                                    <button onClick={() => setConfigs(p => Object.fromEntries(cajasLista.map(c => [c.nombre, { ...(p[c.nombre] || { vendedoraNombre: '', montoApertura: 0 }), incluida: true }])))}
+                                    <button onClick={() => setConfigs(p => Object.fromEntries(cajasLista.map(c => [c.nombre, { ...(p[c.nombre] || configDefault()), incluida: true }])))}
                                         className="text-[10px] font-black uppercase text-blue-500 hover:text-blue-700 px-2 py-1 rounded-lg hover:bg-blue-50 transition-all">Todas</button>
-                                    <button onClick={() => setConfigs(p => Object.fromEntries(cajasLista.map(c => [c.nombre, { ...(p[c.nombre] || { vendedoraNombre: '', montoApertura: 0 }), incluida: false }])))}
+                                    <button onClick={() => setConfigs(p => Object.fromEntries(cajasLista.map(c => [c.nombre, { ...(p[c.nombre] || configDefault()), incluida: false }])))}
                                         className="text-[10px] font-black uppercase text-slate-400 hover:text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-50 transition-all">Ninguna</button>
                                 </div>
                             </div>
                             <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden divide-y divide-slate-50 dark:divide-slate-800">
                                 {cajasLista.map((caja) => {
-                                    const cfg     = configs[caja.nombre] || { vendedoraNombre: '', montoApertura: 0, incluida: true };
+                                    const cfg      = configs[caja.nombre] || configDefault();
                                     const incluida = cfg.incluida;
                                     const abierta  = expandida === caja.nombre;
                                     return (
@@ -416,7 +437,13 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                                     <span className="text-xl shrink-0">{caja.emoji}</span>
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-none truncate">{caja.nombre}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold">{caja.descripcion}</p>
+                                                        {cfg.vendedoras.length > 0 ? (
+                                                            <p className="text-[10px] text-emerald-600 font-bold truncate">
+                                                                👤 {cfg.vendedoras.join(' · ')}
+                                                            </p>
+                                                        ) : (
+                                                            <p className="text-[10px] text-slate-400 font-bold">{caja.descripcion}</p>
+                                                        )}
                                                     </div>
                                                 </div>
                                                 {!usarMontoGlobal && incluida && (
@@ -434,12 +461,54 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                                     </button>
                                                 )}
                                             </div>
+
+                                            {/* Panel expandido — selector de trabajadoras */}
                                             {abierta && incluida && (
-                                                <div className="px-4 pb-3 bg-slate-50 dark:bg-slate-800/60 flex items-center gap-2">
-                                                    <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                                                    <input type="text" value={cfg.vendedoraNombre} onChange={e => setVendedora(caja.nombre, e.target.value)}
-                                                        placeholder="Nombre de la vendedora (opcional)" autoFocus
-                                                        className="flex-1 h-9 px-3 text-sm font-bold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 focus:border-blue-300 outline-none uppercase placeholder:normal-case placeholder:font-normal transition-all" />
+                                                <div className="px-4 pb-4 pt-2 bg-slate-50 dark:bg-slate-800/60 space-y-2">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-1">
+                                                        <User className="w-3 h-3" /> ¿Quién atiende esta caja?
+                                                    </p>
+                                                    {trabajadoras.length > 0 ? (
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {trabajadoras.map(nombre => {
+                                                                const seleccionada = cfg.vendedoras.includes(nombre);
+                                                                return (
+                                                                    <button
+                                                                        key={nombre}
+                                                                        onClick={() => toggleVendedora(caja.nombre, nombre)}
+                                                                        className={cn(
+                                                                            "h-8 px-3 rounded-full text-xs font-black uppercase border-2 transition-all flex items-center gap-1.5",
+                                                                            seleccionada
+                                                                                ? "bg-emerald-500 border-emerald-500 text-white shadow-sm"
+                                                                                : "bg-white dark:bg-slate-700 border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-emerald-300 hover:text-emerald-600"
+                                                                        )}
+                                                                    >
+                                                                        {seleccionada && <CheckCircle className="w-3 h-3" />}
+                                                                        {nombre}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[11px] text-slate-400 italic">
+                                                            No hay trabajadoras activas registradas. Ve a <strong>Trabajadores</strong> para agregar.
+                                                        </p>
+                                                    )}
+                                                    {/* Chips de las seleccionadas con X para quitar */}
+                                                    {cfg.vendedoras.length > 0 && (
+                                                        <div className="flex flex-wrap gap-1 pt-1 border-t border-slate-200 dark:border-slate-600">
+                                                            {cfg.vendedoras.map(nombre => (
+                                                                <span key={nombre}
+                                                                    className="inline-flex items-center gap-1 h-6 pl-2.5 pr-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-black uppercase">
+                                                                    {nombre}
+                                                                    <button onClick={() => toggleVendedora(caja.nombre, nombre)}
+                                                                        className="w-4 h-4 rounded-full hover:bg-emerald-300 dark:hover:bg-emerald-600 flex items-center justify-center transition-colors">
+                                                                        <X className="w-2.5 h-2.5" />
+                                                                    </button>
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>

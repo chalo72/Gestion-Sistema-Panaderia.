@@ -33,6 +33,7 @@ import type { ViewType } from '@/types';
 import { cn } from '@/lib/utils';
 import type { Producto, Proveedor, PrecioProveedor } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { usePermisosModulos } from '@/hooks/usePermisosModulos';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState, useEffect } from 'react';
@@ -89,6 +90,7 @@ export function Sidebar({
   onToggleCollapse
 }: SidebarProps) {
   const { check, role } = useCan();
+  const { puedeVer } = usePermisosModulos();
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [alertasSeguridad] = useState(() => getAlertasNoLeidas());
@@ -201,7 +203,12 @@ export function Sidebar({
 
   // Filtrar por permisos — omitir secciones vacías
   const menuGroups = allMenuGroups
-    .map(g => ({ ...g, items: g.items.filter(i => check(i.permission as any)) }))
+    .map(g => ({
+      ...g,
+      items: g.items.filter(i =>
+        check(i.permission as any) && puedeVer(role ?? '', i.id)
+      )
+    }))
     .filter(g => g.items.length > 0);
 
   const renderSidebarContent = () => (
