@@ -439,6 +439,7 @@ export interface Configuracion {
   pesoArrobaKg?: number;        // Peso de la arroba configurable (default 11.5 kg)
   tiposLata?: TipoLata[];       // Tipos de lata configurados por el admin
   tiposDia?: TipoDiaConfig[];   // Plantillas de día: Normal, Alto, Evento
+  whatsappApiKey?: string;      // API key de CallMeBot para envío automático sin interacción
 }
 
 // Plantilla de tipo de día de producción

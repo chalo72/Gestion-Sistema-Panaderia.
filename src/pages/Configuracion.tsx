@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload, MessageCircle, Phone } from 'lucide-react';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import {
@@ -60,6 +60,9 @@ function Configuracion(props: ConfiguracionProps) {
   const [passAuxiliar, setPassAuxiliar] = useState('');
   const [publicUrl, setPublicUrl] = useState('');
   const [aiMode, setAiMode] = useState<'local' | 'hybrid' | 'off'>('hybrid');
+  const [telefonoNegocio, setTelefonoNegocio] = useState('');
+  const [whatsappApiKey, setWhatsappApiKey] = useState('');
+  const [showWaKey, setShowWaKey] = useState(false);
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
@@ -97,6 +100,8 @@ function Configuracion(props: ConfiguracionProps) {
       setPresupuesto((configuracion.presupuestoMensual || 0).toString());
       setPublicUrl(configuracion.publicUrl || '');
       setAiMode(configuracion.aiMode || 'hybrid');
+      setTelefonoNegocio(configuracion.telefonoNegocio || '');
+      setWhatsappApiKey(configuracion.whatsappApiKey || '');
       setLatasPorHorno((configuracion.latasPorHorno || 4).toString());
       setPesoArrobaKg((configuracion.pesoArrobaKg || 11.5).toString());
     }
@@ -127,6 +132,8 @@ function Configuracion(props: ConfiguracionProps) {
         aiMode: aiMode,
         latasPorHorno: parseInt(latasPorHorno) || 4,
         pesoArrobaKg: parseFloat(pesoArrobaKg) || 11.5,
+        telefonoNegocio: telefonoNegocio.trim(),
+        whatsappApiKey: whatsappApiKey.trim(),
       };
       await onUpdateConfiguracion(nuevaConfig);
 
@@ -341,6 +348,94 @@ function Configuracion(props: ConfiguracionProps) {
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* WhatsApp Automático */}
+          <Card className="border-none shadow-xl bg-gradient-to-br from-emerald-50/40 to-card dark:from-emerald-950/10 dark:to-card backdrop-blur-sm overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-emerald-500" />
+                WhatsApp Automático
+              </CardTitle>
+              <CardDescription>
+                Recibe alertas de proveedores directo en WhatsApp — sin tocar nada
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              {/* Teléfono */}
+              <div className="space-y-2">
+                <Label className="font-bold flex items-center gap-2 text-sm">
+                  <Phone className="w-4 h-4 text-emerald-500" />
+                  Tu número de WhatsApp
+                </Label>
+                <Input
+                  value={telefonoNegocio}
+                  onChange={e => setTelefonoNegocio(e.target.value)}
+                  placeholder="573001234567 (con código de país, sin +)"
+                  className="h-11 rounded-xl font-mono border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Ejemplo Colombia: <code className="bg-muted px-1 rounded">573001234567</code> · Sin espacios ni guiones
+                </p>
+              </div>
+
+              {/* API Key */}
+              <div className="space-y-2">
+                <Label className="font-bold flex items-center gap-2 text-sm">
+                  <KeyRound className="w-4 h-4 text-emerald-500" />
+                  API Key de CallMeBot
+                </Label>
+                <div className="relative">
+                  <Input
+                    type={showWaKey ? 'text' : 'password'}
+                    value={whatsappApiKey}
+                    onChange={e => setWhatsappApiKey(e.target.value)}
+                    placeholder="Tu API key de callmebot.com"
+                    className="h-11 pr-10 rounded-xl font-mono border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/20"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowWaKey(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showWaKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Instructivo */}
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 space-y-3">
+                <p className="text-[11px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  ¿Cómo obtener el API key? (gratis, 1 vez)
+                </p>
+                <ol className="space-y-1.5">
+                  {[
+                    'Abrí WhatsApp y buscá el contacto: +34 644 61 77 78',
+                    'Enviale exactamente este mensaje: I allow callmebot to send me messages',
+                    'En segundos te responde con tu API key personal',
+                    'Pegá ese número aquí arriba y guardá',
+                  ].map((paso, i) => (
+                    <li key={i} className="flex gap-2 text-[11px] text-emerald-800 dark:text-emerald-300">
+                      <span className="w-5 h-5 rounded-full bg-emerald-500 text-white font-black text-[9px] flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
+                      {paso}
+                    </li>
+                  ))}
+                </ol>
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 italic">
+                  Una vez configurado, la app envía automáticamente cuando abrís Proveedores y hay alertas pendientes. Si llegan 2 o 3 proveedores el mismo día, llega un solo mensaje con todos.
+                </p>
+              </div>
+
+              {whatsappApiKey && telefonoNegocio && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-300 dark:border-emerald-700">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <p className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
+                    WhatsApp automático activo
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

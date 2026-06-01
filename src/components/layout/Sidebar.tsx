@@ -104,6 +104,26 @@ export function Sidebar({
     };
   }, []);
 
+  // Soporte del botón físico "Atrás" en Android/PWA
+  useEffect(() => {
+    if (!window.history.state?.dpView) {
+      window.history.replaceState({ dpView: currentView }, '');
+    }
+    const handlePopState = (e: PopStateEvent) => {
+      const view = e.state?.dpView as ViewType | undefined;
+      if (view) onViewChange(view);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [onViewChange]);
+
+  // Navegación con historial — cada cambio de módulo empuja un estado al historial
+  const handleViewChange = (view: ViewType) => {
+    window.history.pushState({ dpView: view }, '');
+    onViewChange(view);
+    setOpen(false); // cerrar menú móvil al navegar
+  };
+
   const allMenuGroups: MenuGroup[] = [
     {
       section: 'Inicio',
@@ -278,7 +298,7 @@ export function Sidebar({
                         <button
                           type="button"
                           title={isCollapsed && !isMobile ? item.label : undefined}
-                          onClick={() => { onViewChange(item.id); if (isMobile) setOpen(false); }}
+                          onClick={() => handleViewChange(item.id)}
                           className={cn(
                             "w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative",
                             isCollapsed && !isMobile ? "px-2 justify-center" : "",

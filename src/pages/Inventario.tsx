@@ -493,6 +493,8 @@ export function Inventario({
         }
         setCargandoCien(false);
         setConfirmCien(false);
+        // Disparar sincronización inmediata para que otros dispositivos vean el cambio
+        setTimeout(() => window.dispatchEvent(new CustomEvent('dp-force-sync')), 500);
         toast.success(`✅ ${ajustados} producto(s) ajustados a 100 unidades. ¡Ya pueden vender!`);
     };
 

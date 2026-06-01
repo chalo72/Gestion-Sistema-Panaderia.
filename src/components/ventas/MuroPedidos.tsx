@@ -110,8 +110,8 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                 <div className={cn(
                     "grid gap-3",
                     mesas.length <= 4  ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" :
-                    mesas.length <= 8  ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5" :
-                                         "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+                    mesas.length <= 8  ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4" :
+                                         "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-6"
                 )}>
                     {mesas.map(mesa => {
                         const pedido = pedidosActivos.find(p => p.id === mesa.pedidoActivoId);

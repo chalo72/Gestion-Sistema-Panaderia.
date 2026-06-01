@@ -428,11 +428,16 @@ export function useRealtimeSync() {
     const handleOnline = () => syncNow().catch(() => {});
     window.addEventListener('online', handleOnline);
 
+    // Sync forzado por operaciones masivas (ej: carga 100 uds de inventario)
+    const handleForceSync = () => syncNow().catch(() => {});
+    window.addEventListener('dp-force-sync', handleForceSync);
+
     return () => {
       channelsRef.current.forEach(ch => supabase.removeChannel(ch));
       channelsRef.current = [];
       setSyncConnected(false);
       window.removeEventListener('online', handleOnline);
+      window.removeEventListener('dp-force-sync', handleForceSync);
     };
   }, [applyRemoteChange, syncNow]);
 

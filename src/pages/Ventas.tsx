@@ -135,6 +135,7 @@ export function Ventas(props: VentasProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
+    const [nequiComprobante, setNequiComprobante] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showPagoModal, setShowPagoModal] = useState(false);
     const [dineroRecibido, setDineroRecibido] = useState<number>(0);
@@ -595,6 +596,7 @@ export function Ventas(props: VentasProps) {
 
             setShowPagoModal(false);
             setShowSuccessModal(true);
+            setNequiComprobante(null);
             setShowMobileCart(false); // volver al catálogo en móvil tras cobrar
 
             // Si era una mesa, liberarla y cerrar la pestaña
@@ -653,7 +655,11 @@ export function Ventas(props: VentasProps) {
             <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm z-10">
                 <POSHeader
                     viewMode={viewMode}
-                    setViewMode={setViewMode}
+                    setViewMode={(mode) => {
+                        setViewMode(mode);
+                        // Al cambiar a mesas en móvil, asegurar que el panel izquierdo sea visible
+                        if (mode === 'mesas') setShowMobileCart(false);
+                    }}
                     formatCurrency={formatCurrency}
                     tabs={tabs}
                     activeTabId={activeTabId}
@@ -850,6 +856,42 @@ export function Ventas(props: VentasProps) {
                                 </button>
                             </div>
                         </div>
+
+                        {/* Foto comprobante Nequi */}
+                        {metodoPago === 'nequi' && tipoTransaccion !== 'credito' && (
+                            <div className="space-y-2">
+                                <p className="text-sm font-bold text-slate-600">Comprobante Nequi</p>
+                                {nequiComprobante ? (
+                                    <div className="relative">
+                                        <img src={nequiComprobante} alt="Comprobante Nequi" className="w-full max-h-48 object-contain rounded-xl border border-purple-200 bg-purple-50" />
+                                        <button onClick={() => setNequiComprobante(null)}
+                                            className="absolute top-2 right-2 w-7 h-7 rounded-full bg-red-500 text-white flex items-center justify-center text-xs font-black shadow">
+                                            ✕
+                                        </button>
+                                        <p className="text-xs text-emerald-600 font-bold mt-1 text-center">✅ Foto guardada</p>
+                                    </div>
+                                ) : (
+                                    <label className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-purple-300 bg-purple-50 cursor-pointer active:bg-purple-100 transition-colors">
+                                        <span className="text-2xl">📸</span>
+                                        <span className="text-sm font-bold text-purple-700">Tomar foto del comprobante</span>
+                                        <span className="text-xs text-slate-400">Opcional — abre la cámara</span>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            capture="environment"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (!file) return;
+                                                const reader = new FileReader();
+                                                reader.onload = (ev) => setNequiComprobante(ev.target?.result as string);
+                                                reader.readAsDataURL(file);
+                                            }}
+                                        />
+                                    </label>
+                                )}
+                            </div>
+                        )}
 
                         {/* Sección según método */}
                         {tipoTransaccion !== 'credito' ? (

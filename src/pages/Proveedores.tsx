@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
-import { enviarAlertaPreventistaPorWhatsApp, guardarHintNavegacion } from '@/lib/whatsapp-alerts';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { enviarAlertaPreventistaPorWhatsApp, enviarAlertasAutomatico, guardarHintNavegacion } from '@/lib/whatsapp-alerts';
 import { validarCatalogo } from '@/lib/price-guard';
 import { useCan } from '@/contexts/AuthContext';
 import { db } from '@/lib/database';
@@ -398,6 +398,17 @@ export function Proveedores({
       .map(p => ({ prov: p, alerta: getScheduleAlerta(p.id) }))
       .filter(x => x.alerta !== null) as { prov: Proveedor; alerta: { diasRestantes: number; proximaVisita: string } }[];
   }, [proveedores]);
+
+  /* ─── Auto-envío WhatsApp al montar (solo si hay API key configurada) ─── */
+  useEffect(() => {
+    if (alertasVisita.length === 0) return;
+    const alertas = alertasVisita.map(({ prov, alerta }) => ({
+      id: prov.id,
+      nombre: prov.nombre,
+      diasRestantes: alerta.diasRestantes,
+    }));
+    enviarAlertasAutomatico(alertas); // fire-and-forget, solo actúa si hay API key
+  }, [alertasVisita]);
 
   /* ─── Filtrado + orden ─── */
   const filtrados = useMemo(() => {
@@ -805,6 +816,26 @@ export function Proveedores({
       {/* ── Alertas de visitas próximas ── */}
       {alertasVisita.length > 0 && (
         <div className="flex flex-col gap-2">
+          {/* Botón consolidado cuando hay 2+ proveedores */}
+          {alertasVisita.length > 1 && (
+            <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800">
+              <p className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5" />
+                {alertasVisita.length} preventistas con alerta
+              </p>
+              <button
+                onClick={() => {
+                  const { enviarAlertaManual: enviar } = require('@/lib/whatsapp-alerts');
+                  enviar(alertasVisita.map(({ prov, alerta }) => ({
+                    id: prov.id, nombre: prov.nombre, diasRestantes: alerta.diasRestantes
+                  })));
+                }}
+                className="h-7 px-3 text-[10px] font-black text-emerald-700 hover:text-white hover:bg-emerald-600 border border-emerald-400 rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                <MessageCircle className="w-3 h-3" /> Enviar todos por WhatsApp
+              </button>
+            </div>
+          )}
           {alertasVisita.map(({ prov, alerta }) => (
             <div key={prov.id} className={cn(
               'flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 rounded-2xl border',
