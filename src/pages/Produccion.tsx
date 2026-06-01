@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange
+    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +15,8 @@ import { CalculadoraRendimiento } from '@/components/produccion/CalculadoraRendi
 import { GeneradorPedidoInsumos } from '@/components/produccion/GeneradorPedidoInsumos';
 import { PlanDiarioView } from '@/components/produccion/PlanDiarioView';
 import { PlanSemanaView } from '@/components/produccion/PlanSemanaView';
+import { ControlCalidadModal } from '@/components/produccion/ControlCalidadModal';
+import { useControlCalidad } from '@/hooks/useControlCalidad';
 import {
     Dialog,
     DialogContent,
@@ -76,9 +78,13 @@ export function Produccion({
 }: ProduccionProps) {
     const [showPlanModal, setShowPlanModal] = useState(false);
     const [activeTab, setActiveTab] = useState('ordenes');
-    
+
     // Estado para el Asistente Paso a Paso
     const [ordenPasoAPaso, setOrdenPasoAPaso] = useState<OrdenProduccion | null>(null);
+
+    // Control de Calidad
+    const { guardarInspeccion, getInspeccionPorOrden } = useControlCalidad();
+    const [ordenQC, setOrdenQC] = useState<OrdenProduccion | null>(null);
 
     // Guías Dinámicas a partir de Formulaciones reales
     const guiasDinamicas = formulaciones.filter(f => f.instrucciones && f.instrucciones.length > 5).map(f => {
@@ -375,12 +381,39 @@ export function Produccion({
                                                         </Button>
                                                     </div>
                                                 )}
-                                                {orden.estado === 'completado' && (
-                                                    <div className="flex items-center justify-center gap-2 text-emerald-500 py-2">
-                                                        <CheckCircle2 className="w-5 h-5" />
-                                                        <span className="text-[10px] font-black uppercase tracking-widest">Lote Completado</span>
-                                                    </div>
-                                                )}
+                                                {orden.estado === 'completado' && (() => {
+                                                    const insp = getInspeccionPorOrden(orden.id);
+                                                    return insp ? (
+                                                        <div className="space-y-2">
+                                                            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50 border border-emerald-200">
+                                                                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-[10px] font-black text-emerald-700 uppercase tracking-wider">QC Aprobado</p>
+                                                                    <p className="text-[11px] text-emerald-600">
+                                                                        <strong>{insp.cantidadAprobada}</strong> aprobadas
+                                                                        {insp.rechazos.length > 0 && (
+                                                                            <> · <span className="text-rose-500">{insp.rechazos.reduce((s,r)=>s+r.cantidad,0)} rechazadas</span></>
+                                                                        )}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                            <Button
+                                                                variant="outline"
+                                                                className="w-full text-[9px] font-bold uppercase tracking-widest h-8 text-slate-400 border-dashed"
+                                                                onClick={() => setOrdenQC(orden)}
+                                                            >
+                                                                <ClipboardCheck className="w-3 h-3 mr-1" /> Re-inspeccionar
+                                                            </Button>
+                                                        </div>
+                                                    ) : (
+                                                        <Button
+                                                            className="w-full text-[10px] font-black uppercase tracking-widest h-10 bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-lg shadow-violet-500/25"
+                                                            onClick={() => setOrdenQC(orden)}
+                                                        >
+                                                            <ClipboardCheck className="w-4 h-4 mr-2" /> Control de Calidad
+                                                        </Button>
+                                                    );
+                                                })()}
                                             </div>
                                         </CardContent>
                                     </Card>
@@ -543,6 +576,18 @@ export function Produccion({
                 modelos={modelosPan}
                 inventario={inventario}
                 onConfirm={addOrdenProduccion}
+            />
+
+            {/* Modal Control de Calidad */}
+            <ControlCalidadModal
+                open={!!ordenQC}
+                onOpenChange={open => !open && setOrdenQC(null)}
+                orden={ordenQC}
+                modeloNombre={ordenQC ? (modelosPan.find(m => m.id === ordenQC.modeloPanId)?.nombre ?? 'Lote') : ''}
+                productoNombre={ordenQC ? (productos.find(p => p.id === ordenQC.productoId)?.nombre ?? 'Producto') : ''}
+                onGuardar={guardarInspeccion}
+                onActualizarOrden={updateOrdenProduccion}
+                inspeccionExistente={ordenQC ? getInspeccionPorOrden(ordenQC.id) : undefined}
             />
 
             {/* Asistente Paso a Paso Modal */}
