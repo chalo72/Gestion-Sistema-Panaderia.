@@ -113,29 +113,31 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
     return `${lunes.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })} – ${dom.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}`;
   }, [weekDays]);
 
-  async function registrar(tipo: 'entrada' | 'salida') {
-    if (!seleccionado) return;
+  async function registrar(trabajador: Trabajador, tipo: 'entrada' | 'salida') {
+    if (confirmando) return;
     setConfirmando(true);
+    setSeleccionado(trabajador);
     try {
       const hora = horaISO();
       await onAddRegistro({
-        trabajadorId: seleccionado.id,
-        trabajadorNombre: seleccionado.nombre,
+        trabajadorId: trabajador.id,
+        trabajadorNombre: trabajador.nombre,
         tipo,
         fecha: hoy,
         hora,
       });
       setExito({ tipo, hora: horaActual() });
       toast.success(tipo === 'entrada'
-        ? `¡Bienvenida, ${seleccionado.nombre.split(' ')[0]}! 🎉`
-        : `¡Hasta luego, ${seleccionado.nombre.split(' ')[0]}! 👋`
+        ? `¡Bienvenida, ${trabajador.nombre.split(' ')[0]}!`
+        : `¡Hasta luego, ${trabajador.nombre.split(' ')[0]}!`
       );
       setTimeout(() => {
         setExito(null);
         setSeleccionado(null);
-      }, 3000);
+      }, 2500);
     } catch {
       toast.error('Error al registrar asistencia');
+      setSeleccionado(null);
     } finally {
       setConfirmando(false);
     }
@@ -219,44 +221,6 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
     );
   }
 
-  // ── Modal de confirmación ──────────────────────────────────────────────────
-  if (seleccionado) {
-    const ultimoRegistro = ultimoRegistroPorTrabajador.get(seleccionado.id);
-    const sigueTipo: 'entrada' | 'salida' = ultimoRegistro?.tipo === 'entrada' ? 'salida' : 'entrada';
-
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/60 p-6">
-        <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-2xl p-8 max-w-sm w-full text-center">
-          <div className="w-24 h-24 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center mx-auto mb-4 text-4xl font-bold text-amber-700 dark:text-amber-400">
-            {seleccionado.nombre.charAt(0).toUpperCase()}
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">{seleccionado.nombre}</h2>
-          <p className="text-gray-500 dark:text-gray-400 mb-6 text-sm">{horaActual()}</p>
-          <div className="flex flex-col gap-3">
-            {sigueTipo === 'entrada' ? (
-              <button onClick={() => registrar('entrada')} disabled={confirmando}
-                className="w-full py-5 rounded-2xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white text-xl font-bold transition-all shadow-lg disabled:opacity-50">
-                ✅ Ya llegué
-              </button>
-            ) : (
-              <button onClick={() => registrar('salida')} disabled={confirmando}
-                className="w-full py-5 rounded-2xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white text-xl font-bold transition-all shadow-lg disabled:opacity-50">
-                👋 Ya me voy
-              </button>
-            )}
-            <button onClick={() => registrar(sigueTipo === 'entrada' ? 'salida' : 'entrada')} disabled={confirmando}
-              className="w-full py-3 rounded-2xl border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 text-sm font-medium transition-all hover:bg-gray-50 dark:hover:bg-gray-800">
-              {sigueTipo === 'entrada' ? 'Registrar salida' : 'Registrar entrada'}
-            </button>
-            <button onClick={() => setSeleccionado(null)} className="w-full py-3 rounded-2xl text-gray-400 text-sm">
-              Cancelar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // ── Vista principal ────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-50 dark:from-gray-950 dark:to-gray-900">
@@ -267,7 +231,7 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
           <Clock className="w-7 h-7 text-amber-600 dark:text-amber-400" />
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Control de Asistencia</h1>
         </div>
-        <p className="text-lg font-semibold text-amber-600 dark:text-amber-400">
+        <p className="text-base font-semibold text-amber-600 dark:text-amber-400">
           {new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
         </p>
       </div>
@@ -295,9 +259,6 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
       {/* ── KIOSKO ────────────────────────────────────────────────────────── */}
       {tab === 'kiosko' && (
         <div className="px-4 pb-8">
-          <p className="text-center text-gray-500 dark:text-gray-400 mb-6">
-            Toca tu nombre para registrar tu llegada o salida
-          </p>
 
           {trabajadoresActivos.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
@@ -306,35 +267,60 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
               <p className="text-sm mt-1">Ve al módulo Trabajadores para agregar personal</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-w-4xl mx-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-w-3xl mx-auto">
               {trabajadoresActivos.map(t => {
                 const ultimo = ultimoRegistroPorTrabajador.get(t.id);
                 const estaAdentro = ultimo?.tipo === 'entrada';
+                const ocupada = confirmando && seleccionado?.id === t.id;
                 return (
-                  <button key={t.id} onClick={() => setSeleccionado(t)}
-                    className="flex flex-col items-center p-5 bg-white dark:bg-gray-800 rounded-2xl shadow-md hover:shadow-xl active:scale-95 transition-all border-2 border-transparent hover:border-amber-400 dark:hover:border-amber-500">
-                    <div className={`w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold mb-3 ${
+                  <div key={t.id}
+                    className={`bg-white dark:bg-gray-800 rounded-2xl shadow-md p-4 border-2 transition-all ${
                       estaAdentro
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ring-2 ring-emerald-400'
-                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        ? 'border-emerald-300 dark:border-emerald-700'
+                        : 'border-transparent'
                     }`}>
-                      {t.nombre.charAt(0).toUpperCase()}
-                    </div>
-                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 text-center leading-tight">
-                      {t.nombre.split(' ').slice(0, 2).join(' ')}
-                    </p>
-                    {ultimo ? (
-                      <span className={`mt-2 text-xs px-2 py-0.5 rounded-full font-medium ${
+
+                    {/* Nombre + estado */}
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-black shrink-0 ${
                         estaAdentro
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
-                          : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 ring-2 ring-emerald-400'
+                          : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
                       }`}>
-                        {estaAdentro ? `Llegó ${ultimo.hora}` : `Salió ${ultimo.hora}`}
-                      </span>
-                    ) : (
-                      <span className="mt-2 text-xs text-gray-400 dark:text-gray-500">Sin registro hoy</span>
-                    )}
-                  </button>
+                        {t.nombre.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-gray-900 dark:text-white text-sm leading-tight truncate">
+                          {t.nombre.split(' ').slice(0, 2).join(' ')}
+                        </p>
+                        {ultimo ? (
+                          <span className={`text-xs font-medium ${
+                            estaAdentro ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-gray-500'
+                          }`}>
+                            {estaAdentro ? `✅ Llegó ${ultimo.hora}` : `👋 Salió ${ultimo.hora}`}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400 dark:text-gray-500">Sin registro hoy</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Botones directos */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => registrar(t, 'entrada')}
+                        disabled={ocupada}
+                        className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-black text-sm transition-all shadow-sm shadow-emerald-500/30 disabled:opacity-40">
+                        ✅ Llegué
+                      </button>
+                      <button
+                        onClick={() => registrar(t, 'salida')}
+                        disabled={ocupada}
+                        className="flex-1 py-3 rounded-xl bg-rose-500 hover:bg-rose-600 active:scale-95 text-white font-black text-sm transition-all shadow-sm shadow-rose-500/30 disabled:opacity-40">
+                        👋 Me voy
+                      </button>
+                    </div>
+                  </div>
                 );
               })}
             </div>
