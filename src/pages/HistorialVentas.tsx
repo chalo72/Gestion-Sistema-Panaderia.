@@ -1456,6 +1456,52 @@ export default function HistorialVentas({
             </Card>
             )}
 
+            {/* ── BANNER RESUMEN DE CATEGORÍAS SELECCIONADAS ── */}
+            {viewMode === 'productos' && categoriasSeleccionadas.size > 0 && (
+                <div className="rounded-2xl overflow-hidden border border-emerald-200 dark:border-emerald-800/50 shadow-md bg-white dark:bg-slate-900">
+                    {/* Fila superior: chips por categoría */}
+                    <div className="flex flex-wrap gap-2 px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 border-b border-emerald-100 dark:border-emerald-800/30">
+                        <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest self-center shrink-0">
+                            {categoriasSeleccionadas.size} {categoriasSeleccionadas.size === 1 ? 'categoría' : 'categorías'}:
+                        </span>
+                        {resumenCompletoPorCategoria
+                            .filter(cat => categoriasSeleccionadas.has(cat.categoria))
+                            .map(cat => (
+                                <div key={cat.categoria}
+                                    className="flex items-center gap-1.5 bg-white dark:bg-slate-800 border border-emerald-200 dark:border-emerald-700/50 rounded-xl px-3 py-1.5 shadow-sm">
+                                    <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 uppercase truncate max-w-[100px]">{cat.categoria}</span>
+                                    <span className="text-[10px] text-slate-400 font-bold">{cat.cantidad}u</span>
+                                    <span className="text-[11px] font-black text-indigo-600 tabular-nums">{formatCurrency(cat.total)}</span>
+                                </div>
+                            ))}
+                        {/* Categorías seleccionadas sin ventas en el período */}
+                        {Array.from(categoriasSeleccionadas)
+                            .filter(cat => !resumenCompletoPorCategoria.find(r => r.categoria === cat))
+                            .map(cat => (
+                                <div key={cat}
+                                    className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 opacity-60">
+                                    <span className="text-[10px] font-black text-slate-500 uppercase truncate max-w-[100px]">{cat}</span>
+                                    <span className="text-[9px] text-slate-400 font-bold">sin ventas</span>
+                                </div>
+                            ))}
+                    </div>
+                    {/* Fila inferior: total combinado grande */}
+                    <div className="flex items-center justify-between px-4 py-3">
+                        <div className="flex flex-col">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total combinado · {fechaDesde || fechaHasta ? 'período seleccionado' : 'todos los registros'}</span>
+                            <span className="text-[10px] font-bold text-slate-500 mt-0.5">
+                                {totalCategoriasSeleccionadas.cantidad} unidades vendidas
+                            </span>
+                        </div>
+                        <div className="text-right">
+                            <span className="text-2xl font-black text-emerald-600 tabular-nums tracking-tight">
+                                {formatCurrency(totalCategoriasSeleccionadas.total)}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* VISTA DE PRODUCTOS - Tabla detallada por producto (solo cuando hay categorías seleccionadas) */}
             {viewMode === 'productos' && categoriasSeleccionadas.size > 0 && (
                 <Card className="rounded-xl border-slate-100 dark:border-slate-800 shadow-lg overflow-hidden bg-white dark:bg-slate-900 shrink-0">
@@ -1479,7 +1525,7 @@ export default function HistorialVentas({
                                     </button>
                                 </>
                             )}
-                            <span className="text-sm font-black">{formatCurrency(totalCategoriasSeleccionadas.total)}</span>
+                            <span className="text-[10px] font-black opacity-80">{productosVendidos.length} líneas</span>
                         </div>
                     </div>
                     <div className="overflow-auto max-h-[350px]">
