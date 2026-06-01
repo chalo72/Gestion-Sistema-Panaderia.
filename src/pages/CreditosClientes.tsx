@@ -149,7 +149,7 @@ export default function CreditosClientes({
         nota: '',
     });
     const [editandoCredito, setEditandoCredito] = useState<CreditoCliente | null>(null);
-    const [formEditCliente, setFormEditCliente] = useState({ estado: 'activo', descripcion: '', fechaVencimiento: '' });
+    const [formEditCliente, setFormEditCliente] = useState({ estado: 'activo', descripcion: '', fecha: '', fechaVencimiento: '' });
     const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
     const [selectedCreditosIds, setSelectedCreditosIds] = useState<Set<string>>(new Set());
 
@@ -443,7 +443,12 @@ export default function CreditosClientes({
 
     const abrirEditarCredito = (c: CreditoCliente) => {
         setEditandoCredito(c);
-        setFormEditCliente({ estado: c.estado, descripcion: c.descripcion, fechaVencimiento: c.fechaVencimiento || '' });
+        setFormEditCliente({
+            estado: c.estado,
+            descripcion: c.descripcion,
+            fecha: c.fecha ? c.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
+            fechaVencimiento: c.fechaVencimiento || '',
+        });
     };
 
     const handleGuardarEditCliente = async () => {
@@ -453,6 +458,7 @@ export default function CreditosClientes({
             await onUpdateCreditoCliente(editandoCredito.id, {
                 estado: formEditCliente.estado as CreditoCliente['estado'],
                 descripcion: formEditCliente.descripcion.trim() || editandoCredito.descripcion,
+                fecha: formEditCliente.fecha ? new Date(formEditCliente.fecha + 'T12:00:00').toISOString() : editandoCredito.fecha,
                 fechaVencimiento: formEditCliente.fechaVencimiento || undefined,
             });
             setEditandoCredito(null);
@@ -869,7 +875,9 @@ export default function CreditosClientes({
                                                         </div>
                                                     ) : (
                                                         <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                                            {[...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados].map(credito => {
+                                                            {[...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados]
+                                                              .sort((a, b) => new Date(b.fecha || b.createdAt || 0).getTime() - new Date(a.fecha || a.createdAt || 0).getTime())
+                                                              .map(credito => {
                                                                 const isSelected = selectedCreditosIds.has(credito.id);
                                                                 return (
                                                                 <div key={credito.id} 
@@ -1697,6 +1705,15 @@ export default function CreditosClientes({
                                 value={formEditCliente.descripcion}
                                 onChange={e => setFormEditCliente(p => ({ ...p, descripcion: e.target.value }))}
                                 placeholder="Descripción del crédito..."
+                                className="mt-1"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Fecha del crédito</Label>
+                            <Input
+                                type="date"
+                                value={formEditCliente.fecha}
+                                onChange={e => setFormEditCliente(p => ({ ...p, fecha: e.target.value }))}
                                 className="mt-1"
                             />
                         </div>
