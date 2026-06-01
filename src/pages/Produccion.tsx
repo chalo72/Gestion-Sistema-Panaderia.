@@ -172,6 +172,8 @@ export function Produccion({
     // arrobas manuales por formulacion: { [formulacionId]: number }
     const [turnoArrobas, setTurnoArrobas] = useState<Record<string, number>>({});
     const [turnoConfirmado, setTurnoConfirmado] = useState(false);
+    // unidades planeadas para tortas / galletas (por formulacionId)
+    const [turnoUnidades, setTurnoUnidades] = useState<Record<string, number>>({});
 
     const turnoPreset = presetsFinales.find(p => p.id === turnoTipoDia);
 
@@ -180,13 +182,26 @@ export function Produccion({
         return turnoPreset?.arrobas[fId] ?? 1;
     };
 
+    // Categorías que usan sistema de arrobas/latas (masa de panadería)
+    const CATS_MASA = ['panes', 'hojaldres'];
+    // Etiqueta de unidad según categoría
+    const unidadLabel = (cat: string) =>
+        cat === 'tortas' || cat === 'pasteleria' ? 'torta(s)' :
+        cat === 'galletas' ? 'bandeja(s)' :
+        cat === 'dulces' ? 'lote(s)' : 'unidad(es)';
+
     const confirmarTurno = async () => {
-        const formulacionesActivas = formulaciones.filter(f => f.activo && (f.mixProduccion?.length ?? 0) > 0);
-        if (formulacionesActivas.length === 0) {
-            toast.error('Configura la distribución de al menos una fórmula antes de confirmar el turno');
+        const formulacionesMasa = formulaciones.filter(f => f.activo && CATS_MASA.includes(f.categoria) && (f.mixProduccion?.length ?? 0) > 0);
+        const formulacionesUnidad = formulaciones.filter(f => f.activo && !CATS_MASA.includes(f.categoria));
+        const hayUnidades = formulacionesUnidad.some(f => (turnoUnidades[f.id] ?? 0) > 0);
+
+        if (formulacionesMasa.length === 0 && !hayUnidades) {
+            toast.error('Agregá al menos una fórmula de panes con distribución, o planificá tortas/galletas antes de confirmar');
             return;
         }
-        for (const f of formulacionesActivas) {
+
+        // Panes y hojaldres — sistema arroba/lata
+        for (const f of formulacionesMasa) {
             const arrobas = getArrobasParaFormulacion(f.id);
             if (arrobas <= 0) continue;
             for (const mixItem of (f.mixProduccion || [])) {
@@ -211,6 +226,26 @@ export function Produccion({
                 });
             }
         }
+
+        // Tortas, galletas, pastelería, dulces — sistema por unidades
+        for (const f of formulacionesUnidad) {
+            const unidades = turnoUnidades[f.id] ?? 0;
+            if (unidades <= 0) continue;
+            const prod = productos.find(p => !['ingrediente'].includes(p.tipo ?? ''));
+            if (!prod) continue;
+            await addOrdenProduccion({
+                productoId: prod.id,
+                cantidadPlaneada: unidades,
+                cantidadCompletada: 0,
+                usuarioId: 'turno',
+                costoEstimadoTotal: f.costoTotalArroba * unidades,
+                formulacionId: f.id,
+                modeloPanId: '',
+                arrobasUsadas: 0,
+                notas: `Turno ${turnoTipoDia}: ${unidades} ${unidadLabel(f.categoria)} — ${f.nombre}`
+            });
+        }
+
         toast.success('¡Turno lanzado a producción!');
         setTurnoConfirmado(true);
         setActiveTab('ordenes');
@@ -796,109 +831,201 @@ export function Produccion({
                         ))}
                     </div>
 
-                    {/* Formulaciones con distribución configurada */}
-                    {formulaciones.filter(f => f.activo && (f.mixProduccion?.length ?? 0) > 0).length === 0 && (
-                        <div className="p-8 rounded-3xl border-2 border-dashed border-slate-200 text-center space-y-3">
-                            <AlertCircle className="w-10 h-10 text-slate-300 mx-auto" />
-                            <p className="font-black text-slate-400">Ninguna fórmula tiene distribución configurada</p>
-                            <p className="text-sm text-slate-400">Ve a Recetas → Formulaciones → botón <span className="font-black text-emerald-600">◔</span> (Distribución) para configurar</p>
-                        </div>
-                    )}
-
-                    {formulaciones.filter(f => f.activo && (f.mixProduccion?.length ?? 0) > 0).map(f => {
-                        const arrobas = getArrobasParaFormulacion(f.id);
-                        const masaTotal = f.rendimientoBaseKg * arrobas;
-                        const totalPanes = (f.mixProduccion || []).reduce((sum, mx) => {
-                            const modelo = modelosPan.find(m => m.id === mx.modeloPanId);
-                            if (!modelo || modelo.pesoUnitarioGr <= 0) return sum;
-                            return sum + Math.floor(masaTotal * (mx.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr);
-                        }, 0);
-
+                    {/* ── SECCIÓN PANES / HOJALDRES ─────────────────────── */}
+                    {(() => {
+                        const fMasa = formulaciones.filter(f => f.activo && CATS_MASA.includes(f.categoria) && (f.mixProduccion?.length ?? 0) > 0);
                         return (
-                            <Card key={f.id} className="rounded-3xl border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
-                                {/* Header de la formulación */}
-                                <div className="flex items-center justify-between p-5 pb-3 border-b border-slate-100 dark:border-slate-800">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-                                            <Layers3 className="w-5 h-5 text-amber-600" />
-                                        </div>
-                                        <div>
-                                            <p className="font-black text-slate-800 dark:text-white">{f.nombre}</p>
-                                            <p className="text-[10px] text-slate-400 font-medium capitalize">{f.categoria}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                        {/* Control de arrobas */}
-                                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-2xl px-3 py-2 border border-slate-200 dark:border-slate-700">
-                                            <button onClick={() => setTurnoArrobas(p => ({ ...p, [f.id]: Math.max(0, (p[f.id] ?? arrobas) - 0.5) }))} className="w-7 h-7 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-white font-black hover:bg-slate-300 active:scale-95">−</button>
-                                            <div className="text-center min-w-[60px]">
-                                                <p className="font-black text-slate-800 dark:text-white text-lg leading-none">{arrobas}</p>
-                                                <p className="text-[9px] text-slate-400 uppercase">arrobas</p>
-                                            </div>
-                                            <button onClick={() => setTurnoArrobas(p => ({ ...p, [f.id]: (p[f.id] ?? arrobas) + 0.5 }))} className="w-7 h-7 rounded-xl bg-amber-500 flex items-center justify-center text-white font-black hover:bg-amber-600 active:scale-95">+</button>
-                                        </div>
-                                        <div className="text-center">
-                                            <p className="font-black text-slate-800 dark:text-white">{totalPanes}</p>
-                                            <p className="text-[9px] text-slate-400 uppercase">panes</p>
-                                        </div>
-                                    </div>
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
+                                    <p className="text-[11px] font-black uppercase tracking-widest text-amber-600">Masas — Panes y Hojaldres</p>
                                 </div>
-
-                                {/* Tabla de latas */}
-                                <div className="p-5">
-                                    <div className="grid grid-cols-12 gap-2 px-1 mb-2">
-                                        <div className="col-span-4 text-[9px] font-black uppercase text-slate-400 tracking-wider">Pan</div>
-                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">% masa</div>
-                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Panes</div>
-                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Lata</div>
-                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Latas</div>
+                                {fMasa.length === 0 && (
+                                    <div className="p-6 rounded-3xl border-2 border-dashed border-amber-100 text-center space-y-2">
+                                        <AlertCircle className="w-8 h-8 text-amber-200 mx-auto" />
+                                        <p className="font-black text-slate-400 text-sm">Ninguna fórmula de panes tiene distribución configurada</p>
+                                        <p className="text-xs text-slate-400">Recetas → Formulaciones → botón <span className="font-black text-emerald-600">◔</span></p>
                                     </div>
-                                    <div className="space-y-2">
-                                        {(f.mixProduccion || []).map((mx, idx) => {
-                                            const modelo = modelosPan.find(m => m.id === mx.modeloPanId);
-                                            if (!modelo) return null;
-                                            const panes = modelo.pesoUnitarioGr > 0
-                                                ? Math.floor(masaTotal * (mx.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr) : 0;
-                                            const tipoLata = tiposLata.find(t => t.id === mx.tipoLataId);
-                                            const capacidad = tipoLata?.capacidades.find(c => c.modeloPanId === mx.modeloPanId)?.piezas
-                                                || modelo.piezasPorLata || 0;
-                                            const latas = capacidad > 0 && panes > 0 ? Math.ceil(panes / capacidad) : null;
-
-                                            return (
-                                                <div key={idx} className="grid grid-cols-12 gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl items-center">
-                                                    <div className="col-span-4">
-                                                        <p className="text-sm font-black text-slate-800 dark:text-white leading-tight truncate">{modelo.nombre}</p>
-                                                        <p className="text-[10px] text-slate-400">{modelo.pesoUnitarioGr}gr</p>
+                                )}
+                                {fMasa.map(f => {
+                                    const arrobas = getArrobasParaFormulacion(f.id);
+                                    const masaTotal = f.rendimientoBaseKg * arrobas;
+                                    const totalPanes = (f.mixProduccion || []).reduce((sum, mx) => {
+                                        const modelo = modelosPan.find(m => m.id === mx.modeloPanId);
+                                        if (!modelo || modelo.pesoUnitarioGr <= 0) return sum;
+                                        return sum + Math.floor(masaTotal * (mx.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr);
+                                    }, 0);
+                                    return (
+                                        <Card key={f.id} className="rounded-3xl border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
+                                            <div className="flex items-center justify-between p-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                                                        <Layers3 className="w-5 h-5 text-amber-600" />
                                                     </div>
-                                                    <div className="col-span-2 text-center">
-                                                        <span className="text-sm font-black text-slate-600 dark:text-slate-400">{mx.porcentaje}%</span>
-                                                    </div>
-                                                    <div className="col-span-2 text-center">
-                                                        <span className="text-lg font-black text-slate-800 dark:text-white">{panes}</span>
-                                                    </div>
-                                                    <div className="col-span-2 text-center">
-                                                        <span className="text-[11px] font-bold text-slate-500">
-                                                            {tipoLata ? `${tipoLata.anchoCm}×${tipoLata.largoCm}` : '—'}
-                                                        </span>
-                                                    </div>
-                                                    <div className="col-span-2 text-center">
-                                                        {latas !== null ? (
-                                                            <div className="inline-flex flex-col items-center">
-                                                                <span className="text-xl font-black text-amber-600">{latas}</span>
-                                                                <span className="text-[9px] text-slate-400">×{capacidad} pzas</span>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-[10px] text-slate-300">sin lata</span>
-                                                        )}
+                                                    <div>
+                                                        <p className="font-black text-slate-800 dark:text-white">{f.nombre}</p>
+                                                        <p className="text-[10px] text-slate-400 font-medium capitalize">{f.categoria}</p>
                                                     </div>
                                                 </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </Card>
+                                                <div className="flex items-center gap-3">
+                                                    <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-2xl px-3 py-2 border border-slate-200 dark:border-slate-700">
+                                                        <button onClick={() => setTurnoArrobas(p => ({ ...p, [f.id]: Math.max(0, (p[f.id] ?? arrobas) - 0.5) }))} className="w-7 h-7 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-white font-black hover:bg-slate-300 active:scale-95">−</button>
+                                                        <div className="text-center min-w-[60px]">
+                                                            <p className="font-black text-slate-800 dark:text-white text-lg leading-none">{arrobas}</p>
+                                                            <p className="text-[9px] text-slate-400 uppercase">arrobas</p>
+                                                        </div>
+                                                        <button onClick={() => setTurnoArrobas(p => ({ ...p, [f.id]: (p[f.id] ?? arrobas) + 0.5 }))} className="w-7 h-7 rounded-xl bg-amber-500 flex items-center justify-center text-white font-black hover:bg-amber-600 active:scale-95">+</button>
+                                                    </div>
+                                                    <div className="text-center">
+                                                        <p className="font-black text-slate-800 dark:text-white">{totalPanes}</p>
+                                                        <p className="text-[9px] text-slate-400 uppercase">panes</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="p-5">
+                                                <div className="grid grid-cols-12 gap-2 px-1 mb-2">
+                                                    <div className="col-span-4 text-[9px] font-black uppercase text-slate-400 tracking-wider">Pan</div>
+                                                    <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">% masa</div>
+                                                    <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Panes</div>
+                                                    <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Lata</div>
+                                                    <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Latas</div>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {(f.mixProduccion || []).map((mx, idx) => {
+                                                        const modelo = modelosPan.find(m => m.id === mx.modeloPanId);
+                                                        if (!modelo) return null;
+                                                        const panes = modelo.pesoUnitarioGr > 0
+                                                            ? Math.floor(masaTotal * (mx.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr) : 0;
+                                                        const tipoLata = tiposLata.find(t => t.id === mx.tipoLataId);
+                                                        const capacidad = tipoLata?.capacidades.find(c => c.modeloPanId === mx.modeloPanId)?.piezas
+                                                            || modelo.piezasPorLata || 0;
+                                                        const latas = capacidad > 0 && panes > 0 ? Math.ceil(panes / capacidad) : null;
+                                                        return (
+                                                            <div key={idx} className="grid grid-cols-12 gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl items-center">
+                                                                <div className="col-span-4">
+                                                                    <p className="text-sm font-black text-slate-800 dark:text-white leading-tight truncate">{modelo.nombre}</p>
+                                                                    <p className="text-[10px] text-slate-400">{modelo.pesoUnitarioGr}gr</p>
+                                                                </div>
+                                                                <div className="col-span-2 text-center"><span className="text-sm font-black text-slate-600 dark:text-slate-400">{mx.porcentaje}%</span></div>
+                                                                <div className="col-span-2 text-center"><span className="text-lg font-black text-slate-800 dark:text-white">{panes}</span></div>
+                                                                <div className="col-span-2 text-center"><span className="text-[11px] font-bold text-slate-500">{tipoLata ? `${tipoLata.anchoCm}×${tipoLata.largoCm}` : '—'}</span></div>
+                                                                <div className="col-span-2 text-center">
+                                                                    {latas !== null ? (
+                                                                        <div className="inline-flex flex-col items-center">
+                                                                            <span className="text-xl font-black text-amber-600">{latas}</span>
+                                                                            <span className="text-[9px] text-slate-400">×{capacidad} pzas</span>
+                                                                        </div>
+                                                                    ) : <span className="text-[10px] text-slate-300">sin lata</span>}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        </Card>
+                                    );
+                                })}
+                            </div>
                         );
-                    })}
+                    })()}
+
+                    {/* ── SECCIÓN TORTAS / PASTELERÍA ───────────────────── */}
+                    {(() => {
+                        const fTortas = formulaciones.filter(f => f.activo && (f.categoria === 'tortas' || f.categoria === 'pasteleria'));
+                        if (fTortas.length === 0) return null;
+                        return (
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-1.5 h-6 bg-rose-500 rounded-full" />
+                                    <p className="text-[11px] font-black uppercase tracking-widest text-rose-500">Tortas y Pastelería</p>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {fTortas.map(f => {
+                                        const unidades = turnoUnidades[f.id] ?? 0;
+                                        const costoEst = f.costoTotalArroba * (unidades || 1);
+                                        return (
+                                            <Card key={f.id} className="rounded-3xl border-0 shadow-md bg-white dark:bg-slate-900 overflow-hidden">
+                                                <div className="p-5 flex flex-col gap-4">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center flex-shrink-0">
+                                                            <ChefHat className="w-5 h-5 text-rose-500" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="font-black text-slate-800 dark:text-white truncate">{f.nombre}</p>
+                                                            <p className="text-[10px] text-slate-400 capitalize">{f.categoria} · {f.ingredientes.length} insumos</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-2xl px-4 py-3">
+                                                        <div>
+                                                            <p className="text-[9px] font-black uppercase text-slate-400">Costo est.</p>
+                                                            <p className="text-sm font-black text-slate-700 dark:text-slate-300">{formatCurrency(costoEst)}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <button onClick={() => setTurnoUnidades(p => ({ ...p, [f.id]: Math.max(0, (p[f.id] ?? 0) - 1) }))} className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-white font-black text-lg hover:bg-slate-300 active:scale-95">−</button>
+                                                            <div className="text-center min-w-[48px]">
+                                                                <p className="font-black text-slate-800 dark:text-white text-2xl leading-none">{unidades}</p>
+                                                                <p className="text-[9px] text-slate-400 uppercase">tortas</p>
+                                                            </div>
+                                                            <button onClick={() => setTurnoUnidades(p => ({ ...p, [f.id]: (p[f.id] ?? 0) + 1 }))} className="w-9 h-9 rounded-xl bg-rose-500 flex items-center justify-center text-white font-black text-lg hover:bg-rose-600 active:scale-95">+</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    {/* ── SECCIÓN GALLETAS / DULCES ─────────────────────── */}
+                    {(() => {
+                        const fGalletas = formulaciones.filter(f => f.activo && (f.categoria === 'galletas' || f.categoria === 'dulces' || f.categoria === 'especiales'));
+                        if (fGalletas.length === 0) return null;
+                        return (
+                            <div className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-1.5 h-6 bg-violet-500 rounded-full" />
+                                    <p className="text-[11px] font-black uppercase tracking-widest text-violet-500">Galletas, Dulces y Especiales</p>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {fGalletas.map(f => {
+                                        const unidades = turnoUnidades[f.id] ?? 0;
+                                        const costoEst = f.costoTotalArroba * (unidades || 1);
+                                        return (
+                                            <Card key={f.id} className="rounded-3xl border-0 shadow-md bg-white dark:bg-slate-900 overflow-hidden">
+                                                <div className="p-5 flex flex-col gap-4">
+                                                    <div className="flex items-start gap-3">
+                                                        <div className="w-10 h-10 rounded-2xl bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0">
+                                                            <Package className="w-5 h-5 text-violet-500" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="font-black text-slate-800 dark:text-white truncate">{f.nombre}</p>
+                                                            <p className="text-[10px] text-slate-400 capitalize">{f.categoria} · {f.ingredientes.length} insumos</p>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-2xl px-4 py-3">
+                                                        <div>
+                                                            <p className="text-[9px] font-black uppercase text-slate-400">Costo est. / lote</p>
+                                                            <p className="text-sm font-black text-slate-700 dark:text-slate-300">{formatCurrency(costoEst)}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <button onClick={() => setTurnoUnidades(p => ({ ...p, [f.id]: Math.max(0, (p[f.id] ?? 0) - 1) }))} className="w-9 h-9 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-white font-black text-lg hover:bg-slate-300 active:scale-95">−</button>
+                                                            <div className="text-center min-w-[48px]">
+                                                                <p className="font-black text-slate-800 dark:text-white text-2xl leading-none">{unidades}</p>
+                                                                <p className="text-[9px] text-slate-400 uppercase">{unidadLabel(f.categoria)}</p>
+                                                            </div>
+                                                            <button onClick={() => setTurnoUnidades(p => ({ ...p, [f.id]: (p[f.id] ?? 0) + 1 }))} className="w-9 h-9 rounded-xl bg-violet-500 flex items-center justify-center text-white font-black text-lg hover:bg-violet-600 active:scale-95">+</button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </Card>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })()}
                 </TabsContent>
 
                 {/* ═══════════════════════════════════════════════════════

@@ -58,11 +58,13 @@ interface FormulacionesViewProps {
 const ARROBA_KG_VALUE = 11.5;
 
 const CATEGORIAS_FORMULACION = [
-  { value: 'panes', label: 'Panes', color: 'bg-amber-500' },
-  { value: 'pasteleria', label: 'Pastelería', color: 'bg-pink-500' },
-  { value: 'hojaldres', label: 'Hojaldres', color: 'bg-orange-500' },
-  { value: 'dulces', label: 'Dulces', color: 'bg-purple-500' },
-  { value: 'especiales', label: 'Especiales', color: 'bg-blue-500' },
+  { value: 'panes',      label: 'Panes',      color: 'bg-amber-500'  },
+  { value: 'hojaldres',  label: 'Hojaldres',  color: 'bg-orange-500' },
+  { value: 'tortas',     label: 'Tortas',     color: 'bg-rose-500'   },
+  { value: 'pasteleria', label: 'Pastelería', color: 'bg-pink-500'   },
+  { value: 'galletas',   label: 'Galletas',   color: 'bg-violet-500' },
+  { value: 'dulces',     label: 'Dulces',     color: 'bg-purple-500' },
+  { value: 'especiales', label: 'Especiales', color: 'bg-blue-500'   },
 ];
 
 export function FormulacionesView({

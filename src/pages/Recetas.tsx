@@ -93,11 +93,13 @@ interface RecetasProps {
 
 // ─── Categorías de formulaciones ─────────────────────────────────────────────
 const CATS_FORMULACION = [
-    { id: 'panes', label: 'Panes' },
-    { id: 'pasteleria', label: 'Pastelería' },
-    { id: 'hojaldres', label: 'Hojaldres' },
-    { id: 'dulces', label: 'Dulces' },
-    { id: 'especiales', label: 'Especiales' },
+    { id: 'panes',      label: 'Panes'       },
+    { id: 'hojaldres',  label: 'Hojaldres'   },
+    { id: 'tortas',     label: 'Tortas'      },
+    { id: 'pasteleria', label: 'Pastelería'  },
+    { id: 'galletas',   label: 'Galletas'    },
+    { id: 'dulces',     label: 'Dulces'      },
+    { id: 'especiales', label: 'Especiales'  },
 ] as const;
 
 type CatFormulacion = typeof CATS_FORMULACION[number]['id'];

@@ -97,7 +97,7 @@ export interface FormulacionBase {
   id: string;
   nombre: string;              // Ej: "Masa Pan Francés", "Masa Integral"
   descripcion?: string;
-  categoria: 'panes' | 'pasteleria' | 'hojaldres' | 'dulces' | 'especiales';
+  categoria: 'panes' | 'pasteleria' | 'tortas' | 'hojaldres' | 'galletas' | 'dulces' | 'especiales';
   ingredientes: IngredienteFormulacion[];
   rendimientoBaseKg: number;   // Kg de masa resultante por arroba (~11.5 pero puede variar)
   costoTotalArroba: number;    // Suma de costos de ingredientes
