@@ -1826,7 +1826,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 <Input
                                     placeholder="Buscar producto por nombre..."
                                     value={busquedaPerfil}
-                                    onChange={e => setBusquedaPerfil(e.target.value)}
+                                    onChange={e => { setBusquedaPerfil(e.target.value); setCategoriaPerfil(''); }}
                                     className="h-10 pl-9 rounded-xl border-slate-200 bg-white text-xs font-bold"
                                 />
                             </div>
@@ -1835,7 +1835,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             {categoriasPerfil.length > 1 && (
                                 <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
                                     <button
-                                        onClick={() => setCategoriaPerfil('')}
+                                        onClick={() => { setCategoriaPerfil(''); setBusquedaPerfil(''); }}
                                         className={cn(
                                             'shrink-0 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors whitespace-nowrap',
                                             !categoriaPerfil
@@ -1848,7 +1848,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     {categoriasPerfil.map(cat => (
                                         <button
                                             key={cat}
-                                            onClick={() => setCategoriaPerfil(cat === categoriaPerfil ? '' : cat)}
+                                            onClick={() => { setCategoriaPerfil(cat === categoriaPerfil ? '' : cat); setBusquedaPerfil(''); }}
                                             className={cn(
                                                 'shrink-0 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-colors whitespace-nowrap',
                                                 categoriaPerfil === cat
