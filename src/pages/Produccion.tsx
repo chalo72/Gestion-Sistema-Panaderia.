@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck
+    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck, TrendingDown, ArrowDownUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,10 @@ import { GeneradorPedidoInsumos } from '@/components/produccion/GeneradorPedidoI
 import { PlanDiarioView } from '@/components/produccion/PlanDiarioView';
 import { PlanSemanaView } from '@/components/produccion/PlanSemanaView';
 import { ControlCalidadModal } from '@/components/produccion/ControlCalidadModal';
+import { MermasDashboard } from '@/components/produccion/MermasDashboard';
+import { RotacionBreadView } from '@/components/produccion/RotacionBreadView';
 import { useControlCalidad } from '@/hooks/useControlCalidad';
+import { useLotesStock } from '@/hooks/useLotesStock';
 import {
     Dialog,
     DialogContent,
@@ -83,8 +86,11 @@ export function Produccion({
     const [ordenPasoAPaso, setOrdenPasoAPaso] = useState<OrdenProduccion | null>(null);
 
     // Control de Calidad
-    const { guardarInspeccion, getInspeccionPorOrden } = useControlCalidad();
+    const { inspecciones, guardarInspeccion, getInspeccionPorOrden } = useControlCalidad();
     const [ordenQC, setOrdenQC] = useState<OrdenProduccion | null>(null);
+
+    // FIFO / Lotes en stock
+    const { crearLote, lotesConProblema } = useLotesStock();
 
     // Guías Dinámicas a partir de Formulaciones reales
     const guiasDinamicas = formulaciones.filter(f => f.instrucciones && f.instrucciones.length > 5).map(f => {
@@ -233,7 +239,7 @@ export function Produccion({
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-8 w-full max-w-5xl mx-auto">
+                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-10 w-full max-w-5xl mx-auto">
                     <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <ClipboardList className="w-4 h-4" />
                         <span className="hidden sm:inline">Órdenes</span>
@@ -265,6 +271,17 @@ export function Produccion({
                     <TabsTrigger value="pedidos" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <ShoppingCart className="w-4 h-4" />
                         <span className="hidden sm:inline">Pedidos</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="mermas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2 relative">
+                        <TrendingDown className="w-4 h-4" />
+                        <span className="hidden sm:inline">Mermas</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="rotacion" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2 relative">
+                        <ArrowDownUp className="w-4 h-4" />
+                        <span className="hidden sm:inline">Rotación</span>
+                        {lotesConProblema.length > 0 && (
+                            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-rose-500 rounded-full" />
+                        )}
                     </TabsTrigger>
                 </TabsList>
 
