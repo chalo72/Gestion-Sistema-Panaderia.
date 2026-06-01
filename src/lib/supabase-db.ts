@@ -1174,4 +1174,22 @@ export class SupabaseDatabase implements IDatabase {
             estado: c.estado
         };
     }
+
+    // ── Nóminas ────────────────────────────────────────────────────────────
+    async getAllNominas(): Promise<any[]> {
+        try {
+            const { data, error } = await supabase.from('nominas').select('*');
+            if (error) return [];
+            return (data ?? []).map((n: any) => ({
+                ...n,
+                items: n.items ?? [],
+            }));
+        } catch { return []; }
+    }
+    async addNomina(n: any): Promise<void> {
+        try { await supabase.from('nominas').upsert({ ...n }); } catch { /* tabla puede no existir */ }
+    }
+    async updateNomina(n: any): Promise<void> {
+        try { await supabase.from('nominas').upsert({ ...n }); } catch { /* tabla puede no existir */ }
+    }
 }

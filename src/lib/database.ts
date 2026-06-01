@@ -125,6 +125,11 @@ export interface IDatabase {
   getAllAsistencia(): Promise<any[]>;
   addRegistroAsistencia(r: any): Promise<void>;
   getAsistenciaByFecha(fecha: string): Promise<any[]>;
+
+  // Nóminas
+  getAllNominas(): Promise<any[]>;
+  addNomina(n: any): Promise<void>;
+  updateNomina(n: any): Promise<void>;
 }
 
 /**
@@ -473,6 +478,11 @@ class NexusDatabase implements IDatabase {
     const all = await this.adapter.getCollection<any>('asistencia');
     return all.filter((r: any) => r.fecha === fecha);
   }
+
+  // Nóminas
+  async getAllNominas() { return this.adapter.getCollection('nominas'); }
+  async addNomina(n: any) { return this.adapter.setDocument('nominas', n.id, n); }
+  async updateNomina(n: any) { return this.adapter.setDocument('nominas', n.id, n); }
 
   // Recetas
   async getAllRecetas() { return this.adapter.getCollection('recetas'); }

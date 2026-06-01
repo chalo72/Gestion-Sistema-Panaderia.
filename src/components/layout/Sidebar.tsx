@@ -170,6 +170,7 @@ export function Sidebar({
         { id: 'oficina',       label: 'Oficina del Equipo',   icon: Building2,   permission: 'VER_USUARIOS' },
         { id: 'trabajadores',  label: 'Trabajadores',         icon: UserCircle2,    permission: 'VER_USUARIOS' },
         { id: 'asistencia',    label: 'Asistencia',           icon: CalendarCheck,  permission: 'VER_USUARIOS' },
+        { id: 'nomina',        label: 'Nómina',               icon: Wallet,         permission: 'VER_FINANZAS' },
         { id: 'usuarios',      label: 'Equipo de Trabajo',    icon: Users,          permission: 'VER_USUARIOS' },
         { id: 'roles',         label: 'Seguridad y Roles',    icon: Shield,      permission: 'VER_USUARIOS' },
         { id: 'seguridad',     label: 'Agente Anti-Fraude',   icon: Shield,      permission: 'VER_FINANZAS' },

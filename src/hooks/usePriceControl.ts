@@ -64,6 +64,7 @@ export function usePriceControl() {
   const [recetas, setRecetas] = useState<Receta[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>([]);
+  const [nominas, setNominas]       = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   
   // 🛡️ PATRÓN: BACKUP PENDING (Trigger System)
@@ -340,7 +341,7 @@ export function usePriceControl() {
         alertas, inventario, movimientos, gastos, recepciones, historial, recetas, 
         ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, 
         produccion, creditosClientes, creditosTrabajadoresData, trabajadores, prepedidos,
-        clientesData, asistenciaData
+        clientesData, asistenciaData, nominasData
       ] = await Promise.all([
         db.getAllAlertas(),
         db.getAllInventario(),
@@ -362,6 +363,7 @@ export function usePriceControl() {
         db.getAllPrePedidos(),
         db.getAllClientes(),
         db.getAllAsistencia(),
+        db.getAllNominas(),
       ]);
 
       setAlertas(alertas);
@@ -434,6 +436,7 @@ export function usePriceControl() {
       finanzas.setCreditosTrabajadores(creditosTrabajadoresData as any);
       finanzas.setTrabajadores(trabajadores as any);
       setAsistencia(asistenciaData as RegistroAsistencia[]);
+      setNominas(nominasData as any[]);
 
     } catch (error) {
       console.error('Error cargando datos secundarios:', error);
@@ -927,6 +930,19 @@ export function usePriceControl() {
     return nuevo;
   }, []);
 
+  // Nóminas
+  const addNomina = useCallback(async (data: any) => {
+    const nueva = { ...data, id: generateUUID(), createdAt: new Date().toISOString() };
+    await db.addNomina(nueva);
+    setNominas(prev => [...prev, nueva]);
+    return nueva;
+  }, []);
+
+  const updateNomina = useCallback(async (nomina: any) => {
+    await db.updateNomina(nomina);
+    setNominas(prev => prev.map(n => n.id === nomina.id ? nomina : n));
+  }, []);
+
   // Funciones de Alertas
   const marcarAlertaLeida = useCallback(async (id: string) => {
     const alerta = alertas.find(a => a.id === id);
@@ -1349,6 +1365,9 @@ export function usePriceControl() {
 
     // --- ASISTENCIA ---
     asistencia, addRegistroAsistencia,
+
+    // --- NÓMINA ---
+    nominas, addNomina, updateNomina,
 
     // --- DELEGACIÓN A SUB-HOOK: PRODUCCIÓN ---
     ...produccionHook,
