@@ -366,6 +366,31 @@ const Recetas: React.FC<RecetasProps> = ({
         } catch { toast.error('Error al guardar la fórmula'); }
     };
 
+    // ── Distribución por arroba ───────────────────────────────────────────
+
+    const openDistribucion = (f: FormulacionBase) => {
+        setDistribucionFormulacion(f);
+        setDMix(f.mixProduccion ? f.mixProduccion.map(m => ({ ...m })) : []);
+        setIsDistribucionOpen(true);
+    };
+
+    const saveDistribucion = async () => {
+        if (!distribucionFormulacion) return;
+        const total = dMix.reduce((s, i) => s + (i.porcentaje || 0), 0);
+        if (total > 100) { toast.error(`El total es ${total}% — no puede superar 100%`); return; }
+        const mix: MixItemProduccion[] = dMix
+            .filter(i => i.modeloPanId && (i.porcentaje || 0) > 0)
+            .map((i, idx) => ({ modeloPanId: i.modeloPanId!, porcentaje: i.porcentaje!, tipoLataId: i.tipoLataId, orden: idx }));
+        await updateFormulacion(distribucionFormulacion.id, { ...distribucionFormulacion, mixProduccion: mix });
+        toast.success('Distribución guardada');
+        setIsDistribucionOpen(false);
+    };
+
+    const addDMixItem = () => setDMix(p => [...p, { modeloPanId: '', porcentaje: 0, orden: p.length }]);
+    const removeDMixItem = (idx: number) => setDMix(p => p.filter((_, i) => i !== idx));
+    const updateDMixItem = (idx: number, field: keyof MixItemProduccion, value: any) =>
+        setDMix(p => p.map((item, i) => i === idx ? { ...item, [field]: value } : item));
+
     const deleteFormulacionHandler = async (id: string) => {
         const modelsCount = modelosPan.filter(m => m.formulacionId === id).length;
         const msg = modelsCount > 0
@@ -624,6 +649,7 @@ const Recetas: React.FC<RecetasProps> = ({
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-1">
+                                                    <Button variant="ghost" size="icon" onClick={() => openDistribucion(f)} title="Distribución por arroba (latas)" className={cn("h-9 w-9 rounded-xl", f.mixProduccion?.length ? "text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600" : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50")}><PieChart className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => openEditFormulacion(f)} className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl"><Edit2 className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => deleteFormulacionHandler(f.id)} className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => setExpandedFormulacion(isExpanded ? null : f.id)} className="h-9 w-9 text-slate-400 hover:text-slate-700 rounded-xl">
@@ -1211,6 +1237,182 @@ const Recetas: React.FC<RecetasProps> = ({
                             <Button variant="outline" onClick={() => setIsModeloOpen(false)} className="rounded-xl px-6">Cancelar</Button>
                             <Button onClick={saveModelo} className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl px-8 flex items-center gap-2">
                                 <Save className="w-4 h-4" />{editingModelo ? 'Actualizar' : 'Guardar Modelo'}
+                            </Button>
+                        </DialogFooter>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
+            {/* ════════════════════════════════════════════════════════════
+                MODAL DISTRIBUCIÓN POR ARROBA — Admin configura latas
+            ════════════════════════════════════════════════════════════ */}
+            <Dialog open={isDistribucionOpen} onOpenChange={setIsDistribucionOpen}>
+                <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
+                    <div className="h-2 w-full bg-gradient-to-r from-emerald-400 to-teal-500" />
+                    <div className="p-8">
+                        <DialogHeader className="mb-6">
+                            <div className="flex items-center gap-3 mb-2">
+                                <PieChart className="w-6 h-6 text-emerald-600" />
+                                <DialogTitle className="text-xl font-bold">
+                                    Distribución por Arroba — {distribucionFormulacion?.nombre}
+                                </DialogTitle>
+                            </div>
+                            <DialogDescription>
+                                Define qué % de la masa va para cada pan y qué lata usa. El sistema calculará panes y latas exactas para el panadero.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        {/* Resumen masa disponible */}
+                        {distribucionFormulacion && (
+                            <div className="flex gap-3 mb-6">
+                                <div className="bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 rounded-2xl border border-emerald-100 text-center">
+                                    <p className="text-[10px] font-black uppercase text-emerald-500">Masa/arroba</p>
+                                    <p className="font-black text-emerald-700 dark:text-emerald-300">{distribucionFormulacion.rendimientoBaseKg.toFixed(2)} kg</p>
+                                </div>
+                                <div className={cn(
+                                    "px-4 py-2 rounded-2xl border text-center",
+                                    dMix.reduce((s, i) => s + (i.porcentaje || 0), 0) > 100
+                                        ? "bg-rose-50 border-rose-200 text-rose-600"
+                                        : "bg-slate-50 dark:bg-slate-800/50 border-slate-100 text-slate-700 dark:text-white"
+                                )}>
+                                    <p className="text-[10px] font-black uppercase text-slate-400">% asignado</p>
+                                    <p className="font-black text-lg">{dMix.reduce((s, i) => s + (i.porcentaje || 0), 0)}%</p>
+                                </div>
+                                <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-2 rounded-2xl border border-slate-100 text-center">
+                                    <p className="text-[10px] font-black uppercase text-slate-400">% libre</p>
+                                    <p className="font-black text-slate-600 dark:text-slate-300 text-lg">{Math.max(0, 100 - dMix.reduce((s, i) => s + (i.porcentaje || 0), 0))}%</p>
+                                </div>
+                            </div>
+                        )}
+
+                        {tiposLata.length === 0 && (
+                            <div className="mb-4 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 text-amber-700 text-xs font-bold flex items-center gap-2">
+                                <AlertCircle className="w-4 h-4 shrink-0" />
+                                Configura los tipos de lata en Producción → Turno → Config antes de asignarlos aquí.
+                            </div>
+                        )}
+
+                        {/* Filas de distribución */}
+                        <div className="space-y-3 mb-4">
+                            {/* Header */}
+                            <div className="grid grid-cols-12 gap-2 px-1">
+                                <div className="col-span-4 text-[10px] font-black uppercase text-slate-400">Pan (modelo)</div>
+                                <div className="col-span-2 text-[10px] font-black uppercase text-slate-400 text-center">% masa</div>
+                                <div className="col-span-3 text-[10px] font-black uppercase text-slate-400">Lata</div>
+                                <div className="col-span-2 text-[10px] font-black uppercase text-slate-400 text-center">Resultado</div>
+                                <div className="col-span-1" />
+                            </div>
+
+                            {dMix.map((item, idx) => {
+                                const modelo = modelosPan.find(m => m.id === item.modeloPanId);
+                                const masaKg = distribucionFormulacion?.rendimientoBaseKg || 0;
+                                const masaModelo = masaKg * (item.porcentaje || 0) / 100;
+                                const panes = modelo && modelo.pesoUnitarioGr > 0
+                                    ? Math.floor(masaModelo * 1000 / modelo.pesoUnitarioGr) : 0;
+                                const tipoLata = tiposLata.find(t => t.id === item.tipoLataId);
+                                const capacidad = tipoLata?.capacidades.find(c => c.modeloPanId === item.modeloPanId)?.piezas
+                                    || modelo?.piezasPorLata || 0;
+                                const latas = capacidad > 0 && panes > 0 ? Math.ceil(panes / capacidad) : null;
+                                const modelosFiltrados = distribucionFormulacion
+                                    ? modelosPan.filter(m => m.formulacionId === distribucionFormulacion.id)
+                                    : [];
+
+                                return (
+                                    <div key={idx} className="grid grid-cols-12 gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 items-center">
+                                        {/* Modelo */}
+                                        <div className="col-span-4">
+                                            <Select value={item.modeloPanId || ''} onValueChange={v => updateDMixItem(idx, 'modeloPanId', v)}>
+                                                <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-xl text-xs">
+                                                    <SelectValue placeholder="Seleccionar pan..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {modelosFiltrados.length === 0
+                                                        ? <SelectItem value="_none" disabled>No hay modelos — créalos primero</SelectItem>
+                                                        : modelosFiltrados.map(m => <SelectItem key={m.id} value={m.id}>{m.nombre} ({m.pesoUnitarioGr}gr)</SelectItem>)
+                                                    }
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        {/* % masa */}
+                                        <div className="col-span-2">
+                                            <div className="relative">
+                                                <Input type="number" min={0} max={100} value={item.porcentaje || ''} onChange={e => updateDMixItem(idx, 'porcentaje', Number(e.target.value))} className="h-9 rounded-xl bg-white dark:bg-slate-900 border-slate-200 text-center font-black pr-6 text-sm" />
+                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
+                                            </div>
+                                        </div>
+                                        {/* Tipo de lata */}
+                                        <div className="col-span-3">
+                                            <Select value={item.tipoLataId || ''} onValueChange={v => updateDMixItem(idx, 'tipoLataId', v || undefined)}>
+                                                <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-xl text-xs">
+                                                    <SelectValue placeholder={tiposLata.length ? "Tipo lata..." : "Sin latas"} />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="">Sin asignar</SelectItem>
+                                                    {tiposLata.map(l => <SelectItem key={l.id} value={l.id}>{l.nombre} ({l.anchoCm}×{l.largoCm}cm)</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        {/* Resultado */}
+                                        <div className="col-span-2 text-center">
+                                            {panes > 0 ? (
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-800 dark:text-white">{panes} panes</p>
+                                                    {latas !== null
+                                                        ? <p className="text-[10px] font-bold text-emerald-600">{latas} lata{latas !== 1 ? 's' : ''} × {capacidad}</p>
+                                                        : <p className="text-[10px] text-slate-400">sin cap. lata</p>
+                                                    }
+                                                </div>
+                                            ) : <span className="text-[10px] text-slate-300">—</span>}
+                                        </div>
+                                        {/* Eliminar */}
+                                        <div className="col-span-1 flex justify-center">
+                                            <Button onClick={() => removeDMixItem(idx)} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+
+                        <Button variant="outline" onClick={addDMixItem} className="w-full rounded-2xl border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400 mb-2">
+                            <Plus className="w-4 h-4 mr-2" /> Agregar pan a la distribución
+                        </Button>
+
+                        {/* Vista previa del turno */}
+                        {dMix.some(i => i.modeloPanId && (i.porcentaje || 0) > 0) && (
+                            <div className="mt-5 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-3 flex items-center gap-2">
+                                    <Layers3 className="w-3.5 h-3.5" /> Vista previa del turno (1 arroba)
+                                </p>
+                                <div className="space-y-1.5">
+                                    {dMix.filter(i => i.modeloPanId && (i.porcentaje || 0) > 0).map((item, idx) => {
+                                        const modelo = modelosPan.find(m => m.id === item.modeloPanId);
+                                        const masaKg = distribucionFormulacion?.rendimientoBaseKg || 0;
+                                        const panes = modelo && modelo.pesoUnitarioGr > 0
+                                            ? Math.floor(masaKg * (item.porcentaje! / 100) * 1000 / modelo.pesoUnitarioGr) : 0;
+                                        const tipoLata = tiposLata.find(t => t.id === item.tipoLataId);
+                                        const capacidad = tipoLata?.capacidades.find(c => c.modeloPanId === item.modeloPanId)?.piezas || modelo?.piezasPorLata || 0;
+                                        const latas = capacidad > 0 && panes > 0 ? Math.ceil(panes / capacidad) : 0;
+                                        return (
+                                            <div key={idx} className="flex items-center justify-between text-xs">
+                                                <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                                    {modelo?.nombre ?? '—'}
+                                                </span>
+                                                <span className="font-black text-slate-800 dark:text-white">
+                                                    {panes} panes
+                                                    {latas > 0 && <span className="text-emerald-600 ml-2">→ {latas} lata{latas !== 1 ? 's' : ''}</span>}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        <DialogFooter className="mt-6 flex gap-3 pt-6 border-t border-slate-100 dark:border-slate-800">
+                            <Button variant="outline" onClick={() => setIsDistribucionOpen(false)} className="rounded-xl px-6">Cancelar</Button>
+                            <Button onClick={saveDistribucion} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-8 flex items-center gap-2">
+                                <Save className="w-4 h-4" /> Guardar Distribución
                             </Button>
                         </DialogFooter>
                     </div>

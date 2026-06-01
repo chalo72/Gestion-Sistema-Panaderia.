@@ -1,11 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import {
-    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck, TrendingDown, ArrowDownUp
+    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant,
+    Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck, TrendingDown,
+    ArrowDownUp, SunMedium, Layers3, Settings2, Trash2, Edit2, Save, X, CheckCheck, AlertCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { generateUUID } from '@/lib/safe-utils';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { PlanProduccionModal } from '@/components/produccion/PlanProduccionModal';
@@ -29,7 +34,8 @@ import {
 } from '@/components/ui/dialog';
 
 import type {
-    Producto, OrdenProduccion, Receta, ProduccionEstado, InventarioItem, FormulacionBase, ModeloPan, Proveedor
+    Producto, OrdenProduccion, Receta, ProduccionEstado, InventarioItem,
+    FormulacionBase, ModeloPan, Proveedor, TipoLata, CapacidadLata
 } from '@/types';
 
 interface ProduccionProps {
