@@ -163,10 +163,13 @@ export interface PedidoInsumoProduccion {
 // ============================================
 
 export type MotivoRechazo = 'quemado' | 'amogañado' | 'deforme' | 'crudo' | 'otro';
+export type ResponsableRechazo = 'panadero' | 'vendedora' | 'panaderia';
 
 export interface RechazoCalidad {
   motivo: MotivoRechazo;
   cantidad: number;
+  responsable: ResponsableRechazo;
+  nombreResponsable?: string;
   notas?: string;
 }
 
@@ -181,7 +184,33 @@ export interface InspeccionCalidad {
   rechazos: RechazoCalidad[];
   cantidadAprobada: number;
   porcentajeRechazo: number;
+  precioUnitario: number;
+  valorPerdidaTotal: number;
   notas?: string;
+}
+
+// ── FIFO / ROTACIÓN DE LOTES ──────────────────
+export type LoteEstado = 'disponible' | 'despachado' | 'vencido';
+
+export interface LoteStock {
+  id: string;
+  ordenProduccionId: string;
+  modeloNombre: string;
+  productoNombre: string;
+  fechaProduccion: string;
+  cantidadInicial: number;
+  cantidadDisponible: number;
+  precioUnitario: number;
+  costoUnitario: number;
+  estado: LoteEstado;
+  despachos: DespachoLote[];
+}
+
+export interface DespachoLote {
+  id: string;
+  fecha: string;
+  cantidad: number;
+  usuarioNombre: string;
 }
 
 // ============================================
