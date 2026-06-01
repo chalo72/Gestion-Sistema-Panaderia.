@@ -833,9 +833,9 @@ export default function CreditosClientes({
                                                             const seleccionados = creditosTodos.filter(c => selectedCreditosIds.has(c.id));
                                                             const tel = (cliente.telefono || '').replace(/\D/g, '');
                                                             const saldoTotal = seleccionados.reduce((s, c) => s + c.saldo, 0);
+                                                            const fmt = (n: number) => formatCurrency(n);
                                                             const handleWAMasivo = () => {
                                                                 if (!tel) { toast.error('El cliente no tiene teléfono registrado'); return; }
-                                                                const fmt = (n: number) => formatCurrency(n);
                                                                 const fmtF = (f: string) => { try { return new Date(f).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return f; } };
                                                                 let msg = `🥐 *DULCE PLACER*\n━━━━━━━━━━━━━━━━━━\n📋 *ESTADO DE CUENTA*\n👤 ${cliente.nombre}\n📅 ${new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })}\n\n`;
                                                                 seleccionados.forEach((c, i) => {
