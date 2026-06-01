@@ -1,11 +1,11 @@
 /**
  * VendedoraQuickPicker — Selector rápido de vendedora activa
- * Un toque = cambia. Sin dropdowns, sin pasos extra.
- * Usado en POS (venta rápida) y en apertura de mesa.
+ * Un toque = asigna. Toca de nuevo = deselecciona (vuelve a Por Venta).
+ * Solo muestra trabajadoras con rol VENDEDOR.
  */
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { UserCheck } from 'lucide-react';
+import { UserCheck, ShoppingBag } from 'lucide-react';
 
 export interface VendedoraOption {
   id: string;
@@ -16,14 +16,11 @@ export interface VendedoraOption {
 interface VendedoraQuickPickerProps {
   vendedoras: VendedoraOption[];
   activaId: string | null;
-  onSelect: (vendedora: VendedoraOption) => void;
-  /** Modo compacto para el header del POS */
+  onSelect: (vendedora: VendedoraOption | null) => void;
   compact?: boolean;
-  /** Clase adicional para el contenedor */
   className?: string;
 }
 
-/** Genera iniciales desde un nombre completo */
 function getInitials(nombre: string): string {
   return nombre
     .split(' ')
@@ -33,7 +30,6 @@ function getInitials(nombre: string): string {
     .join('');
 }
 
-/** Color determinista basado en el nombre */
 const CHIP_COLORS = [
   'bg-orange-500',
   'bg-blue-500',
@@ -55,52 +51,73 @@ export function VendedoraQuickPicker({
 }: VendedoraQuickPickerProps) {
   if (vendedoras.length === 0) return null;
 
-  return (
-    <div className={cn('flex items-center gap-2 flex-wrap', className)}>
-      {!compact && (
-        <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
-          <UserCheck className="w-3.5 h-3.5" /> Vendiendo:
-        </span>
-      )}
-      {vendedoras.map(v => {
-        const isActiva = v.id === activaId;
-        const color = getColor(v.nombre);
-        const initials = getInitials(v.nombre);
-        const firstName = v.nombre.split(' ')[0];
+  const activaNombre = vendedoras.find(v => v.id === activaId)?.nombre ?? null;
 
-        return (
-          <button
-            key={v.id}
-            onClick={() => onSelect(v)}
-            title={v.nombre}
-            className={cn(
-              'flex items-center gap-1.5 rounded-full transition-all active:scale-95 select-none',
-              compact
-                ? 'h-8 px-3 text-xs font-black'
-                : 'h-9 px-3 text-[11px] font-black',
-              isActiva
-                ? 'ring-2 ring-offset-1 ring-orange-400 shadow-lg shadow-orange-500/20 scale-105'
-                : 'opacity-60 hover:opacity-90 hover:scale-102',
-              isActiva ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-            )}
-          >
-            {/* Avatar circular con iniciales */}
-            <span className={cn(
-              'rounded-full flex items-center justify-center text-white font-black shrink-0',
-              color,
-              compact ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'
-            )}>
-              {initials}
-            </span>
-            {/* Nombre (solo el primero) */}
-            <span className="truncate max-w-[80px]">{firstName}</span>
-            {/* Indicador activo */}
-            {isActiva && (
-              <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
-            )}
-          </button>
-        );
-      })}
+  return (
+    <div className={cn('flex flex-col gap-1.5 w-full', className)}>
+      {/* Fila de chips */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {!compact && (
+          <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400 shrink-0">
+            <UserCheck className="w-3.5 h-3.5" /> Vendiendo:
+          </span>
+        )}
+        {vendedoras.map(v => {
+          const isActiva = v.id === activaId;
+          const color = getColor(v.nombre);
+          const initials = getInitials(v.nombre);
+          const firstName = v.nombre.split(' ')[0];
+
+          return (
+            <button
+              key={v.id}
+              onClick={() => onSelect(isActiva ? null : v)}
+              title={isActiva ? `Deseleccionar a ${v.nombre}` : `Asignar venta a ${v.nombre}`}
+              className={cn(
+                'flex items-center gap-1.5 rounded-full transition-all active:scale-95 select-none',
+                compact
+                  ? 'h-8 px-3 text-xs font-black'
+                  : 'h-9 px-3 text-[11px] font-black',
+                isActiva
+                  ? 'ring-2 ring-offset-1 ring-orange-400 shadow-lg shadow-orange-500/20 scale-105 bg-white dark:bg-slate-800 text-slate-800 dark:text-white'
+                  : 'opacity-60 hover:opacity-90 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+              )}
+            >
+              <span className={cn(
+                'rounded-full flex items-center justify-center text-white font-black shrink-0',
+                color,
+                compact ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'
+              )}>
+                {initials}
+              </span>
+              <span className="truncate max-w-[80px]">{firstName}</span>
+              {isActiva && (
+                <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 animate-pulse" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Indicador de estado — siempre visible y claro */}
+      <div className={cn(
+        'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit transition-all',
+        activaId
+          ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800'
+          : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 border border-slate-200 dark:border-slate-700'
+      )}>
+        {activaId ? (
+          <>
+            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+            {activaNombre?.split(' ')[0]} — asignada a esta venta
+          </>
+        ) : (
+          <>
+            <ShoppingBag className="w-3 h-3" />
+            Por Venta (automático)
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -115,7 +132,6 @@ interface VendedoraMesaModalProps {
 
 export function VendedoraMesaModal({ vendedoras, onSelect, mesaNumero }: VendedoraMesaModalProps) {
   if (vendedoras.length <= 1) {
-    // Con 1 o menos, no tiene sentido mostrar modal — selecciona automáticamente
     React.useEffect(() => { onSelect(vendedoras[0] || null); }, []);
     return null;
   }
@@ -123,7 +139,6 @@ export function VendedoraMesaModal({ vendedoras, onSelect, mesaNumero }: Vendedo
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl p-6 w-80 mx-4 animate-in zoom-in-95 duration-150">
-        {/* Header */}
         <div className="text-center mb-5">
           <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-2xl flex items-center justify-center mx-auto mb-3">
             <UserCheck className="w-6 h-6 text-orange-500" />
@@ -134,7 +149,6 @@ export function VendedoraMesaModal({ vendedoras, onSelect, mesaNumero }: Vendedo
           <p className="text-[11px] text-slate-400 mt-1 font-medium">Toca tu nombre para continuar</p>
         </div>
 
-        {/* Botones de vendedoras — grandes para toque rápido */}
         <div className="space-y-2">
           {vendedoras.map(v => {
             const color = getColor(v.nombre);
@@ -159,12 +173,11 @@ export function VendedoraMesaModal({ vendedoras, onSelect, mesaNumero }: Vendedo
             );
           })}
 
-          {/* Opción sin asignar */}
           <button
             onClick={() => onSelect(null)}
             className="w-full py-3 rounded-2xl text-[11px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
           >
-            Continuar sin asignar
+            Continuar sin asignar (Por Venta)
           </button>
         </div>
       </div>

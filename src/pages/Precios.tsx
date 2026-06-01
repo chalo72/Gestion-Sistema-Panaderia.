@@ -73,14 +73,23 @@ export function Precios({
     notas: '',
   });
 
-  const filteredPrecios = precios.filter(p => {
-    const producto = getProductoById(p.productoId);
-    const proveedor = getProveedorById(p.proveedorId);
-    return (
-      producto?.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      proveedor?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  // Normaliza texto: quita tildes y pasa a minúsculas para comparación insensible
+  const norm = (s: string | undefined) =>
+    (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
+  // Búsqueda multi-token AND: cada palabra del buscador debe aparecer en algún campo
+  const filteredPrecios = useMemo(() => {
+    const tokens = norm(searchTerm).split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return precios;
+    return precios.filter(p => {
+      const producto = getProductoById(p.productoId);
+      const proveedor = getProveedorById(p.proveedorId);
+      const haystack = norm(
+        [producto?.nombre, producto?.categoria, proveedor?.nombre, p.notas].join(' ')
+      );
+      return tokens.every(token => haystack.includes(token));
+    });
+  }, [precios, searchTerm, getProductoById, getProveedorById]);
 
   const handleOpenCreateModal = () => {
     setEditingPrecio(null);
@@ -146,6 +155,8 @@ export function Precios({
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         canEdit={check('EDITAR_PRECIOS')}
+        resultCount={filteredPrecios.length}
+        totalCount={precios.length}
       />
 
       <Tabs defaultValue="lista" className="w-full">
