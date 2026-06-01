@@ -89,17 +89,31 @@ const TAREAS_DEFAULT: TareaCheck[] = [
   { id: 'p9', texto: 'Inventario de insumos para el día siguiente', icono: '📦', roles: ['PANADERO', 'ADMIN', 'GERENTE'], momento: 'cierre' },
 ];
 
-// ─── Helpers de persistencia (localStorage) ──────────────────────────────────
+// ─── Helpers de persistencia ─────────────────────────────────────────────────
 
 const HOY = () => new Date().toISOString().split('T')[0];
 
-const getAnuncios = (): Anuncio[] => {
-  try { return JSON.parse(localStorage.getItem('dp_anuncios') || '[]'); } catch { return []; }
-};
-const saveAnuncios = (a: Anuncio[]) => {
-  localStorage.setItem('dp_anuncios', JSON.stringify(a.slice(0, 50)));
-  window.dispatchEvent(new Event('dp_anuncios_changed'));
-};
+// Mappers Supabase ↔ Anuncio
+const mapFromDB = (r: any): Anuncio => ({
+  id:           r.id,
+  autorId:      r.autor_id,
+  autorNombre:  r.autor_nombre,
+  autorRol:     r.autor_rol,
+  texto:        r.texto,
+  urgencia:     r.urgencia,
+  destinatarios: r.destinatarios,
+  timestamp:    r.created_at,
+});
+const mapToDB = (a: Anuncio) => ({
+  id:           a.id,
+  autor_id:     a.autorId,
+  autor_nombre: a.autorNombre,
+  autor_rol:    a.autorRol,
+  texto:        a.texto,
+  urgencia:     a.urgencia,
+  destinatarios: a.destinatarios,
+  created_at:   a.timestamp,
+});
 
 const getCompletadas = (): CompletadaKey[] => {
   try { return JSON.parse(localStorage.getItem('dp_checklist_completadas') || '[]'); } catch { return []; }
@@ -121,10 +135,12 @@ export default function Comunicaciones() {
   const [tab, setTab] = useState<Tab>('anuncios');
 
   // ── Anuncios ──
-  const [anuncios, setAnuncios] = useState<Anuncio[]>(getAnuncios);
+  const [anuncios, setAnuncios] = useState<Anuncio[]>([]);
+  const [cargandoAnuncios, setCargandoAnuncios] = useState(true);
   const [textoAnuncio, setTextoAnuncio] = useState('');
   const [urgencia, setUrgencia] = useState<Anuncio['urgencia']>('normal');
   const [destinatarios, setDestinatarios] = useState<Anuncio['destinatarios']>('todos');
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // ── Checklist ──
   const [completadas, setCompletadas] = useState<CompletadaKey[]>(getCompletadas);
@@ -136,17 +152,45 @@ export default function Comunicaciones() {
   const rol = (usuario?.rol as UserRole) || 'AUXILIAR';
   const esAdmin = rol === 'ADMIN' || rol === 'GERENTE';
 
-  // Refresca checklist al inicio de cada día
+  // Refresca checklist al inicio de cada día + carga anuncios desde Supabase
   useEffect(() => {
+    // Limpiar tareas viejas
     const hoy = HOY();
     const limpias = completadas.filter(c => c.fecha === hoy);
     if (limpias.length !== completadas.length) {
       setCompletadas(limpias);
       saveCompletadas(limpias);
     }
-    // Marcar anuncios como leídos al abrir el módulo
+
+    // Marcar como leídos
     localStorage.setItem('dp_anuncios_ultima_vista', new Date().toISOString());
     window.dispatchEvent(new Event('dp_anuncios_changed'));
+
+    // Carga inicial de anuncios desde Supabase
+    supabase
+      .from('anuncios')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data, error }) => {
+        if (!error && data) setAnuncios(data.map(mapFromDB));
+        setCargandoAnuncios(false);
+      });
+
+    // Suscripción en tiempo real
+    const channel = supabase
+      .channel('anuncios_realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'anuncios' }, payload => {
+        setAnuncios(prev => [mapFromDB(payload.new), ...prev].slice(0, 50));
+        window.dispatchEvent(new Event('dp_anuncios_changed'));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'anuncios' }, payload => {
+        setAnuncios(prev => prev.filter(a => a.id !== payload.old.id));
+      })
+      .subscribe();
+
+    channelRef.current = channel;
+    return () => { channel.unsubscribe(); };
   }, []);
 
   // ── Anuncios filtrados por rol ──
@@ -159,7 +203,7 @@ export default function Comunicaciones() {
     }).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
   }, [anuncios, rol]);
 
-  const publicarAnuncio = () => {
+  const publicarAnuncio = async () => {
     if (!textoAnuncio.trim() || !usuario) return;
     const nuevo: Anuncio = {
       id: Date.now().toString(),
@@ -171,17 +215,20 @@ export default function Comunicaciones() {
       destinatarios,
       timestamp: new Date().toISOString(),
     };
-    const updated = [nuevo, ...anuncios];
-    setAnuncios(updated);
-    saveAnuncios(updated);
     setTextoAnuncio('');
-    toast.success('Anuncio publicado al equipo');
+    const { error } = await supabase.from('anuncios').insert(mapToDB(nuevo));
+    if (error) {
+      // Fallback offline: agregar localmente
+      setAnuncios(prev => [nuevo, ...prev]);
+      toast.error('Sin conexión — anuncio guardado localmente');
+    } else {
+      toast.success('Anuncio publicado al equipo');
+    }
   };
 
-  const eliminarAnuncio = (id: string) => {
-    const updated = anuncios.filter(a => a.id !== id);
-    setAnuncios(updated);
-    saveAnuncios(updated);
+  const eliminarAnuncio = async (id: string) => {
+    setAnuncios(prev => prev.filter(a => a.id !== id));
+    await supabase.from('anuncios').delete().eq('id', id);
   };
 
   // ── Checklist ──
