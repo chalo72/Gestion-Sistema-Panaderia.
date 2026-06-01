@@ -145,17 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (savedLocalUser) {
           const userData = JSON.parse(savedLocalUser) as Usuario;
-          // Validar que la sesion no tenga mas de 12 horas de antiguedad
-          const SESSION_MAX_MS = 12 * 60 * 60 * 1000;
-          const ultimoAcceso = userData.ultimoAcceso ? new Date(userData.ultimoAcceso).getTime() : 0;
-          const sesionExpirada = ultimoAcceso > 0 && (Date.now() - ultimoAcceso) > SESSION_MAX_MS;
-          
-          if (sesionExpirada) {
-            console.info('⏰ [Auth] Sesion expirada (>12h). Limpiando...');
-            localStorage.removeItem('pricecontrol_local_user');
-          } else {
-            currentUser = userData;
-          }
+          // Sesión permanente — solo el admin desactiva al usuario manualmente
+          currentUser = userData;
         }
 
         // No hay sesión guardada → el usuario deberá iniciar sesión manualmente
@@ -202,8 +193,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localUserList = [...USUARIOS_PRUEBA];
     }
 
-    // Buscar usuario por email (insensible a mayúsculas y sin espacios adicionales)
-    const localUser = localUserList.find(u => (u.email || '').toLowerCase().trim() === emailLower);
+    // Buscar usuario por email — con fallback a Firebase si no está local
+    let localUser = localUserList.find(u => (u.email || '').toLowerCase().trim() === emailLower);
+
+    if (!localUser && firestore) {
+      try {
+        console.log('[Login] No encontrado local — buscando en nube...');
+        const snapshot = await getDocs(collection(firestore, 'usuarios_sistema'));
+        const cloudUser = snapshot.docs
+          .map(d => d.data() as Usuario)
+          .find(u => (u.email || '').toLowerCase().trim() === emailLower);
+        if (cloudUser) {
+          // Guardar en localStorage para próximos logins sin conexión
+          localUserList.push(cloudUser);
+          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(localUserList));
+          localUser = cloudUser;
+          console.log(`[Login] Usuario "${emailLower}" recuperado de la nube y guardado localmente.`);
+        }
+      } catch (e) {
+        console.warn('[Login] Firebase no disponible como fallback:', e);
+      }
+    }
 
     if (!localUser) {
       setIsLoading(false);
