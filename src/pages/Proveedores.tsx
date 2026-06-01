@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { enviarAlertaPreventistaPorWhatsApp, enviarAlertasAutomatico, guardarHintNavegacion } from '@/lib/whatsapp-alerts';
+import { enviarAlertaPreventistaPorWhatsApp, enviarAlertasAutomatico, enviarAlertaManual, guardarHintNavegacion } from '@/lib/whatsapp-alerts';
 import { validarCatalogo } from '@/lib/price-guard';
 import { useCan } from '@/contexts/AuthContext';
 import { db } from '@/lib/database';
@@ -824,12 +824,9 @@ export function Proveedores({
                 {alertasVisita.length} preventistas con alerta
               </p>
               <button
-                onClick={() => {
-                  const { enviarAlertaManual: enviar } = require('@/lib/whatsapp-alerts');
-                  enviar(alertasVisita.map(({ prov, alerta }) => ({
-                    id: prov.id, nombre: prov.nombre, diasRestantes: alerta.diasRestantes
-                  })));
-                }}
+                onClick={() => enviarAlertaManual(alertasVisita.map(({ prov, alerta }) => ({
+                  id: prov.id, nombre: prov.nombre, diasRestantes: alerta.diasRestantes
+                })))}
                 className="h-7 px-3 text-[10px] font-black text-emerald-700 hover:text-white hover:bg-emerald-600 border border-emerald-400 rounded-lg transition-colors flex items-center gap-1.5"
               >
                 <MessageCircle className="w-3 h-3" /> Enviar todos por WhatsApp
