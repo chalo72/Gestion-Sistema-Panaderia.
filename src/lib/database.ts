@@ -613,6 +613,8 @@ class NexusDatabase implements IDatabase {
             { col: 'clientes',           fn: () => supaDB.getAllClientes() },
             { col: 'recetas',            fn: () => supaDB.getAllRecetas() },
             { col: 'sesiones_caja',      fn: () => supaDB.getAllSesionesCaja() },
+            { col: 'mesas',              fn: () => supaDB.getAllMesas() },
+            { col: 'pedidos_activos',    fn: () => supaDB.getAllPedidosActivos() },
           ];
 
           // Precargar tombstones una sola vez para todo el bloque

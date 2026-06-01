@@ -190,32 +190,38 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   // --- Gestión de Mesas ---
   const updateMesa = useCallback(async (mesa: Mesa) => {
     await db.updateMesa(mesa);
+    _supaDB.updateMesa(mesa).catch(() => {});
     setMesas(prev => prev.map(m => m.id === mesa.id ? mesa : m));
   }, []);
 
   const addMesa = useCallback(async (mesa: Mesa) => {
-    await db.updateMesa(mesa); 
+    await db.updateMesa(mesa);
+    _supaDB.updateMesa(mesa).catch(() => {});
     setMesas(prev => [...prev, mesa]);
   }, []);
 
   const deleteMesa = useCallback(async (id: string) => {
     await db.deleteMesa(id);
+    _supaDB.deleteMesa(id).catch(() => {});
     setMesas(prev => prev.filter(m => m.id !== id));
   }, []);
 
   // --- Gestión de Pedidos Activos ---
   const addPedidoActivo = useCallback(async (pedido: PedidoActivo) => {
     await db.addPedidoActivo(pedido);
+    _supaDB.updatePedidoActivo(pedido).catch(() => {});
     setPedidosActivos(prev => [...prev, pedido]);
   }, []);
 
   const updatePedidoActivo = useCallback(async (pedido: PedidoActivo) => {
     await db.updatePedidoActivo(pedido);
+    _supaDB.updatePedidoActivo(pedido).catch(() => {});
     setPedidosActivos(prev => prev.map(p => p.id === pedido.id ? pedido : p));
   }, []);
 
   const deletePedidoActivo = useCallback(async (id: string) => {
     await db.deletePedidoActivo(id);
+    _supaDB.deletePedidoActivo(id).catch(() => {});
     setPedidosActivos(prev => prev.filter(p => p.id !== id));
   }, []);
 
