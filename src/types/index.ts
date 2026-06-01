@@ -159,6 +159,32 @@ export interface PedidoInsumoProduccion {
 }
 
 // ============================================
+// CONTROL DE CALIDAD — PRE-VENTA
+// ============================================
+
+export type MotivoRechazo = 'quemado' | 'amogañado' | 'deforme' | 'crudo' | 'otro';
+
+export interface RechazoCalidad {
+  motivo: MotivoRechazo;
+  cantidad: number;
+  notas?: string;
+}
+
+export interface InspeccionCalidad {
+  id: string;
+  ordenProduccionId: string;
+  modeloNombre: string;
+  productoNombre: string;
+  fechaInspeccion: string;
+  cantidadProducida: number;
+  cantidadContada: number;
+  rechazos: RechazoCalidad[];
+  cantidadAprobada: number;
+  porcentajeRechazo: number;
+  notas?: string;
+}
+
+// ============================================
 // PLAN SEMANAL DE PRODUCCIÓN
 // ============================================
 
