@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, LayoutGrid, X, Users, Plus, LogOut, ArrowUpCircle, ArrowDownCircle, ChevronDown } from 'lucide-react';
+import { Zap, LayoutGrid, X, Users, Plus, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 
@@ -58,23 +58,6 @@ export function POSHeader({
             ══════════════════════════════════════════ */}
             <div className="hidden lg:flex flex-col gap-1 py-1 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-3">
                 <div className="flex items-center gap-2 justify-between">
-                    {cajaActiva && (
-                        <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={onMovimientoEntrada} className="h-8 px-2 rounded-lg flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-all" title="Entrada de caja">
-                                <ArrowUpCircle className="w-3.5 h-3.5" />
-                                <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Entrada</span>
-                            </button>
-                            <button onClick={onMovimientoSalida} className="h-8 px-2 rounded-lg flex items-center gap-1 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-100 transition-all" title="Salida de caja">
-                                <ArrowDownCircle className="w-3.5 h-3.5" />
-                                <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Salida</span>
-                            </button>
-                            <button onClick={onCerrarCaja} className="h-8 px-2 rounded-lg flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-all" title="Cerrar caja">
-                                <LogOut className="w-3.5 h-3.5" />
-                                <span className="text-[9px] font-black uppercase tracking-tight hidden sm:inline">Cerrar Caja</span>
-                            </button>
-                        </div>
-                    )}
-                    {cajaActiva && <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 shrink-0" />}
                     <button
                         onClick={() => setViewMode(viewMode === 'mesas' ? 'pos' : 'mesas')}
                         className={cn("h-8 px-3 rounded-lg flex items-center gap-2 transition-all active:scale-95 shadow-sm border shrink-0",
@@ -130,22 +113,6 @@ export function POSHeader({
 
                 {/* Fila principal */}
                 <div className="flex items-center gap-2 px-3 py-2">
-                    {/* Caja — iconos compactos */}
-                    {cajaActiva && (
-                        <div className="flex items-center gap-1 shrink-0">
-                            <button onClick={onMovimientoEntrada} className="w-9 h-9 rounded-xl flex items-center justify-center bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 active:scale-95 transition-all" title="Entrada">
-                                <ArrowUpCircle className="w-4 h-4" />
-                            </button>
-                            <button onClick={onMovimientoSalida} className="w-9 h-9 rounded-xl flex items-center justify-center bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 active:scale-95 transition-all" title="Salida">
-                                <ArrowDownCircle className="w-4 h-4" />
-                            </button>
-                            <button onClick={onCerrarCaja} className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 active:scale-95 transition-all" title="Cerrar caja">
-                                <LogOut className="w-4 h-4" />
-                            </button>
-                            <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1" />
-                        </div>
-                    )}
-
                     {/* Botón activo — toca para abrir panel */}
                     <button
                         onClick={() => setPanelOpen(true)}
@@ -161,13 +128,9 @@ export function POSHeader({
                             <p className="text-sm font-black text-slate-800 dark:text-white truncate leading-tight">
                                 {activeTab?.label ?? 'Venta Rápida'}
                             </p>
-                            {activeVendedora ? (
+                            {activeVendedora && (
                                 <p className="text-[10px] font-bold text-orange-500 truncate leading-tight">
                                     {activeVendedora.nombre.split(' ')[0]} — asignada
-                                </p>
-                            ) : (
-                                <p className="text-[10px] font-medium text-slate-400 truncate leading-tight">
-                                    Por Venta (automático)
                                 </p>
                             )}
                         </div>

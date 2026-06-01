@@ -5,7 +5,7 @@
  */
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { UserCheck, ShoppingBag } from 'lucide-react';
+import { UserCheck } from 'lucide-react';
 
 export interface VendedoraOption {
   id: string;
@@ -100,25 +100,13 @@ export function VendedoraQuickPicker({
         })}
       </div>
 
-      {/* Indicador de estado — siempre visible y claro */}
-      <div className={cn(
-        'flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit transition-all',
-        activaId
-          ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800'
-          : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 border border-slate-200 dark:border-slate-700'
-      )}>
-        {activaId ? (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-            {activaNombre?.split(' ')[0]} — asignada a {tabLabel || 'esta venta'}
-          </>
-        ) : (
-          <>
-            <ShoppingBag className="w-3 h-3" />
-            Por Venta (automático)
-          </>
-        )}
-      </div>
+      {/* Indicador de estado — solo visible cuando hay vendedora asignada */}
+      {activaId && (
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
+          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
+          {activaNombre?.split(' ')[0]} — asignada a {tabLabel || 'esta venta'}
+        </div>
+      )}
     </div>
   );
 }

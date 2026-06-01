@@ -84,6 +84,8 @@ interface VentasProps {
     onAddCreditoCliente?: (credito: any) => Promise<any>;
     creditosClientes?: any[];
     clientes: Cliente[];
+    cajaActionTrigger?: { tipo: 'entrada' | 'salida' | 'cierre'; ts: number } | null;
+    onCajaActionConsumed?: () => void;
 }
 
 // ID constante para la pestaña de Venta Rápida
@@ -112,7 +114,9 @@ export function Ventas(props: VentasProps) {
         onAjustarStock,
         onAddMesa,
         onDeleteMesa,
-        clientes: masterClientes
+        clientes: masterClientes,
+        cajaActionTrigger,
+        onCajaActionConsumed,
     } = props;
 
     // ==========================================
@@ -146,6 +150,15 @@ export function Ventas(props: VentasProps) {
     const [showAperturaModal, setShowAperturaModal] = useState(false);
     const [showCierreModal, setShowCierreModal] = useState(false);
     const [movimientoCaja, setMovimientoCaja] = useState<{ tipo: 'entrada' | 'salida' } | null>(null);
+
+    // Reacciona a triggers del header global (botones Entrada/Salida/Cerrar Caja)
+    useEffect(() => {
+        if (!cajaActionTrigger) return;
+        if (cajaActionTrigger.tipo === 'cierre') setShowCierreModal(true);
+        else setMovimientoCaja({ tipo: cajaActionTrigger.tipo });
+        onCajaActionConsumed?.();
+    }, [cajaActionTrigger]);
+
     // Mesa esperando selección de vendedora (multi-vendedora)
     const [mesaPendienteVendedora, setMesaPendienteVendedora] = useState<Mesa | null>(null);
 

@@ -5,7 +5,9 @@ import {
   Moon,
   LayoutDashboard,
   ShieldCheck,
-  Database
+  Database,
+  ArrowUpCircle,
+  ArrowDownCircle,
 } from 'lucide-react';
 
 import { usePriceControl } from '@/hooks/usePriceControl';
@@ -180,6 +182,7 @@ const App = () => {
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [cajaActionTrigger, setCajaActionTrigger] = useState<{ tipo: 'entrada' | 'salida' | 'cierre'; ts: number } | null>(null);
 
 
 
@@ -367,6 +370,8 @@ const App = () => {
             onDeletePedidoActivo={onDeletePedidoActivo}
             onUpdateProducto={updateProducto}
             onAjustarStock={onAjustarStock}
+            cajaActionTrigger={cajaActionTrigger}
+            onCajaActionConsumed={() => setCajaActionTrigger(null)}
           />
         );
       case 'caja':
@@ -728,8 +733,37 @@ const App = () => {
             </div>
 
             <div className="flex items-center gap-6">
+               {/* Botones de Caja — solo visibles en POS con caja abierta */}
+               {currentView === 'ventas' && cajaActiva && (
+                 <div className="flex items-center gap-1">
+                   <button
+                     onClick={() => setCajaActionTrigger({ tipo: 'entrada', ts: Date.now() })}
+                     className="h-8 px-2.5 rounded-lg flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 transition-all"
+                     title="Entrada de caja"
+                   >
+                     <ArrowUpCircle className="w-3.5 h-3.5" />
+                     <span className="text-[9px] font-black uppercase tracking-tight">Entrada</span>
+                   </button>
+                   <button
+                     onClick={() => setCajaActionTrigger({ tipo: 'salida', ts: Date.now() })}
+                     className="h-8 px-2.5 rounded-lg flex items-center gap-1.5 bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-400 hover:bg-rose-100 transition-all"
+                     title="Salida de caja"
+                   >
+                     <ArrowDownCircle className="w-3.5 h-3.5" />
+                     <span className="text-[9px] font-black uppercase tracking-tight">Salida</span>
+                   </button>
+                   <button
+                     onClick={() => setCajaActionTrigger({ tipo: 'cierre', ts: Date.now() })}
+                     className="h-8 px-2.5 rounded-lg flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-200 transition-all"
+                     title="Cerrar caja"
+                   >
+                     <LogOut className="w-3.5 h-3.5" />
+                     <span className="text-[9px] font-black uppercase tracking-tight">Cerrar Caja</span>
+                   </button>
+                 </div>
+               )}
                {/* Modo Oscuro */}
-               <button 
+               <button
                   onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
                   className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
                >
