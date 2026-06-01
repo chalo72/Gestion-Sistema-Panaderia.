@@ -100,27 +100,36 @@ export function IceCreamAssistantModal({
         return (p.tipo === 'ingrediente' || p.tipo === 'insumo') && kw.some(k => n.includes(k));
     }), [productos]);
 
-    // ── Cálculos paso 1 — promedio ponderado por cajas abiertas ─────────────
+    // ── Cálculos paso 1 ──────────────────────────────────────────────────────
 
     const mlPorCajaNum = parseFloat(mlPorCaja) || 10000;
 
     const { totalCostoCajas, totalMlDisponible, promedioMaestro, totalCajas } = useMemo(() => {
-        let totalCosto = 0, totalMl = 0, totalC = 0;
+        let totalCostoInvertido = 0, totalC = 0;
         cajasSeleccionadas.forEach(({ id, cajas }) => {
             const precio = parseFloat(precios.find(pr => pr.productoId === id)?.precioCosto?.toString() || '0');
-            totalCosto += precio * cajas;
-            totalMl    += cajas * mlPorCajaNum;
-            totalC     += cajas;
+            totalCostoInvertido += precio * cajas;   // costo real total (para punto de equilibrio)
+            totalC += cajas;
         });
+
+        // Promedio SIMPLE de precios entre sabores seleccionados (no ponderado por cajas)
+        const sumPrecios = cajasSeleccionadas.reduce((s, { id }) => {
+            const precio = parseFloat(precios.find(pr => pr.productoId === id)?.precioCosto?.toString() || '0');
+            return s + precio;
+        }, 0);
+        const promedio = cajasSeleccionadas.length > 0 ? sumPrecios / cajasSeleccionadas.length : 0;
+
         return {
-            totalCostoCajas:   totalCosto,
-            totalMlDisponible: totalMl,
-            promedioMaestro:   totalC > 0 ? totalCosto / totalC : 0,
+            totalCostoCajas:   totalCostoInvertido,
+            totalMlDisponible: totalC * mlPorCajaNum,
+            promedioMaestro:   promedio,
             totalCajas:        totalC,
         };
     }, [cajasSeleccionadas, precios, mlPorCajaNum]);
 
-    const costoPorMl = totalMlDisponible > 0 ? totalCostoCajas / totalMlDisponible : 0;
+    // Costo por gramo/ml basado en el promedio simple de precios
+    const costoPorMl    = mlPorCajaNum > 0 ? promedioMaestro / mlPorCajaNum : 0;
+    const costoPor1000g = costoPorMl * 1000;
 
     // ── Cálculos por perfil ───────────────────────────────────────────────────
 
@@ -378,23 +387,32 @@ export function IceCreamAssistantModal({
 
                             {/* KPIs resumen */}
                             {cajasSeleccionadas.length > 0 && (
-                                <div className="grid grid-cols-3 gap-3">
-                                    <div className="bg-cyan-600 rounded-2xl p-4 text-white text-center shadow-lg shadow-cyan-100">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">Costo prom. / caja</p>
-                                        <p className="text-xl font-black mt-1">{formatCurrency(promedioMaestro)}</p>
-                                        <p className="text-[9px] font-bold opacity-60 mt-1">{cajasSeleccionadas.length} sabor(es)</p>
+                                <>
+                                    {/* Fila 1 — el dato más importante: costo por kilo/litro */}
+                                    <div className="bg-gradient-to-r from-cyan-600 to-blue-600 rounded-2xl p-5 text-white shadow-lg">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.3em] opacity-80 mb-1">
+                                            Costo por cada 1.000 g / 1 L de helado
+                                        </p>
+                                        <p className="text-4xl font-black">{formatCurrency(costoPor1000g)}</p>
+                                        <p className="text-[10px] font-bold opacity-70 mt-1">
+                                            Promedio de {cajasSeleccionadas.length} sabor(es): {formatCurrency(promedioMaestro)} / caja de {(mlPorCajaNum/1000).toFixed(0)} kg
+                                        </p>
                                     </div>
-                                    <div className="bg-blue-600 rounded-2xl p-4 text-white text-center shadow-lg shadow-blue-100">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">Stock total</p>
-                                        <p className="text-xl font-black mt-1">{(totalMlDisponible / 1000).toFixed(1)} kg/L</p>
-                                        <p className="text-[9px] font-bold opacity-60 mt-1">{totalCajas} caja(s)</p>
+
+                                    {/* Fila 2 — stock y costo total */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 text-center">
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-blue-500">Stock disponible</p>
+                                            <p className="text-2xl font-black text-blue-700 mt-1">{(totalMlDisponible / 1000).toFixed(1)} kg/L</p>
+                                            <p className="text-[9px] font-bold text-blue-400 mt-1">{totalCajas} caja(s) × {(mlPorCajaNum/1000).toFixed(0)} kg</p>
+                                        </div>
+                                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-center">
+                                            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-500">Costo total invertido</p>
+                                            <p className="text-2xl font-black text-slate-700 mt-1">{formatCurrency(totalCostoCajas)}</p>
+                                            <p className="text-[9px] font-bold text-slate-400 mt-1">a recuperar con ventas</p>
+                                        </div>
                                     </div>
-                                    <div className="bg-slate-800 rounded-2xl p-4 text-white text-center shadow-lg">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">Costo total</p>
-                                        <p className="text-xl font-black mt-1">{formatCurrency(totalCostoCajas)}</p>
-                                        <p className="text-[9px] font-bold opacity-60 mt-1">a recuperar</p>
-                                    </div>
-                                </div>
+                                </>
                             )}
                         </>
                     )}
