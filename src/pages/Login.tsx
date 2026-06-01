@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, KeyRound, CloudDownload } from 'lucide-react';
+import { pullUsersFromCloud, mergeUsersToLocalStorage, applyAccessCode } from '@/lib/user-cloud-sync';
 
 interface LoginProps {
   onLoginSuccess: () => void;
@@ -16,7 +17,36 @@ export function Login({ onLoginSuccess }: LoginProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [showCodeSection, setShowCodeSection] = useState(false);
+  const [accessCode, setAccessCode] = useState('');
+  const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
+  const syncDone = useRef(false);
   const { login } = useAuth();
+
+  // Al montar: intentar traer usuarios del cloud para sincronizar dispositivos de trabajadores
+  useEffect(() => {
+    if (syncDone.current) return;
+    syncDone.current = true;
+    setSyncStatus('syncing');
+    pullUsersFromCloud()
+      .then(remote => {
+        mergeUsersToLocalStorage(remote);
+        setSyncStatus('done');
+      })
+      .catch(() => setSyncStatus('idle'));
+  }, []);
+
+  const handleApplyCode = () => {
+    if (!accessCode.trim()) return;
+    const result = applyAccessCode(accessCode.trim());
+    if (result.ok) {
+      setCodeMsg({ ok: true, text: `✅ ¡Listo! ${result.nombre} ya puede entrar. Inicia sesión normalmente.` });
+      setAccessCode('');
+    } else {
+      setCodeMsg({ ok: false, text: result.error || 'Código inválido' });
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -126,10 +156,13 @@ export function Login({ onLoginSuccess }: LoginProps) {
               Sistema de Gestión de Panadería
             </p>
 
-            {/* Indicador online */}
+            {/* Indicador online + sync */}
             <div className="flex items-center gap-2 mt-2 px-3 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-              <span className="text-[10px] font-black text-emerald-400 tracking-widest uppercase">Sistema en línea</span>
+              <span className="text-[10px] font-black text-emerald-400 tracking-widest uppercase">
+                {syncStatus === 'syncing' ? 'Sincronizando...' : 'Sistema en línea'}
+              </span>
+              {syncStatus === 'syncing' && <CloudDownload className="w-3 h-3 text-emerald-400 animate-pulse" />}
             </div>
           </div>
 
@@ -213,6 +246,45 @@ export function Login({ onLoginSuccess }: LoginProps) {
               ) : 'Entrar al Sistema'}
             </Button>
           </form>
+
+          {/* ── Código de acceso ── */}
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => { setShowCodeSection(s => !s); setCodeMsg(null); }}
+              className="w-full text-[10px] font-black text-slate-500 hover:text-violet-400 tracking-widest uppercase transition-colors flex items-center justify-center gap-1.5"
+            >
+              <KeyRound className="w-3 h-3" />
+              {showCodeSection ? 'Ocultar' : '¿No puedes entrar? Tengo un código de acceso'}
+            </button>
+
+            {showCodeSection && (
+              <div className="mt-3 space-y-2 p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200">
+                <p className="text-[10px] text-violet-300 font-bold uppercase tracking-widest">
+                  Código de acceso — enviado por el Administrador
+                </p>
+                <textarea
+                  rows={3}
+                  value={accessCode}
+                  onChange={e => { setAccessCode(e.target.value); setCodeMsg(null); }}
+                  placeholder="Pega aquí el código que te envió el administrador..."
+                  className="w-full bg-white/[0.06] border border-white/10 text-white placeholder:text-slate-600 rounded-xl px-3 py-2 text-xs font-mono resize-none focus:border-violet-500/60 focus:outline-none"
+                />
+                {codeMsg && (
+                  <p className={`text-[11px] font-bold ${codeMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {codeMsg.text}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  onClick={handleApplyCode}
+                  className="w-full h-9 bg-violet-600 hover:bg-violet-500 text-white text-xs font-black rounded-xl"
+                >
+                  Activar Código
+                </Button>
+              </div>
+            )}
+          </div>
 
           <p className="text-slate-600 text-xs text-center mt-4">
             © 2026 Panadería Dulce Placer —{' '}

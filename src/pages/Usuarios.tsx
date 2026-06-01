@@ -3,7 +3,7 @@ import { useAuth, useCan } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
@@ -13,20 +13,20 @@ import {
   UserCheck,
   UserX,
   Users,
-  Shield,
   Mail,
   Search,
-  Activity,
   UserPlus,
   Lock,
   Eye,
   EyeOff,
-  MoreVertical,
-  Share2
+  Share2,
+  CloudUpload,
+  Copy,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ROLE_DESCRIPTIONS, type UserRole, type Usuario } from '@/types';
 import { cn } from '@/lib/utils';
+import { pushAllUsersToCloud, pushUserToCloud, generateAccessCode } from '@/lib/user-cloud-sync';
 
 export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
   const { usuarios, addUsuario, updateUsuario, deleteUsuario } = useAuth();
@@ -45,6 +45,7 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
   });
 
   const [isSavingUser, setIsSavingUser] = useState(false);
+  const [isSyncingCloud, setIsSyncingCloud] = useState(false);
 
   const filteredUsuarios = useMemo(() => {
     return usuarios.filter(u =>
@@ -90,6 +91,7 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
         const success = await updateUsuario(editingUser.id, updates);
         if (success) {
           toast.success(`${formData.nombre} actualizado correctamente`);
+          pushUserToCloud({ ...editingUser, ...updates }).catch(() => {});
           setIsDialogOpen(false);
           setEditingUser(null);
         }
@@ -97,6 +99,13 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
         const success = await addUsuario(formData);
         if (success) {
           toast.success(`Usuario ${formData.nombre} creado`);
+          // Buscar el usuario recién creado en localStorage para obtener su id
+          try {
+            const raw = localStorage.getItem('pricecontrol_local_user_list');
+            const all: any[] = raw ? JSON.parse(raw) : [];
+            const created = all.find((u: any) => u.email === formData.email);
+            if (created) pushUserToCloud(created).catch(() => {});
+          } catch {}
           setIsDialogOpen(false);
           setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true, password: '' });
         }
@@ -140,6 +149,33 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
     }
   };
 
+  const handleSyncCloud = async () => {
+    setIsSyncingCloud(true);
+    try {
+      const raw = localStorage.getItem('pricecontrol_local_user_list');
+      const all: any[] = raw ? JSON.parse(raw) : [];
+      const ok = await pushAllUsersToCloud(all);
+      if (ok) toast.success(`${all.length} usuario(s) sincronizados a la nube ✓`);
+      else toast.error('Error al sincronizar. ¿Existe la tabla en Supabase?');
+    } catch {
+      toast.error('Error inesperado al sincronizar');
+    } finally {
+      setIsSyncingCloud(false);
+    }
+  };
+
+  const handleCopyAccessCode = (user: Usuario) => {
+    const raw = localStorage.getItem('pricecontrol_local_user_list');
+    const all: any[] = raw ? JSON.parse(raw) : [];
+    const full = all.find((u: any) => u.id === user.id) ?? user;
+    const code = generateAccessCode(full as Record<string, unknown>);
+    navigator.clipboard.writeText(code).then(() => {
+      toast.success(`Código de ${user.nombre} copiado. Envíalo por WhatsApp.`, { duration: 4000 });
+    }).catch(() => {
+      toast.info(`Código: ${code.slice(0, 40)}...`, { duration: 8000 });
+    });
+  };
+
   const handleShareWhatsApp = (user: Usuario) => {
     const rolePasswords = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
     const password = (user as any).password || rolePasswords[user.rol] || 'Pendiente asignar';
@@ -165,9 +201,21 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
           </div>
           <div>
             <h1 className="text-xl font-black text-slate-900 dark:text-white">Usuarios del Sistema</h1>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">{usuarios.length} activos · Dulce Placer</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">{usuarios.length} usuarios · Dulce Placer</p>
           </div>
         </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleSyncCloud}
+            disabled={isSyncingCloud}
+            variant="outline"
+            className="h-10 px-3 rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs border-violet-300 text-violet-600 hover:bg-violet-50"
+            title="Sincronizar todos los usuarios a la nube para que puedan entrar desde otros dispositivos"
+          >
+            <CloudUpload className="w-4 h-4" />
+            {isSyncingCloud ? 'Sync...' : 'Sync Nube'}
+          </Button>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -289,6 +337,7 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
             </div>
           </DialogContent>
         </Dialog>
+        </div>
 
       </header>
 
@@ -337,6 +386,15 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
 
             {/* Acciones */}
             <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleCopyAccessCode(user)}
+                className="w-8 h-8 rounded-xl text-violet-500 hover:bg-violet-500/10"
+                title="Copiar código de acceso (para trabajadores que no pueden entrar)"
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
