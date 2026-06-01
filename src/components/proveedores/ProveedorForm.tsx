@@ -1384,9 +1384,12 @@ export function ProveedorForm({
                               type="number"
                               min={0}
                               max={500}
-                              step={1}
-                              value={Math.round(prodActual.margenVenta || 0)}
-                              onChange={(e) => setProdActual(prev => ({ ...prev, margenVenta: Math.round(Number(e.target.value) || 0) }))}
+                              step={0.5}
+                              value={Math.round((prodActual.margenVenta || 0) * 10) / 10}
+                              onChange={(e) => {
+                                const v = Math.round(Number(e.target.value || 0) * 10) / 10;
+                                setProdActual(prev => ({ ...prev, margenVenta: v }));
+                              }}
                               className="h-12 pl-9 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-600 focus:ring-4 focus:ring-emerald-500/10"
                               placeholder="30"
                             />
@@ -1398,11 +1401,11 @@ export function ProveedorForm({
                           <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Venta Final</Label>
                           <div className="relative group flex gap-1">
                             <CurrencyInput
-                                value={sellPrice > 0 ? Math.round(sellPrice / 100) * 100 : 0}
+                                value={sellPrice > 0 ? Math.round(sellPrice) : 0}
                                 onChange={(newPrice) => {
                                   if (costUnit > 0) {
-                                    const newMargin = ((newPrice / costUnit) - 1) * 100;
-                                    setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargin) }));
+                                    const newMargen = ((newPrice / costUnit) - 1) * 100;
+                                    setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargen * 10) / 10 }));
                                   }
                                 }}
                                 icon={ShoppingCart}
