@@ -1,5 +1,6 @@
 import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect } from 'react';
+import { leerYLimpiarHintNavegacion } from '@/lib/whatsapp-alerts';
 import {
   Plus,
   Minus,
@@ -144,6 +145,16 @@ export default function PrePedidos({
   
   // Para ver detalles en historial
   const [verDetallePedido, setVerDetallePedido] = useState<PrePedido | null>(null);
+
+  // Leer hint de navegación desde Proveedores → auto-seleccionar proveedor
+  useEffect(() => {
+    const provId = leerYLimpiarHintNavegacion();
+    if (provId) {
+      setActiveProveedorId(provId);
+      setShowProveedorPanel(true);
+      setShowSupplierGrid(false);
+    }
+  }, []);
 
   // Proveedores filtrados por búsqueda
   const proveedoresFiltrados = useMemo(() => {

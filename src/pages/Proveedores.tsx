@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { enviarAlertaPreventistaPorWhatsApp, guardarHintNavegacion } from '@/lib/whatsapp-alerts';
 import { validarCatalogo } from '@/lib/price-guard';
 import { useCan } from '@/contexts/AuthContext';
 import { db } from '@/lib/database';
@@ -806,14 +807,14 @@ export function Proveedores({
         <div className="flex flex-col gap-2">
           {alertasVisita.map(({ prov, alerta }) => (
             <div key={prov.id} className={cn(
-              'flex items-center gap-3 px-4 py-3 rounded-2xl border',
+              'flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 rounded-2xl border',
               alerta.diasRestantes <= 0
                 ? 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800'
                 : alerta.diasRestantes <= 1
                 ? 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
                 : 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
             )}>
-              <Bell className={cn('w-4 h-4 shrink-0',
+              <Bell className={cn('w-4 h-4 shrink-0 hidden sm:block',
                 alerta.diasRestantes <= 0 ? 'text-red-600' :
                 alerta.diasRestantes <= 1 ? 'text-amber-600' : 'text-yellow-600'
               )} />
@@ -824,12 +825,41 @@ export function Proveedores({
                   ? `🔔 Mañana llega el preventista de ${prov.nombre} — prepara el prepedido`
                   : `📅 En ${alerta.diasRestantes} días llega el preventista de ${prov.nombre}`}
               </p>
-              <button
-                onClick={() => setSelectedProvId(prov.id)}
-                className="shrink-0 text-[10px] font-black text-blue-600 hover:text-blue-800 underline"
-              >
-                Ver proveedor
-              </button>
+              <div className="flex gap-2 flex-wrap shrink-0">
+                <button
+                  onClick={() => {
+                    setSelectedProvId(prov.id);
+                    setTimeout(() => {
+                      document.getElementById(`prov-${prov.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }, 120);
+                  }}
+                  className="h-7 px-3 text-[10px] font-black text-blue-600 hover:text-white hover:bg-blue-600 border border-blue-300 rounded-lg transition-colors"
+                >
+                  Ver proveedor
+                </button>
+                <button
+                  onClick={() => enviarAlertaPreventistaPorWhatsApp(prov, alerta.diasRestantes)}
+                  className="h-7 px-3 text-[10px] font-black text-emerald-700 hover:text-white hover:bg-emerald-600 border border-emerald-300 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <MessageCircle className="w-3 h-3" /> WhatsApp
+                </button>
+                {onNavigateTo && (
+                  <button
+                    onClick={() => {
+                      guardarHintNavegacion(prov.id);
+                      onNavigateTo('prepedidos');
+                    }}
+                    className={cn(
+                      'h-7 px-3 text-[10px] font-black text-white rounded-lg transition-colors flex items-center gap-1',
+                      alerta.diasRestantes <= 0
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : 'bg-amber-600 hover:bg-amber-700'
+                    )}
+                  >
+                    Hacer prepedido →
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -921,7 +951,7 @@ export function Proveedores({
               const totalVenta   = insumos.filter(i => i.destino === 'venta').length;
               const isSel        = selectedProvId === prov.id;
               return (
-                <div key={prov.id} className={cn(
+                <div key={prov.id} id={`prov-${prov.id}`} className={cn(
                   'rounded-2xl border-2 overflow-hidden transition-all duration-300 bg-white dark:bg-slate-800',
                   isSel
                     ? vistaActual === 'grid'
