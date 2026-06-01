@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays
+    Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant, Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,7 @@ import { ModelosPanView } from '@/components/produccion/ModelosPanView';
 import { CalculadoraRendimiento } from '@/components/produccion/CalculadoraRendimiento';
 import { GeneradorPedidoInsumos } from '@/components/produccion/GeneradorPedidoInsumos';
 import { PlanDiarioView } from '@/components/produccion/PlanDiarioView';
+import { PlanSemanaView } from '@/components/produccion/PlanSemanaView';
 import {
     Dialog,
     DialogContent,
@@ -226,10 +227,14 @@ export function Produccion({
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-7 w-full max-w-5xl mx-auto">
+                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-8 w-full max-w-5xl mx-auto">
                     <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <ClipboardList className="w-4 h-4" />
                         <span className="hidden sm:inline">Órdenes</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="semana" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                        <CalendarRange className="w-4 h-4" />
+                        <span className="hidden sm:inline">Semana</span>
                     </TabsTrigger>
                     <TabsTrigger value="plan-diario" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <CalendarDays className="w-4 h-4" />
@@ -396,6 +401,17 @@ export function Produccion({
                     </div>
                 ))}
                     </div>
+                </TabsContent>
+
+                {/* Tab: Semana — Planificador semanal + Vista panadero */}
+                <TabsContent value="semana">
+                    <PlanSemanaView
+                        formulaciones={formulaciones}
+                        modelos={modelosPan}
+                        configuracion={configuracion}
+                        produccion={produccion}
+                        onLanzarPlanHoy={handleLanzarPlan}
+                    />
                 </TabsContent>
 
                 {/* Tab: Plan Diario */}

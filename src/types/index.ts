@@ -159,6 +159,32 @@ export interface PedidoInsumoProduccion {
 }
 
 // ============================================
+// PLAN SEMANAL DE PRODUCCIÓN
+// ============================================
+
+export interface PlanSemanaItem {
+  id: string;
+  formulacionId: string;
+  modeloId: string;
+  arrobas: number;
+}
+
+// días[0]=domingo, días[1]=lunes ... días[6]=sábado (igual que Date.getDay())
+export interface PlanSemana {
+  dias: PlanSemanaItem[][];
+  updatedAt: string;
+}
+
+export type EstadoDiaPerdido = 'ignorar' | 'postergar' | 'pendiente';
+
+export interface DiaPerdido {
+  diaSemana: number;  // 0-6
+  fecha: string;      // YYYY-MM-DD
+  items: PlanSemanaItem[];
+  estado: EstadoDiaPerdido;
+}
+
+// ============================================
 // REGISTRO DE MERMAS Y DESPERDICIOS
 // ============================================
 
