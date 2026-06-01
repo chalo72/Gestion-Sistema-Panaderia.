@@ -582,6 +582,16 @@ export function Produccion({
                         }}
                     />
                 </TabsContent>
+
+                {/* Tab: Mermas y Responsabilidades */}
+                <TabsContent value="mermas">
+                    <MermasDashboard inspecciones={inspecciones} formatCurrency={formatCurrency} />
+                </TabsContent>
+
+                {/* Tab: Rotación FIFO */}
+                <TabsContent value="rotacion">
+                    <RotacionBreadView formatCurrency={formatCurrency} />
+                </TabsContent>
             </Tabs>
 
             <PlanProduccionModal
@@ -596,16 +606,25 @@ export function Produccion({
             />
 
             {/* Modal Control de Calidad */}
-            <ControlCalidadModal
-                open={!!ordenQC}
-                onOpenChange={open => !open && setOrdenQC(null)}
-                orden={ordenQC}
-                modeloNombre={ordenQC ? (modelosPan.find(m => m.id === ordenQC.modeloPanId)?.nombre ?? 'Lote') : ''}
-                productoNombre={ordenQC ? (productos.find(p => p.id === ordenQC.productoId)?.nombre ?? 'Producto') : ''}
-                onGuardar={guardarInspeccion}
-                onActualizarOrden={updateOrdenProduccion}
-                inspeccionExistente={ordenQC ? getInspeccionPorOrden(ordenQC.id) : undefined}
-            />
+            {(() => {
+                const modelo = ordenQC ? modelosPan.find(m => m.id === ordenQC.modeloPanId) : null;
+                const producto = ordenQC ? productos.find(p => p.id === ordenQC.productoId) : null;
+                return (
+                    <ControlCalidadModal
+                        open={!!ordenQC}
+                        onOpenChange={open => !open && setOrdenQC(null)}
+                        orden={ordenQC}
+                        modeloNombre={modelo?.nombre ?? 'Lote'}
+                        productoNombre={producto?.nombre ?? 'Producto'}
+                        precioUnitario={modelo?.precioVentaUnitario ?? producto?.precioVenta ?? 0}
+                        costoUnitario={modelo?.costoUnitario ?? 0}
+                        onGuardar={guardarInspeccion}
+                        onActualizarOrden={updateOrdenProduccion}
+                        onCrearLote={crearLote}
+                        inspeccionExistente={ordenQC ? getInspeccionPorOrden(ordenQC.id) : undefined}
+                    />
+                );
+            })()}
 
             {/* Asistente Paso a Paso Modal */}
             <Dialog open={!!ordenPasoAPaso} onOpenChange={(open) => !open && setOrdenPasoAPaso(null)}>
