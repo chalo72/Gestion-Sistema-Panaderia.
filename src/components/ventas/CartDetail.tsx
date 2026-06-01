@@ -65,15 +65,24 @@ export function CartDetail({
                 <div className="flex items-center gap-2 bg-white/5 rounded-md px-2 py-1 flex-1 h-7 border border-white/5">
                     {!isMesa ? (
                         <div className="flex items-center gap-2 w-full">
-                            <Zap className="w-3 h-3 text-slate-600" />
+                            <Zap className="w-3 h-3 text-slate-600 shrink-0" />
                             <input
-                                className="flex-1 bg-transparent border-none p-0 focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-600"
+                                className="flex-1 bg-transparent border-none p-0 focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-600 min-w-0"
                                 placeholder="Cliente..."
                                 value={cliente}
                                 onChange={e => setCliente(e.target.value)}
                                 list="cart-clientes-list"
                                 autoComplete="off"
                             />
+                            {cliente && (
+                                <button
+                                    onClick={() => setCliente('')}
+                                    className="shrink-0 text-slate-500 hover:text-rose-400 transition-colors"
+                                    title="Quitar cliente"
+                                >
+                                    <X className="w-3 h-3" />
+                                </button>
+                            )}
                             {clientesNombres.length > 0 && (
                                 <datalist id="cart-clientes-list">
                                     {clientesNombres.map(nombre => (
