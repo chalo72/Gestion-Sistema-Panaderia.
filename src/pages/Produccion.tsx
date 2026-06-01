@@ -25,6 +25,7 @@ import { MermasDashboard } from '@/components/produccion/MermasDashboard';
 import { RotacionBreadView } from '@/components/produccion/RotacionBreadView';
 import { useControlCalidad } from '@/hooks/useControlCalidad';
 import { useLotesStock } from '@/hooks/useLotesStock';
+import { usePlanSemana } from '@/hooks/usePlanSemana';
 import {
     Dialog,
     DialogContent,

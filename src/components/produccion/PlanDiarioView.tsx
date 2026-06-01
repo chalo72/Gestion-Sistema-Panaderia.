@@ -11,7 +11,8 @@ import {
   AlertTriangle,
   FlaskConical,
   CheckCircle2,
-  ArrowRight
+  ArrowRight,
+  CalendarRange
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,6 +36,7 @@ interface PlanDiarioViewProps {
   configuracion: Configuracion;
   formatCurrency: (value: number) => string;
   onLanzarPlan?: (planItems: any[]) => void;
+  onGuardarComoPlantilla?: (items: any[]) => void;
 }
 
 interface PlanItem {
@@ -51,7 +53,8 @@ export function PlanDiarioView({
   inventario,
   configuracion,
   formatCurrency,
-  onLanzarPlan
+  onLanzarPlan,
+  onGuardarComoPlantilla,
 }: PlanDiarioViewProps) {
   const [items, setItems] = useState<PlanItem[]>([]);
   const ARROBA_KG = configuracion.pesoArrobaKg || 11.5;
@@ -173,10 +176,20 @@ export function PlanDiarioView({
           </h2>
           <p className="text-muted-foreground">Planifica las arrobas a procesar y obtén latas y horneadas exactas.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {items.length > 0 && onGuardarComoPlantilla && (
+            <Button
+              onClick={() => onGuardarComoPlantilla(resultados.rows)}
+              variant="outline"
+              className="gap-2 rounded-xl border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-900/20 font-black uppercase tracking-widest text-[10px]"
+            >
+              <CalendarRange className="w-4 h-4" />
+              Guardar como plantilla semanal
+            </Button>
+          )}
           {items.length > 0 && onLanzarPlan && (
-            <Button 
-              onClick={() => onLanzarPlan(resultados.rows)} 
+            <Button
+              onClick={() => onLanzarPlan(resultados.rows)}
               className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 animate-pulse"
             >
               🚀 Lanzar a Producción
@@ -184,7 +197,7 @@ export function PlanDiarioView({
           )}
           <Button onClick={handlePrint} variant="outline" className="gap-2 rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50">
             <Printer className="w-4 h-4" />
-            Imprimir Plan
+            Imprimir
           </Button>
           <Button onClick={handleAddItem} className="gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700">
             <Plus className="w-4 h-4" />

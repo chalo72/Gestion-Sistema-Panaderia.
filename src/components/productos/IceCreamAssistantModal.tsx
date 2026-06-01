@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Check, X, Pencil, Trash2, Plus, TrendingUp, TrendingDown, AlertTriangle, Target } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, X, Pencil, Trash2, Plus, TrendingUp, TrendingDown, AlertTriangle, Target, Minus } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogHeader } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,10 +55,25 @@ export function IceCreamAssistantModal({
     const [step, setStep]       = useState(1);
     const [loading, setLoading] = useState(false);
 
-    // Paso 1
-    const [selectedIds, setSelectedIds]         = useState<string[]>([]);
-    const [mlPorCaja, setMlPorCaja]             = useState('10000');
-    const [cajasDisponibles, setCajasDisponibles] = useState('1');
+    // Paso 1 — por cada sabor: cuántas cajas abiertas
+    interface CajaSeleccionada { id: string; cajas: number; }
+    const [cajasSeleccionadas, setCajasSeleccionadas] = useState<CajaSeleccionada[]>([]);
+    const [mlPorCaja, setMlPorCaja] = useState('10000');
+
+    const selectedIds = cajasSeleccionadas.map(c => c.id);
+
+    const toggleCaja = (id: string) => {
+        setCajasSeleccionadas(prev =>
+            prev.some(c => c.id === id)
+                ? prev.filter(c => c.id !== id)
+                : [...prev, { id, cajas: 1 }]
+        );
+    };
+    const setCajasCount = (id: string, delta: number) => {
+        setCajasSeleccionadas(prev => prev.map(c =>
+            c.id === id ? { ...c, cajas: Math.max(1, c.cajas + delta) } : c
+        ));
+    };
 
     // Paso 2 — perfiles
     const [perfiles, setPerfiles]               = useState<PerfilCopa[]>(PERFILES_DEFAULT);
@@ -85,23 +100,27 @@ export function IceCreamAssistantModal({
         return (p.tipo === 'ingrediente' || p.tipo === 'insumo') && kw.some(k => n.includes(k));
     }), [productos]);
 
-    // ── Cálculos paso 1 ──────────────────────────────────────────────────────
+    // ── Cálculos paso 1 — promedio ponderado por cajas abiertas ─────────────
 
-    const promedioMaestro = useMemo(() => {
-        if (selectedIds.length === 0) return 0;
-        let total = 0, count = 0;
-        selectedIds.forEach(id => {
-            precios.filter(pr => pr.productoId === id).forEach(pr => {
-                total += parseFloat(pr.precioCosto) || 0;
-                count++;
-            });
+    const mlPorCajaNum = parseFloat(mlPorCaja) || 10000;
+
+    const { totalCostoCajas, totalMlDisponible, promedioMaestro, totalCajas } = useMemo(() => {
+        let totalCosto = 0, totalMl = 0, totalC = 0;
+        cajasSeleccionadas.forEach(({ id, cajas }) => {
+            const precio = parseFloat(precios.find(pr => pr.productoId === id)?.precioCosto?.toString() || '0');
+            totalCosto += precio * cajas;
+            totalMl    += cajas * mlPorCajaNum;
+            totalC     += cajas;
         });
-        return count > 0 ? total / count : 0;
-    }, [selectedIds, precios]);
+        return {
+            totalCostoCajas:   totalCosto,
+            totalMlDisponible: totalMl,
+            promedioMaestro:   totalC > 0 ? totalCosto / totalC : 0,
+            totalCajas:        totalC,
+        };
+    }, [cajasSeleccionadas, precios, mlPorCajaNum]);
 
-    const mlTotal           = parseFloat(mlPorCaja) || 10000;
-    const costoPorMl        = promedioMaestro / mlTotal;
-    const totalMlDisponible = (parseFloat(cajasDisponibles) || 1) * mlTotal;
+    const costoPorMl = totalMlDisponible > 0 ? totalCostoCajas / totalMlDisponible : 0;
 
     // ── Cálculos por perfil ───────────────────────────────────────────────────
 
@@ -134,7 +153,7 @@ export function IceCreamAssistantModal({
         });
         const gananciaTotal = totalIngresos - totalCostos;
         // Copas necesarias para cubrir el costo de las cajas
-        const costoCajasTotal = (parseFloat(cajasDisponibles) || 1) * promedioMaestro;
+        const costoCajasTotal = totalCostoCajas;
         // Promedio de ganancia por copa (activos con precio)
         const gananciaPorCopaPromedio = activos.length > 0
             ? activos.reduce((s, p) => s + (p.pvpFinal - p.costoTotal), 0) / activos.length
@@ -232,9 +251,8 @@ export function IceCreamAssistantModal({
 
     const reset = () => {
         setStep(1);
-        setSelectedIds([]);
+        setCajasSeleccionadas([]);
         setMlPorCaja('10000');
-        setCajasDisponibles('1');
         setPerfiles(PERFILES_DEFAULT);
         setNombreBase('');
         setEditingId(null);
@@ -277,19 +295,27 @@ export function IceCreamAssistantModal({
                     {/* ══════════ PASO 1: CAJAS ══════════ */}
                     {step === 1 && (
                         <>
-                            <div className="flex gap-3">
-                                <div className="flex-1 bg-slate-50 rounded-xl p-4 border border-slate-100">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">ml / g por caja</Label>
-                                    <Input type="number" value={mlPorCaja} onChange={e => setMlPorCaja(e.target.value)} className="mt-1.5 h-9 font-bold text-sm" />
-                                </div>
-                                <div className="flex-1 bg-blue-50 rounded-xl p-4 border border-blue-100">
-                                    <Label className="text-[10px] font-black uppercase text-blue-500 tracking-widest">Cajas disponibles</Label>
-                                    <Input type="number" value={cajasDisponibles} onChange={e => setCajasDisponibles(e.target.value)} className="mt-1.5 h-9 font-bold text-sm bg-white border-blue-200" />
-                                </div>
+                            {/* Contenido por caja */}
+                            <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                                <Label className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                                    Gramos (g) o mililitros (ml) por caja
+                                </Label>
+                                <p className="text-[9px] text-slate-400 font-medium mt-0.5 mb-2">
+                                    Ejemplo: una caja de 10 kg → escribe <strong>10000</strong>. Una de 5 L → <strong>5000</strong>.
+                                </p>
+                                <Input
+                                    type="number" min="100"
+                                    value={mlPorCaja}
+                                    onChange={e => setMlPorCaja(e.target.value)}
+                                    className="h-9 font-bold text-sm w-40"
+                                />
                             </div>
 
+                            {/* Lista de sabores */}
                             <div>
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Selecciona las cajas de helado</p>
+                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">
+                                    Marca los sabores que tienes abiertos e indica cuántas cajas de cada uno
+                                </p>
                                 {insumosLista.length === 0 ? (
                                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center space-y-1">
                                         <p className="text-sm font-black text-amber-700">No hay cajas de helado registradas</p>
@@ -298,40 +324,75 @@ export function IceCreamAssistantModal({
                                         </p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-3 gap-2">
+                                    <div className="space-y-2">
                                         {insumosLista.map(p => {
-                                            const isSel   = selectedIds.includes(p.id);
-                                            const pCosto  = parseFloat(precios.find(pr => pr.productoId === p.id)?.precioCosto?.toString() || '0');
+                                            const isSel  = selectedIds.includes(p.id);
+                                            const item   = cajasSeleccionadas.find(c => c.id === p.id);
+                                            const pCosto = parseFloat(precios.find(pr => pr.productoId === p.id)?.precioCosto?.toString() || '0');
                                             return (
-                                                <button key={p.id} onClick={() => setSelectedIds(prev =>
-                                                    prev.includes(p.id) ? prev.filter(i => i !== p.id) : [...prev, p.id]
-                                                )} className={cn(
-                                                    'flex flex-col p-3 rounded-xl border-2 text-left transition-all active:scale-95',
-                                                    isSel ? 'bg-cyan-600 text-white border-cyan-700 shadow-md' : 'bg-white border-slate-100 hover:border-cyan-300'
+                                                <div key={p.id} className={cn(
+                                                    'flex items-center gap-3 p-3 rounded-xl border-2 transition-all',
+                                                    isSel ? 'bg-cyan-50 border-cyan-300' : 'bg-white border-slate-100 hover:border-cyan-200'
                                                 )}>
-                                                    <p className="text-[10px] font-black truncate uppercase leading-tight">{p.nombre}</p>
-                                                    <p className={cn('text-[10px] font-bold mt-1', isSel ? 'text-cyan-200' : 'text-slate-400')}>
-                                                        {formatCurrency(pCosto)}
-                                                    </p>
-                                                    {isSel && <Check className="w-3.5 h-3.5 mt-1.5 self-end" />}
-                                                </button>
+                                                    <button
+                                                        onClick={() => toggleCaja(p.id)}
+                                                        className={cn(
+                                                            'w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border-2 transition-all',
+                                                            isSel ? 'bg-cyan-600 border-cyan-700 text-white' : 'border-slate-200 text-slate-300 hover:border-cyan-300'
+                                                        )}
+                                                    >
+                                                        {isSel ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                                                    </button>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[11px] font-black text-slate-800 uppercase leading-tight truncate">{p.nombre}</p>
+                                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">{formatCurrency(pCosto)} / caja</p>
+                                                    </div>
+                                                    {isSel && item && (
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className="text-[9px] font-black text-cyan-600 uppercase tracking-wide hidden sm:inline">cajas</span>
+                                                            <button
+                                                                onClick={() => setCajasCount(p.id, -1)}
+                                                                disabled={item.cajas <= 1}
+                                                                className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-500 hover:bg-slate-50 disabled:opacity-30"
+                                                            >
+                                                                <Minus className="w-3 h-3" />
+                                                            </button>
+                                                            <span className="w-6 text-center font-black text-slate-800 text-sm">{item.cajas}</span>
+                                                            <button
+                                                                onClick={() => setCajasCount(p.id, 1)}
+                                                                className="w-7 h-7 rounded-lg bg-cyan-600 text-white flex items-center justify-center hover:bg-cyan-700"
+                                                            >
+                                                                <Plus className="w-3 h-3" />
+                                                            </button>
+                                                            <span className="text-[9px] font-black text-cyan-700 w-20 text-right">
+                                                                = {formatCurrency(pCosto * item.cajas)}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             );
                                         })}
                                     </div>
                                 )}
                             </div>
 
-                            {selectedIds.length > 0 && (
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-cyan-600 rounded-2xl p-5 text-white text-center shadow-lg shadow-cyan-100">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.3em] opacity-70">Costo promedio caja</p>
-                                        <p className="text-4xl font-black mt-1">{formatCurrency(promedioMaestro)}</p>
-                                        <p className="text-[9px] font-bold opacity-60 mt-1">{selectedIds.length} sabor(es)</p>
+                            {/* KPIs resumen */}
+                            {cajasSeleccionadas.length > 0 && (
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="bg-cyan-600 rounded-2xl p-4 text-white text-center shadow-lg shadow-cyan-100">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">Costo prom. / caja</p>
+                                        <p className="text-xl font-black mt-1">{formatCurrency(promedioMaestro)}</p>
+                                        <p className="text-[9px] font-bold opacity-60 mt-1">{cajasSeleccionadas.length} sabor(es)</p>
                                     </div>
-                                    <div className="bg-blue-600 rounded-2xl p-5 text-white text-center shadow-lg shadow-blue-100">
-                                        <p className="text-[9px] font-black uppercase tracking-[0.3em] opacity-70">Stock total disponible</p>
-                                        <p className="text-4xl font-black mt-1">{(totalMlDisponible / 1000).toFixed(1)} L</p>
-                                        <p className="text-[9px] font-bold opacity-60 mt-1">{cajasDisponibles} caja(s) × {(mlTotal / 1000).toFixed(1)} L</p>
+                                    <div className="bg-blue-600 rounded-2xl p-4 text-white text-center shadow-lg shadow-blue-100">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">Stock total</p>
+                                        <p className="text-xl font-black mt-1">{(totalMlDisponible / 1000).toFixed(1)} kg/L</p>
+                                        <p className="text-[9px] font-bold opacity-60 mt-1">{totalCajas} caja(s)</p>
+                                    </div>
+                                    <div className="bg-slate-800 rounded-2xl p-4 text-white text-center shadow-lg">
+                                        <p className="text-[9px] font-black uppercase tracking-[0.2em] opacity-70">Costo total</p>
+                                        <p className="text-xl font-black mt-1">{formatCurrency(totalCostoCajas)}</p>
+                                        <p className="text-[9px] font-bold opacity-60 mt-1">a recuperar</p>
                                     </div>
                                 </div>
                             )}
@@ -609,7 +670,7 @@ export function IceCreamAssistantModal({
                                             <p className="text-xs font-black text-slate-700">Punto de equilibrio semanal</p>
                                         </div>
                                         <p className="text-[11px] text-slate-600 font-medium">
-                                            Para recuperar el costo de las {cajasDisponibles} caja(s) ({formatCurrency(analisisSemana.costoCajasTotal)}), necesitas vender aproximadamente{' '}
+                                            Para recuperar el costo de las {totalCajas} caja(s) ({formatCurrency(analisisSemana.costoCajasTotal)}), necesitas vender aproximadamente{' '}
                                             <strong className="text-slate-900">{analisisSemana.copasPuntoPequilibrio} copas en total</strong>.
                                         </p>
                                         <div className="mt-2 h-2.5 bg-slate-200 rounded-full overflow-hidden">
