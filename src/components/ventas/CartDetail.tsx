@@ -17,6 +17,7 @@ interface CartDetailProps {
     usuario: any;
     cliente: string;
     setCliente: (c: string) => void;
+    clientesNombres?: string[];
     activeTabLabel?: string;
     activeTabTipo?: 'venta-rapida' | 'mesa';
     onLiberarMesa?: () => void;
@@ -28,6 +29,7 @@ interface CartDetailProps {
 export function CartDetail({
     cart, onUpdateQuantity, onRemoveFromCart, onClearCart,
     onProcessPayment, formatCurrency, cajaActiva, usuario, cliente, setCliente,
+    clientesNombres = [],
     activeTabLabel, activeTabTipo, onLiberarMesa,
     descuento = 0, setDescuento, rolUsuario,
 }: CartDetailProps) {
@@ -69,7 +71,16 @@ export function CartDetail({
                                 placeholder="Cliente..."
                                 value={cliente}
                                 onChange={e => setCliente(e.target.value)}
+                                list="cart-clientes-list"
+                                autoComplete="off"
                             />
+                            {clientesNombres.length > 0 && (
+                                <datalist id="cart-clientes-list">
+                                    {clientesNombres.map(nombre => (
+                                        <option key={nombre} value={nombre} />
+                                    ))}
+                                </datalist>
+                            )}
                         </div>
                     ) : (
                         <div className="flex items-center gap-2 w-full">

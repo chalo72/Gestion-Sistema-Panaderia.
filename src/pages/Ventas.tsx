@@ -122,7 +122,7 @@ export function Ventas(props: VentasProps) {
     const vendedorasDisponibles = useMemo<VendedoraOption[]>(() => {
         if (!usuarios || usuarios.length === 0) return [];
         return usuarios
-            .filter(u => u.activo !== false)
+            .filter(u => u.activo !== false && u.rol === 'VENDEDOR')
             .map(u => ({ id: u.id, nombre: u.nombre, rol: u.rol }));
     }, [usuarios]);
 
@@ -716,6 +716,10 @@ export function Ventas(props: VentasProps) {
                         usuario={usuario}
                         cliente={cliente}
                         setCliente={setCliente}
+                        clientesNombres={Array.from(new Set([
+                            ...(masterClientes || []).map(c => c.nombre),
+                            ...(props.creditosClientes || []).map((c: any) => c.clienteNombre),
+                        ])).filter(Boolean)}
                         activeTabLabel={activeTab?.label}
                         activeTabTipo={activeTab?.tipo}
                         onLiberarMesa={handleLiberarMesa}
