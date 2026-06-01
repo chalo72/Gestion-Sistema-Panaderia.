@@ -107,6 +107,7 @@ export interface FormulacionBase {
   instrucciones?: string;
   activo: boolean;
   fechaActualizacion: string;
+  mixProduccion?: MixItemProduccion[];  // Distribución % de modelos de pan por arroba
 }
 
 // ============================================
@@ -211,6 +212,36 @@ export interface DespachoLote {
   fecha: string;
   cantidad: number;
   usuarioNombre: string;
+}
+
+// ============================================
+// TIPOS DE LATA — Configuración por admin
+// ============================================
+
+export interface TipoLata {
+  id: string;
+  nombre: string;          // "Lata Grande", "Lata Mediana", "Lata Galletas"
+  anchoCm: number;         // Ancho en centímetros
+  largoCm: number;         // Largo en centímetros
+  capacidades: CapacidadLata[];  // Una lata puede tener distintas capacidades según el pan
+  activo: boolean;
+  color?: string;          // Color para identificar visualmente en la UI
+}
+
+export interface CapacidadLata {
+  modeloPanId: string;     // Qué modelo de pan
+  piezas: number;          // Cuántos panes caben en esta lata
+}
+
+// ============================================
+// MIX DE PRODUCCIÓN — Distribución % por formulación
+// ============================================
+
+export interface MixItemProduccion {
+  modeloPanId: string;
+  porcentaje: number;      // 0–100. Suma de todos los items de una formulación = ≤100
+  tipoLataId?: string;     // Qué lata usa por defecto este pan en esta formulación
+  orden: number;           // Para ordenar en la lista del panadero
 }
 
 // ============================================
@@ -404,8 +435,23 @@ export interface Configuracion {
   destinos?: string[];
   carpetasClientes?: string[];  // NUEVO: Nombres de carpetas/categorías para los créditos de clientes
   aiMode?: 'local' | 'hybrid' | 'off'; // MODO DE IA: Local, Híbrido o Apagado (Kill Switch)
-  latasPorHorno?: number;       // NUEVO: Capacidad del horno
-  pesoArrobaKg?: number;        // NUEVO: Peso de la arroba configurable
+  latasPorHorno?: number;       // Capacidad del horno en latas
+  pesoArrobaKg?: number;        // Peso de la arroba configurable (default 11.5 kg)
+  tiposLata?: TipoLata[];       // Tipos de lata configurados por el admin
+  tiposDia?: TipoDiaConfig[];   // Plantillas de día: Normal, Alto, Evento
+}
+
+// Plantilla de tipo de día de producción
+export interface TipoDiaConfig {
+  id: string;
+  nombre: string;            // "Normal", "Alto", "Festivo", "Evento"
+  color: string;             // Para mostrar en el calendario
+  distribucionArrobas: DistribucionArrobasDia[];
+}
+
+export interface DistribucionArrobasDia {
+  formulacionId: string;
+  arrobas: number;
 }
 
 export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina';

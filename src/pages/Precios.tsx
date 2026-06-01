@@ -65,6 +65,7 @@ export function Precios({
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPrecio, setEditingPrecio] = useState<PrecioProveedor | null>(null);
+  const [soloMejor, setSoloMejor] = useState(true);
 
   const [formData, setFormData] = useState({
     productoId: '',
@@ -80,8 +81,7 @@ export function Precios({
   // Búsqueda multi-token AND: cada palabra del buscador debe aparecer en algún campo
   const filteredPrecios = useMemo(() => {
     const tokens = norm(searchTerm).split(/\s+/).filter(Boolean);
-    if (tokens.length === 0) return precios;
-    return precios.filter(p => {
+    const base = tokens.length === 0 ? precios : precios.filter(p => {
       const producto = getProductoById(p.productoId);
       const proveedor = getProveedorById(p.proveedorId);
       const haystack = norm(
@@ -89,7 +89,19 @@ export function Precios({
       );
       return tokens.every(token => haystack.includes(token));
     });
-  }, [precios, searchTerm, getProductoById, getProveedorById]);
+
+    if (!soloMejor) return base;
+
+    // Deduplicar: por cada producto, conservar solo el de menor costo (mayor markup)
+    const mapa = new Map<string, PrecioProveedor>();
+    base.forEach(p => {
+      const existente = mapa.get(p.productoId);
+      if (!existente || p.precioCosto < existente.precioCosto) {
+        mapa.set(p.productoId, p);
+      }
+    });
+    return Array.from(mapa.values());
+  }, [precios, searchTerm, soloMejor, getProductoById, getProveedorById]);
 
   const handleOpenCreateModal = () => {
     setEditingPrecio(null);
@@ -175,6 +187,26 @@ export function Precios({
         </div>
 
         <TabsContent value="lista" className="mt-0 focus-visible:ring-0">
+          {/* Toggle mejor precio */}
+          <div className="flex items-center justify-between px-2 mb-3">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              {filteredPrecios.length} resultado{filteredPrecios.length !== 1 ? 's' : ''}
+              {soloMejor && <span className="text-emerald-600 ml-2">· mejor precio por producto</span>}
+            </p>
+            <button
+              onClick={() => setSoloMejor(v => !v)}
+              className={cn(
+                'flex items-center gap-1.5 h-8 px-3 rounded-xl text-[10px] font-black uppercase tracking-wide border transition-all',
+                soloMejor
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-500/20'
+                  : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700'
+              )}
+            >
+              <TrendingUp className="w-3 h-3" />
+              {soloMejor ? 'Solo mejor precio' : 'Todos los proveedores'}
+            </button>
+          </div>
+
           <Card className="border-none bg-white/40 dark:bg-gray-900/40 backdrop-blur-xl rounded-[3rem] shadow-2xl overflow-hidden border border-white/20 dark:border-gray-800/10">
             <CardContent className="p-0">
               {filteredPrecios.length === 0 ? (

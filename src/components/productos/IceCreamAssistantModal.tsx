@@ -1,11 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Check, X } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, X, Pencil, Trash2, Plus, TrendingUp, TrendingDown, AlertTriangle, Target } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogHeader } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
 
 interface ExtraCopa {
     productoId: string;
@@ -33,48 +35,61 @@ interface IceCreamAssistantModalProps {
     formatCurrency: (val: number) => string;
 }
 
+// ─── Datos iniciales ──────────────────────────────────────────────────────────
+
 const PERFILES_DEFAULT: PerfilCopa[] = [
-    { id: 'c1', label: '1 Bola',  numBolas: 1, pesoGramos: 80, activo: true,  extras: [], precioVenta: '', margen: 45 },
-    { id: 'c2', label: '2 Bolas', numBolas: 2, pesoGramos: 80, activo: true,  extras: [], precioVenta: '', margen: 45 },
-    { id: 'c3', label: '3 Bolas', numBolas: 3, pesoGramos: 80, activo: true,  extras: [], precioVenta: '', margen: 45 },
-    { id: 'c4', label: '4 Bolas', numBolas: 4, pesoGramos: 80, activo: false, extras: [], precioVenta: '', margen: 45 },
+    { id: 'c1', label: '1 Bola',  numBolas: 1, pesoGramos: 80, activo: true,  extras: [], precioVenta: '1600',  margen: 45 },
+    { id: 'c2', label: '2 Bolas', numBolas: 2, pesoGramos: 80, activo: true,  extras: [], precioVenta: '2600',  margen: 45 },
+    { id: 'c3', label: '3 Bolas', numBolas: 3, pesoGramos: 80, activo: true,  extras: [], precioVenta: '3600',  margen: 45 },
+    { id: 'c4', label: '4 Bolas', numBolas: 4, pesoGramos: 80, activo: false, extras: [], precioVenta: '4600',  margen: 45 },
 ];
+
+let _nextId = 10;
+const nextId = () => `cp${_nextId++}`;
+
+// ─── Componente principal ─────────────────────────────────────────────────────
 
 export function IceCreamAssistantModal({
     isOpen, onOpenChange, productos, precios, onAddProducto, formatCurrency
 }: IceCreamAssistantModalProps) {
-    const [step, setStep] = useState(1);
+    const [step, setStep]       = useState(1);
     const [loading, setLoading] = useState(false);
 
     // Paso 1
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [mlPorCaja, setMlPorCaja] = useState('10000');
+    const [selectedIds, setSelectedIds]         = useState<string[]>([]);
+    const [mlPorCaja, setMlPorCaja]             = useState('10000');
     const [cajasDisponibles, setCajasDisponibles] = useState('1');
 
-    // Paso 2
-    const [perfiles, setPerfiles] = useState<PerfilCopa[]>(PERFILES_DEFAULT);
-    const [nombreBase, setNombreBase] = useState('');
+    // Paso 2 — perfiles
+    const [perfiles, setPerfiles]               = useState<PerfilCopa[]>(PERFILES_DEFAULT);
+    const [nombreBase, setNombreBase]           = useState('');
+    const [editingId, setEditingId]             = useState<string | null>(null);
+    const [editLabel, setEditLabel]             = useState('');
+    const [editBolas, setEditBolas]             = useState('');
+    const [editPeso, setEditPeso]               = useState('');
+
+    // Paso 3 — ventas semanales por perfil
+    const [ventasSemana, setVentasSemana] = useState<Record<string, string>>({});
 
     // ── Filtros ──────────────────────────────────────────────────────────────
-    // Cajas de helado: filtrar por categoría "helado" y excluir elaborados
+
     const insumosLista = useMemo(() => productos.filter(p => {
         const cat = (p.categoria || '').toLowerCase();
         const n   = p.nombre.toLowerCase();
-        const esHelado = cat.includes('helado') || n.includes('helado');
-        return esHelado && p.tipo !== 'elaborado';
+        return (cat.includes('helado') || n.includes('helado')) && p.tipo !== 'elaborado';
     }), [productos]);
 
-    // Extras: vaso, cuchara, gragea, salsa, cono…
     const extrasDisponibles = useMemo(() => productos.filter(p => {
         const n = p.nombre.toLowerCase();
-        const keywords = ['vaso', 'salsa', 'cono', 'cuchara', 'grajea', 'gragea', 'chispa', 'topping', 'bolsa', 'cucharita'];
-        return (p.tipo === 'ingrediente' || p.tipo === 'insumo') && keywords.some(k => n.includes(k));
+        const kw = ['vaso', 'salsa', 'cono', 'cuchara', 'grajea', 'gragea', 'chispa', 'topping', 'bolsa', 'cucharita'];
+        return (p.tipo === 'ingrediente' || p.tipo === 'insumo') && kw.some(k => n.includes(k));
     }), [productos]);
 
-    // ── Cálculos paso 1 ───────────────────────────────────────────────────────
+    // ── Cálculos paso 1 ──────────────────────────────────────────────────────
+
     const promedioMaestro = useMemo(() => {
         if (selectedIds.length === 0) return 0;
-        let total = 0; let count = 0;
+        let total = 0, count = 0;
         selectedIds.forEach(id => {
             precios.filter(pr => pr.productoId === id).forEach(pr => {
                 total += parseFloat(pr.precioCosto) || 0;
@@ -84,11 +99,12 @@ export function IceCreamAssistantModal({
         return count > 0 ? total / count : 0;
     }, [selectedIds, precios]);
 
-    const mlTotal            = parseFloat(mlPorCaja) || 10000;
-    const costoPorMl         = promedioMaestro / mlTotal;
-    const totalMlDisponible  = (parseFloat(cajasDisponibles) || 1) * mlTotal;
+    const mlTotal           = parseFloat(mlPorCaja) || 10000;
+    const costoPorMl        = promedioMaestro / mlTotal;
+    const totalMlDisponible = (parseFloat(cajasDisponibles) || 1) * mlTotal;
 
     // ── Cálculos por perfil ───────────────────────────────────────────────────
+
     const perfilesCalc = useMemo(() => perfiles.map(p => {
         const mlCopa        = p.numBolas * p.pesoGramos;
         const costoHelado   = mlCopa * costoPorMl;
@@ -102,18 +118,67 @@ export function IceCreamAssistantModal({
         return { ...p, costoHelado, costoExtras, costoTotal, pvpCalculado, pvpFinal, margenReal, copasPosibles };
     }), [perfiles, costoPorMl, totalMlDisponible]);
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-    const reset = () => {
-        setStep(1);
-        setSelectedIds([]);
-        setMlPorCaja('10000');
-        setCajasDisponibles('1');
-        setPerfiles(PERFILES_DEFAULT);
-        setNombreBase('');
+    // ── Cálculos semana ───────────────────────────────────────────────────────
+
+    const analisisSemana = useMemo(() => {
+        const activos = perfilesCalc.filter(p => p.activo);
+        let totalIngresos = 0, totalCostos = 0;
+        const porPerfil = activos.map(p => {
+            const vendidas = parseInt(ventasSemana[p.id] || '0') || 0;
+            const ingreso  = vendidas * p.pvpFinal;
+            const costo    = vendidas * p.costoTotal;
+            const ganancia = ingreso - costo;
+            totalIngresos += ingreso;
+            totalCostos   += costo;
+            return { ...p, vendidas, ingreso, costo, ganancia };
+        });
+        const gananciaTotal = totalIngresos - totalCostos;
+        // Copas necesarias para cubrir el costo de las cajas
+        const costoCajasTotal = (parseFloat(cajasDisponibles) || 1) * promedioMaestro;
+        // Promedio de ganancia por copa (activos con precio)
+        const gananciaPorCopaPromedio = activos.length > 0
+            ? activos.reduce((s, p) => s + (p.pvpFinal - p.costoTotal), 0) / activos.length
+            : 0;
+        const copasPuntoPequilibrio = gananciaPorCopaPromedio > 0
+            ? Math.ceil(costoCajasTotal / gananciaPorCopaPromedio)
+            : 0;
+        const totalCopasVendidas = porPerfil.reduce((s, p) => s + p.vendidas, 0);
+        return { porPerfil, totalIngresos, totalCostos, gananciaTotal, costoCajasTotal, copasPuntoPequilibrio, totalCopasVendidas };
+    }, [perfilesCalc, ventasSemana, cajasDisponibles, promedioMaestro]);
+
+    // ── Helpers CRUD perfiles ─────────────────────────────────────────────────
+
+    const startEdit = (p: PerfilCopa) => {
+        setEditingId(p.id);
+        setEditLabel(p.label);
+        setEditBolas(p.numBolas.toString());
+        setEditPeso(p.pesoGramos.toString());
     };
 
-    const updatePerfil = (id: string, updates: Partial<PerfilCopa>) =>
-        setPerfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+    const saveEdit = () => {
+        if (!editingId) return;
+        setPerfiles(prev => prev.map(p => p.id === editingId
+            ? { ...p, label: editLabel || p.label, numBolas: parseInt(editBolas) || p.numBolas, pesoGramos: parseInt(editPeso) || p.pesoGramos }
+            : p
+        ));
+        setEditingId(null);
+    };
+
+    const cancelEdit = () => setEditingId(null);
+
+    const deleteProfile = (id: string) => {
+        setPerfiles(prev => prev.filter(p => p.id !== id));
+        toast.success('Perfil eliminado');
+    };
+
+    const addProfile = () => {
+        const n = perfiles.length + 1;
+        setPerfiles(prev => [...prev, {
+            id: nextId(), label: `${n} Bola${n !== 1 ? 's' : ''}`,
+            numBolas: n, pesoGramos: 80, activo: true,
+            extras: [], precioVenta: '', margen: 45,
+        }]);
+    };
 
     const addExtra = (profileId: string, productoId: string) => {
         const prod    = productos.find(p => p.id === productoId);
@@ -132,19 +197,22 @@ export function IceCreamAssistantModal({
             : p
         ));
 
+    const updatePerfil = (id: string, updates: Partial<PerfilCopa>) =>
+        setPerfiles(prev => prev.map(p => p.id === id ? { ...p, ...updates } : p));
+
+    // ── Guardar ───────────────────────────────────────────────────────────────
+
     const handleSave = async () => {
         const activos = perfilesCalc.filter(p => p.activo);
-        if (activos.length === 0) { toast.error('Activa al menos un tamaño de copa'); return; }
+        if (activos.length === 0) { toast.error('Activa al menos un tamaño'); return; }
         setLoading(true);
         try {
             for (const p of activos) {
-                const nombre = nombreBase
-                    ? `${nombreBase} ${p.label}`
-                    : `Copa Helado ${p.label}`;
+                const nombre = nombreBase ? `${nombreBase} ${p.label}` : `Copa Helado ${p.label}`;
                 await onAddProducto({
                     nombre,
-                    categoria: 'Helados',
-                    descripcion: `${p.numBolas} bola(s) × ${p.pesoGramos}g. Costo base: ${formatCurrency(p.costoTotal)}.`,
+                    categoria:      'Helados',
+                    descripcion:    `${p.numBolas} bola(s) × ${p.pesoGramos}g. Costo base: ${formatCurrency(p.costoTotal)}.`,
                     precioVenta:    Math.round(p.pvpFinal),
                     margenUtilidad: p.margenReal.toFixed(0),
                     tipo:           'elaborado',
@@ -152,7 +220,7 @@ export function IceCreamAssistantModal({
                     costoBase:      p.costoTotal,
                 });
             }
-            toast.success(`${activos.length} producto(s) creados correctamente`);
+            toast.success(`${activos.length} producto(s) creados`);
             onOpenChange(false);
             reset();
         } catch {
@@ -162,7 +230,22 @@ export function IceCreamAssistantModal({
         }
     };
 
+    const reset = () => {
+        setStep(1);
+        setSelectedIds([]);
+        setMlPorCaja('10000');
+        setCajasDisponibles('1');
+        setPerfiles(PERFILES_DEFAULT);
+        setNombreBase('');
+        setEditingId(null);
+        setVentasSemana({});
+    };
+
     React.useEffect(() => { if (isOpen) reset(); }, [isOpen]);
+
+    // ─────────────────────────────────────────────────────────────────────────
+
+    const STEP_LABELS = ['Cajas', 'Perfiles', 'Rentabilidad', 'Guardar'];
 
     return (
         <Dialog open={isOpen} onOpenChange={(o) => { if (!o) reset(); onOpenChange(o); }}>
@@ -176,22 +259,22 @@ export function IceCreamAssistantModal({
                             <div>
                                 <DialogTitle className="text-lg font-black text-white leading-tight">Asistente de Helados</DialogTitle>
                                 <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest leading-none mt-0.5">
-                                    {step === 1 ? 'Paso 1 — Cajas e insumos' : step === 2 ? 'Paso 2 — Tamaños de copa' : 'Paso 3 — Resumen y guardar'}
+                                    Paso {step} — {STEP_LABELS[step - 1]}
                                 </p>
                             </div>
                         </div>
                         <div className="flex gap-1.5">
-                            {[1, 2, 3].map(s => (
-                                <div key={s} className={cn('h-1.5 rounded-full transition-all duration-300', step >= s ? 'bg-white w-8' : 'bg-white/30 w-4')} />
+                            {[1, 2, 3, 4].map(s => (
+                                <div key={s} className={cn('h-1.5 rounded-full transition-all duration-300', step >= s ? 'bg-white w-7' : 'bg-white/30 w-4')} />
                             ))}
                         </div>
                     </div>
                 </DialogHeader>
 
                 {/* ── Contenido ── */}
-                <div className="p-6 max-h-[62vh] overflow-y-auto space-y-5">
+                <div className="p-6 max-h-[60vh] overflow-y-auto space-y-5">
 
-                    {/* ════════════ PASO 1 ════════════ */}
+                    {/* ══════════ PASO 1: CAJAS ══════════ */}
                     {step === 1 && (
                         <>
                             <div className="flex gap-3">
@@ -208,29 +291,29 @@ export function IceCreamAssistantModal({
                             <div>
                                 <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Selecciona las cajas de helado</p>
                                 {insumosLista.length === 0 ? (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center">
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 text-center space-y-1">
                                         <p className="text-sm font-black text-amber-700">No hay cajas de helado registradas</p>
-                                        <p className="text-[11px] text-amber-500 mt-1">
-                                            Registra primero los productos de tu proveedor con categoría <strong>"Helados"</strong>
+                                        <p className="text-[11px] text-amber-600">
+                                            Ve a <strong>Productos → Nuevo producto</strong> y registra tus cajas con categoría <strong>"Helados"</strong>. Pon el nombre del sabor y el precio de compra.
                                         </p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-3 gap-2">
                                         {insumosLista.map(p => {
-                                            const isSelected = selectedIds.includes(p.id);
-                                            const pCosto = parseFloat(precios.find(pr => pr.productoId === p.id)?.precioCosto?.toString() || '0');
+                                            const isSel   = selectedIds.includes(p.id);
+                                            const pCosto  = parseFloat(precios.find(pr => pr.productoId === p.id)?.precioCosto?.toString() || '0');
                                             return (
                                                 <button key={p.id} onClick={() => setSelectedIds(prev =>
                                                     prev.includes(p.id) ? prev.filter(i => i !== p.id) : [...prev, p.id]
                                                 )} className={cn(
                                                     'flex flex-col p-3 rounded-xl border-2 text-left transition-all active:scale-95',
-                                                    isSelected ? 'bg-cyan-600 text-white border-cyan-700 shadow-md' : 'bg-white border-slate-100 hover:border-cyan-300'
+                                                    isSel ? 'bg-cyan-600 text-white border-cyan-700 shadow-md' : 'bg-white border-slate-100 hover:border-cyan-300'
                                                 )}>
                                                     <p className="text-[10px] font-black truncate uppercase leading-tight">{p.nombre}</p>
-                                                    <p className={cn('text-[10px] font-bold mt-1', isSelected ? 'text-cyan-200' : 'text-slate-400')}>
+                                                    <p className={cn('text-[10px] font-bold mt-1', isSel ? 'text-cyan-200' : 'text-slate-400')}>
                                                         {formatCurrency(pCosto)}
                                                     </p>
-                                                    {isSelected && <Check className="w-3.5 h-3.5 mt-1.5 self-end" />}
+                                                    {isSel && <Check className="w-3.5 h-3.5 mt-1.5 self-end" />}
                                                 </button>
                                             );
                                         })}
@@ -243,135 +326,319 @@ export function IceCreamAssistantModal({
                                     <div className="bg-cyan-600 rounded-2xl p-5 text-white text-center shadow-lg shadow-cyan-100">
                                         <p className="text-[9px] font-black uppercase tracking-[0.3em] opacity-70">Costo promedio caja</p>
                                         <p className="text-4xl font-black mt-1">{formatCurrency(promedioMaestro)}</p>
-                                        <p className="text-[9px] font-bold opacity-60 mt-1">{selectedIds.length} sabor(es) seleccionado(s)</p>
+                                        <p className="text-[9px] font-bold opacity-60 mt-1">{selectedIds.length} sabor(es)</p>
                                     </div>
                                     <div className="bg-blue-600 rounded-2xl p-5 text-white text-center shadow-lg shadow-blue-100">
                                         <p className="text-[9px] font-black uppercase tracking-[0.3em] opacity-70">Stock total disponible</p>
                                         <p className="text-4xl font-black mt-1">{(totalMlDisponible / 1000).toFixed(1)} L</p>
-                                        <p className="text-[9px] font-bold opacity-60 mt-1">
-                                            {cajasDisponibles} caja(s) × {(mlTotal / 1000).toFixed(1)} L
-                                        </p>
+                                        <p className="text-[9px] font-bold opacity-60 mt-1">{cajasDisponibles} caja(s) × {(mlTotal / 1000).toFixed(1)} L</p>
                                     </div>
                                 </div>
                             )}
                         </>
                     )}
 
-                    {/* ════════════ PASO 2 ════════════ */}
+                    {/* ══════════ PASO 2: PERFILES ══════════ */}
                     {step === 2 && (
                         <>
                             <div className="flex items-end gap-3">
                                 <div className="flex-1">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Nombre base del producto</Label>
+                                    <Label className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Nombre base</Label>
                                     <Input value={nombreBase} onChange={e => setNombreBase(e.target.value)}
-                                        placeholder="Ej: Copa, Sorbete, Sundae…" className="mt-1.5 h-9 text-sm font-bold" />
+                                        placeholder="Ej: Copa, Sorbete…" className="mt-1.5 h-9 text-sm font-bold" />
                                 </div>
                                 <span className="text-[10px] text-slate-400 font-bold pb-2 whitespace-nowrap">
                                     → "{nombreBase || 'Copa'} 2 Bolas"
                                 </span>
                             </div>
 
-                            {perfilesCalc.map(p => (
-                                <div key={p.id} className={cn(
-                                    'rounded-2xl border-2 overflow-hidden transition-all',
-                                    p.activo ? 'border-cyan-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-55'
-                                )}>
-                                    {/* Cabecera del perfil */}
-                                    <div className="flex items-center gap-3 px-3 py-2.5 bg-slate-50/80 border-b border-slate-100">
-                                        <button onClick={() => updatePerfil(p.id, { activo: !p.activo })}
-                                            className={cn('w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm transition-all shrink-0',
-                                                p.activo ? 'bg-cyan-600 text-white shadow-sm' : 'bg-slate-200 text-slate-400'
-                                            )}>
-                                            {p.activo ? <Check className="w-4 h-4" /> : p.numBolas}
-                                        </button>
-                                        <span className="font-black text-slate-800 text-sm">{p.label}</span>
+                            <div className="space-y-2.5">
+                                {perfilesCalc.map(p => {
+                                    const isEditing = editingId === p.id;
+                                    return (
+                                        <div key={p.id} className={cn(
+                                            'rounded-2xl border-2 overflow-hidden transition-all',
+                                            p.activo ? 'border-cyan-200 bg-white' : 'border-slate-100 bg-slate-50 opacity-55'
+                                        )}>
+                                            {/* Cabecera perfil */}
+                                            <div className="flex items-center gap-2 px-3 py-2.5 bg-slate-50/80 border-b border-slate-100">
+                                                {/* Toggle activo */}
+                                                <button onClick={() => !isEditing && updatePerfil(p.id, { activo: !p.activo })}
+                                                    className={cn('w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm transition-all shrink-0',
+                                                        p.activo ? 'bg-cyan-600 text-white shadow-sm' : 'bg-slate-200 text-slate-400'
+                                                    )}>
+                                                    {p.activo ? <Check className="w-4 h-4" /> : p.numBolas}
+                                                </button>
 
-                                        {p.activo && (
-                                            <>
-                                                <div className="flex items-center gap-1.5 ml-2">
-                                                    <span className="text-[9px] text-slate-400 font-black uppercase">Peso/bola</span>
-                                                    <Input type="number" value={p.pesoGramos}
-                                                        onChange={e => updatePerfil(p.id, { pesoGramos: parseInt(e.target.value) || 0 })}
-                                                        className="h-7 w-14 text-center text-xs font-black p-0 border border-slate-200 rounded-lg" />
-                                                    <span className="text-[9px] text-slate-400">g</span>
-                                                </div>
-                                                <div className="ml-auto flex items-center gap-2">
-                                                    <span className="text-[9px] font-black text-slate-400 uppercase">Costo helado</span>
-                                                    <span className="text-sm font-black text-cyan-700">{formatCurrency(p.costoHelado)}</span>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-
-                                    {p.activo && (
-                                        <div className="p-3 grid grid-cols-2 gap-3">
-                                            {/* Insumos del vaso */}
-                                            <div className="space-y-1.5">
-                                                <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
-                                                    Insumos del vaso (vaso, cuchara, gragea, salsa…)
-                                                </p>
-                                                {p.extras.map((ex, i) => (
-                                                    <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5 border border-slate-100">
-                                                        <span className="text-[10px] font-bold text-slate-700 flex-1 truncate">{ex.nombre}</span>
-                                                        <span className="text-[10px] font-black text-cyan-700 shrink-0">{formatCurrency(ex.costo)}</span>
-                                                        <button onClick={() => removeExtra(p.id, i)}
-                                                            className="text-slate-300 hover:text-rose-500 transition-colors ml-1 shrink-0">
-                                                            <X className="w-3 h-3" />
+                                                {isEditing ? (
+                                                    /* Modo edición inline */
+                                                    <div className="flex items-center gap-2 flex-1">
+                                                        <Input value={editLabel} onChange={e => setEditLabel(e.target.value)}
+                                                            placeholder="Nombre" className="h-7 w-24 text-xs font-black border-cyan-300" />
+                                                        <div className="flex items-center gap-1">
+                                                            <Input type="number" value={editBolas} onChange={e => setEditBolas(e.target.value)}
+                                                                className="h-7 w-12 text-center text-xs font-black border-cyan-300" />
+                                                            <span className="text-[9px] text-slate-400 font-bold">bolas</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <Input type="number" value={editPeso} onChange={e => setEditPeso(e.target.value)}
+                                                                className="h-7 w-14 text-center text-xs font-black border-cyan-300" />
+                                                            <span className="text-[9px] text-slate-400 font-bold">g/bola</span>
+                                                        </div>
+                                                        <button onClick={saveEdit} className="h-7 px-3 bg-cyan-600 text-white rounded-lg text-[10px] font-black">Guardar</button>
+                                                        <button onClick={cancelEdit} className="h-7 w-7 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                                                            <X className="w-3.5 h-3.5" />
                                                         </button>
                                                     </div>
-                                                ))}
-                                                <select value="" onChange={e => { if (e.target.value) addExtra(p.id, e.target.value); }}
-                                                    className="w-full h-8 bg-white border border-dashed border-cyan-300 rounded-lg px-2 text-[9px] font-black uppercase text-slate-500 outline-none cursor-pointer">
-                                                    <option value="">+ Agregar vaso / gragea / salsa / cuchara…</option>
-                                                    {extrasDisponibles.map(e => {
-                                                        const c = parseFloat(precios.find(pr => pr.productoId === e.id)?.precioCosto?.toString() || '0');
-                                                        return <option key={e.id} value={e.id}>{e.nombre} ({formatCurrency(c)})</option>;
-                                                    })}
-                                                </select>
-                                                {extrasDisponibles.length === 0 && (
-                                                    <p className="text-[9px] text-slate-400 italic">
-                                                        Registra vasos y otros insumos con ese nombre para que aparezcan aquí
-                                                    </p>
+                                                ) : (
+                                                    /* Vista normal */
+                                                    <>
+                                                        <span className="font-black text-slate-800 text-sm flex-1">{p.label}</span>
+                                                        {p.activo && (
+                                                            <div className="flex items-center gap-1.5">
+                                                                <span className="text-[9px] text-slate-400 font-black uppercase">Peso/bola</span>
+                                                                <Input type="number" value={p.pesoGramos}
+                                                                    onChange={e => updatePerfil(p.id, { pesoGramos: parseInt(e.target.value) || 0 })}
+                                                                    className="h-7 w-14 text-center text-xs font-black p-0 border border-slate-200 rounded-lg" />
+                                                                <span className="text-[9px] text-slate-400">g</span>
+                                                                <span className="text-[9px] font-black text-cyan-700 ml-1">{formatCurrency(p.costoHelado)}</span>
+                                                            </div>
+                                                        )}
+                                                        <div className="flex items-center gap-1 ml-1">
+                                                            <button onClick={() => startEdit(p)}
+                                                                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 transition-colors">
+                                                                <Pencil className="w-3.5 h-3.5" />
+                                                            </button>
+                                                            <button onClick={() => deleteProfile(p.id)}
+                                                                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                            </button>
+                                                        </div>
+                                                    </>
                                                 )}
                                             </div>
 
-                                            {/* Precio y margen */}
-                                            <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-xl p-3 space-y-2 border border-cyan-100">
-                                                <div className="flex justify-between text-[10px]">
-                                                    <span className="font-bold text-slate-500">Insumos del vaso</span>
-                                                    <span className="font-black text-slate-700">+{formatCurrency(p.costoExtras)}</span>
+                                            {/* Extras + precio (solo si activo y no editando) */}
+                                            {p.activo && !isEditing && (
+                                                <div className="p-3 grid grid-cols-2 gap-3">
+                                                    {/* Insumos del vaso */}
+                                                    <div className="space-y-1.5">
+                                                        <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                                                            Insumos del vaso
+                                                        </p>
+                                                        {p.extras.length === 0 && (
+                                                            <p className="text-[9px] text-slate-300 italic">Sin insumos — agrega vaso, cuchara, gragea…</p>
+                                                        )}
+                                                        {p.extras.map((ex, i) => (
+                                                            <div key={i} className="flex items-center gap-2 bg-slate-50 rounded-lg px-2.5 py-1.5 border border-slate-100">
+                                                                <span className="text-[10px] font-bold text-slate-700 flex-1 truncate">{ex.nombre}</span>
+                                                                <span className="text-[10px] font-black text-cyan-700 shrink-0">{formatCurrency(ex.costo)}</span>
+                                                                <button onClick={() => removeExtra(p.id, i)}
+                                                                    className="text-slate-300 hover:text-rose-500 transition-colors ml-1 shrink-0">
+                                                                    <X className="w-3 h-3" />
+                                                                </button>
+                                                            </div>
+                                                        ))}
+                                                        <select value="" onChange={e => { if (e.target.value) addExtra(p.id, e.target.value); }}
+                                                            className="w-full h-8 bg-white border border-dashed border-cyan-300 rounded-lg px-2 text-[9px] font-black uppercase text-slate-500 outline-none cursor-pointer">
+                                                            <option value="">+ Agregar insumo del vaso…</option>
+                                                            {extrasDisponibles.map(e => {
+                                                                const c = parseFloat(precios.find(pr => pr.productoId === e.id)?.precioCosto?.toString() || '0');
+                                                                return <option key={e.id} value={e.id}>{e.nombre} ({formatCurrency(c)})</option>;
+                                                            })}
+                                                        </select>
+                                                        {extrasDisponibles.length === 0 && (
+                                                            <p className="text-[9px] text-amber-500 font-bold">
+                                                                Registra vasos, cucharas y salsas en Productos para que aparezcan aquí
+                                                            </p>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Panel de precio */}
+                                                    <div className="bg-gradient-to-br from-cyan-50 to-blue-50 rounded-xl p-3 space-y-2 border border-cyan-100">
+                                                        <div className="flex justify-between text-[10px]">
+                                                            <span className="font-bold text-slate-500">Costo helado</span>
+                                                            <span className="font-black text-slate-700">{formatCurrency(p.costoHelado)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-[10px]">
+                                                            <span className="font-bold text-slate-500">Insumos vaso</span>
+                                                            <span className="font-black text-slate-700">+{formatCurrency(p.costoExtras)}</span>
+                                                        </div>
+                                                        <div className="flex justify-between text-[10px] font-black border-t border-cyan-100 pt-1.5">
+                                                            <span className="text-slate-600">Costo total</span>
+                                                            <span className="text-cyan-700">{formatCurrency(p.costoTotal)}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5">
+                                                            <span className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap">Precio venta $</span>
+                                                            <Input type="number" value={p.precioVenta}
+                                                                onChange={e => updatePerfil(p.id, { precioVenta: e.target.value })}
+                                                                placeholder={Math.round(p.pvpCalculado).toString()}
+                                                                className="h-7 flex-1 text-right text-xs font-black border-cyan-200 bg-white" />
+                                                        </div>
+                                                        <div className={cn(
+                                                            'flex justify-between text-[10px] font-black rounded-lg px-2.5 py-1.5',
+                                                            p.margenReal >= 30 ? 'bg-emerald-600 text-white' : p.margenReal >= 15 ? 'bg-amber-500 text-white' : 'bg-rose-600 text-white'
+                                                        )}>
+                                                            <span>Margen</span>
+                                                            <span>{p.margenReal.toFixed(0)}%</span>
+                                                        </div>
+                                                        <p className="text-[9px] font-bold text-blue-500 text-center">
+                                                            ~{p.copasPosibles} copas posibles con stock actual
+                                                        </p>
+                                                    </div>
                                                 </div>
-                                                <div className="flex justify-between text-[10px] font-black border-t border-cyan-100 pt-1.5">
-                                                    <span className="text-slate-600">Costo total copa</span>
-                                                    <span className="text-cyan-700">{formatCurrency(p.costoTotal)}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5 pt-0.5">
-                                                    <span className="text-[9px] font-black text-slate-400 uppercase whitespace-nowrap">Precio venta $</span>
-                                                    <Input type="number" value={p.precioVenta}
-                                                        onChange={e => updatePerfil(p.id, { precioVenta: e.target.value })}
-                                                        placeholder={Math.round(p.pvpCalculado).toString()}
-                                                        className="h-7 flex-1 text-right text-xs font-black border-cyan-200 bg-white" />
-                                                </div>
-                                                <div className="flex justify-between text-[10px] font-black bg-cyan-600 text-white rounded-lg px-2.5 py-1.5">
-                                                    <span>Margen</span>
-                                                    <span>{p.margenReal.toFixed(0)}%</span>
-                                                </div>
-                                                <p className="text-[9px] font-bold text-blue-500 text-center">
-                                                    ~{p.copasPosibles} copas con el stock actual
-                                                </p>
-                                            </div>
+                                            )}
                                         </div>
-                                    )}
-                                </div>
-                            ))}
+                                    );
+                                })}
+                            </div>
+
+                            <button onClick={addProfile}
+                                className="w-full h-10 flex items-center justify-center gap-2 border-2 border-dashed border-cyan-300 rounded-2xl text-[11px] font-black uppercase text-cyan-600 hover:bg-cyan-50 transition-all">
+                                <Plus className="w-4 h-4" /> Agregar nuevo tamaño de copa
+                            </button>
                         </>
                     )}
 
-                    {/* ════════════ PASO 3 ════════════ */}
+                    {/* ══════════ PASO 3: RENTABILIDAD SEMANAL ══════════ */}
                     {step === 3 && (
                         <>
+                            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-1">
+                                <p className="text-xs font-black text-blue-800">¿Cuántas copas de cada tamaño vendiste esta semana?</p>
+                                <p className="text-[10px] text-blue-500 font-medium">Esto te mostrará si estás ganando o perdiendo con los helados</p>
+                            </div>
+
+                            <div className="space-y-2">
+                                {perfilesCalc.filter(p => p.activo).map(p => (
+                                    <div key={p.id} className="flex items-center gap-3 bg-white rounded-xl border border-slate-100 px-4 py-3">
+                                        <span className="text-sm font-black text-slate-700 w-20 shrink-0">{p.label}</span>
+                                        <span className="text-[10px] font-bold text-slate-400 flex-1">
+                                            Costo {formatCurrency(p.costoTotal)} → Venta {formatCurrency(p.pvpFinal)}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                            <Label className="text-[10px] font-black text-slate-400 uppercase whitespace-nowrap">Copas vendidas</Label>
+                                            <Input type="number" min={0} value={ventasSemana[p.id] || ''}
+                                                onChange={e => setVentasSemana(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                                placeholder="0" className="h-8 w-16 text-center font-black text-sm border-slate-200" />
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Diagnóstico semana */}
+                            {analisisSemana.totalCopasVendidas > 0 && (
+                                <div className="space-y-3">
+                                    {/* Resumen por tamaño */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {analisisSemana.porPerfil.filter(p => p.vendidas > 0).map(p => (
+                                            <div key={p.id} className={cn(
+                                                'rounded-xl p-3 border-2',
+                                                p.ganancia > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'
+                                            )}>
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <span className="text-xs font-black text-slate-800">{p.label}</span>
+                                                    <span className="text-[9px] font-bold text-slate-400">{p.vendidas} copas</span>
+                                                </div>
+                                                <div className="space-y-0.5 text-[10px]">
+                                                    <div className="flex justify-between">
+                                                        <span className="text-slate-500">Ingresos</span>
+                                                        <span className="font-black text-slate-700">{formatCurrency(p.ingreso)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-slate-500">Costos</span>
+                                                        <span className="font-black text-rose-600">-{formatCurrency(p.costo)}</span>
+                                                    </div>
+                                                    <div className={cn('flex justify-between font-black border-t pt-1', p.ganancia > 0 ? 'text-emerald-700' : 'text-rose-700')}>
+                                                        <span>Ganancia</span>
+                                                        <span>{p.ganancia > 0 ? '+' : ''}{formatCurrency(p.ganancia)}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Semáforo total */}
+                                    <div className={cn(
+                                        'rounded-2xl p-5 text-white space-y-3 shadow-lg',
+                                        analisisSemana.gananciaTotal > 0 ? 'bg-emerald-600' : 'bg-rose-600'
+                                    )}>
+                                        <div className="flex items-center gap-2">
+                                            {analisisSemana.gananciaTotal > 0
+                                                ? <TrendingUp className="w-5 h-5" />
+                                                : <TrendingDown className="w-5 h-5" />
+                                            }
+                                            <span className="font-black uppercase text-sm">Ganancia real esta semana</span>
+                                        </div>
+                                        <p className="text-5xl font-black">
+                                            {analisisSemana.gananciaTotal > 0 ? '+' : ''}{formatCurrency(analisisSemana.gananciaTotal)}
+                                        </p>
+                                        <div className="bg-white/10 rounded-xl p-3 space-y-1.5 text-[11px] font-bold">
+                                            <div className="flex justify-between">
+                                                <span className="opacity-70">Total ingresos</span>
+                                                <span>{formatCurrency(analisisSemana.totalIngresos)}</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="opacity-70">Total costos</span>
+                                                <span>-{formatCurrency(analisisSemana.totalCostos)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Diagnóstico: por qué no queda ganancia */}
+                                    {analisisSemana.gananciaTotal <= 0 && (
+                                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-2">
+                                            <div className="flex items-center gap-2">
+                                                <AlertTriangle className="w-4 h-4 text-amber-600" />
+                                                <p className="text-xs font-black text-amber-800">¿Por qué no queda ganancia?</p>
+                                            </div>
+                                            <div className="space-y-1.5 text-[10px] text-amber-700 font-medium">
+                                                {perfilesCalc.filter(p => p.activo && p.margenReal < 25).map(p => (
+                                                    <p key={p.id}>• <strong>{p.label}:</strong> margen de solo {p.margenReal.toFixed(0)}% — precio de venta ({formatCurrency(p.pvpFinal)}) demasiado bajo vs costo ({formatCurrency(p.costoTotal)})</p>
+                                                ))}
+                                                {perfilesCalc.filter(p => p.activo).every(p => p.margenReal >= 25) && (
+                                                    <p>• Los márgenes están bien, pero el volumen de ventas ({analisisSemana.totalCopasVendidas} copas) no es suficiente para cubrir los costos fijos de las cajas.</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Punto de equilibrio */}
+                                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <Target className="w-4 h-4 text-slate-600" />
+                                            <p className="text-xs font-black text-slate-700">Punto de equilibrio semanal</p>
+                                        </div>
+                                        <p className="text-[11px] text-slate-600 font-medium">
+                                            Para recuperar el costo de las {cajasDisponibles} caja(s) ({formatCurrency(analisisSemana.costoCajasTotal)}), necesitas vender aproximadamente{' '}
+                                            <strong className="text-slate-900">{analisisSemana.copasPuntoPequilibrio} copas en total</strong>.
+                                        </p>
+                                        <div className="mt-2 h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                                            <div
+                                                className={cn('h-full rounded-full transition-all', analisisSemana.totalCopasVendidas >= analisisSemana.copasPuntoPequilibrio ? 'bg-emerald-500' : 'bg-amber-500')}
+                                                style={{ width: `${Math.min(100, analisisSemana.copasPuntoPequilibrio > 0 ? (analisisSemana.totalCopasVendidas / analisisSemana.copasPuntoPequilibrio) * 100 : 0)}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-[9px] text-slate-400 font-bold mt-1">
+                                            {analisisSemana.totalCopasVendidas} de {analisisSemana.copasPuntoPequilibrio} copas
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {analisisSemana.totalCopasVendidas === 0 && (
+                                <div className="text-center py-8 text-slate-300">
+                                    <p className="text-5xl mb-3">🍦</p>
+                                    <p className="text-sm font-black uppercase tracking-widest text-slate-400">Ingresa las ventas de la semana</p>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {/* ══════════ PASO 4: GUARDAR ══════════ */}
+                    {step === 4 && (
+                        <>
                             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
-                                Se crearán {perfilesCalc.filter(p => p.activo).length} producto(s)
+                                Se crearán {perfilesCalc.filter(p => p.activo).length} producto(s) en el catálogo
                             </p>
                             <div className="grid grid-cols-2 gap-3">
                                 {perfilesCalc.filter(p => p.activo).map(p => (
@@ -386,25 +653,27 @@ export function IceCreamAssistantModal({
                                         <div className="space-y-1 text-[10px]">
                                             <div className="flex justify-between">
                                                 <span className="text-slate-500 font-bold">Costo helado</span>
-                                                <span className="font-black text-slate-700">{formatCurrency(p.costoHelado)}</span>
+                                                <span className="font-black">{formatCurrency(p.costoHelado)}</span>
                                             </div>
                                             {p.costoExtras > 0 && (
                                                 <div className="flex justify-between">
                                                     <span className="text-slate-500 font-bold">Insumos vaso</span>
-                                                    <span className="font-black text-slate-700">{formatCurrency(p.costoExtras)}</span>
+                                                    <span className="font-black">+{formatCurrency(p.costoExtras)}</span>
                                                 </div>
                                             )}
                                             <div className="flex justify-between font-black border-t border-slate-100 pt-1">
-                                                <span className="text-slate-600">Costo total</span>
+                                                <span>Costo total</span>
                                                 <span className="text-cyan-700">{formatCurrency(p.costoTotal)}</span>
                                             </div>
                                             <div className="flex justify-between font-black text-[11px]">
-                                                <span className="text-slate-600">Precio venta</span>
+                                                <span>Precio venta</span>
                                                 <span className="text-emerald-600">{formatCurrency(p.pvpFinal)}</span>
                                             </div>
                                             <div className="flex justify-between">
-                                                <span className="text-slate-500 font-bold">Margen real</span>
-                                                <span className="font-black text-slate-700">{p.margenReal.toFixed(0)}%</span>
+                                                <span className="text-slate-400 font-bold">Margen</span>
+                                                <span className={cn('font-black', p.margenReal >= 30 ? 'text-emerald-600' : p.margenReal >= 15 ? 'text-amber-600' : 'text-rose-600')}>
+                                                    {p.margenReal.toFixed(0)}%
+                                                </span>
                                             </div>
                                             <div className="flex justify-between border-t border-slate-100 pt-1">
                                                 <span className="text-slate-400 font-bold">Copas posibles</span>
@@ -414,9 +683,7 @@ export function IceCreamAssistantModal({
                                         {p.extras.length > 0 && (
                                             <div className="bg-slate-50 rounded-lg p-2 space-y-0.5">
                                                 {p.extras.map((ex, i) => (
-                                                    <p key={i} className="text-[9px] text-slate-500 font-bold truncate">
-                                                        • {ex.nombre} — {formatCurrency(ex.costo)}
-                                                    </p>
+                                                    <p key={i} className="text-[9px] text-slate-500 font-bold truncate">• {ex.nombre} — {formatCurrency(ex.costo)}</p>
                                                 ))}
                                             </div>
                                         )}
@@ -433,12 +700,12 @@ export function IceCreamAssistantModal({
                         className="h-11 px-5 rounded-xl text-xs font-black uppercase text-slate-400">
                         {step === 1 ? 'Cerrar' : <><ChevronLeft className="w-4 h-4 mr-1" />Atrás</>}
                     </Button>
-                    {step < 3 ? (
+                    {step < 4 ? (
                         <Button
                             disabled={step === 1 && selectedIds.length === 0}
                             onClick={() => setStep(step + 1)}
                             className="h-11 flex-1 bg-cyan-600 hover:bg-cyan-700 text-white text-xs font-black uppercase rounded-xl shadow-lg shadow-cyan-100">
-                            Siguiente <ChevronRight className="w-4 h-4 ml-1" />
+                            {step === 3 ? 'Ver resumen y guardar' : 'Siguiente'} <ChevronRight className="w-4 h-4 ml-1" />
                         </Button>
                     ) : (
                         <Button disabled={loading} onClick={handleSave}

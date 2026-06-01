@@ -5,7 +5,7 @@ import {
     UtensilsCrossed, Save, AlertCircle, Thermometer, Timer, Gauge, Clock,
     Scale, TrendingUp, Info, History as HistoryIcon, Camera, X, ArrowUp,
     ArrowDown, ListOrdered, Filter, Calculator, ChevronDown, ChevronUp,
-    Package, Wheat, Percent, Tag
+    Package, Wheat, Percent, Tag, PieChart, Layers3
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,8 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import type {
     Producto, Receta, IngredienteReceta,
-    FormulacionBase, ModeloPan, IngredienteFormulacion
+    FormulacionBase, ModeloPan, IngredienteFormulacion,
+    MixItemProduccion, TipoLata
 } from '@/types';
 import { ARROBA_KG } from '@/types';
 import { toast } from 'sonner';
@@ -157,6 +158,16 @@ const Recetas: React.FC<RecetasProps> = ({
     const [calcFormulacionId, setCalcFormulacionId] = useState('');
     const [calcArrobas, setCalcArrobas] = useState(1);
     const [expandedFormulacion, setExpandedFormulacion] = useState<string | null>(null);
+
+    // ── Modal DISTRIBUCIÓN POR ARROBA ─────────────────────────────────────
+    const [isDistribucionOpen, setIsDistribucionOpen] = useState(false);
+    const [distribucionFormulacion, setDistribucionFormulacion] = useState<FormulacionBase | null>(null);
+    const [dMix, setDMix] = useState<Partial<MixItemProduccion>[]>([]);
+    // Tipos de lata: configurados en Producción → Config (se guardan en localStorage)
+    const tiposLata = useMemo<TipoLata[]>(() => {
+        try { return JSON.parse(localStorage.getItem('dp_tipos_lata') || '[]'); } catch { return []; }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isDistribucionOpen]);
 
     // ── Listas derivadas ──────────────────────────────────────────────────
     const productosElaborados = useMemo(() => productos.filter(p => p.tipo !== 'ingrediente'), [productos]);
