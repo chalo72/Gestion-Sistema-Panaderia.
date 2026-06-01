@@ -175,14 +175,14 @@ export function Ventas(props: VentasProps) {
         [VENTA_RAPIDA_ID]: { cart: [], cliente: '' }
     });
 
-    // Vendedora de la pestaña activa — derivada DESPUÉS de tabCarts y activeTabId
+    // Vendedora de la pestaña activa — null cuando no hay selección explícita
     const vendedoraActiva = useMemo<VendedoraOption | null>(() => {
         const tab = tabCarts[activeTabId];
         if (tab?.vendedoraId && tab?.vendedoraNombre) {
             return { id: tab.vendedoraId, nombre: tab.vendedoraNombre };
         }
-        return usuario ? { id: usuario.id, nombre: usuario.nombre, rol: usuario.rol } : null;
-    }, [tabCarts, activeTabId, usuario]);
+        return null;
+    }, [tabCarts, activeTabId]);
 
     const setVendedoraActiva = useCallback((v: VendedoraOption | null) => {
         setTabCarts(prev => {
@@ -341,8 +341,8 @@ export function Ventas(props: VentasProps) {
                 [newId]: {
                     cart: [],
                     cliente: '',
-                    vendedoraId: current.vendedoraId || usuario?.id,
-                    vendedoraNombre: current.vendedoraNombre || usuario?.nombre,
+                    vendedoraId: current.vendedoraId,
+                    vendedoraNombre: current.vendedoraNombre,
                 }
             };
         });
