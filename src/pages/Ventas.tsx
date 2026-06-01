@@ -659,6 +659,7 @@ export function Ventas(props: VentasProps) {
                             vendedoras={vendedorasDisponibles}
                             activaId={vendedoraActiva?.id ?? null}
                             onSelect={setVendedoraActiva}
+                            tabLabel={activeTab?.label}
                             compact
                         />
                     </div>

@@ -17,6 +17,7 @@ interface VendedoraQuickPickerProps {
   vendedoras: VendedoraOption[];
   activaId: string | null;
   onSelect: (vendedora: VendedoraOption | null) => void;
+  tabLabel?: string;
   compact?: boolean;
   className?: string;
 }
@@ -47,7 +48,7 @@ function getColor(nombre: string): string {
 }
 
 export function VendedoraQuickPicker({
-  vendedoras, activaId, onSelect, compact = false, className
+  vendedoras, activaId, onSelect, tabLabel, compact = false, className
 }: VendedoraQuickPickerProps) {
   if (vendedoras.length === 0) return null;
 
@@ -109,7 +110,7 @@ export function VendedoraQuickPicker({
         {activaId ? (
           <>
             <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-            {activaNombre?.split(' ')[0]} — asignada a esta venta
+            {activaNombre?.split(' ')[0]} — asignada a {tabLabel || 'esta venta'}
           </>
         ) : (
           <>
