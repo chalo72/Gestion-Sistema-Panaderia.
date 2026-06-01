@@ -98,6 +98,118 @@ export function Produccion({
     // FIFO / Lotes en stock
     const { crearLote, lotesConProblema } = useLotesStock();
 
+    // ── Config Latas (localStorage) ───────────────────────────────────────
+    const [tiposLata, setTiposLata] = useState<TipoLata[]>(() => {
+        try { return JSON.parse(localStorage.getItem('dp_tipos_lata') || '[]'); } catch { return []; }
+    });
+    const [editingLata, setEditingLata] = useState<TipoLata | null>(null);
+    const [lNombre, setLNombre] = useState('');
+    const [lAncho, setLAncho] = useState(60);
+    const [lLargo, setLLargo] = useState(40);
+    const [lColor, setLColor] = useState('#10b981');
+    const [lCapacidades, setLCapacidades] = useState<CapacidadLata[]>([]);
+
+    const saveTiposLata = useCallback((lista: TipoLata[]) => {
+        setTiposLata(lista);
+        localStorage.setItem('dp_tipos_lata', JSON.stringify(lista));
+    }, []);
+
+    const openNewLata = () => {
+        setEditingLata(null); setLNombre(''); setLAncho(60); setLLargo(40);
+        setLColor('#10b981'); setLCapacidades([]);
+    };
+
+    const openEditLata = (l: TipoLata) => {
+        setEditingLata(l); setLNombre(l.nombre); setLAncho(l.anchoCm); setLLargo(l.largoCm);
+        setLColor(l.color || '#10b981'); setLCapacidades([...l.capacidades]);
+    };
+
+    const saveLata = () => {
+        if (!lNombre.trim()) return;
+        const lata: TipoLata = {
+            id: editingLata?.id || generateUUID(),
+            nombre: lNombre.trim(), anchoCm: lAncho, largoCm: lLargo,
+            color: lColor, capacidades: lCapacidades, activo: true
+        };
+        saveTiposLata(editingLata
+            ? tiposLata.map(l => l.id === lata.id ? lata : l)
+            : [...tiposLata, lata]
+        );
+        setEditingLata(null); setLNombre('');
+    };
+
+    const deleteLata = (id: string) => saveTiposLata(tiposLata.filter(l => l.id !== id));
+
+    const updateCapacidad = (modeloPanId: string, piezas: number) => {
+        setLCapacidades(prev => {
+            const existe = prev.find(c => c.modeloPanId === modeloPanId);
+            if (existe) return prev.map(c => c.modeloPanId === modeloPanId ? { ...c, piezas } : c);
+            return [...prev, { modeloPanId, piezas }];
+        });
+    };
+
+    // ── Turno del día ─────────────────────────────────────────────────────
+    type TipoDiaPreset = { id: string; label: string; color: string; arrobas: Record<string, number> };
+
+    const [tiposDia] = useState<TipoDiaPreset[]>(() => {
+        try { return JSON.parse(localStorage.getItem('dp_tipos_dia') || '[]'); } catch { return []; }
+    });
+
+    const PRESETS_DEFAULT: TipoDiaPreset[] = [
+        { id: 'normal',  label: 'Normal',  color: 'bg-emerald-500', arrobas: {} },
+        { id: 'alto',    label: 'Alto',    color: 'bg-amber-500',   arrobas: {} },
+        { id: 'evento',  label: 'Evento',  color: 'bg-violet-500',  arrobas: {} },
+    ];
+    const presetsFinales = tiposDia.length ? tiposDia : PRESETS_DEFAULT;
+
+    const [turnoTipoDia, setTurnoTipoDia] = useState('normal');
+    // arrobas manuales por formulacion: { [formulacionId]: number }
+    const [turnoArrobas, setTurnoArrobas] = useState<Record<string, number>>({});
+    const [turnoConfirmado, setTurnoConfirmado] = useState(false);
+
+    const turnoPreset = presetsFinales.find(p => p.id === turnoTipoDia);
+
+    const getArrobasParaFormulacion = (fId: string): number => {
+        if (turnoArrobas[fId] !== undefined) return turnoArrobas[fId];
+        return turnoPreset?.arrobas[fId] ?? 1;
+    };
+
+    const confirmarTurno = async () => {
+        const formulacionesActivas = formulaciones.filter(f => f.activo && (f.mixProduccion?.length ?? 0) > 0);
+        if (formulacionesActivas.length === 0) {
+            toast.error('Configura la distribución de al menos una fórmula antes de confirmar el turno');
+            return;
+        }
+        for (const f of formulacionesActivas) {
+            const arrobas = getArrobasParaFormulacion(f.id);
+            if (arrobas <= 0) continue;
+            for (const mixItem of (f.mixProduccion || [])) {
+                const modelo = modelosPan.find(m => m.id === mixItem.modeloPanId);
+                if (!modelo) continue;
+                const masaKg = f.rendimientoBaseKg * arrobas;
+                const panes = Math.floor(masaKg * (mixItem.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr);
+                if (panes <= 0) continue;
+                const prod = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente')
+                    || productos.find(p => p.tipo !== 'ingrediente');
+                if (!prod) continue;
+                await addOrdenProduccion({
+                    productoId: prod.id,
+                    cantidadPlaneada: panes,
+                    cantidadCompletada: 0,
+                    usuarioId: 'turno',
+                    costoEstimadoTotal: f.costoTotalArroba * arrobas * (mixItem.porcentaje / 100),
+                    formulacionId: f.id,
+                    modeloPanId: modelo.id,
+                    arrobasUsadas: arrobas * (mixItem.porcentaje / 100),
+                    notas: `Turno ${turnoTipoDia}: ${arrobas} arroba${arrobas !== 1 ? 's' : ''} de ${f.nombre}`
+                });
+            }
+        }
+        toast.success('¡Turno lanzado a producción!');
+        setTurnoConfirmado(true);
+        setActiveTab('ordenes');
+    };
+
     // Guías Dinámicas a partir de Formulaciones reales
     const guiasDinamicas = formulaciones.filter(f => f.instrucciones && f.instrucciones.length > 5).map(f => {
         const bgColors = ['bg-amber-500/10', 'bg-violet-500/10', 'bg-emerald-500/10', 'bg-blue-500/10', 'bg-pink-500/10'];
@@ -245,7 +357,11 @@ export function Produccion({
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-10 w-full max-w-5xl mx-auto">
+                <TabsList className="bg-muted/40 p-1 rounded-2xl grid grid-cols-12 w-full max-w-5xl mx-auto">
+                    <TabsTrigger value="turno" className="rounded-xl data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow gap-2">
+                        <SunMedium className="w-4 h-4" />
+                        <span className="hidden sm:inline font-black">Turno</span>
+                    </TabsTrigger>
                     <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
                         <ClipboardList className="w-4 h-4" />
                         <span className="hidden sm:inline">Órdenes</span>
@@ -288,6 +404,10 @@ export function Produccion({
                         {lotesConProblema.length > 0 && (
                             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-rose-500 rounded-full" />
                         )}
+                    </TabsTrigger>
+                    <TabsTrigger value="config-latas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-2">
+                        <Settings2 className="w-4 h-4" />
+                        <span className="hidden sm:inline">Config</span>
                     </TabsTrigger>
                 </TabsList>
 
@@ -598,6 +718,268 @@ export function Produccion({
                 <TabsContent value="rotacion">
                     <RotacionBreadView formatCurrency={formatCurrency} />
                 </TabsContent>
+
+                {/* ═══════════════════════════════════════════════════════
+                    TAB: TURNO DEL DÍA — Vista operativa del panadero
+                ═══════════════════════════════════════════════════════ */}
+                <TabsContent value="turno" className="space-y-6">
+                    {/* Header del turno */}
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div>
+                            <h2 className="text-2xl font-black text-slate-800 dark:text-white flex items-center gap-3">
+                                <SunMedium className="w-7 h-7 text-amber-500" />
+                                Turno del Día
+                            </h2>
+                            <p className="text-sm text-slate-400 font-medium mt-1">
+                                {new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </p>
+                        </div>
+                        {!turnoConfirmado && (
+                            <Button onClick={confirmarTurno} className="bg-amber-500 hover:bg-amber-600 text-white font-black h-12 px-8 rounded-2xl shadow-lg shadow-amber-500/25 text-[11px] uppercase tracking-widest">
+                                <CheckCheck className="w-5 h-5 mr-2" /> Confirmar Turno
+                            </Button>
+                        )}
+                        {turnoConfirmado && (
+                            <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-black text-sm">
+                                <CheckCheck className="w-5 h-5" /> Turno confirmado — ver en Órdenes
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Tipo de día */}
+                    <div className="flex gap-3 flex-wrap">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 self-center">Tipo de día:</p>
+                        {presetsFinales.map(preset => (
+                            <button key={preset.id} onClick={() => { setTurnoTipoDia(preset.id); setTurnoArrobas({}); }}
+                                className={cn(
+                                    "h-10 px-5 rounded-2xl font-black text-sm transition-all active:scale-95 border-2",
+                                    turnoTipoDia === preset.id
+                                        ? `${preset.color} text-white border-transparent shadow-lg`
+                                        : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-slate-400"
+                                )}
+                            >
+                                {preset.label}
+                            </button>
+                        ))}
+                    </div>
+
+                    {/* Formulaciones con distribución configurada */}
+                    {formulaciones.filter(f => f.activo && (f.mixProduccion?.length ?? 0) > 0).length === 0 && (
+                        <div className="p-8 rounded-3xl border-2 border-dashed border-slate-200 text-center space-y-3">
+                            <AlertCircle className="w-10 h-10 text-slate-300 mx-auto" />
+                            <p className="font-black text-slate-400">Ninguna fórmula tiene distribución configurada</p>
+                            <p className="text-sm text-slate-400">Ve a Recetas → Formulaciones → botón <span className="font-black text-emerald-600">◔</span> (Distribución) para configurar</p>
+                        </div>
+                    )}
+
+                    {formulaciones.filter(f => f.activo && (f.mixProduccion?.length ?? 0) > 0).map(f => {
+                        const arrobas = getArrobasParaFormulacion(f.id);
+                        const masaTotal = f.rendimientoBaseKg * arrobas;
+                        const totalPanes = (f.mixProduccion || []).reduce((sum, mx) => {
+                            const modelo = modelosPan.find(m => m.id === mx.modeloPanId);
+                            if (!modelo || modelo.pesoUnitarioGr <= 0) return sum;
+                            return sum + Math.floor(masaTotal * (mx.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr);
+                        }, 0);
+
+                        return (
+                            <Card key={f.id} className="rounded-3xl border-0 shadow-lg bg-white dark:bg-slate-900 overflow-hidden">
+                                {/* Header de la formulación */}
+                                <div className="flex items-center justify-between p-5 pb-3 border-b border-slate-100 dark:border-slate-800">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                                            <Layers3 className="w-5 h-5 text-amber-600" />
+                                        </div>
+                                        <div>
+                                            <p className="font-black text-slate-800 dark:text-white">{f.nombre}</p>
+                                            <p className="text-[10px] text-slate-400 font-medium capitalize">{f.categoria}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        {/* Control de arrobas */}
+                                        <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 rounded-2xl px-3 py-2 border border-slate-200 dark:border-slate-700">
+                                            <button onClick={() => setTurnoArrobas(p => ({ ...p, [f.id]: Math.max(0, (p[f.id] ?? arrobas) - 0.5) }))} className="w-7 h-7 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-white font-black hover:bg-slate-300 active:scale-95">−</button>
+                                            <div className="text-center min-w-[60px]">
+                                                <p className="font-black text-slate-800 dark:text-white text-lg leading-none">{arrobas}</p>
+                                                <p className="text-[9px] text-slate-400 uppercase">arrobas</p>
+                                            </div>
+                                            <button onClick={() => setTurnoArrobas(p => ({ ...p, [f.id]: (p[f.id] ?? arrobas) + 0.5 }))} className="w-7 h-7 rounded-xl bg-amber-500 flex items-center justify-center text-white font-black hover:bg-amber-600 active:scale-95">+</button>
+                                        </div>
+                                        <div className="text-center">
+                                            <p className="font-black text-slate-800 dark:text-white">{totalPanes}</p>
+                                            <p className="text-[9px] text-slate-400 uppercase">panes</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Tabla de latas */}
+                                <div className="p-5">
+                                    <div className="grid grid-cols-12 gap-2 px-1 mb-2">
+                                        <div className="col-span-4 text-[9px] font-black uppercase text-slate-400 tracking-wider">Pan</div>
+                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">% masa</div>
+                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Panes</div>
+                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Lata</div>
+                                        <div className="col-span-2 text-[9px] font-black uppercase text-slate-400 text-center">Latas</div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {(f.mixProduccion || []).map((mx, idx) => {
+                                            const modelo = modelosPan.find(m => m.id === mx.modeloPanId);
+                                            if (!modelo) return null;
+                                            const panes = modelo.pesoUnitarioGr > 0
+                                                ? Math.floor(masaTotal * (mx.porcentaje / 100) * 1000 / modelo.pesoUnitarioGr) : 0;
+                                            const tipoLata = tiposLata.find(t => t.id === mx.tipoLataId);
+                                            const capacidad = tipoLata?.capacidades.find(c => c.modeloPanId === mx.modeloPanId)?.piezas
+                                                || modelo.piezasPorLata || 0;
+                                            const latas = capacidad > 0 && panes > 0 ? Math.ceil(panes / capacidad) : null;
+
+                                            return (
+                                                <div key={idx} className="grid grid-cols-12 gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl items-center">
+                                                    <div className="col-span-4">
+                                                        <p className="text-sm font-black text-slate-800 dark:text-white leading-tight truncate">{modelo.nombre}</p>
+                                                        <p className="text-[10px] text-slate-400">{modelo.pesoUnitarioGr}gr</p>
+                                                    </div>
+                                                    <div className="col-span-2 text-center">
+                                                        <span className="text-sm font-black text-slate-600 dark:text-slate-400">{mx.porcentaje}%</span>
+                                                    </div>
+                                                    <div className="col-span-2 text-center">
+                                                        <span className="text-lg font-black text-slate-800 dark:text-white">{panes}</span>
+                                                    </div>
+                                                    <div className="col-span-2 text-center">
+                                                        <span className="text-[11px] font-bold text-slate-500">
+                                                            {tipoLata ? `${tipoLata.anchoCm}×${tipoLata.largoCm}` : '—'}
+                                                        </span>
+                                                    </div>
+                                                    <div className="col-span-2 text-center">
+                                                        {latas !== null ? (
+                                                            <div className="inline-flex flex-col items-center">
+                                                                <span className="text-xl font-black text-amber-600">{latas}</span>
+                                                                <span className="text-[9px] text-slate-400">×{capacidad} pzas</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-[10px] text-slate-300">sin lata</span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </Card>
+                        );
+                    })}
+                </TabsContent>
+
+                {/* ═══════════════════════════════════════════════════════
+                    TAB: CONFIG LATAS — Solo administrador
+                ═══════════════════════════════════════════════════════ */}
+                <TabsContent value="config-latas" className="space-y-8">
+                    <div className="flex items-center gap-3">
+                        <Settings2 className="w-6 h-6 text-slate-500" />
+                        <h2 className="text-2xl font-black text-slate-800 dark:text-white">Configuración de Latas</h2>
+                    </div>
+
+                    {/* Formulario nueva/editar lata */}
+                    <Card className="rounded-3xl border-slate-200 dark:border-slate-700">
+                        <CardHeader className="pb-3">
+                            <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500">
+                                {editingLata ? `Editando: ${editingLata.nombre}` : 'Nueva Lata'}
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-5">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-2 space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nombre</Label>
+                                    <Input value={lNombre} onChange={e => setLNombre(e.target.value)} placeholder="Ej: Lata Grande, Lata Mediana, Lata Galletas..." className="rounded-2xl h-11 bg-slate-50 border-slate-200" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Ancho (cm)</Label>
+                                    <Input type="number" min={1} value={lAncho} onChange={e => setLAncho(Number(e.target.value))} className="rounded-2xl h-11 bg-slate-50 border-slate-200 font-black text-center text-lg" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase text-slate-400">Largo (cm)</Label>
+                                    <Input type="number" min={1} value={lLargo} onChange={e => setLLargo(Number(e.target.value))} className="rounded-2xl h-11 bg-slate-50 border-slate-200 font-black text-center text-lg" />
+                                </div>
+                            </div>
+
+                            {/* Capacidades por modelo de pan */}
+                            {modelosPan.filter(m => m.activo).length > 0 && (
+                                <div className="space-y-3">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Piezas que caben en esta lata por tipo de pan:</p>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                        {modelosPan.filter(m => m.activo).map(modelo => {
+                                            const cap = lCapacidades.find(c => c.modeloPanId === modelo.id)?.piezas || 0;
+                                            return (
+                                                <div key={modelo.id} className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-3 border border-slate-100 dark:border-slate-800 space-y-1.5">
+                                                    <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 truncate" title={modelo.nombre}>{modelo.nombre}</p>
+                                                    <p className="text-[9px] text-slate-400">{modelo.pesoUnitarioGr}gr</p>
+                                                    <Input
+                                                        type="number" min={0} placeholder="0"
+                                                        value={cap || ''}
+                                                        onChange={e => updateCapacidad(modelo.id, Number(e.target.value))}
+                                                        className="h-9 rounded-xl bg-white dark:bg-slate-900 border-slate-200 font-black text-center text-base"
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="flex gap-3">
+                                <Button onClick={saveLata} className="bg-slate-800 hover:bg-slate-900 text-white rounded-2xl px-6 font-black flex items-center gap-2">
+                                    <Save className="w-4 h-4" /> {editingLata ? 'Actualizar Lata' : 'Guardar Lata'}
+                                </Button>
+                                {editingLata && (
+                                    <Button variant="outline" onClick={openNewLata} className="rounded-2xl px-6">
+                                        <X className="w-4 h-4 mr-2" /> Cancelar
+                                    </Button>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Lista de latas configuradas */}
+                    <div className="space-y-3">
+                        {tiposLata.length === 0 && (
+                            <div className="p-8 rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400 font-medium">
+                                No hay latas configuradas todavía.
+                            </div>
+                        )}
+                        {tiposLata.map(lata => (
+                            <Card key={lata.id} className="rounded-2xl border-slate-100 dark:border-slate-800">
+                                <div className="flex items-start justify-between p-5">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg shadow-sm" style={{ backgroundColor: lata.color || '#10b981' }}>
+                                            {lata.nombre.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <p className="font-black text-slate-800 dark:text-white">{lata.nombre}</p>
+                                            <p className="text-sm text-slate-400 font-medium">{lata.anchoCm} × {lata.largoCm} cm</p>
+                                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                                {lata.capacidades.filter(c => c.piezas > 0).map(cap => {
+                                                    const modelo = modelosPan.find(m => m.id === cap.modeloPanId);
+                                                    if (!modelo) return null;
+                                                    return (
+                                                        <span key={cap.modeloPanId} className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-black text-slate-600 dark:text-slate-400">
+                                                            {modelo.nombre}: {cap.piezas} pzas
+                                                        </span>
+                                                    );
+                                                })}
+                                                {lata.capacidades.filter(c => c.piezas > 0).length === 0 && (
+                                                    <span className="text-[10px] text-slate-400">Sin capacidades definidas</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 shrink-0">
+                                        <Button variant="ghost" size="icon" onClick={() => openEditLata(lata)} className="h-9 w-9 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl"><Edit2 className="w-4 h-4" /></Button>
+                                        <Button variant="ghost" size="icon" onClick={() => deleteLata(lata.id)} className="h-9 w-9 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"><Trash2 className="w-4 h-4" /></Button>
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </TabsContent>
+
             </Tabs>
 
             <PlanProduccionModal
