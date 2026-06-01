@@ -127,6 +127,12 @@ const HANDLERS: Record<string, Handler> = {
     writeToLocal:    (d) => orig('updatePedidoActivo', db.updatePedidoActivo.bind(db))(d),
     deleteFromLocal: (id) => orig('deletePedidoActivo', db.deletePedidoActivo.bind(db))(id),
   },
+  clientes: {
+    localTableName:  'clientes',
+    getFromSupabase: () => _sdb.getAllClientes(),
+    writeToLocal:    (d) => orig('updateCliente', db.updateCliente.bind(db))(d),
+    deleteFromLocal: (id) => orig('deleteCliente', db.deleteCliente.bind(db))(id),
+  },
 };
 
 export const TABLE_LABELS: Record<string, string> = {
@@ -146,6 +152,7 @@ export const TABLE_LABELS: Record<string, string> = {
   produccion:             'Producción',
   mesas:                  'Mesas',
   pedidos_activos:        'Pedidos Activos',
+  clientes:               'Clientes',
 };
 
 export interface RemoteSyncEvent {
@@ -282,6 +289,11 @@ export function useRealtimeSync() {
       ['caja',        () => db.getAllSesionesCaja(),     (d) => supabaseDB.updateSesionCaja(d)],
       ['mesas',       () => db.getAllMesas(),             (d) => supabaseDB.updateMesa(d)],
       ['pedidos_activos', () => db.getAllPedidosActivos(), (d) => supabaseDB.addPedidoActivo(d)],
+      ['trabajadores',    () => db.getAllTrabajadores(),   (d) => supabaseDB.addTrabajador(d)],
+      ['creditos_trabajadores', () => db.getAllCreditosTrabajadores(), (d) => supabaseDB.addCreditoTrabajador(d)],
+      ['recetas',         () => db.getAllRecetas(),        (d) => supabaseDB.addReceta(d)],
+      ['produccion',      () => db.getAllOrdenesProduccion(), (d) => supabaseDB.addOrdenProduccion(d)],
+      ['clientes',        () => db.getAllClientes(),       (d) => supabaseDB.addCliente(d)],
     ];
     // Push todas las tablas en paralelo (antes era secuencial y tardaba mucho)
     await Promise.all(pushTasks.map(async ([tableName, getLocal, writeSupabase]) => {
@@ -326,6 +338,7 @@ export function useRealtimeSync() {
             case 'produccion':             return db.getAllOrdenesProduccion();
             case 'mesas':                  return db.getAllMesas();
             case 'pedidos_activos':        return db.getAllPedidosActivos();
+            case 'clientes':               return db.getAllClientes();
             default:                       return [];
           }
         })(),

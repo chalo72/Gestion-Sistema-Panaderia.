@@ -60,6 +60,8 @@ const WRITES: WriteSpec[] = [
   { method: 'updateMesa',           table: 'mesas',              fn: (d) => supabaseDB.updateMesa(d) },
   { method: 'addPedidoActivo',      table: 'pedidos_activos',    fn: (d) => supabaseDB.addPedidoActivo(d) },
   { method: 'updatePedidoActivo',   table: 'pedidos_activos',    fn: (d) => supabaseDB.updatePedidoActivo(d) },
+  { method: 'addCliente',           table: 'clientes',           fn: (d) => supabaseDB.addCliente(d) },
+  { method: 'updateCliente',        table: 'clientes',           fn: (d) => supabaseDB.updateCliente(d) },
 ];
 
 const DELETES: DeleteSpec[] = [
@@ -75,6 +77,8 @@ const DELETES: DeleteSpec[] = [
   { method: 'deleteReceta',             table: 'recetas',                fn: (id) => supabaseDB.deleteReceta(id) },
   { method: 'deleteMesa',               table: 'mesas',                  fn: (id) => supabaseDB.deleteMesa(id) },
   { method: 'deletePedidoActivo',       table: 'pedidos_activos',        fn: (id) => supabaseDB.deletePedidoActivo(id) },
+  { method: 'deleteCliente',            table: 'clientes',               fn: (id) => supabaseDB.deleteCliente(id) },
+  { method: 'deleteOrdenProduccion',    table: 'produccion',             fn: (id) => supabaseDB.deleteOrdenProduccion(id) },
 ];
 
 export function applySyncPatch(): void {
