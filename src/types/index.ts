@@ -327,7 +327,7 @@ export interface Configuracion {
   pesoArrobaKg?: number;        // NUEVO: Peso de la arroba configurable
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina';
 
 export interface RegistroAsistencia {
   id: string;
@@ -886,5 +886,48 @@ export interface Trabajador {
   horario?: string;           // ej: "Lun-Vie 7am-3pm"
   observaciones?: string;
   fotoPerfil?: string;        // base64 foto del trabajador
+  createdAt: string;
+}
+
+// ============================================================
+// NÓMINA QUINCENAL
+// ============================================================
+
+export interface NominaDescuento {
+  concepto: string;
+  monto: number;
+  creditoId?: string;
+}
+
+export interface NominaItem {
+  trabajadorId: string;
+  trabajadorNombre: string;
+  salarioBase: number;
+  diasTrabajados: number;
+  totalDiasPeriodo: number;
+  valorBruto: number;
+  descuentos: NominaDescuento[];
+  totalDescuentos: number;
+  valorNeto: number;
+}
+
+export type NominaPeriodo = 'primera' | 'segunda';
+export type NominaEstado  = 'borrador' | 'pagada';
+
+export interface NominaQuincenal {
+  id: string;
+  periodo: NominaPeriodo;
+  mes: number;
+  año: number;
+  fechaInicio: string;
+  fechaFin: string;
+  fechaPago?: string;
+  estado: NominaEstado;
+  items: NominaItem[];
+  totalBruto: number;
+  totalDescuentos: number;
+  totalNeto: number;
+  gastoId?: string;
+  observaciones?: string;
   createdAt: string;
 }

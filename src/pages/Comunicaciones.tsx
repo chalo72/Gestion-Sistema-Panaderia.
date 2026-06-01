@@ -95,7 +95,10 @@ const HOY = () => new Date().toISOString().split('T')[0];
 const getAnuncios = (): Anuncio[] => {
   try { return JSON.parse(localStorage.getItem('dp_anuncios') || '[]'); } catch { return []; }
 };
-const saveAnuncios = (a: Anuncio[]) => localStorage.setItem('dp_anuncios', JSON.stringify(a.slice(0, 50)));
+const saveAnuncios = (a: Anuncio[]) => {
+  localStorage.setItem('dp_anuncios', JSON.stringify(a.slice(0, 50)));
+  window.dispatchEvent(new Event('dp_anuncios_changed'));
+};
 
 const getCompletadas = (): CompletadaKey[] => {
   try { return JSON.parse(localStorage.getItem('dp_checklist_completadas') || '[]'); } catch { return []; }
@@ -140,6 +143,9 @@ export default function Comunicaciones() {
       setCompletadas(limpias);
       saveCompletadas(limpias);
     }
+    // Marcar anuncios como leídos al abrir el módulo
+    localStorage.setItem('dp_anuncios_ultima_vista', new Date().toISOString());
+    window.dispatchEvent(new Event('dp_anuncios_changed'));
   }, []);
 
   // ── Anuncios filtrados por rol ──

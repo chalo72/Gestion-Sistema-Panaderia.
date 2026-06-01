@@ -35,8 +35,16 @@ import type { Producto, Proveedor, PrecioProveedor } from '@/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { getAlertasNoLeidas } from '@/lib/security-agent';
+
+function getAnunciosNoLeidos(): number {
+  try {
+    const anuncios: Array<{ timestamp: string }> = JSON.parse(localStorage.getItem('dp_anuncios') || '[]');
+    const ultimaVista = localStorage.getItem('dp_anuncios_ultima_vista') || '0';
+    return anuncios.filter(a => a.timestamp > ultimaVista).length;
+  } catch { return 0; }
+}
 
 interface SidebarProps {
   currentView: ViewType;
@@ -84,6 +92,17 @@ export function Sidebar({
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [alertasSeguridad] = useState(() => getAlertasNoLeidas());
+  const [anunciosNoLeidos, setAnunciosNoLeidos] = useState(() => getAnunciosNoLeidos());
+
+  useEffect(() => {
+    const update = () => setAnunciosNoLeidos(getAnunciosNoLeidos());
+    window.addEventListener('storage', update);
+    window.addEventListener('dp_anuncios_changed', update);
+    return () => {
+      window.removeEventListener('storage', update);
+      window.removeEventListener('dp_anuncios_changed', update);
+    };
+  }, []);
 
   const allMenuGroups: MenuGroup[] = [
     {
@@ -284,6 +303,11 @@ export function Sidebar({
                           {(!isCollapsed || isMobile) && item.id === 'seguridad' && alertasSeguridad > 0 && (
                             <span className="ml-auto bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-ag-pulse-glow">
                               {alertasSeguridad}
+                            </span>
+                          )}
+                          {(!isCollapsed || isMobile) && item.id === 'comunicaciones' && anunciosNoLeidos > 0 && (
+                            <span className="ml-auto bg-indigo-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full animate-ag-pulse-glow">
+                              {anunciosNoLeidos}
                             </span>
                           )}
                           {isActive && (!isCollapsed || isMobile) && (
