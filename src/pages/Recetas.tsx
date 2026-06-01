@@ -174,9 +174,19 @@ const Recetas: React.FC<RecetasProps> = ({
     const ingredientesDisponibles = useMemo(() => productos.filter(p => p.tipo === 'ingrediente'), [productos]);
 
     const categoriasDeInsumos = useMemo(() => {
-        const cats = new Set(ingredientesDisponibles.map(p => p.categoria).filter(Boolean));
-        return Array.from(cats).sort();
-    }, [ingredientesDisponibles]);
+        // Solo categorías donde la mayoría (>50%) de productos son tipo 'ingrediente'
+        const catMap = new Map<string, { total: number; ing: number }>();
+        productos.filter(p => p.categoria).forEach(p => {
+            const e = catMap.get(p.categoria!) ?? { total: 0, ing: 0 };
+            e.total++;
+            if (p.tipo === 'ingrediente') e.ing++;
+            catMap.set(p.categoria!, e);
+        });
+        return Array.from(catMap.entries())
+            .filter(([, v]) => v.total > 0 && v.ing / v.total > 0.5)
+            .map(([cat]) => cat)
+            .sort();
+    }, [productos]);
 
     const ingredientesFiltrados = useMemo(() =>
         categoriasInsumosFiltro.length === 0
@@ -897,10 +907,10 @@ const Recetas: React.FC<RecetasProps> = ({
                                                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filtrar por categoría:</span>
                                                     {categoriasInsumosFiltro.length > 0 && <button onClick={() => setCategoriasInsumosFiltro([])} className="text-[10px] text-rose-500 font-black ml-auto">Limpiar</button>}
                                                 </div>
-                                                <div className="flex flex-wrap gap-1.5">
+                                                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
                                                     {categoriasDeInsumos.map(cat => (
                                                         <button key={cat} onClick={() => setCategoriasInsumosFiltro(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
-                                                            className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase border transition-all",
+                                                            className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase border transition-all whitespace-nowrap flex-shrink-0",
                                                                 categoriasInsumosFiltro.includes(cat)
                                                                     ? "bg-indigo-600 text-white border-indigo-600"
                                                                     : "bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 hover:border-indigo-400"
@@ -1070,17 +1080,19 @@ const Recetas: React.FC<RecetasProps> = ({
                                 </div>
 
                                 {categoriasDeInsumos.length > 1 && (
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <Filter className="w-3.5 h-3.5 text-slate-400" />
-                                        {categoriasDeInsumos.map(cat => (
-                                            <button key={cat} onClick={() => setFCategoriasInsumosF(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
-                                                className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border transition-all",
-                                                    fCategoriasInsumosF.includes(cat) ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-50 text-slate-500 border-slate-200 hover:border-indigo-400"
-                                                )}>
-                                                {cat}
-                                            </button>
-                                        ))}
-                                        {fCategoriasInsumosF.length > 0 && <button onClick={() => setFCategoriasInsumosF([])} className="text-[10px] text-rose-500 font-black ml-2">Limpiar</button>}
+                                    <div className="flex items-center gap-2">
+                                        <Filter className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                                        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin flex-1">
+                                            {categoriasDeInsumos.map(cat => (
+                                                <button key={cat} onClick={() => setFCategoriasInsumosF(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
+                                                    className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border transition-all whitespace-nowrap flex-shrink-0",
+                                                        fCategoriasInsumosF.includes(cat) ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-50 text-slate-500 border-slate-200 hover:border-indigo-400"
+                                                    )}>
+                                                    {cat}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        {fCategoriasInsumosF.length > 0 && <button onClick={() => setFCategoriasInsumosF([])} className="text-[10px] text-rose-500 font-black flex-shrink-0">Limpiar</button>}
                                     </div>
                                 )}
 
