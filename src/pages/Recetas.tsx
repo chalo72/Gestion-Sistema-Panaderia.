@@ -198,7 +198,25 @@ const Recetas: React.FC<RecetasProps> = ({
     }, [isDistribucionOpen]);
 
     // ── Listas derivadas ──────────────────────────────────────────────────
-    const ingredientesDisponibles = useMemo(() => productos.filter(p => p.tipo === 'ingrediente'), [productos]);
+    // Un producto es válido si tiene nombre real (no UUID, no vacío, no JSON)
+    const esNombreValido = (nombre: string | undefined) =>
+        !!nombre &&
+        nombre.trim().length > 1 &&
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(nombre) &&
+        !nombre.startsWith('{');
+
+    // Insumo si: tipo === 'ingrediente'  OR  su categoría está marcada como 'insumo' en la config
+    // Esto recupera productos que llegaron de Supabase con tipo=null (mapeado a 'elaborado') pero
+    // cuya categoría (ej. "INS: Panadería") sí está correctamente marcada como 'insumo'.
+    const ingredientesDisponibles = useMemo(() => {
+        const insumoCateg = catTipoMap.size > 0
+            ? new Set(Array.from(catTipoMap.entries()).filter(([, t]) => t === 'insumo').map(([c]) => c))
+            : new Set<string>();
+        return productos.filter(p =>
+            esNombreValido(p.nombre) &&
+            (p.tipo === 'ingrediente' || (p.categoria && insumoCateg.has(p.categoria)))
+        );
+    }, [productos, catTipoMap]);
 
     // Categorías que son de insumos: usa el tipo configurado en la BD; si no hay config, usa
     // heurística estricta (100% de productos deben ser tipo 'ingrediente')
@@ -229,15 +247,22 @@ const Recetas: React.FC<RecetasProps> = ({
         if (catTipoMap.size > 0) {
             return productos
                 .filter(p => {
+                    if (!esNombreValido(p.nombre)) return false;
                     if (p.tipo === 'ingrediente') return false;
                     if (!p.categoria) return true;
-                    return catTipoMap.get(p.categoria) === 'venta';
+                    const catTipo = catTipoMap.get(p.categoria);
+                    if (catTipo === 'insumo') return false;
+                    return catTipo === 'venta';
                 })
                 .sort((a, b) => a.nombre.localeCompare(b.nombre));
         }
         const insumoCats = new Set(categoriasDeInsumos);
         return productos
-            .filter(p => p.tipo !== 'ingrediente' && !insumoCats.has(p.categoria || ''))
+            .filter(p =>
+                esNombreValido(p.nombre) &&
+                p.tipo !== 'ingrediente' &&
+                !insumoCats.has(p.categoria || '')
+            )
             .sort((a, b) => a.nombre.localeCompare(b.nombre));
     }, [productos, catTipoMap, categoriasDeInsumos]);
 
