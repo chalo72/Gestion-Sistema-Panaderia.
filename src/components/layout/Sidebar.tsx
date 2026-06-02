@@ -25,7 +25,8 @@ import {
   Store,
   Building2,
   MessageCircle,
-  CalendarCheck
+  CalendarCheck,
+  RefreshCw
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -38,6 +39,7 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useState, useEffect } from 'react';
 import { getAlertasNoLeidas } from '@/lib/security-agent';
+import { useAutoUpdate } from '@/hooks/useAutoUpdate';
 
 function getAnunciosNoLeidos(): number {
   try {
@@ -95,6 +97,7 @@ export function Sidebar({
   const [open, setOpen] = useState(false);
   const [alertasSeguridad] = useState(() => getAlertasNoLeidas());
   const [anunciosNoLeidos, setAnunciosNoLeidos] = useState(() => getAnunciosNoLeidos());
+  const { recargar, updateAvailable } = useAutoUpdate();
 
   useEffect(() => {
     const update = () => setAnunciosNoLeidos(getAnunciosNoLeidos());
@@ -354,16 +357,37 @@ export function Sidebar({
 
       {/* Footer */}
       <div className={cn(
-        "flex-none p-4 border-t border-white/[0.06] bg-[#0f172a] transition-all",
-        isCollapsed && !isMobile ? "p-2 items-center" : ""
+        "flex-none border-t border-white/[0.06] bg-[#0f172a] transition-all",
+        isCollapsed && !isMobile ? "p-2" : "p-3"
       )}>
+        {/* Botón Actualizar App — siempre visible */}
+        <button
+          onClick={recargar}
+          title="Limpiar caché y cargar la versión más reciente"
+          className={cn(
+            "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 transition-all text-left",
+            updateAvailable
+              ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 animate-pulse"
+              : "text-slate-500 hover:bg-white/[0.06] hover:text-slate-300",
+            isCollapsed && !isMobile ? "justify-center px-2" : ""
+          )}
+        >
+          <RefreshCw className={cn("w-4 h-4 flex-shrink-0", updateAvailable ? "text-emerald-400" : "")} />
+          {(!isCollapsed || isMobile) && (
+            <span className="text-[11px] font-bold truncate">
+              {updateAvailable ? "¡Actualizar!" : "Actualizar App"}
+            </span>
+          )}
+        </button>
+
+        {/* Info de versión */}
         {(!isCollapsed || isMobile) ? (
-          <div className="text-xs text-slate-500 text-center space-y-1 animate-ag-fade-in">
-            <p className="font-semibold text-[#ff007f]/80">Panaderia Dulce Placer</p>
+          <div className="text-xs text-slate-600 text-center mt-2 space-y-0.5">
+            <p className="font-semibold text-[#ff007f]/60">Panaderia Dulce Placer</p>
             <p>v5.1-NEXUS • {role}</p>
           </div>
         ) : (
-          <div className="flex justify-center text-[8px] font-bold text-[#ff007f]">DP</div>
+          <div className="flex justify-center mt-1 text-[8px] font-bold text-[#ff007f]/60">DP</div>
         )}
       </div>
     </div>
