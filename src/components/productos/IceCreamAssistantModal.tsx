@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ChevronRight, ChevronLeft, Check, X, Plus, Trash2, Minus } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Check, X, Plus, Trash2, Minus, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogHeader } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +87,7 @@ export function IceCreamAssistantModal({
     const [precioVentaManual, setPrecioVentaManual] = useState('');
     const [configsGuardadas, setConfigsGuardadas] = useState<Record<string, BaseConfig>>({});
     const [addingExtra, setAddingExtra]           = useState(false);
+    const [editingExtraIdx, setEditingExtraIdx]   = useState<number | null>(null);
     const [extraForm, setExtraForm]               = useState({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
 
     // ── Filtros ───────────────────────────────────────────────────────────────
@@ -221,26 +222,42 @@ export function IceCreamAssistantModal({
         setBolasLista(prev => prev.length > 1 ? prev.filter(b => b.id !== id) : prev);
 
     const openAddExtra = () => {
+        setEditingExtraIdx(null);
         setAddingExtra(true);
         setExtraForm({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
     };
 
+    const openEditExtra = (idx: number) => {
+        const ex = extrasProducto[idx];
+        setEditingExtraIdx(idx);
+        setAddingExtra(true);
+        setExtraForm({
+            productoId:     ex.productoId,
+            unidadesEnPack: ex.unidadesEnPack.toString(),
+            unidad:         ex.unidad,
+            cantidadPorCopa: ex.cantidadPorCopa.toString(),
+        });
+    };
+
     const confirmAddExtra = () => {
         if (!extraForm.productoId || !extraForm.unidadesEnPack) return;
-        const prod    = productos.find(p => p.id === extraForm.productoId);
+        const prod = productos.find(p => p.id === extraForm.productoId);
         if (!prod) return;
         const costoPackTotal  = extraPackCosto;
         const unidadesEnPack  = parseFloat(extraForm.unidadesEnPack) || 1;
         const costoUnitario   = costoPackTotal / unidadesEnPack;
         const cantidadPorCopa = parseFloat(extraForm.cantidadPorCopa) || 1;
         const costoPorCopa    = costoUnitario * cantidadPorCopa;
-        setExtrasProducto(prev => [...prev, {
-            productoId: prod.id, nombre: prod.nombre,
-            costoPackTotal, unidadesEnPack, costoUnitario,
-            unidad: extraForm.unidad, cantidadPorCopa, costoPorCopa,
-        }]);
+        const item = { productoId: prod.id, nombre: prod.nombre, costoPackTotal, unidadesEnPack, costoUnitario, unidad: extraForm.unidad, cantidadPorCopa, costoPorCopa };
+        if (editingExtraIdx !== null) {
+            setExtrasProducto(prev => prev.map((ex, i) => i === editingExtraIdx ? item : ex));
+            toast.success(`${prod.nombre} actualizado`);
+        } else {
+            setExtrasProducto(prev => [...prev, item]);
+            toast.success(`${prod.nombre} añadido — ${formatCurrency(costoUnitario)} c/u`);
+        }
         setAddingExtra(false);
-        toast.success(`${prod.nombre} añadido — $${Math.round(costoUnitario)} c/u`);
+        setEditingExtraIdx(null);
     };
 
     const updateExtraCantidad = (idx: number, newVal: number) =>
@@ -289,11 +306,50 @@ export function IceCreamAssistantModal({
         setMargenVenta(45);
         setPrecioVentaManual('');
         setAddingExtra(false);
+        setEditingExtraIdx(null);
         setExtraForm({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
     };
 
     React.useEffect(() => {
-        if (isOpen) { reset(); setConfigsGuardadas(getStoredConfigs()); }
+        if (!isOpen) return;
+        reset();
+        const v3 = getStoredConfigs();
+        // Migrar configs v2 (perfiles múltiples) → v3 (producto único por perfil)
+        try {
+            const v2Raw = localStorage.getItem('ice_cream_base_configs_v2');
+            if (v2Raw) {
+                const v2 = JSON.parse(v2Raw) as Record<string, any>;
+                let changed = false;
+                for (const [baseName, cfg] of Object.entries(v2)) {
+                    const perfiles: any[] = cfg.perfiles || [];
+                    for (const p of perfiles) {
+                        if (!p.activo) continue;
+                        const nombre = `${baseName} ${p.label}`;
+                        if (!v3[nombre]) {
+                            v3[nombre] = {
+                                bolasLista: Array.from({ length: p.numBolas || 1 }, (_, i) => ({ id: `lg${i}`, pesoGramos: p.pesoGramos || 80 })),
+                                extrasProducto: (p.extras || []).map((ex: any) => ({
+                                    productoId:    ex.productoId || '',
+                                    nombre:        ex.nombre || '',
+                                    costoPackTotal: ex.costoPackTotal || 0,
+                                    unidadesEnPack: ex.cantidadPack || 1,
+                                    costoUnitario: (ex.cantidadPack || 1) > 0 ? (ex.costoPackTotal || 0) / (ex.cantidadPack || 1) : 0,
+                                    unidad:        ex.unidad || 'und',
+                                    cantidadPorCopa: ex.cantidadPorCopa || 1,
+                                    costoPorCopa:  ex.costoPorCopa || 0,
+                                })),
+                                margenVenta:        p.margen || 45,
+                                precioVentaManual:  p.precioVenta || '',
+                                mlPorCaja:          cfg.mlPorCaja || '10000',
+                            };
+                            changed = true;
+                        }
+                    }
+                }
+                if (changed) localStorage.setItem(CONFIGS_KEY, JSON.stringify(v3));
+            }
+        } catch {}
+        setConfigsGuardadas(v3);
     }, [isOpen]);
 
     const STEP_LABELS = ['Cajas', 'Configurar', 'Guardar'];
@@ -517,19 +573,16 @@ export function IceCreamAssistantModal({
                                         <div className="flex-1 min-w-0">
                                             <p className="text-[10px] font-black text-slate-700 truncate">{ex.nombre}</p>
                                             <p className="text-[8px] text-slate-400">
-                                                {formatCurrency(ex.costoPackTotal)} ÷ {ex.unidadesEnPack}{ex.unidad} = {formatCurrency(ex.costoUnitario)} c/u
+                                                {formatCurrency(ex.costoPackTotal)} ÷ {ex.unidadesEnPack} = {formatCurrency(ex.costoUnitario)} c/u · {ex.cantidadPorCopa}{ex.unidad} por copa
                                             </p>
                                         </div>
-                                        <div className="flex items-center gap-1.5 shrink-0">
-                                            <Input type="number" min="0.1" step="0.5"
-                                                value={ex.cantidadPorCopa}
-                                                onChange={e => updateExtraCantidad(i, parseFloat(e.target.value) || 0)}
-                                                className="h-6 w-14 text-center text-[10px] font-black border-slate-200 p-0 rounded-md" />
-                                            <span className="text-[9px] text-slate-400 font-bold">{ex.unidad}</span>
-                                            <span className="text-[10px] font-black text-cyan-700 w-16 text-right">{formatCurrency(ex.costoPorCopa)}</span>
-                                        </div>
+                                        <span className="text-[11px] font-black text-cyan-700 shrink-0">{formatCurrency(ex.costoPorCopa)}</span>
+                                        <button onClick={() => openEditExtra(i)}
+                                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-cyan-600 hover:bg-cyan-50 transition-colors shrink-0">
+                                            <Pencil className="w-3.5 h-3.5" />
+                                        </button>
                                         <button onClick={() => removeExtra(i)}
-                                            className="text-slate-300 hover:text-rose-500 transition-colors shrink-0 ml-1">
+                                            className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-colors shrink-0">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
                                     </div>
@@ -537,7 +590,9 @@ export function IceCreamAssistantModal({
 
                                 {addingExtra ? (
                                     <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 space-y-2.5">
-                                        <p className="text-[9px] font-black uppercase text-cyan-700">Nuevo insumo</p>
+                                        <p className="text-[9px] font-black uppercase text-cyan-700">
+                                            {editingExtraIdx !== null ? `✏️ Editar insumo #${editingExtraIdx + 1}` : 'Nuevo insumo'}
+                                        </p>
 
                                         {/* 1. Seleccionar producto */}
                                         <select value={extraForm.productoId}
@@ -613,9 +668,9 @@ export function IceCreamAssistantModal({
                                             <button onClick={confirmAddExtra}
                                                 disabled={!extraForm.productoId || !extraForm.unidadesEnPack}
                                                 className="flex-1 h-8 bg-cyan-700 text-white rounded-lg text-[10px] font-black hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed">
-                                                ✓ Agregar
+                                                {editingExtraIdx !== null ? '✓ Guardar cambios' : '✓ Agregar'}
                                             </button>
-                                            <button onClick={() => setAddingExtra(false)}
+                                            <button onClick={() => { setAddingExtra(false); setEditingExtraIdx(null); }}
                                                 className="h-8 px-3 bg-white border border-slate-200 text-slate-500 rounded-lg text-[10px] font-black hover:bg-slate-50">
                                                 Cancelar
                                             </button>

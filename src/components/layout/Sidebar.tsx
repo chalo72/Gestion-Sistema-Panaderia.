@@ -360,34 +360,35 @@ export function Sidebar({
         "flex-none border-t border-white/[0.06] bg-[#0f172a] transition-all",
         isCollapsed && !isMobile ? "p-2" : "p-3"
       )}>
-        {/* Botón Actualizar App — siempre visible */}
-        <button
-          onClick={recargar}
-          title="Limpiar caché y cargar la versión más reciente"
-          className={cn(
-            "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 transition-all text-left",
-            updateAvailable
-              ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 animate-pulse"
-              : "text-slate-500 hover:bg-white/[0.06] hover:text-slate-300",
-            isCollapsed && !isMobile ? "justify-center px-2" : ""
-          )}
-        >
-          <RefreshCw className={cn("w-4 h-4 flex-shrink-0", updateAvailable ? "text-emerald-400" : "")} />
-          {(!isCollapsed || isMobile) && (
-            <span className="text-[11px] font-bold truncate">
-              {updateAvailable ? "¡Actualizar!" : "Actualizar App"}
-            </span>
-          )}
-        </button>
+        {/* Botón Actualizar — solo visible cuando hay versión nueva disponible */}
+        {updateAvailable && (
+          <button
+            onClick={recargar}
+            className={cn(
+              "w-full flex items-center gap-2.5 rounded-xl px-3 py-2 mb-2 transition-all",
+              "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 animate-pulse",
+              isCollapsed && !isMobile ? "justify-center px-2" : ""
+            )}
+          >
+            <RefreshCw className="w-4 h-4 flex-shrink-0" />
+            {(!isCollapsed || isMobile) && (
+              <span className="text-[11px] font-bold">¡Nueva versión!</span>
+            )}
+          </button>
+        )}
 
-        {/* Info de versión */}
+        {/* Info de versión — clic para forzar actualización manual */}
         {(!isCollapsed || isMobile) ? (
-          <div className="text-xs text-slate-600 text-center mt-2 space-y-0.5">
+          <button
+            onClick={recargar}
+            title="Toca para forzar actualización"
+            className="w-full text-xs text-slate-600 hover:text-slate-400 text-center space-y-0.5 transition-colors"
+          >
             <p className="font-semibold text-[#ff007f]/60">Panaderia Dulce Placer</p>
             <p>v5.1-NEXUS • {role}</p>
-          </div>
+          </button>
         ) : (
-          <div className="flex justify-center mt-1 text-[8px] font-bold text-[#ff007f]/60">DP</div>
+          <button onClick={recargar} title="Forzar actualización" className="flex justify-center w-full text-[8px] font-bold text-[#ff007f]/60 hover:text-[#ff007f]">DP</button>
         )}
       </div>
     </div>
