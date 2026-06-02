@@ -116,8 +116,13 @@ export function IceCreamAssistantModal({
     // ── Helados existentes (historial) ───────────────────────────────────────
     const heladosProductos = useMemo(() =>
         productos
-            .filter(p => p.categoria === 'HELADOS PRE')
+            .filter(p => (p.categoria || '').trim().toLowerCase() === 'helados pre')
             .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    , [productos]);
+
+    // Categorías únicas para diagnóstico (solo cuando lista vacía)
+    const todasCategorias = useMemo(() =>
+        [...new Set(productos.map(p => p.categoria).filter(Boolean))].sort()
     , [productos]);
 
     // ── Sugerencias de nombre ─────────────────────────────────────────────────
@@ -467,10 +472,23 @@ export function IceCreamAssistantModal({
                     {mode === 'history' && (
                         <>
                             {heladosProductos.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <p className="text-5xl mb-3">🍦</p>
-                                    <p className="text-sm font-black uppercase tracking-widest text-slate-300">Sin helados registrados</p>
-                                    <p className="text-xs text-slate-400 mt-1">Ve a la pestaña "Crear nuevo" para agregar el primero</p>
+                                <div className="space-y-4">
+                                    <div className="text-center py-6">
+                                        <p className="text-4xl mb-2">🍦</p>
+                                        <p className="text-sm font-black uppercase tracking-widest text-slate-300">Sin productos en "HELADOS PRE"</p>
+                                    </div>
+                                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1.5">
+                                        <p className="text-[9px] font-black uppercase text-amber-700 tracking-widest">Categorías encontradas en el sistema ({todasCategorias.length})</p>
+                                        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto">
+                                            {todasCategorias.map(cat => (
+                                                <button key={cat} onClick={() => {/* diagnóstico */}}
+                                                    className="text-[9px] font-bold bg-white border border-amber-200 text-amber-700 px-2 py-1 rounded-lg hover:bg-amber-100">
+                                                    {cat}
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <p className="text-[8px] text-amber-500">Dime cuál de estas es la categoría de tus vasos/bolas</p>
+                                    </div>
                                 </div>
                             ) : (
                                 <div className="space-y-3">
