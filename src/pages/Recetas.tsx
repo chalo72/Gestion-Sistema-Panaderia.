@@ -664,17 +664,160 @@ const Recetas: React.FC<RecetasProps> = ({
             ══════════════════════════════════════════════════════════ */}
             <TabsContent value="maestro" className="m-0 space-y-6 animate-in fade-in">
 
-                {/* Explicación rápida */}
-                <div className="p-5 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 flex items-start gap-4">
-                    <Info className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
-                    <div className="text-sm text-indigo-800 dark:text-indigo-300 font-medium leading-relaxed">
-                        <b>¿Para qué sirve esto?</b> Trabajas con <b>1 Arroba = 11.5 kg de harina</b> como base.
-                        Defines la proporción de cada ingrediente para esa base (la <b>Fórmula Maestra</b>).
-                        Luego creas <b>Modelos de Pan</b> con distintos gramajes: de una misma masa puede salir
-                        un pan de 40 gr o uno de 80 gr. La calculadora te dice cuánto ingrediente preparar
-                        y cuántos panes salen según las arrobas que vayas a trabajar hoy.
-                    </div>
-                </div>
+                {/* ── GUÍA DE INICIO INTELIGENTE ── */}
+                {(() => {
+                    const tieneFormulas  = formulaciones.length > 0;
+                    const tieneModelos   = modelosPan.length > 0;
+                    const tieneRecetas   = recetas.length > 0;
+                    const pasoActivo     = !tieneFormulas ? 1 : !tieneModelos ? 2 : !tieneRecetas ? 3 : 0;
+
+                    const pasos = [
+                        {
+                            n: 1,
+                            titulo: 'Fórmula Maestra',
+                            desc: 'Define qué ingredientes lleva tu masa y en qué proporción por arroba (11.5 kg de harina).',
+                            accion: 'Nueva Fórmula Maestra',
+                            onClick: openCreateFormulacion,
+                            done: tieneFormulas,
+                            count: formulaciones.length,
+                            color: 'indigo',
+                        },
+                        {
+                            n: 2,
+                            titulo: 'Modelo de Pan',
+                            desc: 'Asigna el gramaje a cada presentación. De una misma masa puede salir pan de 40 g o de 80 g.',
+                            accion: 'Nuevo Modelo de Pan',
+                            onClick: () => openCreateModelo(),
+                            done: tieneModelos,
+                            count: modelosPan.length,
+                            color: 'violet',
+                        },
+                        {
+                            n: 3,
+                            titulo: 'Receta del Producto',
+                            desc: 'Vincula la receta a un producto del catálogo para calcular costos y márgenes automáticamente.',
+                            accion: 'Nueva Receta',
+                            onClick: openCreateReceta,
+                            done: tieneRecetas,
+                            count: recetas.length,
+                            color: 'blue',
+                        },
+                    ] as const;
+
+                    const colorMap = {
+                        indigo: {
+                            ring:   'ring-indigo-500',
+                            bg:     'bg-indigo-600',
+                            bgSoft: 'bg-indigo-50 dark:bg-indigo-900/20',
+                            border: 'border-indigo-200 dark:border-indigo-800',
+                            text:   'text-indigo-700 dark:text-indigo-300',
+                            badge:  'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600',
+                            btn:    'bg-indigo-600 hover:bg-indigo-700',
+                        },
+                        violet: {
+                            ring:   'ring-violet-500',
+                            bg:     'bg-violet-600',
+                            bgSoft: 'bg-violet-50 dark:bg-violet-900/20',
+                            border: 'border-violet-200 dark:border-violet-800',
+                            text:   'text-violet-700 dark:text-violet-300',
+                            badge:  'bg-violet-100 dark:bg-violet-900/40 text-violet-600',
+                            btn:    'bg-violet-600 hover:bg-violet-700',
+                        },
+                        blue: {
+                            ring:   'ring-blue-500',
+                            bg:     'bg-blue-600',
+                            bgSoft: 'bg-blue-50 dark:bg-blue-900/20',
+                            border: 'border-blue-200 dark:border-blue-800',
+                            text:   'text-blue-700 dark:text-blue-300',
+                            badge:  'bg-blue-100 dark:bg-blue-900/40 text-blue-600',
+                            btn:    'bg-blue-600 hover:bg-blue-700',
+                        },
+                    };
+
+                    return (
+                        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                            {/* Encabezado */}
+                            <div className="px-5 py-4 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                                <div className="w-7 h-7 rounded-lg bg-slate-200 dark:bg-slate-700 flex items-center justify-center flex-shrink-0">
+                                    <ListOrdered className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-black text-slate-800 dark:text-white">¿Por dónde empiezo?</p>
+                                    <p className="text-[11px] text-slate-500">
+                                        {pasoActivo === 0
+                                            ? '✅ Todo configurado — puedes seguir agregando más fórmulas, modelos y recetas.'
+                                            : `Completa los 3 pasos en orden para tener el sistema funcionando.`}
+                                    </p>
+                                </div>
+                                {pasoActivo === 0 && (
+                                    <span className="ml-auto text-[10px] font-black uppercase bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 px-2.5 py-1 rounded-full">Completo</span>
+                                )}
+                            </div>
+
+                            {/* Pasos */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-slate-800">
+                                {pasos.map((paso) => {
+                                    const c = colorMap[paso.color];
+                                    const esActivo  = pasoActivo === paso.n;
+                                    const esDone    = paso.done;
+                                    const esBloqueado = paso.n > pasoActivo && pasoActivo !== 0;
+                                    return (
+                                        <div key={paso.n}
+                                            className={cn('p-5 flex flex-col gap-3 transition-colors',
+                                                esActivo  ? `${c.bgSoft}` : 'bg-white dark:bg-slate-900',
+                                                esDone && !esActivo ? 'opacity-70' : '',
+                                            )}>
+                                            {/* Número y estado */}
+                                            <div className="flex items-center gap-3">
+                                                <div className={cn('w-8 h-8 rounded-full flex items-center justify-center text-sm font-black flex-shrink-0 transition-all',
+                                                    esDone    ? 'bg-emerald-500 text-white'
+                                                    : esActivo ? `${c.bg} text-white ring-4 ${c.ring}/30`
+                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                                                )}>
+                                                    {esDone ? <Check className="w-4 h-4" /> : paso.n}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={cn('text-sm font-black truncate',
+                                                        esActivo ? c.text : esDone ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'
+                                                    )}>
+                                                        {paso.titulo}
+                                                    </p>
+                                                    {esDone && (
+                                                        <span className={cn('text-[10px] font-bold', c.badge.split(' ').slice(-1)[0])}>
+                                                            {paso.count} {paso.count === 1 ? 'creada' : 'creadas'}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Descripción */}
+                                            <p className={cn('text-xs leading-relaxed',
+                                                esActivo ? c.text : 'text-slate-400 dark:text-slate-500'
+                                            )}>
+                                                {paso.desc}
+                                            </p>
+
+                                            {/* Botón de acción */}
+                                            {esActivo && (
+                                                <Button onClick={paso.onClick}
+                                                    className={cn('w-full rounded-xl h-9 text-xs font-black text-white gap-1.5 mt-auto', c.btn)}>
+                                                    <Plus className="w-3.5 h-3.5" />
+                                                    {paso.accion}
+                                                </Button>
+                                            )}
+                                            {esDone && (
+                                                <button onClick={paso.onClick}
+                                                    className="text-[11px] text-slate-400 hover:text-slate-600 font-bold flex items-center gap-1 mt-auto">
+                                                    <Plus className="w-3 h-3" /> Agregar otra
+                                                </button>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                })()}
 
                 {/* Acciones principales */}
                 <div className="flex flex-wrap items-center gap-3 justify-end">
