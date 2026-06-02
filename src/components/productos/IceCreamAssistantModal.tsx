@@ -91,7 +91,7 @@ export function IceCreamAssistantModal({
     const insumosLista = useMemo(() => productos.filter(p => {
         const cat = (p.categoria || '').toLowerCase();
         const n   = p.nombre.toLowerCase();
-        return (cat.includes('helado') || n.includes('helado')) && p.tipo !== 'elaborado';
+        return (cat.includes('helado') || n.includes('helado') || n.includes('caja') || n.includes('10l')) && p.tipo !== 'elaborado';
     }), [productos]);
 
     const extrasDisponibles = useMemo(() => productos.filter(p => {
@@ -112,12 +112,15 @@ export function IceCreamAssistantModal({
             totalC += cajas;
         });
 
-        // Promedio SIMPLE de precios entre sabores seleccionados (no ponderado por cajas)
-        const sumPrecios = cajasSeleccionadas.reduce((s, { id }) => {
-            const precio = parseFloat(precios.find(pr => pr.productoId === id)?.precioCosto?.toString() || '0');
-            return s + precio;
-        }, 0);
-        const promedio = cajasSeleccionadas.length > 0 ? sumPrecios / cajasSeleccionadas.length : 0;
+        // Promedio sobre TODOS los precios de TODOS los proveedores de cada caja seleccionada
+        let sumTodosPrecios = 0, countTodos = 0;
+        cajasSeleccionadas.forEach(({ id }) => {
+            precios.filter(pr => pr.productoId === id).forEach(pr => {
+                const v = parseFloat(pr.precioCosto?.toString() || '0');
+                if (v > 0) { sumTodosPrecios += v; countTodos++; }
+            });
+        });
+        const promedio = countTodos > 0 ? sumTodosPrecios / countTodos : 0;
 
         return {
             totalCostoCajas:   totalCostoInvertido,
