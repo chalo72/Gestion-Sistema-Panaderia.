@@ -403,7 +403,7 @@ export function ProveedorForm({
         ...prodActual,
         uid: editingUid || generateUUID(),
         precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
-        costoUnitario: Math.round(costUnit / 100) * 100,
+        costoUnitario: Math.round(costUnit),
         precioVenta: Math.round(sellPrice / 100) * 100,
         precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1) / 100) * 100,
         stockRecibido: prodActual.stockRecibido,
@@ -451,7 +451,7 @@ export function ProveedorForm({
       ...prodActual,
       uid: editingUid || generateUUID(),
       precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
-      costoUnitario: Math.round(costUnit / 100) * 100,
+      costoUnitario: Math.round(costUnit),
       precioVenta: Math.round(sellPrice / 100) * 100,
       precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1) / 100) * 100,
       stockRecibido: prodActual.stockRecibido
@@ -1361,7 +1361,7 @@ export function ProveedorForm({
                           <Label className="text-[10px] font-black uppercase tracking-widest text-blue-500 ml-1">Costo Unitario</Label>
                           <div className="relative group flex">
                               <CurrencyInput
-                                value={costUnit > 0 ? Math.round(costUnit / 100) * 100 : 0}
+                                value={costUnit > 0 ? Math.round(costUnit) : 0}
                                 onChange={(val) => {
                                   // [Nexus-Volt] Si cambia el unitario, recalculamos el total de la paca (precioCosto)
                                   setProdActual(prev => ({ 
