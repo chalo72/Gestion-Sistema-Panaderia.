@@ -114,17 +114,9 @@ export function IceCreamAssistantModal({
     }), [productos]);
 
     // ── Helados existentes (historial) ───────────────────────────────────────
-    // Incluye cualquier categoría con 'helado' que NO sea de insumos (INS:, ingrediente, insumo)
     const heladosProductos = useMemo(() =>
         productos
-            .filter(p => {
-                const cat = (p.categoria || '').toLowerCase();
-                const tipo = (p.tipo || '').toLowerCase();
-                return cat.includes('helado')
-                    && !cat.startsWith('ins')
-                    && tipo !== 'ingrediente'
-                    && tipo !== 'insumo';
-            })
+            .filter(p => p.categoria === 'HELADOS PRE')
             .sort((a, b) => a.nombre.localeCompare(b.nombre))
     , [productos]);
 
@@ -321,7 +313,7 @@ export function IceCreamAssistantModal({
         setLoading(true);
         const datos = {
             nombre,
-            categoria:      'Helados',
+            categoria:      'HELADOS PRE',
             descripcion:    `${bolasLista.length} bola(s) × ${bolasLista.map(b => b.pesoGramos + 'g').join(' + ')} = ${totalGramos}g. Costo: ${formatCurrency(costoTotal)}.`,
             precioVenta:    Math.round(precioFinal),
             margenUtilidad: margenReal.toFixed(0),
