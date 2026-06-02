@@ -172,7 +172,7 @@ const Recetas: React.FC<RecetasProps> = ({
     }, [isDistribucionOpen]);
 
     // ── Listas derivadas ──────────────────────────────────────────────────
-    const productosElaborados = useMemo(() => productos.filter(p => p.tipo !== 'ingrediente'), [productos]);
+    const productosElaborados = useMemo(() => productos.filter(p => p.tipo === 'elaborado'), [productos]);
     const ingredientesDisponibles = useMemo(() => productos.filter(p => p.tipo === 'ingrediente'), [productos]);
 
     const categoriasDeInsumos = useMemo(() => {
@@ -861,7 +861,7 @@ const Recetas: React.FC<RecetasProps> = ({
                                     <div className="md:col-span-1 space-y-6">
                                         <div className="space-y-3">
                                             <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Producto que se elabora</Label>
-                                            <Select value={selectedProductoId} onValueChange={setSelectedProductoId} disabled={!!editingReceta}>
+                                            <Select value={selectedProductoId} onValueChange={setSelectedProductoId}>
                                                 <SelectTrigger className="rounded-2xl bg-slate-50 dark:bg-slate-800 border-slate-200 h-12"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
                                                 <SelectContent>{productosElaborados.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}</SelectContent>
                                             </Select>
@@ -909,13 +909,13 @@ const Recetas: React.FC<RecetasProps> = ({
                                                     <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filtrar por categoría:</span>
                                                     {categoriasInsumosFiltro.length > 0 && <button onClick={() => setCategoriasInsumosFiltro([])} className="text-[10px] text-rose-500 font-black ml-auto">Limpiar</button>}
                                                 </div>
-                                                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-thin">
+                                                <div className="flex flex-wrap gap-1.5">
                                                     {categoriasDeInsumos.map(cat => (
                                                         <button key={cat} onClick={() => setCategoriasInsumosFiltro(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
-                                                            className={cn("px-3 py-1 rounded-full text-[10px] font-black uppercase border transition-all whitespace-nowrap flex-shrink-0",
+                                                            className={cn("px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border transition-all",
                                                                 categoriasInsumosFiltro.includes(cat)
-                                                                    ? "bg-indigo-600 text-white border-indigo-600"
-                                                                    : "bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 hover:border-indigo-400"
+                                                                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                                                                    : "bg-white dark:bg-slate-800 text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-500"
                                                             )}>
                                                             {cat}
                                                         </button>
