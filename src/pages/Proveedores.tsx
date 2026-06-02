@@ -637,22 +637,28 @@ export function Proveedores({
     const preciosExistentes = getInsumosValidos(proveedor.id);
     const itemsPreCargados: ProductoCatalogo[] = preciosExistentes.map(precio => {
       const prod = getProductoById(precio.productoId);
+      const cantEmb = precio.cantidadEmbalaje || 1;
+      const costoUnit = cantEmb > 0 ? precio.precioCosto / cantEmb : precio.precioCosto;
+      const margenCalc = prod?.margenUtilidad || 30;
+      // Usar precio guardado si > 0; si no, calcularlo desde costo + margen en vivo
+      const precioVentaCalc = (prod?.precioVenta && prod.precioVenta > 0)
+        ? prod.precioVenta
+        : (costoUnit > 0 ? Math.round(costoUnit * (1 + margenCalc / 100)) : 0);
       return {
         uid: precio.id,
         productoId: precio.productoId,
         nombre: prod?.nombre || 'Producto eliminado',
         categoria: prod?.categoria || CATEGORIAS_PROD[0],
         precioCosto: precio.precioCosto,
-        margenVenta: prod?.margenUtilidad || 30,
-        cantidadEmbalaje: precio.cantidadEmbalaje || 1,
+        margenVenta: margenCalc,
+        cantidadEmbalaje: cantEmb,
         tipoEmbalaje: (precio.tipoEmbalaje as any) || 'unidad',
-        // Fallback inteligente: primero el campo guardado, luego el tipo del producto
         destino: precio.destino || (prod?.tipo === 'elaborado' ? 'venta' : 'insumo'),
         notas: precio.notas || '',
-        costoUnitario: (precio.cantidadEmbalaje && precio.cantidadEmbalaje > 0) ? Math.round(precio.precioCosto / precio.cantidadEmbalaje) : precio.precioCosto,
-        precioVenta: Math.round(prod?.precioVenta || 0),
-        precioVentaPack: prod?.precioVenta ? Math.round(prod.precioVenta * (precio.cantidadEmbalaje || 1)) : 0,
-        stockRecibido: 0, // Campo requerido por la interfaz ProductoCatalogo
+        costoUnitario: cantEmb > 0 ? Math.round(precio.precioCosto / cantEmb) : precio.precioCosto,
+        precioVenta: precioVentaCalc,
+        precioVentaPack: Math.round(precioVentaCalc * cantEmb),
+        stockRecibido: 0,
       };
     });
     setCatalogoParaForm(itemsPreCargados);
@@ -1184,9 +1190,13 @@ export function Proveedores({
                                     const precioCosto = precio.precioCosto;
                                     const costoUnitario = cantidadEmbalaje > 1 ? Math.round(precioCosto / cantidadEmbalaje) : precioCosto;
                                     const margenVenta = prodItem.margenUtilidad || 0;
-                                    const precioVenta = prodItem.precioVenta || 0;
                                     const costoReal = cantidadEmbalaje > 1 ? precioCosto / cantidadEmbalaje : precioCosto;
-                                    const gananciaU = precioVenta - costoReal;
+                                    // Usar precio guardado si > 0; si no, calcularlo desde costo + margen
+                                    const precioVentaGuardado = prodItem.precioVenta || 0;
+                                    const precioVenta = precioVentaGuardado > 0
+                                      ? precioVentaGuardado
+                                      : (costoReal > 0 && margenVenta > 0 ? Math.round(costoReal * (1 + margenVenta / 100)) : 0);
+                                    const gananciaU = precioVenta > 0 && costoReal > 0 ? precioVenta - costoReal : 0;
                                     
                                     return (
                                       <tr key={precio.id} className="transition-all hover:bg-blue-50/30 dark:hover:bg-blue-900/10 border-l-4 border-transparent group">
@@ -1217,12 +1227,16 @@ export function Proveedores({
                                           {margenVenta}%
                                         </td>
                                         <td className="px-4 py-4 text-right">
-                                          <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(precioVenta)}</p>
+                                          {precioVenta > 0
+                                            ? <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(precioVenta)}</p>
+                                            : <p className="text-sm text-slate-300 dark:text-slate-600">—</p>
+                                          }
                                         </td>
                                         <td className="px-4 py-4 text-right">
-                                          <p className="text-sm font-black text-amber-500 tabular-nums">
-                                            +{formatCurrency(Math.round(gananciaU))}<span className="text-[9px] text-slate-400">/u</span>
-                                          </p>
+                                          {gananciaU > 0
+                                            ? <p className="text-sm font-black text-amber-500 tabular-nums">+{formatCurrency(Math.round(gananciaU))}<span className="text-[9px] text-slate-400">/u</span></p>
+                                            : <p className="text-sm text-slate-300 dark:text-slate-600">—</p>
+                                          }
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                           <div className="flex items-center justify-center gap-1">
