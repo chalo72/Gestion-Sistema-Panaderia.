@@ -286,7 +286,7 @@ describe('CONS-01 — Integridad del código fuente', () => {
   it('CONS-01f: useRealtimeSync.ts tiene pull inteligente con actualizados', () => {
     const src = readSrc('hooks/useRealtimeSync.ts');
     expect(src).toContain('actualizados');
-    expect(src).toContain("['productos', 'proveedores', 'precios', 'inventario'].includes(table)");
+    expect(src).toContain("TABLAS_INMUTABLES.includes(table)");
   });
 
   it('CONS-01g: useRealtimeSync usa removeTombstone solo en loop de restauración cloud', () => {

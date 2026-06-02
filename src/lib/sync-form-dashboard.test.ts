@@ -65,12 +65,12 @@ describe('CAPA 1: ProveedorForm — datos completos en ProductoCatalogo', () => 
     expect(proveedorFormSrc).toContain("destino: DestinoUso");
   });
 
-  it('addProductoCatalogo redondea costoUnitario a centenas', () => {
-    expect(proveedorFormSrc).toContain('costoUnitario: Math.round(costUnit / 100) * 100');
+  it('addProductoCatalogo redondea costoUnitario a peso (sin pérdida COP)', () => {
+    expect(proveedorFormSrc).toContain('costoUnitario: Math.round(costUnit)');
   });
 
-  it('addProductoCatalogo redondea precioVenta a centenas', () => {
-    expect(proveedorFormSrc).toContain('precioVenta: Math.round(sellPrice / 100) * 100');
+  it('addProductoCatalogo redondea precioVenta a peso (sin pérdida COP)', () => {
+    expect(proveedorFormSrc).toContain('precioVenta: Math.round(sellPrice)');
   });
 
   it('handleSave llama onSubmit con formData e items guardados', () => {
@@ -95,7 +95,7 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
   });
 
   it('handleSubmit envía precioCosto al crear precio', () => {
-    expect(proveedoresPageSrc).toContain('precioCosto: Math.round((Number(item.precioCosto)');
+    expect(proveedoresPageSrc).toContain('precioCosto: Math.round(Number(item.precioCosto) || 0)');
   });
 
   it('handleSubmit envía cantidadEmbalaje al crear precio', () => {
@@ -111,11 +111,11 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
   });
 
   it('handleSubmit actualiza producto con precioVenta del formulario (redondeado COP)', () => {
-    expect(proveedoresPageSrc).toContain('precioVenta: Math.round((Number(item.precioVenta)');
+    expect(proveedoresPageSrc).toContain('precioVenta: Math.round(Number(item.precioVenta) || 0)');
   });
 
   it('handleSubmit actualiza producto con costoBase unitario', () => {
-    expect(proveedoresPageSrc).toContain('costoBase: Math.round((Number(item.costoUnitario)');
+    expect(proveedoresPageSrc).toContain('costoBase: Math.round(Number(item.costoUnitario) || 0)');
   });
 
   it('handleSubmit actualiza producto con margenUtilidad', () => {
@@ -148,16 +148,17 @@ describe('CAPA 3: Proveedores.tsx handleEdit — sincronización DB → Form', (
     expect(proveedoresPageSrc).toContain('precioCosto: precio.precioCosto');
   });
 
-  it('handleEdit carga margenVenta desde producto.margenUtilidad', () => {
-    expect(proveedoresPageSrc).toContain('margenVenta: prod?.margenUtilidad');
+  it('handleEdit carga margenVenta desde producto.margenUtilidad con fallback', () => {
+    expect(proveedoresPageSrc).toContain('prod?.margenUtilidad || 30');
   });
 
-  it('handleEdit carga precioVenta desde producto real (no recalcula)', () => {
-    expect(proveedoresPageSrc).toContain('Math.round((prod?.precioVenta || 0) / 100) * 100');
+  it('handleEdit carga precioVenta REAL si > 0, calcula si es 0', () => {
+    // Respeta precio guardado; fallback a costo+margen para insumos sin precio
+    expect(proveedoresPageSrc).toContain('prod?.precioVenta && prod.precioVenta > 0');
   });
 
-  it('handleEdit carga cantidadEmbalaje desde PrecioProveedor', () => {
-    expect(proveedoresPageSrc).toContain('cantidadEmbalaje: precio.cantidadEmbalaje');
+  it('handleEdit carga cantidadEmbalaje desde PrecioProveedor con fallback 1', () => {
+    expect(proveedoresPageSrc).toContain('precio.cantidadEmbalaje || 1');
   });
 
   it('handleEdit carga tipoEmbalaje desde PrecioProveedor', () => {
@@ -165,8 +166,8 @@ describe('CAPA 3: Proveedores.tsx handleEdit — sincronización DB → Form', (
     expect(proveedoresPageSrc).toContain('precio.tipoEmbalaje');
   });
 
-  it('handleEdit calcula costoUnitario = precioCosto / cantidadEmbalaje', () => {
-    expect(proveedoresPageSrc).toContain('precio.precioCosto / precio.cantidadEmbalaje');
+  it('handleEdit calcula costoUnitario = precioCosto / cantEmb', () => {
+    expect(proveedoresPageSrc).toContain('precio.precioCosto / cantEmb');
   });
 
   it('handleEdit carga categoría desde producto real', () => {
@@ -189,11 +190,13 @@ describe('CAPA 4: Dashboard — tabla expandida muestra datos reales', () => {
   });
 
   it('Tabla calcula COSTO/U dividiendo precioCosto / cantidadEmbalaje', () => {
-    expect(proveedoresPageSrc).toContain('precio.precioCosto / precio.cantidadEmbalaje');
+    // Local vars: const precioCosto = precio.precioCosto; const cantidadEmbalaje = precio.cantidadEmbalaje || 1
+    expect(proveedoresPageSrc).toContain('precioCosto / cantidadEmbalaje');
   });
 
   it('Tabla muestra P.VENTA desde el precio de venta del producto', () => {
-    expect(proveedoresPageSrc).toContain("const precioVenta = prodItem.precioVenta");
+    // Usa precioVentaGuardado con fallback calculado si el guardado es 0
+    expect(proveedoresPageSrc).toContain("const precioVentaGuardado = prodItem.precioVenta || 0");
   });
 
   it('Tabla muestra categoría del producto', () => {

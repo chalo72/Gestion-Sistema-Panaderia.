@@ -152,8 +152,7 @@ describe('CAPA 4: Proveedores.tsx sincroniza con módulo de productos', () => {
   });
 
   it('handleSubmit actualiza producto con precioVenta redondeado del formulario', () => {
-    // Se guarda con redondeo a centenas COP
-    expect(proveedoresSrc).toContain('precioVenta: Math.round((Number(item.precioVenta)');
+    expect(proveedoresSrc).toContain('precioVenta: Math.round(Number(item.precioVenta) || 0)');
   });
 
   it('handleSubmit actualiza producto con margenUtilidad', () => {
@@ -161,16 +160,17 @@ describe('CAPA 4: Proveedores.tsx sincroniza con módulo de productos', () => {
   });
 
   it('handleSubmit actualiza producto con costoBase (costo unitario)', () => {
-    expect(proveedoresSrc).toContain('costoBase: Math.round((Number(item.costoUnitario)');
+    expect(proveedoresSrc).toContain('costoBase: Math.round(Number(item.costoUnitario) || 0)');
   });
 
   it('handleEdit carga margenVenta REAL del producto (no hardcodeado)', () => {
-    // Al editar un proveedor, el margen debe venir del producto real
-    expect(proveedoresSrc).toContain('margenVenta: prod?.margenUtilidad');
+    // Al editar un proveedor, el margen viene del producto real con fallback 30
+    expect(proveedoresSrc).toContain('prod?.margenUtilidad || 30');
   });
 
   it('handleEdit carga precioVenta REAL del producto', () => {
-    expect(proveedoresSrc).toContain('Math.round((prod?.precioVenta || 0) / 100) * 100');
+    // Usa el precio guardado si > 0; si no, lo calcula desde costo + margen
+    expect(proveedoresSrc).toContain('prod?.precioVenta && prod.precioVenta > 0');
   });
 });
 

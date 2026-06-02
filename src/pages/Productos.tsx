@@ -480,12 +480,14 @@ export default function Productos({
                 onAddCategoria={handleHandleAddCategoria}
                 nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} coloresPreset={COLORES_PRESET} />
 
-            <IceCreamAssistantModal 
-                isOpen={isIceCreamAssistantOpen} 
+            <IceCreamAssistantModal
+                isOpen={isIceCreamAssistantOpen}
                 onOpenChange={setIsIceCreamAssistantOpen}
                 productos={productos}
                 precios={_precios}
                 onAddProducto={onAddProducto}
+                onUpdateProducto={onUpdateProducto}
+                onDeleteProducto={onDeleteProducto}
                 formatCurrency={formatCurrency}
             />
 

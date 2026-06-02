@@ -62,7 +62,7 @@ describe('CAPA 2 — CADENA: handleSubmit transmite todos los campos a DB', () =
   
   // Campos que handleSubmit DEBE enviar a onAddOrUpdatePrecio
   const camposPrecio = [
-    'precioCosto: Math.round((Number(item.precioCosto)',
+    'precioCosto: Math.round(Number(item.precioCosto) || 0)',
     'cantidadEmbalaje: Number(item.cantidadEmbalaje)',
     'tipoEmbalaje: item.tipoEmbalaje',
     'destino: item.destino',
@@ -77,18 +77,14 @@ describe('CAPA 2 — CADENA: handleSubmit transmite todos los campos a DB', () =
   // Campos que handleSubmit DEBE enviar a onUpdateProducto
   const camposProducto = [
     'nombre: item.nombre',
-    'costoBase: Math.round((Number(item.costoUnitario)',
+    'costoBase: Math.round(Number(item.costoUnitario) || 0)',
     'margenUtilidad: Number(item.margenVenta)',
-    'precioVenta: Number(item.precioVenta)',
+    'precioVenta: Math.round(Number(item.precioVenta) || 0)',
   ];
-  
+
   camposProducto.forEach(campo => {
     it(`Producto → DB: ${campo}`, () => {
-      // precioVenta se guarda con redondeo a centenas COP: Math.round((Number(...) || 0) / 100) * 100
-      const campoReal = campo === 'precioVenta: Number(item.precioVenta)'
-        ? 'precioVenta: Math.round((Number(item.precioVenta)'
-        : campo;
-      expect(proveedoresPage).toContain(campoReal);
+      expect(proveedoresPage).toContain(campo);
     });
   });
 
@@ -111,8 +107,8 @@ describe('CAPA 3 — ESPEJO: handleEdit carga datos exactos desde DB', () => {
     { campo: 'uid', fuente: 'precio.id', desc: 'uid viene del ID del precio, no genera nuevo' },
     { campo: 'productoId', fuente: 'precio.productoId', desc: 'productoId del precio existente' },
     { campo: 'precioCosto', fuente: 'precio.precioCosto', desc: 'costo de paca desde DB' },
-    { campo: 'margenVenta', fuente: 'prod?.margenUtilidad', desc: 'margen desde el producto real' },
-    { campo: 'precioVenta', fuente: 'Math.round((prod?.precioVenta', desc: 'precio venta redondeado COP del producto real' },
+    { campo: 'margenVenta', fuente: 'margenCalc', desc: 'margen desde el producto real con fallback 30' },
+    { campo: 'precioVenta', fuente: 'precioVentaCalc', desc: 'precio venta guardado si > 0, calculado si es 0' },
   ];
 
   mapeosObligatorios.forEach(({ campo, fuente, desc }) => {
@@ -122,7 +118,8 @@ describe('CAPA 3 — ESPEJO: handleEdit carga datos exactos desde DB', () => {
   });
 
   it('handleEdit calcula costoUnitario dividiendo precioCosto / cantidadEmbalaje', () => {
-    expect(proveedoresPage).toContain('precio.precioCosto / precio.cantidadEmbalaje');
+    // cantEmb = precio.cantidadEmbalaje || 1; luego divide entre cantEmb
+    expect(proveedoresPage).toContain('precio.precioCosto / cantEmb');
   });
 
   it('handleEdit carga nombre REAL del producto (no genérico)', () => {
@@ -198,12 +195,12 @@ describe('CAPA 5 — CENTINELA: Fórmulas matemáticas blindadas', () => {
     expect(proveedorForm).toContain('costUnit * (1 + Number(prodActual.margenVenta) / 100)');
   });
 
-  it('Form: costoUnitario redondeado = Math.round(costUnit / 100) * 100', () => {
-    expect(proveedorForm).toContain('Math.round(costUnit / 100) * 100');
+  it('Form: costoUnitario redondeado = Math.round(costUnit)', () => {
+    expect(proveedorForm).toContain('Math.round(costUnit)');
   });
 
-  it('Form: precioVenta redondeado = Math.round(sellPrice / 100) * 100', () => {
-    expect(proveedorForm).toContain('Math.round(sellPrice / 100) * 100');
+  it('Form: precioVenta redondeado = Math.round(sellPrice)', () => {
+    expect(proveedorForm).toContain('Math.round(sellPrice)');
   });
 
   // --- Fórmulas de usePriceControl (addOrUpdatePrecio) ---

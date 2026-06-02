@@ -39,6 +39,8 @@ interface IceCreamAssistantModalProps {
     productos: any[];
     precios: any[];
     onAddProducto: (producto: any) => Promise<any>;
+    onUpdateProducto?: (id: string, updates: any) => void;
+    onDeleteProducto?: (id: string) => void;
     formatCurrency: (val: number) => string;
 }
 
@@ -68,10 +70,14 @@ const nextId = () => `b${_nextId++}`;
 // ─── Componente ───────────────────────────────────────────────────────────────
 
 export function IceCreamAssistantModal({
-    isOpen, onOpenChange, productos, precios, onAddProducto, formatCurrency
+    isOpen, onOpenChange, productos, precios,
+    onAddProducto, onUpdateProducto, onDeleteProducto,
+    formatCurrency
 }: IceCreamAssistantModalProps) {
-    const [step, setStep]       = useState(1);
-    const [loading, setLoading] = useState(false);
+    const [mode, setMode]                         = useState<'wizard' | 'history'>('wizard');
+    const [step, setStep]                         = useState(1);
+    const [loading, setLoading]                   = useState(false);
+    const [editingProductoId, setEditingProductoId] = useState<string | null>(null);
 
     // Paso 1
     interface CajaSeleccionada { id: string; cajas: number; }
@@ -106,6 +112,14 @@ export function IceCreamAssistantModal({
         const kw = ['vaso', 'salsa', 'cono', 'cuchara', 'grajea', 'gragea', 'chispa', 'topping', 'bolsa', 'cucharita'];
         return (p.tipo === 'ingrediente' || p.tipo === 'insumo') && kw.some(k => n.includes(k));
     }), [productos]);
+
+    // ── Helados existentes (historial) ───────────────────────────────────────
+
+    const heladosProductos = useMemo(() =>
+        productos
+            .filter(p => (p.categoria || '').toLowerCase().includes('helado'))
+            .sort((a, b) => a.nombre.localeCompare(b.nombre))
+    , [productos]);
 
     // ── Sugerencias de nombre ─────────────────────────────────────────────────
 
@@ -270,32 +284,60 @@ export function IceCreamAssistantModal({
     const removeExtra = (idx: number) =>
         setExtrasProducto(prev => prev.filter((_, i) => i !== idx));
 
+    // ── openForEdit ──────────────────────────────────────────────────────────
+
+    const openForEdit = (producto: any) => {
+        const cfg = configsGuardadas[producto.nombre];
+        if (cfg) {
+            setBolasLista(cfg.bolasLista?.length ? cfg.bolasLista : [{ id: 'b1', pesoGramos: 80 }]);
+            setExtrasProducto(cfg.extrasProducto || []);
+            setMargenVenta(cfg.margenVenta ?? 45);
+            setPrecioVentaManual(cfg.precioVentaManual || '');
+            if (cfg.mlPorCaja) setMlPorCaja(cfg.mlPorCaja);
+        } else {
+            setBolasLista([{ id: 'b1', pesoGramos: 80 }]);
+            setExtrasProducto([]);
+            setMargenVenta(producto.margenUtilidad ? parseInt(producto.margenUtilidad) : 45);
+            setPrecioVentaManual(producto.precioVenta?.toString() || '');
+        }
+        setNombreBase(producto.nombre);
+        setEditingProductoId(producto.id);
+        setMode('wizard');
+        setStep(2);
+    };
+
     // ── Save ─────────────────────────────────────────────────────────────────
 
     const handleSave = async () => {
         const nombre = nombreBase.trim();
         if (!nombre) { toast.error('Escribe el nombre del producto'); return; }
         setLoading(true);
+        const datos = {
+            nombre,
+            categoria:      'Helados',
+            descripcion:    `${bolasLista.length} bola(s) × ${bolasLista.map(b => b.pesoGramos + 'g').join(' + ')} = ${totalGramos}g. Costo: ${formatCurrency(costoTotal)}.`,
+            precioVenta:    Math.round(precioFinal),
+            margenUtilidad: margenReal.toFixed(0),
+            tipo:           'elaborado',
+            unidadMedida:   'unidad',
+            costoBase:      costoTotal,
+        };
         try {
-            await onAddProducto({
-                nombre,
-                categoria:      'Helados',
-                descripcion:    `${bolasLista.length} bola(s) × ${bolasLista.map(b => b.pesoGramos + 'g').join(' + ')} = ${totalGramos}g. Costo: ${formatCurrency(costoTotal)}.`,
-                precioVenta:    Math.round(precioFinal),
-                margenUtilidad: margenReal.toFixed(0),
-                tipo:           'elaborado',
-                unidadMedida:   'unidad',
-                costoBase:      costoTotal,
-            });
+            if (editingProductoId && onUpdateProducto) {
+                onUpdateProducto(editingProductoId, datos);
+                toast.success(`"${nombre}" actualizado ✓`);
+            } else {
+                await onAddProducto(datos);
+                toast.success(`"${nombre}" creado ✓`);
+            }
             saveConfig(nombre, { bolasLista, extrasProducto, margenVenta, precioVentaManual, mlPorCaja });
-            toast.success(`"${nombre}" creado ✓`);
-            onOpenChange(false);
-            reset();
+            setMode('history');
+            resetWizard();
         } catch { toast.error('Error al guardar'); }
         finally { setLoading(false); }
     };
 
-    const reset = () => {
+    const resetWizard = () => {
         setStep(1);
         setCajasSeleccionadas([]);
         setMlPorCaja('10000');
@@ -307,7 +349,13 @@ export function IceCreamAssistantModal({
         setPrecioVentaManual('');
         setAddingExtra(false);
         setEditingExtraIdx(null);
+        setEditingProductoId(null);
         setExtraForm({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
+    };
+
+    const reset = () => {
+        setMode('wizard');
+        resetWizard();
     };
 
     React.useEffect(() => {
@@ -361,40 +409,141 @@ export function IceCreamAssistantModal({
             <DialogContent className="max-w-3xl p-0 overflow-hidden bg-white rounded-2xl shadow-2xl border-none">
 
                 {/* ── Header ─────────────────────────────────────────────── */}
-                <DialogHeader className="p-4 bg-gradient-to-r from-cyan-600 to-blue-700 text-white shrink-0">
-                    <div className="flex items-center justify-between gap-3">
+                <DialogHeader className="bg-gradient-to-r from-cyan-600 to-blue-700 text-white shrink-0">
+                    <div className="flex items-center justify-between gap-3 px-4 pt-4 pb-3">
                         <div className="flex items-center gap-3 min-w-0">
                             <div className="w-9 h-9 bg-white/20 rounded-xl flex items-center justify-center text-xl shrink-0">🍦</div>
                             <div className="min-w-0">
                                 <DialogTitle className="text-base font-black text-white leading-tight">Asistente de Helados</DialogTitle>
                                 <p className="text-[9px] font-bold text-cyan-100/80 uppercase tracking-widest">
-                                    Paso {step} de 3 — {STEP_LABELS[step - 1]}
+                                    {mode === 'history'
+                                        ? `${heladosProductos.length} producto(s) registrado(s)`
+                                        : `Paso ${step} de 3 — ${STEP_LABELS[step - 1]}`}
                                 </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                            {STEP_LABELS.map((lbl, i) => (
-                                <React.Fragment key={i}>
-                                    <div className={cn(
-                                        'flex items-center justify-center rounded-full font-black transition-all',
-                                        step === i + 1 ? 'w-7 h-7 bg-white text-cyan-700 text-[10px] shadow' :
-                                        step > i + 1  ? 'w-6 h-6 bg-white/40 text-white text-[9px]' :
-                                                        'w-5 h-5 bg-white/15 text-white/50 text-[9px]'
-                                    )}>
-                                        {step > i + 1 ? '✓' : i + 1}
-                                    </div>
-                                    {i < 2 && <div className={cn('h-0.5 w-4 rounded-full', step > i + 1 ? 'bg-white/60' : 'bg-white/20')} />}
-                                </React.Fragment>
-                            ))}
-                        </div>
+                        {mode === 'wizard' && (
+                            <div className="flex items-center gap-1 shrink-0">
+                                {STEP_LABELS.map((lbl, i) => (
+                                    <React.Fragment key={i}>
+                                        <div className={cn(
+                                            'flex items-center justify-center rounded-full font-black transition-all',
+                                            step === i + 1 ? 'w-7 h-7 bg-white text-cyan-700 text-[10px] shadow' :
+                                            step > i + 1  ? 'w-6 h-6 bg-white/40 text-white text-[9px]' :
+                                                            'w-5 h-5 bg-white/15 text-white/50 text-[9px]'
+                                        )}>
+                                            {step > i + 1 ? '✓' : i + 1}
+                                        </div>
+                                        {i < 2 && <div className={cn('h-0.5 w-4 rounded-full', step > i + 1 ? 'bg-white/60' : 'bg-white/20')} />}
+                                    </React.Fragment>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    {/* Pestañas */}
+                    <div className="flex border-t border-white/20">
+                        <button
+                            onClick={() => { setMode('wizard'); resetWizard(); }}
+                            className={cn(
+                                'flex-1 py-2 text-[10px] font-black uppercase tracking-widest transition-all',
+                                mode === 'wizard' ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white/80 hover:bg-white/10'
+                            )}>
+                            + Crear nuevo
+                        </button>
+                        <button
+                            onClick={() => setMode('history')}
+                            className={cn(
+                                'flex-1 py-2 text-[10px] font-black uppercase tracking-widest transition-all',
+                                mode === 'history' ? 'bg-white/20 text-white' : 'text-white/50 hover:text-white/80 hover:bg-white/10'
+                            )}>
+                            Mis Helados {heladosProductos.length > 0 && `(${heladosProductos.length})`}
+                        </button>
                     </div>
                 </DialogHeader>
 
                 {/* ── Contenido ──────────────────────────────────────────── */}
                 <div className="p-5 max-h-[64vh] overflow-y-auto space-y-4">
 
+                    {/* ════════ HISTORIAL — MIS HELADOS ════════ */}
+                    {mode === 'history' && (
+                        <>
+                            {heladosProductos.length === 0 ? (
+                                <div className="text-center py-12">
+                                    <p className="text-5xl mb-3">🍦</p>
+                                    <p className="text-sm font-black uppercase tracking-widest text-slate-300">Sin helados registrados</p>
+                                    <p className="text-xs text-slate-400 mt-1">Ve a la pestaña "Crear nuevo" para agregar el primero</p>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {heladosProductos.map(p => {
+                                        const cfg = configsGuardadas[p.nombre];
+                                        const allPr = precios.filter(pr => pr.productoId === p.id);
+                                        const costoReg = allPr.length > 0
+                                            ? allPr.reduce((s, pr) => s + parseFloat(pr.precioCosto?.toString() || '0'), 0) / allPr.length
+                                            : p.costoBase || 0;
+                                        const precioV = parseFloat(p.precioVenta?.toString() || '0');
+                                        const margen  = precioV > 0 ? ((precioV - costoReg) / precioV * 100) : parseFloat(p.margenUtilidad?.toString() || '0');
+                                        return (
+                                            <div key={p.id} className="bg-white rounded-2xl border-2 border-slate-100 overflow-hidden shadow-sm">
+                                                <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-cyan-50 to-blue-50 border-b border-slate-100">
+                                                    <span className="text-2xl shrink-0">🍦</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-black text-slate-800 text-sm truncate">{p.nombre}</p>
+                                                        <p className="text-[9px] text-slate-400 font-bold">
+                                                            {cfg ? `${cfg.bolasLista?.length || '?'} bola(s) · ${cfg.bolasLista?.reduce((s: number, b: any) => s + b.pesoGramos, 0) || '?'}g` : 'Sin config guardada'}
+                                                            {cfg && <span className="text-cyan-500 ml-1">· Config ✓</span>}
+                                                        </p>
+                                                    </div>
+                                                    <div className="text-right shrink-0">
+                                                        <p className="text-sm font-black text-emerald-600">{formatCurrency(precioV)}</p>
+                                                        <p className={cn(
+                                                            'text-[9px] font-black',
+                                                            margen >= 30 ? 'text-emerald-500' : margen >= 15 ? 'text-amber-500' : 'text-rose-500'
+                                                        )}>{margen.toFixed(0)}% margen</p>
+                                                    </div>
+                                                </div>
+                                                {cfg && cfg.extrasProducto?.length > 0 && (
+                                                    <div className="px-3 py-2 flex flex-wrap gap-1.5 border-b border-slate-50">
+                                                        {cfg.extrasProducto.map((ex: ExtraCopa, i: number) => (
+                                                            <span key={i} className="text-[8px] font-bold bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                                                                {ex.cantidadPorCopa}{ex.unidad} {ex.nombre.split(' ')[0]}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <div className="flex">
+                                                    <button
+                                                        onClick={() => openForEdit(p)}
+                                                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black text-cyan-600 hover:bg-cyan-50 transition-colors border-r border-slate-100">
+                                                        <Pencil className="w-3.5 h-3.5" /> Editar
+                                                    </button>
+                                                    {onDeleteProducto ? (
+                                                        <button
+                                                            onClick={() => {
+                                                                if (confirm(`¿Eliminar "${p.nombre}"?`)) {
+                                                                    onDeleteProducto(p.id);
+                                                                    toast.success(`"${p.nombre}" eliminado`);
+                                                                }
+                                                            }}
+                                                            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[10px] font-black text-rose-500 hover:bg-rose-50 transition-colors">
+                                                            <Trash2 className="w-3.5 h-3.5" /> Eliminar
+                                                        </button>
+                                                    ) : (
+                                                        <div className="flex-1 flex items-center justify-center py-2.5 text-[9px] text-slate-300">
+                                                            Eliminar desde Productos
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
+                    )}
+
                     {/* ════════ PASO 1 — CAJAS ════════ */}
-                    {step === 1 && (
+                    {mode === 'wizard' && step === 1 && (
                         <>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
@@ -493,7 +642,7 @@ export function IceCreamAssistantModal({
                     )}
 
                     {/* ════════ PASO 2 — CONFIGURAR PRODUCTO ════════ */}
-                    {step === 2 && (
+                    {mode === 'wizard' && step === 2 && (
                         <>
                             {/* ─ Nombre con autocompletado ─ */}
                             <div className="relative">
@@ -757,7 +906,7 @@ export function IceCreamAssistantModal({
                     )}
 
                     {/* ════════ PASO 3 — CONFIRMAR Y GUARDAR ════════ */}
-                    {step === 3 && (
+                    {mode === 'wizard' && step === 3 && (
                         <>
                             <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3">
                                 <p className="text-xs font-black text-cyan-800">Confirma el producto antes de guardarlo en el catálogo</p>
@@ -823,22 +972,36 @@ export function IceCreamAssistantModal({
 
                 {/* ── Footer ─────────────────────────────────────────────── */}
                 <div className="p-4 border-t border-slate-100 flex gap-3 shrink-0 bg-white">
-                    <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onOpenChange(false)}
-                        className="h-11 px-5 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-slate-600">
-                        {step === 1 ? 'Cerrar' : <><ChevronLeft className="w-4 h-4 mr-1" />Atrás</>}
-                    </Button>
-                    {step < 3 ? (
-                        <Button
-                            disabled={step === 1 && selectedIds.length === 0}
-                            onClick={() => setStep(step + 1)}
-                            className="h-11 flex-1 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-700 hover:to-blue-800 text-white text-xs font-black uppercase rounded-xl shadow-lg shadow-cyan-100">
-                            Siguiente <ChevronRight className="w-4 h-4 ml-1" />
+                    {mode === 'history' ? (
+                        <Button variant="ghost" onClick={() => onOpenChange(false)}
+                            className="h-11 px-5 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-slate-600">
+                            Cerrar
                         </Button>
                     ) : (
-                        <Button disabled={loading || !nombreBase.trim()} onClick={handleSave}
-                            className="h-11 flex-1 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-700 hover:to-blue-800 text-white text-xs font-black uppercase rounded-xl shadow-lg shadow-cyan-100">
-                            {loading ? 'Guardando…' : 'Guardar producto ✓'}
-                        </Button>
+                        <>
+                            <Button variant="ghost"
+                                onClick={() => {
+                                    if (step > 1) setStep(step - 1);
+                                    else if (editingProductoId) { setMode('history'); resetWizard(); }
+                                    else onOpenChange(false);
+                                }}
+                                className="h-11 px-5 rounded-xl text-xs font-black uppercase text-slate-400 hover:text-slate-600">
+                                {step === 1 && !editingProductoId ? 'Cerrar' : <><ChevronLeft className="w-4 h-4 mr-1" />Atrás</>}
+                            </Button>
+                            {step < 3 ? (
+                                <Button
+                                    disabled={step === 1 && selectedIds.length === 0 && !editingProductoId}
+                                    onClick={() => setStep(step + 1)}
+                                    className="h-11 flex-1 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-700 hover:to-blue-800 text-white text-xs font-black uppercase rounded-xl shadow-lg shadow-cyan-100">
+                                    Siguiente <ChevronRight className="w-4 h-4 ml-1" />
+                                </Button>
+                            ) : (
+                                <Button disabled={loading || !nombreBase.trim()} onClick={handleSave}
+                                    className="h-11 flex-1 bg-gradient-to-r from-cyan-600 to-blue-700 hover:from-cyan-700 hover:to-blue-800 text-white text-xs font-black uppercase rounded-xl shadow-lg shadow-cyan-100">
+                                    {loading ? 'Guardando…' : editingProductoId ? 'Actualizar producto ✓' : 'Guardar producto ✓'}
+                                </Button>
+                            )}
+                        </>
                     )}
                 </div>
 

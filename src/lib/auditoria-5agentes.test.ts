@@ -176,14 +176,14 @@ describe('CAPA 1 — FORTALEZA: Errores corregidos no deben regresar', () => {
   describe('FIX-7: Dashboard Proveedores costoU redondeado COP', () => {
     const src = readSrc('pages/Proveedores.tsx');
 
-    it('costoU en tabla expandida usa Math.round / 100 * 100', () => {
-      // Buscar la línea de costoU con redondeo
-      expect(src).toMatch(/costoU\s*=.*Math\.round\(precio\.precioCosto\s*\/\s*precio\.cantidadEmbalaje\s*\/\s*100\)\s*\*\s*100/);
+    it('costoU en tabla expandida usa Math.round sin pérdida de precisión', () => {
+      // Redondeo a peso (no a centenas) para preservar precisión en COP
+      expect(src).toMatch(/costoU\s*=.*Math\.round\(precio\.precioCosto\s*\/\s*\(precio\.cantidadEmbalaje/);
     });
 
     it('costoU NO tiene división sin redondeo', () => {
       const lines = src.split('\n');
-      const costoULine = lines.find(l => l.includes('const costoU') && l.includes('precioCosto / precio.cantidadEmbalaje'));
+      const costoULine = lines.find(l => l.includes('const costoU') && l.includes('Math.round'));
       expect(costoULine).toBeTruthy();
       expect(costoULine).toContain('Math.round');
     });
@@ -192,21 +192,23 @@ describe('CAPA 1 — FORTALEZA: Errores corregidos no deben regresar', () => {
   describe('FIX-8: handleEdit carga datos redondeados COP', () => {
     const src = readSrc('pages/Proveedores.tsx');
 
-    it('costoUnitario en handleEdit usa Math.round / 100 * 100', () => {
-      // Buscar en sección handleEdit
+    it('costoUnitario en handleEdit usa Math.round', () => {
+      // Busca en sección handleEdit: costoUnitario con Math.round
       const editSection = src.substring(
-        src.indexOf('costoUnitario: precio.cantidadEmbalaje'),
-        src.indexOf('costoUnitario: precio.cantidadEmbalaje') + 200
+        src.indexOf('const handleEdit'),
+        src.indexOf('const handleEdit') + 1500
       );
       expect(editSection).toContain('Math.round');
+      expect(editSection).toContain('precioCosto');
     });
 
-    it('precioVenta en handleEdit usa Math.round', () => {
-      expect(src).toContain('Math.round((prod?.precioVenta || 0) / 100) * 100');
+    it('precioVenta en handleEdit usa precio guardado si > 0', () => {
+      // Respeta el precio guardado; calcula desde costo+margen solo si el guardado es 0
+      expect(src).toContain('prod?.precioVenta && prod.precioVenta > 0');
     });
 
-    it('precioVentaPack en handleEdit usa Math.round', () => {
-      expect(src).toContain('Math.round(prod.precioVenta *');
+    it('precioVentaPack en handleEdit usa Math.round con precioVentaCalc', () => {
+      expect(src).toContain('Math.round(precioVentaCalc *');
     });
   });
 
