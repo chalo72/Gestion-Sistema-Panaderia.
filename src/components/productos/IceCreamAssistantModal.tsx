@@ -122,23 +122,22 @@ export function IceCreamAssistantModal({
     const mlPorCajaNum = parseFloat(mlPorCaja) || 10000;
 
     const { totalCostoCajas, totalMlDisponible, promedioMaestro, totalCajas } = useMemo(() => {
-        let totalCostoInvertido = 0, totalC = 0;
+        let totalCosto = 0, totalC = 0;
         cajasSeleccionadas.forEach(({ id, cajas }) => {
-            const precio = parseFloat(precios.find(pr => pr.productoId === id)?.precioCosto?.toString() || '0');
-            totalCostoInvertido += precio * cajas;
+            // Promedio de todos los precios registrados de ESTA caja (todos los proveedores)
+            const vals = precios
+                .filter(pr => pr.productoId === id)
+                .map(pr => parseFloat(pr.precioCosto?.toString() || '0'))
+                .filter(v => v > 0);
+            const precioPromCaja = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+            totalCosto += precioPromCaja * cajas;
             totalC += cajas;
         });
-        let sumTodosPrecios = 0, countTodos = 0;
-        cajasSeleccionadas.forEach(({ id }) => {
-            precios.filter(pr => pr.productoId === id).forEach(pr => {
-                const v = parseFloat(pr.precioCosto?.toString() || '0');
-                if (v > 0) { sumTodosPrecios += v; countTodos++; }
-            });
-        });
         return {
-            totalCostoCajas:   totalCostoInvertido,
+            totalCostoCajas:   totalCosto,
             totalMlDisponible: totalC * mlPorCajaNum,
-            promedioMaestro:   countTodos > 0 ? sumTodosPrecios / countTodos : 0,
+            // Promedio ponderado por cantidad: cuánto cuesta en promedio cada caja que tengo
+            promedioMaestro:   totalC > 0 ? totalCosto / totalC : 0,
             totalCajas:        totalC,
         };
     }, [cajasSeleccionadas, precios, mlPorCajaNum]);
