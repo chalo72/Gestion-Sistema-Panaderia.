@@ -854,11 +854,11 @@ const Recetas: React.FC<RecetasProps> = ({
             <Dialog open={isRecetaOpen} onOpenChange={setIsRecetaOpen}>
                 <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
                     <div className="h-2 w-full bg-gradient-to-r from-indigo-500 to-blue-500" />
-                    <div className="p-8">
-                        <DialogHeader className="mb-8">
+                    <div className="p-4 sm:p-8">
+                        <DialogHeader className="mb-4 sm:mb-8">
                             <div className="flex items-center gap-3 mb-2">
                                 <ChefHat className="w-6 h-6 text-blue-600" />
-                                <DialogTitle className="text-2xl font-bold">{editingReceta ? 'Editar Receta' : 'Nueva Receta'}</DialogTitle>
+                                <DialogTitle className="text-2xl font-bold text-slate-900">{editingReceta ? 'Editar Receta' : 'Nueva Receta'}</DialogTitle>
                             </div>
                             <DialogDescription>Define insumos, costos y el paso a paso de elaboración</DialogDescription>
                         </DialogHeader>
@@ -870,7 +870,7 @@ const Recetas: React.FC<RecetasProps> = ({
                             </TabsList>
 
                             <TabsContent value="insumos" className="space-y-8">
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8">
                                     <div className="md:col-span-1 space-y-6">
                                         <div className="space-y-3">
                                             <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Producto que se elabora</Label>
@@ -960,8 +960,8 @@ const Recetas: React.FC<RecetasProps> = ({
 
                                         <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2">
                                             {recipeIngredients.map(ing => (
-                                                <div key={ing.id} className="grid grid-cols-12 gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 items-center">
-                                                    <div className="col-span-12 md:col-span-5">
+                                                <div key={ing.id} className="flex flex-wrap gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 items-center">
+                                                    <div className="w-full">
                                                         <Select value={ing.productoId} onValueChange={v => handleIngChange(ing.id!, 'productoId', v)}>
                                                             <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue placeholder="Insumo..." /></SelectTrigger>
                                                             <SelectContent>
@@ -981,10 +981,10 @@ const Recetas: React.FC<RecetasProps> = ({
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
-                                                    <div className="col-span-4 md:col-span-2">
+                                                    <div className="flex-1 min-w-[80px]">
                                                         <Input type="number" value={ing.cantidad || ''} onChange={e => handleIngChange(ing.id!, 'cantidad', Number(e.target.value))} className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200" placeholder="Cant." />
                                                     </div>
-                                                    <div className="col-span-4 md:col-span-2">
+                                                    <div className="flex-1 min-w-[80px]">
                                                         <Select value={ing.unidad} onValueChange={v => handleIngChange(ing.id!, 'unidad', v)}>
                                                             <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue /></SelectTrigger>
                                                             <SelectContent>
@@ -992,12 +992,10 @@ const Recetas: React.FC<RecetasProps> = ({
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
-                                                    <div className="col-span-3 md:col-span-2 text-right">
+                                                    <div className="flex-1 min-w-[70px] text-right">
                                                         <span className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(ing.costoCalculado || 0)}</span>
                                                     </div>
-                                                    <div className="col-span-1">
-                                                        <Button onClick={() => setRecipeIngredients(p => p.filter(i => i.id !== ing.id))} variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-500/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
-                                                    </div>
+                                                    <Button onClick={() => setRecipeIngredients(p => p.filter(i => i.id !== ing.id))} variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-500/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
                                                 </div>
                                             ))}
                                             {recipeIngredients.length === 0 && <div className="text-center py-8 text-slate-400 text-sm">Aún no hay insumos. Presiona "Agregar".</div>}
@@ -1011,7 +1009,7 @@ const Recetas: React.FC<RecetasProps> = ({
                             </TabsContent>
 
                             <TabsContent value="tecnica" className="space-y-8 animate-in fade-in">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-8">
                                     <div className="space-y-6">
                                         <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Parámetros de Cocción</h3>
                                         <div className="grid grid-cols-2 gap-4">
@@ -1085,11 +1083,11 @@ const Recetas: React.FC<RecetasProps> = ({
             <Dialog open={isFormulacionOpen} onOpenChange={setIsFormulacionOpen}>
                 <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
                     <div className="h-2 w-full bg-gradient-to-r from-indigo-500 to-violet-500" />
-                    <div className="p-8">
-                        <DialogHeader className="mb-8">
+                    <div className="p-4 sm:p-8">
+                        <DialogHeader className="mb-4 sm:mb-8">
                             <div className="flex items-center gap-3 mb-2">
                                 <Scale className="w-6 h-6 text-indigo-600" />
-                                <DialogTitle className="text-2xl font-bold">{editingFormulacion ? 'Editar Fórmula Maestra' : 'Nueva Fórmula Maestra'}</DialogTitle>
+                                <DialogTitle className="text-2xl font-bold text-slate-900">{editingFormulacion ? 'Editar Fórmula Maestra' : 'Nueva Fórmula Maestra'}</DialogTitle>
                             </div>
                             <DialogDescription>Define la proporción de ingredientes por arroba (11.5 kg de harina)</DialogDescription>
                         </DialogHeader>
@@ -1146,28 +1144,26 @@ const Recetas: React.FC<RecetasProps> = ({
 
                                 <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
                                     {fIngredientes.map(ing => (
-                                        <div key={ing.id} className="grid grid-cols-12 gap-3 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 items-center">
-                                            <div className="col-span-12 md:col-span-5">
+                                        <div key={ing.id} className="flex flex-wrap gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 items-center">
+                                            <div className="w-full">
                                                 <Select value={ing.productoId} onValueChange={v => updateIngFormulacion(ing.id!, 'productoId', v)}>
                                                     <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue placeholder="Ingrediente..." /></SelectTrigger>
                                                     <SelectContent>{ingredientesFiltradosF.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}</SelectContent>
                                                 </Select>
                                             </div>
-                                            <div className="col-span-4 md:col-span-2">
+                                            <div className="flex-1 min-w-[80px]">
                                                 <Input type="number" value={ing.cantidadPorArroba || ''} onChange={e => updateIngFormulacion(ing.id!, 'cantidadPorArroba', Number(e.target.value))} className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200" placeholder="Cant." />
                                             </div>
-                                            <div className="col-span-4 md:col-span-2">
+                                            <div className="flex-1 min-w-[80px]">
                                                 <Select value={ing.unidad} onValueChange={v => updateIngFormulacion(ing.id!, 'unidad', v)}>
                                                     <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue /></SelectTrigger>
                                                     <SelectContent>{['gr', 'kg', 'ml', 'l', 'und'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                                                 </Select>
                                             </div>
-                                            <div className="col-span-3 md:col-span-2 text-right">
+                                            <div className="flex-1 min-w-[70px] text-right">
                                                 <span className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(ing.costoTotalArroba || 0)}</span>
                                             </div>
-                                            <div className="col-span-1">
-                                                <Button onClick={() => removeIngFormulacion(ing.id!)} variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-500/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
-                                            </div>
+                                            <Button onClick={() => removeIngFormulacion(ing.id!)} variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-500/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
                                         </div>
                                     ))}
                                     {fIngredientes.length === 0 && <div className="text-center py-8 text-slate-400 text-sm">Agrega los ingredientes para esta fórmula.</div>}
@@ -1224,11 +1220,11 @@ const Recetas: React.FC<RecetasProps> = ({
             <Dialog open={isModeloOpen} onOpenChange={setIsModeloOpen}>
                 <DialogContent className="max-w-lg rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
                     <div className="h-2 w-full bg-gradient-to-r from-amber-400 to-orange-500" />
-                    <div className="p-8">
+                    <div className="p-4 sm:p-8">
                         <DialogHeader className="mb-6">
                             <div className="flex items-center gap-3 mb-2">
                                 <Package className="w-6 h-6 text-amber-600" />
-                                <DialogTitle className="text-xl font-bold">{editingModelo ? 'Editar Modelo de Pan' : 'Nuevo Modelo de Pan'}</DialogTitle>
+                                <DialogTitle className="text-xl font-bold text-slate-900">{editingModelo ? 'Editar Modelo de Pan' : 'Nuevo Modelo de Pan'}</DialogTitle>
                             </div>
                             <DialogDescription>Define el gramaje y precio de este modelo. Las unidades por arroba se calculan solas.</DialogDescription>
                         </DialogHeader>
@@ -1309,11 +1305,11 @@ const Recetas: React.FC<RecetasProps> = ({
             <Dialog open={isDistribucionOpen} onOpenChange={setIsDistribucionOpen}>
                 <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
                     <div className="h-2 w-full bg-gradient-to-r from-emerald-400 to-teal-500" />
-                    <div className="p-8">
+                    <div className="p-4 sm:p-8">
                         <DialogHeader className="mb-6">
                             <div className="flex items-center gap-3 mb-2">
                                 <PieChart className="w-6 h-6 text-emerald-600" />
-                                <DialogTitle className="text-xl font-bold">
+                                <DialogTitle className="text-xl font-bold text-slate-900">
                                     Distribución por Arroba — {distribucionFormulacion?.nombre}
                                 </DialogTitle>
                             </div>
@@ -1499,8 +1495,8 @@ function PasoEditor({ paso, index, total, onUpdate, onRemove, onMove, onImage }:
         <div className="flex gap-3 p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800">
             <div className="w-7 h-7 rounded-full bg-indigo-600 text-white text-[11px] font-black flex items-center justify-center shrink-0 mt-0.5">{index + 1}</div>
             <div className="flex-1 space-y-2.5 min-w-0">
-                <Input value={paso.titulo || ''} onChange={e => onUpdate(paso.id, 'titulo', e.target.value)} placeholder={`Título del paso ${index + 1} (opcional)`} className="h-9 rounded-xl bg-white dark:bg-slate-900 border-slate-200 text-sm font-bold" />
-                <textarea value={paso.descripcion} onChange={e => onUpdate(paso.id, 'descripcion', e.target.value)} placeholder="Describe qué hay que hacer..." rows={2} className="w-full rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-medium leading-relaxed focus:ring-2 focus:ring-indigo-500/20 focus:outline-none placeholder:text-slate-400 resize-none" />
+                <Input value={paso.titulo || ''} onChange={e => onUpdate(paso.id, 'titulo', e.target.value)} placeholder={`Título del paso ${index + 1} (opcional)`} className="h-9 rounded-xl bg-white dark:bg-slate-900 border-slate-200 text-sm font-bold text-slate-900" />
+                <textarea value={paso.descripcion} onChange={e => onUpdate(paso.id, 'descripcion', e.target.value)} placeholder="Describe qué hay que hacer..." rows={2} className="w-full rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-medium text-slate-900 leading-relaxed focus:ring-2 focus:ring-indigo-500/20 focus:outline-none placeholder:text-slate-400 resize-none" />
                 {paso.imagenBase64 ? (
                     <div className="relative group/img">
                         <img src={paso.imagenBase64} alt={`Paso ${index + 1}`} className="w-full h-36 object-cover rounded-xl border border-slate-200" />
