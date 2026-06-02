@@ -15,7 +15,8 @@ import {
     DialogFooter, DialogDescription
 } from '@/components/ui/dialog';
 import {
-    Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+    SelectGroup, SelectLabel
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Label } from '@/components/ui/label';
@@ -931,7 +932,19 @@ const Recetas: React.FC<RecetasProps> = ({
                                                         <Select value={ing.productoId} onValueChange={v => handleIngChange(ing.id!, 'productoId', v)}>
                                                             <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue placeholder="Insumo..." /></SelectTrigger>
                                                             <SelectContent>
-                                                                {ingredientesFiltrados.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                                                                {Array.from(
+                                                                    ingredientesFiltrados.reduce((map, p) => {
+                                                                        const cat = p.categoria || 'Sin categoría';
+                                                                        if (!map.has(cat)) map.set(cat, []);
+                                                                        map.get(cat)!.push(p);
+                                                                        return map;
+                                                                    }, new Map<string, typeof ingredientesFiltrados>())
+                                                                ).sort(([a], [b]) => a.localeCompare(b)).map(([cat, prods]) => (
+                                                                    <SelectGroup key={cat}>
+                                                                        <SelectLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500 px-2 py-1">{cat}</SelectLabel>
+                                                                        {prods.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                                                                    </SelectGroup>
+                                                                ))}
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
