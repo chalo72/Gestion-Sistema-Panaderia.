@@ -6,7 +6,7 @@ import {
     UtensilsCrossed, Save, AlertCircle, Thermometer, Timer, Gauge, Clock,
     Scale, TrendingUp, Info, History as HistoryIcon, Camera, X, ArrowUp,
     ArrowDown, ListOrdered, Filter, Calculator, ChevronDown, ChevronUp,
-    Package, Wheat, Percent, Tag, PieChart, Layers3, Check
+    Package, Wheat, Percent, Tag, PieChart, Layers3, Check, Wrench, RefreshCw
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -129,6 +129,47 @@ const Recetas: React.FC<RecetasProps> = ({
         }).catch(() => {});
     }, []);
 
+    // ── Reparación de insumos + jalón desde Supabase ──────────────────────
+    // productosReparados: null = usar prop, array = usar reparados (post-sync)
+    const [productosReparados, setProductosReparados] = useState<any[] | null>(null);
+    const [reparando, setReparando] = useState(false);
+
+    const repararYSincronizar = async () => {
+        setReparando(true);
+        try {
+            toast.info('Sincronizando con la nube…');
+            await db.syncCloudToLocal().catch(() => {});
+
+            const todos = await db.getAllProductos();
+            const cfg   = await db.getConfiguracion().catch(() => null);
+            const insumoCategs = new Set<string>(
+                (cfg?.categorias ?? []).filter((c: any) => c.tipo === 'insumo').map((c: any) => c.nombre as string)
+            );
+
+            let reparados = 0;
+            const productosActualizados = await Promise.all(todos.map(async (p: any) => {
+                const esInsumo = p.tipo === 'ingrediente' || (p.categoria && insumoCategs.has(p.categoria));
+                if (esInsumo && p.tipo !== 'ingrediente') {
+                    const actualizado = { ...p, tipo: 'ingrediente' };
+                    await db.updateProducto(actualizado).catch(() => {});
+                    reparados++;
+                    return actualizado;
+                }
+                return p;
+            }));
+
+            setProductosReparados(productosActualizados);
+            setCatTipoMap(new Map(
+                (cfg?.categorias ?? []).map((c: any) => [c.nombre, c.tipo || 'venta'])
+            ));
+            toast.success(`✅ Sincronizado: ${todos.length} productos · ${reparados} tipos reparados`);
+        } catch {
+            toast.error('Error durante la reparación');
+        } finally {
+            setReparando(false);
+        }
+    };
+
     // ── Búsqueda global ───────────────────────────────────────────────────
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -198,6 +239,9 @@ const Recetas: React.FC<RecetasProps> = ({
     }, [isDistribucionOpen]);
 
     // ── Listas derivadas ──────────────────────────────────────────────────
+    // Fuente activa: reparados (post-sync) si existen, sino la prop normal
+    const productosEfectivos = productosReparados ?? productos;
+
     // Un producto es válido si tiene nombre real (no UUID, no vacío, no JSON)
     const esNombreValido = (nombre: string | undefined) =>
         !!nombre &&
@@ -212,11 +256,11 @@ const Recetas: React.FC<RecetasProps> = ({
         const insumoCateg = catTipoMap.size > 0
             ? new Set(Array.from(catTipoMap.entries()).filter(([, t]) => t === 'insumo').map(([c]) => c))
             : new Set<string>();
-        return productos.filter(p =>
+        return productosEfectivos.filter((p: any) =>
             esNombreValido(p.nombre) &&
             (p.tipo === 'ingrediente' || (p.categoria && insumoCateg.has(p.categoria)))
         );
-    }, [productos, catTipoMap]);
+    }, [productosEfectivos, catTipoMap]);
 
     // Categorías que son de insumos: usa el tipo configurado en la BD; si no hay config, usa
     // heurística estricta (100% de productos deben ser tipo 'ingrediente')
@@ -228,7 +272,7 @@ const Recetas: React.FC<RecetasProps> = ({
                 .sort();
         }
         const catMap = new Map<string, { total: number; ing: number }>();
-        productos.filter(p => p.categoria).forEach(p => {
+        productosEfectivos.filter((p: any) => p.categoria).forEach((p: any) => {
             const e = catMap.get(p.categoria!) ?? { total: 0, ing: 0 };
             e.total++;
             if (p.tipo === 'ingrediente') e.ing++;
@@ -238,15 +282,15 @@ const Recetas: React.FC<RecetasProps> = ({
             .filter(([, v]) => v.total > 0 && v.ing === v.total)
             .map(([cat]) => cat)
             .sort();
-    }, [productos, catTipoMap]);
+    }, [productosEfectivos, catTipoMap]);
 
     // Productos elaborados en la panadería: excluye categorías de insumos y categorías de venta
     // que claramente son de reventa (bebidas, snacks). Si catTipoMap está cargado, solo muestra
     // productos cuya categoría es 'venta'; si no, excluye las categorías de insumos detectadas.
     const productosElaborados = useMemo(() => {
         if (catTipoMap.size > 0) {
-            return productos
-                .filter(p => {
+            return productosEfectivos
+                .filter((p: any) => {
                     if (!esNombreValido(p.nombre)) return false;
                     if (p.tipo === 'ingrediente') return false;
                     if (!p.categoria) return true;
@@ -254,17 +298,17 @@ const Recetas: React.FC<RecetasProps> = ({
                     if (catTipo === 'insumo') return false;
                     return catTipo === 'venta';
                 })
-                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+                .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
         }
         const insumoCats = new Set(categoriasDeInsumos);
-        return productos
-            .filter(p =>
+        return productosEfectivos
+            .filter((p: any) =>
                 esNombreValido(p.nombre) &&
                 p.tipo !== 'ingrediente' &&
                 !insumoCats.has(p.categoria || '')
             )
-            .sort((a, b) => a.nombre.localeCompare(b.nombre));
-    }, [productos, catTipoMap, categoriasDeInsumos]);
+            .sort((a: any, b: any) => a.nombre.localeCompare(b.nombre));
+    }, [productosEfectivos, catTipoMap, categoriasDeInsumos]);
 
     // Categorías disponibles para filtrar el selector de producto elaborado
     const categoriasVenta = useMemo(() => {
@@ -606,6 +650,19 @@ const Recetas: React.FC<RecetasProps> = ({
                         <Input placeholder="Buscar..." className="pl-12 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl h-14 text-sm font-medium w-full"
                             value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                     </div>
+                    <Button
+                        onClick={repararYSincronizar}
+                        disabled={reparando}
+                        variant="outline"
+                        className="h-14 px-5 rounded-2xl border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shrink-0"
+                        title="Sincroniza con la nube y repara los tipos de insumos automáticamente"
+                    >
+                        {reparando
+                            ? <RefreshCw className="w-4 h-4 animate-spin" />
+                            : <Wrench className="w-4 h-4" />
+                        }
+                        {reparando ? 'Reparando…' : 'Reparar insumos'}
+                    </Button>
                 </div>
             </div>
 
