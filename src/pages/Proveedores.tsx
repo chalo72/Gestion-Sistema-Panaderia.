@@ -1185,7 +1185,7 @@ export function Proveedores({
                                     const cantidadEmbalaje = precio.cantidadEmbalaje || 1;
                                     const tipoEmbalaje = precio.tipoEmbalaje || 'unidad';
                                     const precioCosto = precio.precioCosto;
-                                    const costoUnitario = cantidadEmbalaje > 1 ? Math.round(precioCosto / cantidadEmbalaje / 100) * 100 : precioCosto;
+                                    const costoUnitario = cantidadEmbalaje > 1 ? Math.round(precioCosto / cantidadEmbalaje) : precioCosto;
                                     const margenVenta = prodItem.margenUtilidad || 0;
                                     const precioVenta = prodItem.precioVenta || 0;
                                     const costoReal = cantidadEmbalaje > 1 ? precioCosto / cantidadEmbalaje : precioCosto;
@@ -1224,7 +1224,7 @@ export function Proveedores({
                                         </td>
                                         <td className="px-4 py-4 text-right">
                                           <p className="text-sm font-black text-amber-500 tabular-nums">
-                                            +{formatCurrency(Math.round(gananciaU / 100) * 100)}<span className="text-[9px] text-slate-400">/u</span>
+                                            +{formatCurrency(Math.round(gananciaU))}<span className="text-[9px] text-slate-400">/u</span>
                                           </p>
                                         </td>
                                         <td className="px-6 py-4 text-center">
@@ -1272,7 +1272,7 @@ export function Proveedores({
                         const productosAnalisis = insumos.map(precio => {
                           const prod = getProductoById(precio.productoId);
                           const cantEmb = precio.cantidadEmbalaje || 1;
-                          const costoU = Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100;
+                          const costoU = Math.round(precio.precioCosto / (precio.cantidadEmbalaje || 1));
                           const pventa = prod?.precioVenta || 0;
                           const gananciaU = pventa - costoU;
                           const margenPct = costoU > 0 && pventa > 0 ? ((pventa - costoU) / costoU) * 100 : 0;
@@ -1357,7 +1357,7 @@ export function Proveedores({
                                       <span className="text-base shrink-0">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '⭐'}</span>
                                       <div className="flex-1 min-w-0">
                                         <p className="text-xs font-black text-slate-800 dark:text-white uppercase truncate">{p.nombre}</p>
-                                        <p className="text-[9px] text-slate-400 font-bold">×{p.cantEmb} und · {formatCurrency(Math.round(p.gananciaU / 100) * 100)}/u · margen {p.margenPct.toFixed(0)}%</p>
+                                        <p className="text-[9px] text-slate-400 font-bold">×{p.cantEmb} und · {formatCurrency(Math.round(p.gananciaU))}/u · margen {p.margenPct.toFixed(0)}%</p>
                                         <div className="mt-1 h-1 bg-slate-100 dark:bg-slate-800 rounded-full">
                                           <div className="h-full bg-emerald-400 rounded-full transition-all" style={{ width: `${pctDelTotal}%` }} />
                                         </div>
