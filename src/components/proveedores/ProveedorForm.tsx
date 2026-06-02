@@ -1,4 +1,4 @@
-﻿import { generateUUID } from '@/lib/safe-utils';
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
