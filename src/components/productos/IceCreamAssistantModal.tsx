@@ -117,7 +117,7 @@ export function IceCreamAssistantModal({
     // El asistente guarda siempre categoria='Helados' (exacto) + tipo='elaborado'
     const heladosProductos = useMemo(() =>
         productos
-            .filter(p => p.tipo === 'elaborado' && p.categoria === 'Helados')
+            .filter(p => p.tipo === 'elaborado' && (p.categoria || '').toLowerCase() === 'helados')
             .sort((a, b) => a.nombre.localeCompare(b.nombre))
     , [productos]);
 
