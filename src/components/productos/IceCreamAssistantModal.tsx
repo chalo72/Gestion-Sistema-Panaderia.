@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 interface ExtraCopa {
     productoId: string;
     nombre: string;
+    costoPackTotal: number;
+    unidadesEnPack: number;
     costoUnitario: number;
     unidad: string;
     cantidadPorCopa: number;
@@ -85,7 +87,7 @@ export function IceCreamAssistantModal({
     const [precioVentaManual, setPrecioVentaManual] = useState('');
     const [configsGuardadas, setConfigsGuardadas] = useState<Record<string, BaseConfig>>({});
     const [addingExtra, setAddingExtra]           = useState(false);
-    const [extraForm, setExtraForm]               = useState({ productoId: '', unidad: 'und', cantidadPorCopa: '1' });
+    const [extraForm, setExtraForm]               = useState({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
 
     // ── Filtros ───────────────────────────────────────────────────────────────
 
@@ -167,17 +169,21 @@ export function IceCreamAssistantModal({
 
     // ── Preview costo insumo ──────────────────────────────────────────────────
 
-    const extraUnitarioCosto = useMemo(() => {
+    const extraPackCosto = useMemo(() => {
         if (!extraForm.productoId) return 0;
         const precObj = precios.find(pr => pr.productoId === extraForm.productoId);
         return parseFloat(precObj?.precioCosto?.toString() || '0');
     }, [extraForm.productoId, precios]);
 
+    const extraUnitarioCosto = useMemo(() => {
+        const pack = parseFloat(extraForm.unidadesEnPack) || 0;
+        return pack > 0 ? extraPackCosto / pack : extraPackCosto;
+    }, [extraPackCosto, extraForm.unidadesEnPack]);
+
     const extraPreviewCosto = useMemo(() => {
-        if (!extraForm.productoId) return 0;
         const porCopa = parseFloat(extraForm.cantidadPorCopa) || 1;
         return extraUnitarioCosto * porCopa;
-    }, [extraForm.cantidadPorCopa, extraUnitarioCosto]);
+    }, [extraUnitarioCosto, extraForm.cantidadPorCopa]);
 
     // ── Handlers paso 1 ──────────────────────────────────────────────────────
 
@@ -216,23 +222,25 @@ export function IceCreamAssistantModal({
 
     const openAddExtra = () => {
         setAddingExtra(true);
-        setExtraForm({ productoId: '', unidad: 'und', cantidadPorCopa: '1' });
+        setExtraForm({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
     };
 
     const confirmAddExtra = () => {
-        if (!extraForm.productoId) return;
+        if (!extraForm.productoId || !extraForm.unidadesEnPack) return;
         const prod    = productos.find(p => p.id === extraForm.productoId);
-        const precObj = precios.find(pr => pr.productoId === extraForm.productoId);
         if (!prod) return;
-        const costoUnitario   = parseFloat(precObj?.precioCosto?.toString() || '0');
+        const costoPackTotal  = extraPackCosto;
+        const unidadesEnPack  = parseFloat(extraForm.unidadesEnPack) || 1;
+        const costoUnitario   = costoPackTotal / unidadesEnPack;
         const cantidadPorCopa = parseFloat(extraForm.cantidadPorCopa) || 1;
         const costoPorCopa    = costoUnitario * cantidadPorCopa;
         setExtrasProducto(prev => [...prev, {
-            productoId: prod.id, nombre: prod.nombre, costoUnitario,
+            productoId: prod.id, nombre: prod.nombre,
+            costoPackTotal, unidadesEnPack, costoUnitario,
             unidad: extraForm.unidad, cantidadPorCopa, costoPorCopa,
         }]);
         setAddingExtra(false);
-        toast.success(`${prod.nombre} añadido`);
+        toast.success(`${prod.nombre} añadido — $${Math.round(costoUnitario)} c/u`);
     };
 
     const updateExtraCantidad = (idx: number, newVal: number) =>
@@ -281,7 +289,7 @@ export function IceCreamAssistantModal({
         setMargenVenta(45);
         setPrecioVentaManual('');
         setAddingExtra(false);
-        setExtraForm({ productoId: '', unidad: 'und', cantidadPorCopa: '1' });
+        setExtraForm({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
     };
 
     React.useEffect(() => {
@@ -508,7 +516,9 @@ export function IceCreamAssistantModal({
                                     <div key={i} className="bg-slate-50 rounded-lg border border-slate-100 p-2.5 flex items-center gap-2">
                                         <div className="flex-1 min-w-0">
                                             <p className="text-[10px] font-black text-slate-700 truncate">{ex.nombre}</p>
-                                            <p className="text-[8px] text-slate-400">{formatCurrency(ex.costoUnitario)} c/u registrado</p>
+                                            <p className="text-[8px] text-slate-400">
+                                                {formatCurrency(ex.costoPackTotal)} ÷ {ex.unidadesEnPack}{ex.unidad} = {formatCurrency(ex.costoUnitario)} c/u
+                                            </p>
                                         </div>
                                         <div className="flex items-center gap-1.5 shrink-0">
                                             <Input type="number" min="0.1" step="0.5"
@@ -526,16 +536,17 @@ export function IceCreamAssistantModal({
                                 ))}
 
                                 {addingExtra ? (
-                                    <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 space-y-2">
+                                    <div className="bg-cyan-50 border border-cyan-200 rounded-xl p-3 space-y-2.5">
                                         <p className="text-[9px] font-black uppercase text-cyan-700">Nuevo insumo</p>
 
+                                        {/* 1. Seleccionar producto */}
                                         <select value={extraForm.productoId}
-                                            onChange={e => setExtraForm(f => ({ ...f, productoId: e.target.value }))}
+                                            onChange={e => setExtraForm(f => ({ ...f, productoId: e.target.value, unidadesEnPack: '' }))}
                                             className="w-full h-8 bg-white border border-cyan-200 rounded-lg px-2 text-[10px] font-bold text-slate-700 outline-none cursor-pointer">
-                                            <option value="">Seleccionar insumo…</option>
+                                            <option value="">① Seleccionar insumo…</option>
                                             {extrasDisponibles.map(e => {
                                                 const c = parseFloat(precios.find(pr => pr.productoId === e.id)?.precioCosto?.toString() || '0');
-                                                return <option key={e.id} value={e.id}>{e.nombre} — {formatCurrency(c)} c/u</option>;
+                                                return <option key={e.id} value={e.id}>{e.nombre} — {formatCurrency(c)}/paquete</option>;
                                             })}
                                         </select>
 
@@ -545,41 +556,63 @@ export function IceCreamAssistantModal({
 
                                         {extraForm.productoId && (
                                             <>
-                                                {/* Costo unitario registrado */}
+                                                {/* Precio del paquete */}
                                                 <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 px-3 py-2">
-                                                    <span className="text-[9px] text-slate-500 font-bold">Costo unitario registrado</span>
-                                                    <span className="text-sm font-black text-slate-800">{formatCurrency(extraUnitarioCosto)}</span>
+                                                    <span className="text-[9px] text-slate-500 font-bold">Precio registrado del paquete</span>
+                                                    <span className="font-black text-slate-800">{formatCurrency(extraPackCosto)}</span>
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div>
-                                                        <p className="text-[8px] font-black text-slate-500 uppercase mb-1">Cantidad por copa</p>
-                                                        <Input type="number" min="0.1" step="0.5" placeholder="ej: 1"
-                                                            value={extraForm.cantidadPorCopa}
-                                                            onChange={e => setExtraForm(f => ({ ...f, cantidadPorCopa: e.target.value }))}
-                                                            className="h-7 text-xs font-black text-center border-cyan-200" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-[8px] font-black text-slate-500 uppercase mb-1">Unidad</p>
+                                                {/* 2. Unidades en el paquete */}
+                                                <div>
+                                                    <p className="text-[8px] font-black text-slate-600 mb-1">
+                                                        ② ¿Cuántas unidades trae ese paquete?
+                                                        <span className="font-normal text-slate-400 ml-1">(ej: 100 cucharitas, 50 vasos)</span>
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <Input type="number" min="1" placeholder="ej: 100"
+                                                            value={extraForm.unidadesEnPack}
+                                                            onChange={e => setExtraForm(f => ({ ...f, unidadesEnPack: e.target.value }))}
+                                                            className="h-8 w-24 text-center font-black text-sm border-cyan-300 bg-white" />
                                                         <select value={extraForm.unidad}
                                                             onChange={e => setExtraForm(f => ({ ...f, unidad: e.target.value }))}
-                                                            className="w-full h-7 bg-white border border-cyan-200 rounded-lg px-1.5 text-[10px] font-bold outline-none cursor-pointer">
+                                                            className="h-8 bg-white border border-cyan-200 rounded-lg px-2 text-[10px] font-bold outline-none cursor-pointer">
                                                             {UNIDADES.map(u => <option key={u}>{u}</option>)}
                                                         </select>
+                                                        {extraForm.unidadesEnPack && parseFloat(extraForm.unidadesEnPack) > 0 && (
+                                                            <span className="text-[9px] font-black text-slate-500">
+                                                                = <span className="text-cyan-700">{formatCurrency(extraUnitarioCosto)}</span> c/u
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
 
-                                                <div className="flex items-center justify-between bg-cyan-100 rounded-lg border border-cyan-300 px-3 py-2">
-                                                    <span className="text-[9px] text-cyan-700 font-bold">Costo por copa</span>
-                                                    <span className="text-sm font-black text-cyan-800">{formatCurrency(extraPreviewCosto)}</span>
-                                                </div>
+                                                {/* 3. Cantidad por copa */}
+                                                {extraForm.unidadesEnPack && (
+                                                    <div>
+                                                        <p className="text-[8px] font-black text-slate-600 mb-1">
+                                                            ③ ¿Cuántas usas por copa?
+                                                        </p>
+                                                        <Input type="number" min="0.1" step="1" placeholder="1"
+                                                            value={extraForm.cantidadPorCopa}
+                                                            onChange={e => setExtraForm(f => ({ ...f, cantidadPorCopa: e.target.value }))}
+                                                            className="h-8 w-24 text-center font-black text-sm border-cyan-300 bg-white" />
+                                                    </div>
+                                                )}
+
+                                                {/* Resultado */}
+                                                {extraForm.unidadesEnPack && parseFloat(extraForm.unidadesEnPack) > 0 && (
+                                                    <div className="flex items-center justify-between bg-cyan-600 rounded-lg px-3 py-2">
+                                                        <span className="text-[9px] text-white/80 font-bold">Costo por copa</span>
+                                                        <span className="text-base font-black text-white">{formatCurrency(extraPreviewCosto)}</span>
+                                                    </div>
+                                                )}
                                             </>
                                         )}
 
                                         <div className="flex gap-2">
                                             <button onClick={confirmAddExtra}
-                                                disabled={!extraForm.productoId}
-                                                className="flex-1 h-8 bg-cyan-600 text-white rounded-lg text-[10px] font-black hover:bg-cyan-700 disabled:opacity-40 disabled:cursor-not-allowed">
+                                                disabled={!extraForm.productoId || !extraForm.unidadesEnPack}
+                                                className="flex-1 h-8 bg-cyan-700 text-white rounded-lg text-[10px] font-black hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed">
                                                 ✓ Agregar
                                             </button>
                                             <button onClick={() => setAddingExtra(false)}
