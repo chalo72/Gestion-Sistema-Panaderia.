@@ -2965,6 +2965,26 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             return formatCurrency(tot - ab);
                                         })()}</span>
                                     </div>
+                                    {/* Enviar tickets seleccionados por WhatsApp */}
+                                    {facturasSeleccionadas.size > 0 && (() => {
+                                        const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id));
+                                        if (sel.length === 0) return null;
+                                        const saldoWA = sel.reduce((s, h) => {
+                                            const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
+                                            return s + Math.max(0, h.total - ab);
+                                        }, 0);
+                                        return (
+                                            <div className="mt-2 pt-2 border-t border-white/10">
+                                                <button
+                                                    onClick={() => enviarWhatsApp(cliente, saldoWA, sel)}
+                                                    className="w-full h-9 rounded-xl bg-[#25D366] hover:bg-[#1da851] text-white text-[9px] font-black uppercase flex items-center justify-center gap-2 transition-colors"
+                                                >
+                                                    <MessageCircle className="w-3.5 h-3.5"/>
+                                                    Enviar {sel.length} ticket{sel.length > 1 ? 's' : ''} por WhatsApp
+                                                </button>
+                                            </div>
+                                        );
+                                    })()}
                                     {/* Confirmar pago de créditos seleccionados */}
                                     {facturasSeleccionadas.size > 0 && (() => {
                                         const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id) && p.metodoPago === 'credito');

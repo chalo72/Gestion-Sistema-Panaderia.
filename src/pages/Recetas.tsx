@@ -6,7 +6,7 @@ import {
     UtensilsCrossed, Save, AlertCircle, Thermometer, Timer, Gauge, Clock,
     Scale, TrendingUp, Info, History as HistoryIcon, Camera, X, ArrowUp,
     ArrowDown, ListOrdered, Filter, Calculator, ChevronDown, ChevronUp,
-    Package, Wheat, Percent, Tag, PieChart, Layers3
+    Package, Wheat, Percent, Tag, PieChart, Layers3, Check
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
