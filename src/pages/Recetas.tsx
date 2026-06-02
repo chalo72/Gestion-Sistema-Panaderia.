@@ -132,6 +132,20 @@ const Recetas: React.FC<RecetasProps> = ({
     // ── Búsqueda global ───────────────────────────────────────────────────
     const [searchTerm, setSearchTerm] = useState('');
 
+    // ── Filtro de categorías para "Producto que se elabora" (persiste en localStorage)
+    const [catsFiltroElaborado, setCatsFiltroElaborado] = useState<string[]>(() => {
+        try { return JSON.parse(localStorage.getItem('dp_cats_elaborado_filtro') || '[]'); } catch { return []; }
+    });
+    const [showCatsFiltroElaborado, setShowCatsFiltroElaborado] = useState(false);
+
+    const toggleCatElaborado = (cat: string) => {
+        setCatsFiltroElaborado(prev => {
+            const next = prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat];
+            localStorage.setItem('dp_cats_elaborado_filtro', JSON.stringify(next));
+            return next;
+        });
+    };
+
     // ── Estado modal RECETA TRADICIONAL ──────────────────────────────────
     const [isRecetaOpen, setIsRecetaOpen] = useState(false);
     const [editingReceta, setEditingReceta] = useState<Receta | null>(null);
@@ -226,6 +240,18 @@ const Recetas: React.FC<RecetasProps> = ({
             .filter(p => p.tipo !== 'ingrediente' && !insumoCats.has(p.categoria || ''))
             .sort((a, b) => a.nombre.localeCompare(b.nombre));
     }, [productos, catTipoMap, categoriasDeInsumos]);
+
+    // Categorías disponibles para filtrar el selector de producto elaborado
+    const categoriasVenta = useMemo(() => {
+        const cats = new Set(productosElaborados.map(p => p.categoria).filter(Boolean));
+        return Array.from(cats).sort() as string[];
+    }, [productosElaborados]);
+
+    // Productos elaborados filtrados por categorías seleccionadas por el usuario
+    const productosElaboradosFiltrados = useMemo(() => {
+        if (catsFiltroElaborado.length === 0) return productosElaborados;
+        return productosElaborados.filter(p => !p.categoria || catsFiltroElaborado.includes(p.categoria));
+    }, [productosElaborados, catsFiltroElaborado]);
 
     const ingredientesFiltrados = useMemo(() =>
         categoriasInsumosFiltro.length === 0
@@ -905,16 +931,67 @@ const Recetas: React.FC<RecetasProps> = ({
                             <TabsContent value="insumos" className="space-y-8">
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-8">
                                     <div className="md:col-span-1 space-y-6">
-                                        <div className="space-y-3">
-                                            <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Producto que se elabora</Label>
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Producto que se elabora</Label>
+                                                {categoriasVenta.length > 0 && (
+                                                    <button onClick={() => setShowCatsFiltroElaborado(p => !p)} className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400 hover:text-amber-600 transition-colors">
+                                                        <Filter className="w-3 h-3" />
+                                                        {catsFiltroElaborado.length > 0
+                                                            ? <span className="text-amber-600">{catsFiltroElaborado.length} categ.</span>
+                                                            : 'Filtrar'}
+                                                        {showCatsFiltroElaborado ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {showCatsFiltroElaborado && categoriasVenta.length > 0 && (
+                                                <div className="rounded-xl bg-amber-50 border border-amber-200/70 p-2.5 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-[9px] font-black uppercase tracking-widest text-amber-700">Mostrar categorías</span>
+                                                        <div className="flex gap-2">
+                                                            <button onClick={() => { setCatsFiltroElaborado(categoriasVenta); localStorage.setItem('dp_cats_elaborado_filtro', JSON.stringify(categoriasVenta)); }} className="text-[9px] font-black text-amber-600 hover:text-amber-800">Todas</button>
+                                                            <span className="text-amber-300">|</span>
+                                                            <button onClick={() => { setCatsFiltroElaborado([]); localStorage.setItem('dp_cats_elaborado_filtro', '[]'); }} className="text-[9px] font-black text-rose-500 hover:text-rose-700">Ninguna</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        {categoriasVenta.map(cat => {
+                                                            const activa = catsFiltroElaborado.length === 0 || catsFiltroElaborado.includes(cat);
+                                                            return (
+                                                                <button key={cat} onClick={() => toggleCatElaborado(cat)}
+                                                                    className={cn(
+                                                                        "flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black border transition-all",
+                                                                        catsFiltroElaborado.includes(cat)
+                                                                            ? "bg-amber-500 text-white border-amber-500 shadow-sm"
+                                                                            : catsFiltroElaborado.length === 0
+                                                                                ? "bg-white text-slate-600 border-slate-200 hover:border-amber-400 hover:text-amber-700"
+                                                                                : "bg-white text-slate-400 border-slate-200 line-through opacity-60 hover:opacity-100 hover:no-underline hover:border-amber-400"
+                                                                    )}>
+                                                                    <span className={cn("w-3 h-3 rounded border flex items-center justify-center text-[8px] shrink-0",
+                                                                        catsFiltroElaborado.includes(cat) ? "bg-white border-white text-amber-600" : "border-slate-300"
+                                                                    )}>{catsFiltroElaborado.includes(cat) ? '✓' : ''}</span>
+                                                                    {cat}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                    {catsFiltroElaborado.length > 0 && (
+                                                        <p className="text-[9px] text-amber-600/80 font-medium">
+                                                            Mostrando {productosElaboradosFiltrados.length} de {productosElaborados.length} productos
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            )}
+
                                             <Select key={`elaborado-${selectedProductoId}`} value={selectedProductoId} onValueChange={setSelectedProductoId}>
                                                 <SelectTrigger className="rounded-2xl bg-slate-50 dark:bg-slate-800 border-slate-200 h-12">
                                                     <SelectValue placeholder="Buscar producto..." />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {productosElaborados.length === 0
-                                                        ? <div className="px-4 py-3 text-xs text-slate-400">No hay productos elaborados registrados</div>
-                                                        : productosElaborados.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)
+                                                    {productosElaboradosFiltrados.length === 0
+                                                        ? <div className="px-4 py-3 text-xs text-slate-400">No hay productos en las categorías seleccionadas</div>
+                                                        : productosElaboradosFiltrados.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)
                                                     }
                                                 </SelectContent>
                                             </Select>
