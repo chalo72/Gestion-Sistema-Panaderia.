@@ -114,10 +114,10 @@ export function IceCreamAssistantModal({
     }), [productos]);
 
     // ── Helados existentes (historial) ───────────────────────────────────────
-
+    // Solo productos elaborados con asistente (tipo=elaborado, no las cajas de 10L que son insumos)
     const heladosProductos = useMemo(() =>
         productos
-            .filter(p => (p.categoria || '').toLowerCase().includes('helado'))
+            .filter(p => p.tipo === 'elaborado' && (p.categoria || '').toLowerCase().includes('helado'))
             .sort((a, b) => a.nombre.localeCompare(b.nombre))
     , [productos]);
 
@@ -565,9 +565,27 @@ export function IceCreamAssistantModal({
                             </div>
 
                             <div>
-                                <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest mb-2">
-                                    Selecciona los sabores que tienes abiertos
-                                </p>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                                        Selecciona los sabores que tienes abiertos
+                                    </p>
+                                    {insumosLista.length > 0 && (
+                                        <button
+                                            onClick={() => {
+                                                if (cajasSeleccionadas.length === insumosLista.length) {
+                                                    setCajasSeleccionadas([]);
+                                                } else {
+                                                    setCajasSeleccionadas(insumosLista.map(p => ({
+                                                        id: p.id,
+                                                        cajas: cajasSeleccionadas.find(c => c.id === p.id)?.cajas ?? 1,
+                                                    })));
+                                                }
+                                            }}
+                                            className="text-[9px] font-black text-cyan-600 hover:text-cyan-800 underline underline-offset-2 transition-colors">
+                                            {cajasSeleccionadas.length === insumosLista.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                                        </button>
+                                    )}
+                                </div>
                                 {insumosLista.length === 0 ? (
                                     <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-center space-y-1">
                                         <p className="text-sm font-black text-amber-700">Sin cajas de helado registradas</p>
