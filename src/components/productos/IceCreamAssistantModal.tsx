@@ -108,7 +108,10 @@ export function IceCreamAssistantModal({
     const insumosLista = useMemo(() => productos.filter(p => {
         const cat = (p.categoria || '').toLowerCase();
         const n   = p.nombre.toLowerCase();
-        return (cat.includes('helado') || n.includes('helado') || n.includes('caja') || n.includes('10l')) && p.tipo !== 'elaborado';
+        // Solo productos de helado — la categoría 'INS: Helados' o cualquier categoría con 'helado'
+        // n.includes('caja') fue removido: causa falsos positivos con cajas de panadería
+        return (cat.includes('helado') || n.includes('helado') || n.includes('10l') || n.includes('litro'))
+            && p.tipo !== 'elaborado';
     }), [productos]);
 
     const extrasDisponibles = useMemo(() => productos.filter(p => {
