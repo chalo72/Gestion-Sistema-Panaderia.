@@ -1242,8 +1242,52 @@ const Recetas: React.FC<RecetasProps> = ({
 
                         {/* ── Ingredientes ── */}
                         <div className="space-y-3">
-                            <div className="flex items-center justify-between">
+
+                            {/* Filtros de categoría — flex-wrap, solo categorías de insumos */}
+                            {categoriasDeInsumos.length > 0 && (
+                                <div className="rounded-xl bg-indigo-50/60 border border-indigo-100 p-3 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest text-indigo-500">
+                                            <Filter className="w-3 h-3" /> Filtrar por categoría
+                                        </span>
+                                        {fCategoriasInsumosF.length > 0 && (
+                                            <button onClick={() => setFCategoriasInsumosF([])} className="text-[9px] font-black text-rose-500 hover:text-rose-700 transition-colors">
+                                                ✕ Ver todos
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {categoriasDeInsumos.map(cat => {
+                                            const count = ingredientesDisponibles.filter(p => p.categoria === cat).length;
+                                            return (
+                                                <button key={cat}
+                                                    onClick={() => setFCategoriasInsumosF(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
+                                                    className={cn(
+                                                        "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border transition-all",
+                                                        fCategoriasInsumosF.includes(cat)
+                                                            ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
+                                                            : "bg-white text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-600"
+                                                    )}>
+                                                    {cat}
+                                                    <span className={cn("text-[9px] rounded-full px-1 font-black",
+                                                        fCategoriasInsumosF.includes(cat) ? "bg-white/20 text-white" : "bg-slate-100 text-slate-400"
+                                                    )}>{count}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    {fCategoriasInsumosF.length > 0 && (
+                                        <p className="text-[9px] text-indigo-500/70 font-medium">
+                                            Mostrando {ingredientesFiltradosF.length} de {ingredientesDisponibles.length} insumos
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Cabecera + botón agregar */}
+                            <div className="flex items-center justify-between px-1">
                                 <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                    <Wheat className="w-3.5 h-3.5 text-amber-500" />
                                     Ingredientes
                                     <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 text-[10px] font-black rounded-full px-2 py-px">{fIngredientes.length}</span>
                                 </span>
@@ -1253,51 +1297,45 @@ const Recetas: React.FC<RecetasProps> = ({
                                 </Button>
                             </div>
 
-                            {/* Filtros de categoría */}
-                            {categoriasDeInsumos.length > 1 && (
-                                <div className="flex items-center gap-2">
-                                    <Filter className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                                    <div className="flex gap-1.5 overflow-x-auto scrollbar-thin flex-1">
-                                        {categoriasDeInsumos.map(cat => (
-                                            <button key={cat} onClick={() => setFCategoriasInsumosF(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
-                                                className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border transition-all whitespace-nowrap flex-shrink-0",
-                                                    fCategoriasInsumosF.includes(cat)
-                                                        ? "bg-indigo-600 text-white border-indigo-600"
-                                                        : "bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 hover:border-indigo-400"
-                                                )}>
-                                                {cat}
-                                            </button>
-                                        ))}
-                                    </div>
-                                    {fCategoriasInsumosF.length > 0 && (
-                                        <button onClick={() => setFCategoriasInsumosF([])} className="text-[10px] text-rose-500 font-black flex-shrink-0">✕</button>
-                                    )}
-                                </div>
-                            )}
-
                             {/* Cabecera de columnas */}
                             {fIngredientes.length > 0 && (
-                                <div className="grid grid-cols-[1fr_88px_76px_72px_32px] gap-2 px-3">
+                                <div className="grid grid-cols-[1fr_88px_76px_72px_32px] gap-2 px-3 pb-1 border-b border-slate-100">
                                     <span className="text-[9px] font-black uppercase text-slate-400">Ingrediente</span>
-                                    <span className="text-[9px] font-black uppercase text-slate-400">Cantidad</span>
-                                    <span className="text-[9px] font-black uppercase text-slate-400">Unidad</span>
+                                    <span className="text-[9px] font-black uppercase text-slate-400 text-center">Cantidad</span>
+                                    <span className="text-[9px] font-black uppercase text-slate-400 text-center">Unidad</span>
                                     <span className="text-[9px] font-black uppercase text-slate-400 text-right">Costo</span>
                                     <span />
                                 </div>
                             )}
 
                             {/* Lista de ingredientes */}
-                            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                            <div className="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
                                 {fIngredientes.map((ing, idx) => (
                                     <div key={ing.id}
-                                        className={cn("grid grid-cols-[1fr_88px_76px_72px_32px] gap-2 items-center px-3 py-2.5 rounded-xl border",
+                                        className={cn("grid grid-cols-[1fr_88px_76px_72px_32px] gap-2 items-center px-3 py-2 rounded-xl border",
                                             idx % 2 === 0
                                                 ? "bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800"
                                                 : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800"
                                         )}>
                                         <Select value={ing.productoId} onValueChange={v => updateIngFormulacion(ing.id!, 'productoId', v)}>
-                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-lg text-xs"><SelectValue placeholder="Ingrediente..." /></SelectTrigger>
-                                            <SelectContent>{ingredientesFiltradosF.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}</SelectContent>
+                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-lg text-xs">
+                                                <SelectValue placeholder="Seleccionar insumo..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {Array.from(
+                                                    ingredientesFiltradosF.reduce((map, p) => {
+                                                        const cat = p.categoria || 'Sin categoría';
+                                                        if (!map.has(cat)) map.set(cat, []);
+                                                        map.get(cat)!.push(p);
+                                                        return map;
+                                                    }, new Map<string, typeof ingredientesFiltradosF>())
+                                                ).sort(([a], [b]) => a.localeCompare(b)).map(([cat, prods]) => (
+                                                    <SelectGroup key={cat}>
+                                                        <SelectLabel className="text-[10px] font-black uppercase tracking-widest text-indigo-500 px-2 py-1">{cat}</SelectLabel>
+                                                        {prods.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}
+                                                    </SelectGroup>
+                                                ))}
+                                            </SelectContent>
                                         </Select>
                                         <Input type="number" value={ing.cantidadPorArroba || ''} onChange={e => updateIngFormulacion(ing.id!, 'cantidadPorArroba', Number(e.target.value))}
                                             className="h-9 rounded-lg bg-white dark:bg-slate-900 border-slate-200 text-xs text-center" placeholder="0" />
@@ -1313,26 +1351,27 @@ const Recetas: React.FC<RecetasProps> = ({
                                     </div>
                                 ))}
                                 {fIngredientes.length === 0 && (
-                                    <div className="text-center py-8 text-slate-400 text-sm">
-                                        Presiona <strong>Agregar</strong> para definir los ingredientes.
-                                    </div>
+                                    <button onClick={addIngFormulacion} className="w-full flex flex-col items-center justify-center py-8 rounded-xl border-2 border-dashed border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition-all text-slate-400 hover:text-indigo-500 gap-2">
+                                        <Plus className="w-6 h-6" />
+                                        <span className="text-xs font-black uppercase tracking-wide">Agregar ingrediente</span>
+                                    </button>
                                 )}
                             </div>
 
                             {/* Resumen de costos */}
                             {fIngredientes.length > 0 && (
-                                <div className="grid grid-cols-3 gap-2 pt-1">
-                                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl text-center border border-indigo-100 dark:border-indigo-800">
-                                        <p className="text-[9px] font-black uppercase text-indigo-400 mb-1">Costo / arroba</p>
-                                        <p className="font-black text-indigo-700 dark:text-indigo-300 text-base">{formatCurrency(totalFormulacion())}</p>
+                                <div className="grid grid-cols-3 gap-2 pt-2">
+                                    <div className="bg-gradient-to-br from-indigo-600 to-violet-600 p-3 rounded-xl text-center shadow-sm">
+                                        <p className="text-[9px] font-black uppercase text-indigo-200 mb-1">Costo / arroba</p>
+                                        <p className="font-black text-white text-base">{formatCurrency(totalFormulacion())}</p>
                                     </div>
-                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl text-center border border-slate-200 dark:border-slate-700">
+                                    <div className="bg-slate-800 p-3 rounded-xl text-center shadow-sm">
                                         <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Masa resultante</p>
-                                        <p className="font-black text-slate-800 dark:text-white text-base">{rendimientoMasa().toFixed(2)} kg</p>
+                                        <p className="font-black text-white text-base">{rendimientoMasa().toFixed(2)} kg</p>
                                     </div>
-                                    <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl text-center border border-emerald-100 dark:border-emerald-800">
-                                        <p className="text-[9px] font-black uppercase text-emerald-500 mb-1">Ingredientes</p>
-                                        <p className="font-black text-emerald-700 dark:text-emerald-300 text-base">{fIngredientes.length}</p>
+                                    <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-3 rounded-xl text-center shadow-sm">
+                                        <p className="text-[9px] font-black uppercase text-emerald-200 mb-1">Ingredientes</p>
+                                        <p className="font-black text-white text-base">{fIngredientes.length}</p>
                                     </div>
                                 </div>
                             )}
