@@ -2985,7 +2985,59 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             </div>
                                         );
                                     })()}
-                                    {/* Confirmar pago de créditos seleccionados */}
+                                    {/* Abono parcial a tickets seleccionados */}
+                                    {facturasSeleccionadas.size > 0 && (() => {
+                                        const sel = historialUnificado.filter(p =>
+                                            p.clienteId === cliente.id &&
+                                            facturasSeleccionadas.has(p.id) &&
+                                            p.metodoPago === 'credito' &&
+                                            (p.total - (p.abonos ?? []).reduce((s, a) => s + a.monto, 0)) > 0
+                                        );
+                                        if (sel.length === 0) return null;
+                                        const aplicarAbono = async (metodo: MetodoPago) => {
+                                            const monto = parseFloat(montoAbonoMultiple);
+                                            if (isNaN(monto) || monto <= 0) { toast.error('Ingresa un monto válido'); return; }
+                                            const ordenados = [...sel].sort((a, b) => a.fecha - b.fecha);
+                                            let restante = monto;
+                                            let procesados = 0;
+                                            for (const h of ordenados) {
+                                                if (restante <= 0) break;
+                                                const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
+                                                const saldo = h.total - ab;
+                                                if (saldo <= 0) continue;
+                                                const aPagar = Math.min(saldo, restante);
+                                                await registrarAbono(h.id, metodo, aPagar);
+                                                restante -= aPagar;
+                                                procesados++;
+                                            }
+                                            setMontoAbonoMultiple('');
+                                            toast.success(`Abono de ${formatCurrency(monto)} distribuido en ${procesados} ticket(s)${restante > 0 ? `. Sobraron ${formatCurrency(restante)}` : ''}`);
+                                        };
+                                        return (
+                                            <div className="mt-2 pt-2 border-t border-white/10 space-y-1.5">
+                                                <p className="text-[8px] font-black uppercase tracking-widest text-indigo-300/80">Abono parcial · {sel.length} crédito(s)</p>
+                                                <input
+                                                    type="number"
+                                                    placeholder="Monto a abonar..."
+                                                    value={montoAbonoMultiple}
+                                                    onChange={e => setMontoAbonoMultiple(e.target.value)}
+                                                    className="w-full h-8 rounded-xl bg-white/10 text-white text-xs px-3 outline-none border border-white/20 focus:border-indigo-400 placeholder:text-white/30"
+                                                />
+                                                <div className="flex gap-1.5">
+                                                    <button onClick={() => aplicarAbono('efectivo')} className="flex-1 h-8 rounded-xl bg-emerald-500/80 hover:bg-emerald-500 text-white text-[8px] font-black uppercase flex items-center justify-center gap-1 transition-colors">
+                                                        <Banknote className="w-3 h-3"/>Efectivo
+                                                    </button>
+                                                    <button onClick={() => aplicarAbono('nequi')} className="flex-1 h-8 rounded-xl bg-violet-500/80 hover:bg-violet-500 text-white text-[8px] font-black uppercase flex items-center justify-center gap-1 transition-colors">
+                                                        <Smartphone className="w-3 h-3"/>Nequi
+                                                    </button>
+                                                    <button onClick={() => aplicarAbono('transferencia')} className="flex-1 h-8 rounded-xl bg-blue-500/80 hover:bg-blue-500 text-white text-[8px] font-black uppercase flex items-center justify-center gap-1 transition-colors">
+                                                        <Building2 className="w-3 h-3"/>Cuenta
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                    {/* Confirmar pago completo de créditos seleccionados */}
                                     {facturasSeleccionadas.size > 0 && (() => {
                                         const sel = historialUnificado.filter(p => p.clienteId === cliente.id && facturasSeleccionadas.has(p.id) && p.metodoPago === 'credito');
                                         const saldoTotal = sel.reduce((s, h) => { const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0); return s + Math.max(0, h.total - ab); }, 0);
@@ -3001,7 +3053,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         };
                                         return (
                                             <div className="mt-2 pt-2 border-t border-white/10 space-y-1.5">
-                                                <p className="text-[8px] font-black uppercase tracking-widest text-white/60">Confirmar pago · {sel.length} crédito(s) · {formatCurrency(saldoTotal)}</p>
+                                                <p className="text-[8px] font-black uppercase tracking-widest text-emerald-300/80">Pago completo · {sel.length} crédito(s) · {formatCurrency(saldoTotal)}</p>
                                                 <div className="flex gap-1.5">
                                                     <button onClick={() => confirmarPago('efectivo')} className="flex-1 h-8 rounded-xl bg-emerald-500 text-white text-[8px] font-black uppercase hover:bg-emerald-600 flex items-center justify-center gap-1">
                                                         <CheckCircle2 className="w-3 h-3"/>Efectivo
