@@ -172,7 +172,7 @@ export function IceCreamAssistantModal({
             : 0;
         const totalCopasVendidas = porPerfil.reduce((s, p) => s + p.vendidas, 0);
         return { porPerfil, totalIngresos, totalCostos, gananciaTotal, costoCajasTotal, copasPuntoPequilibrio, totalCopasVendidas };
-    }, [perfilesCalc, ventasSemana, cajasDisponibles, promedioMaestro]);
+    }, [perfilesCalc, ventasSemana, cajasSeleccionadas, promedioMaestro]);
 
     // ── Helpers CRUD perfiles ─────────────────────────────────────────────────
 
