@@ -1191,136 +1191,182 @@ const Recetas: React.FC<RecetasProps> = ({
                 MODAL FÓRMULA MAESTRA
             ════════════════════════════════════════════════════════════ */}
             <Dialog open={isFormulacionOpen} onOpenChange={setIsFormulacionOpen}>
-                <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
-                    <div className="h-2 w-full bg-gradient-to-r from-indigo-500 to-violet-500" />
-                    <div className="p-4 sm:p-8">
-                        <DialogHeader className="mb-4 sm:mb-8">
-                            <div className="flex items-center gap-3 mb-2">
-                                <Scale className="w-6 h-6 text-indigo-600" />
-                                <DialogTitle className="text-2xl font-bold text-slate-900">{editingFormulacion ? 'Editar Fórmula Maestra' : 'Nueva Fórmula Maestra'}</DialogTitle>
-                            </div>
-                            <DialogDescription>Define la proporción de ingredientes por arroba (11.5 kg de harina)</DialogDescription>
-                        </DialogHeader>
+                <DialogContent className="w-[95vw] max-w-2xl max-h-[92vh] flex flex-col rounded-2xl p-0 border-0 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden">
 
-                        <div className="space-y-8">
-                            {/* Info básica */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                <div className="space-y-3 md:col-span-2">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Nombre de la fórmula</Label>
-                                    <Input value={fNombre} onChange={e => setFNombre(e.target.value)} placeholder="Ej: Masa Pan Francés, Masa Integral, Masa Croissant..." className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200" />
+                    {/* ── Cabecera fija ── */}
+                    <div className="flex-shrink-0">
+                        <div className="h-1.5 w-full bg-gradient-to-r from-indigo-500 to-violet-500" />
+                        <div className="px-6 pt-5 pb-4 border-b border-slate-100 dark:border-slate-800">
+                            <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
+                                    <Scale className="w-5 h-5 text-indigo-600" />
                                 </div>
-                                <div className="space-y-3">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Categoría</Label>
-                                    <Select value={fCategoria} onValueChange={v => setFCategoria(v as CatFormulacion)}>
-                                        <SelectTrigger className="rounded-2xl bg-slate-50 dark:bg-slate-800 border-slate-200 h-12"><SelectValue /></SelectTrigger>
-                                        <SelectContent>{CATS_FORMULACION.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-3">
-                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Descripción (opcional)</Label>
-                                <Input value={fDescripcion} onChange={e => setFDescripcion(e.target.value)} placeholder="Descripción breve de esta fórmula..." className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200" />
-                            </div>
-
-                            {/* Ingredientes de la fórmula */}
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between">
-                                    <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2">
-                                        Ingredientes por arroba (11.5 kg)
-                                        <Badge className="bg-indigo-600/10 text-indigo-500 border-indigo-500/20 rounded-full h-5 text-[10px]">{fIngredientes.length}</Badge>
-                                    </h3>
-                                    <Button variant="ghost" size="sm" onClick={addIngFormulacion} className="rounded-xl text-indigo-600 hover:bg-indigo-600/10 font-black text-[10px] uppercase">
-                                        <Plus className="w-3.5 h-3.5 mr-1" /> Agregar
-                                    </Button>
-                                </div>
-
-                                {categoriasDeInsumos.length > 1 && (
-                                    <div className="flex items-center gap-2">
-                                        <Filter className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                                        <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-thin flex-1">
-                                            {categoriasDeInsumos.map(cat => (
-                                                <button key={cat} onClick={() => setFCategoriasInsumosF(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
-                                                    className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border transition-all whitespace-nowrap flex-shrink-0",
-                                                        fCategoriasInsumosF.includes(cat) ? "bg-indigo-600 text-white border-indigo-600" : "bg-slate-50 text-slate-500 border-slate-200 hover:border-indigo-400"
-                                                    )}>
-                                                    {cat}
-                                                </button>
-                                            ))}
-                                        </div>
-                                        {fCategoriasInsumosF.length > 0 && <button onClick={() => setFCategoriasInsumosF([])} className="text-[10px] text-rose-500 font-black flex-shrink-0">Limpiar</button>}
-                                    </div>
-                                )}
-
-                                <div className="space-y-3 max-h-[320px] overflow-y-auto pr-2">
-                                    {fIngredientes.map(ing => (
-                                        <div key={ing.id} className="flex flex-wrap gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 items-center">
-                                            <div className="w-full">
-                                                <Select value={ing.productoId} onValueChange={v => updateIngFormulacion(ing.id!, 'productoId', v)}>
-                                                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue placeholder="Ingrediente..." /></SelectTrigger>
-                                                    <SelectContent>{ingredientesFiltradosF.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}</SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="flex-1 min-w-[80px]">
-                                                <Input type="number" value={ing.cantidadPorArroba || ''} onChange={e => updateIngFormulacion(ing.id!, 'cantidadPorArroba', Number(e.target.value))} className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-200" placeholder="Cant." />
-                                            </div>
-                                            <div className="flex-1 min-w-[80px]">
-                                                <Select value={ing.unidad} onValueChange={v => updateIngFormulacion(ing.id!, 'unidad', v)}>
-                                                    <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue /></SelectTrigger>
-                                                    <SelectContent>{['gr', 'kg', 'ml', 'l', 'und'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="flex-1 min-w-[70px] text-right">
-                                                <span className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(ing.costoTotalArroba || 0)}</span>
-                                            </div>
-                                            <Button onClick={() => removeIngFormulacion(ing.id!)} variant="ghost" size="icon" className="h-8 w-8 text-rose-500 hover:bg-rose-500/10 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
-                                        </div>
-                                    ))}
-                                    {fIngredientes.length === 0 && <div className="text-center py-8 text-slate-400 text-sm">Agrega los ingredientes para esta fórmula.</div>}
-                                </div>
-
-                                {fIngredientes.length > 0 && (
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-2xl text-center border border-indigo-100 dark:border-indigo-800">
-                                            <p className="text-[10px] font-black uppercase text-indigo-500 mb-1">Costo/arroba</p>
-                                            <p className="font-black text-indigo-700 dark:text-indigo-300 text-lg">{formatCurrency(totalFormulacion())}</p>
-                                        </div>
-                                        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl text-center border border-slate-100 dark:border-slate-800">
-                                            <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Masa resultante</p>
-                                            <p className="font-black text-slate-800 dark:text-white text-lg">{rendimientoMasa().toFixed(2)} kg</p>
-                                        </div>
-                                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-2xl text-center border border-emerald-100 dark:border-emerald-800">
-                                            <p className="text-[10px] font-black uppercase text-emerald-500 mb-1">Ingredientes</p>
-                                            <p className="font-black text-emerald-700 dark:text-emerald-300 text-lg">{fIngredientes.length} tipos</p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Parámetros de cocción opcionales */}
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Thermometer className="w-3 h-3" /> Temperatura °C</Label>
-                                    <Input type="number" placeholder="Ej: 180" value={fTemperatura || ''} onChange={e => setFTemperatura(Number(e.target.value))} className="rounded-xl h-11 bg-slate-50 dark:bg-slate-800 border-slate-200" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Timer className="w-3 h-3" /> Horno (min)</Label>
-                                    <Input type="number" placeholder="Ej: 15" value={fHorneado || ''} onChange={e => setFHorneado(Number(e.target.value))} className="rounded-xl h-11 bg-slate-50 dark:bg-slate-800 border-slate-200" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><Clock className="w-3 h-3" /> Reposo (min)</Label>
-                                    <Input type="number" placeholder="Ej: 60" value={fFermentacion || ''} onChange={e => setFFermentacion(Number(e.target.value))} className="rounded-xl h-11 bg-slate-50 dark:bg-slate-800 border-slate-200" />
+                                <div>
+                                    <DialogTitle className="text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                                        {editingFormulacion ? 'Editar Fórmula Maestra' : 'Nueva Fórmula Maestra'}
+                                    </DialogTitle>
+                                    <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                                        Proporciones por arroba · 11.5 kg de harina
+                                    </DialogDescription>
                                 </div>
                             </div>
                         </div>
-
-                        <DialogFooter className="mt-10 flex gap-3 pt-6 border-t border-slate-100 dark:border-slate-800">
-                            <Button variant="outline" onClick={() => setIsFormulacionOpen(false)} className="rounded-xl px-6">Cancelar</Button>
-                            <Button onClick={saveFormulacion} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-8 flex items-center gap-2">
-                                <Save className="w-4 h-4" />{editingFormulacion ? 'Actualizar Fórmula' : 'Guardar Fórmula'}
-                            </Button>
-                        </DialogFooter>
                     </div>
+
+                    {/* ── Cuerpo scrollable ── */}
+                    <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+                        {/* Nombre + Categoría */}
+                        <div className="grid grid-cols-[1fr_160px] gap-3">
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Nombre</Label>
+                                <Input value={fNombre} onChange={e => setFNombre(e.target.value)}
+                                    placeholder="Ej: Masa Pan Francés, Masa Croissant..."
+                                    className="rounded-xl h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 text-sm" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Categoría</Label>
+                                <Select value={fCategoria} onValueChange={v => setFCategoria(v as CatFormulacion)}>
+                                    <SelectTrigger className="rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200 h-10 text-sm"><SelectValue /></SelectTrigger>
+                                    <SelectContent>{CATS_FORMULACION.map(c => <SelectItem key={c.id} value={c.id}>{c.label}</SelectItem>)}</SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Descripción (opcional)</Label>
+                            <Input value={fDescripcion} onChange={e => setFDescripcion(e.target.value)}
+                                placeholder="Notas sobre esta fórmula..."
+                                className="rounded-xl h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 text-sm" />
+                        </div>
+
+                        {/* ── Ingredientes ── */}
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                                    Ingredientes
+                                    <span className="bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 text-[10px] font-black rounded-full px-2 py-px">{fIngredientes.length}</span>
+                                </span>
+                                <Button variant="ghost" size="sm" onClick={addIngFormulacion}
+                                    className="rounded-lg h-7 px-3 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 font-bold text-xs gap-1">
+                                    <Plus className="w-3.5 h-3.5" /> Agregar
+                                </Button>
+                            </div>
+
+                            {/* Filtros de categoría */}
+                            {categoriasDeInsumos.length > 1 && (
+                                <div className="flex items-center gap-2">
+                                    <Filter className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                                    <div className="flex gap-1.5 overflow-x-auto scrollbar-thin flex-1">
+                                        {categoriasDeInsumos.map(cat => (
+                                            <button key={cat} onClick={() => setFCategoriasInsumosF(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
+                                                className={cn("px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase border transition-all whitespace-nowrap flex-shrink-0",
+                                                    fCategoriasInsumosF.includes(cat)
+                                                        ? "bg-indigo-600 text-white border-indigo-600"
+                                                        : "bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 hover:border-indigo-400"
+                                                )}>
+                                                {cat}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {fCategoriasInsumosF.length > 0 && (
+                                        <button onClick={() => setFCategoriasInsumosF([])} className="text-[10px] text-rose-500 font-black flex-shrink-0">✕</button>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Cabecera de columnas */}
+                            {fIngredientes.length > 0 && (
+                                <div className="grid grid-cols-[1fr_88px_76px_72px_32px] gap-2 px-3">
+                                    <span className="text-[9px] font-black uppercase text-slate-400">Ingrediente</span>
+                                    <span className="text-[9px] font-black uppercase text-slate-400">Cantidad</span>
+                                    <span className="text-[9px] font-black uppercase text-slate-400">Unidad</span>
+                                    <span className="text-[9px] font-black uppercase text-slate-400 text-right">Costo</span>
+                                    <span />
+                                </div>
+                            )}
+
+                            {/* Lista de ingredientes */}
+                            <div className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+                                {fIngredientes.map((ing, idx) => (
+                                    <div key={ing.id}
+                                        className={cn("grid grid-cols-[1fr_88px_76px_72px_32px] gap-2 items-center px-3 py-2.5 rounded-xl border",
+                                            idx % 2 === 0
+                                                ? "bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800"
+                                                : "bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800"
+                                        )}>
+                                        <Select value={ing.productoId} onValueChange={v => updateIngFormulacion(ing.id!, 'productoId', v)}>
+                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-lg text-xs"><SelectValue placeholder="Ingrediente..." /></SelectTrigger>
+                                            <SelectContent>{ingredientesFiltradosF.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <Input type="number" value={ing.cantidadPorArroba || ''} onChange={e => updateIngFormulacion(ing.id!, 'cantidadPorArroba', Number(e.target.value))}
+                                            className="h-9 rounded-lg bg-white dark:bg-slate-900 border-slate-200 text-xs text-center" placeholder="0" />
+                                        <Select value={ing.unidad} onValueChange={v => updateIngFormulacion(ing.id!, 'unidad', v)}>
+                                            <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger>
+                                            <SelectContent>{['gr', 'kg', 'ml', 'l', 'und'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                                        </Select>
+                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 text-right tabular-nums">{formatCurrency(ing.costoTotalArroba || 0)}</span>
+                                        <Button onClick={() => removeIngFormulacion(ing.id!)} variant="ghost" size="icon"
+                                            className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-lg flex-shrink-0">
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
+                                    </div>
+                                ))}
+                                {fIngredientes.length === 0 && (
+                                    <div className="text-center py-8 text-slate-400 text-sm">
+                                        Presiona <strong>Agregar</strong> para definir los ingredientes.
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Resumen de costos */}
+                            {fIngredientes.length > 0 && (
+                                <div className="grid grid-cols-3 gap-2 pt-1">
+                                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl text-center border border-indigo-100 dark:border-indigo-800">
+                                        <p className="text-[9px] font-black uppercase text-indigo-400 mb-1">Costo / arroba</p>
+                                        <p className="font-black text-indigo-700 dark:text-indigo-300 text-base">{formatCurrency(totalFormulacion())}</p>
+                                    </div>
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-xl text-center border border-slate-200 dark:border-slate-700">
+                                        <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Masa resultante</p>
+                                        <p className="font-black text-slate-800 dark:text-white text-base">{rendimientoMasa().toFixed(2)} kg</p>
+                                    </div>
+                                    <div className="bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-xl text-center border border-emerald-100 dark:border-emerald-800">
+                                        <p className="text-[9px] font-black uppercase text-emerald-500 mb-1">Ingredientes</p>
+                                        <p className="font-black text-emerald-700 dark:text-emerald-300 text-base">{fIngredientes.length}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── Parámetros de cocción ── */}
+                        <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Parámetros de cocción (opcional)</p>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Thermometer className="w-3 h-3" /> Temp. °C</Label>
+                                    <Input type="number" placeholder="180" value={fTemperatura || ''} onChange={e => setFTemperatura(Number(e.target.value))} className="rounded-xl h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 text-sm text-center" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Timer className="w-3 h-3" /> Horno (min)</Label>
+                                    <Input type="number" placeholder="15" value={fHorneado || ''} onChange={e => setFHorneado(Number(e.target.value))} className="rounded-xl h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 text-sm text-center" />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <Label className="text-[10px] font-bold text-slate-400 flex items-center gap-1"><Clock className="w-3 h-3" /> Reposo (min)</Label>
+                                    <Input type="number" placeholder="60" value={fFermentacion || ''} onChange={e => setFFermentacion(Number(e.target.value))} className="rounded-xl h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 text-sm text-center" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── Pie fijo ── */}
+                    <div className="flex-shrink-0 px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3 bg-white dark:bg-slate-900">
+                        <Button variant="outline" onClick={() => setIsFormulacionOpen(false)} className="rounded-xl px-5 h-10 text-sm">Cancelar</Button>
+                        <Button onClick={saveFormulacion} className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6 h-10 text-sm flex items-center gap-2">
+                            <Save className="w-4 h-4" />
+                            {editingFormulacion ? 'Actualizar Fórmula' : 'Guardar Fórmula'}
+                        </Button>
+                    </div>
+
                 </DialogContent>
             </Dialog>
 
