@@ -1,4 +1,4 @@
-import { generateUUID } from '@/lib/safe-utils';
+﻿import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
@@ -61,12 +61,12 @@ function CurrencyInput({
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let rawInput = e.target.value;
 
-    // Detectar si el usuario pegó un valor con centavos exactos (ej: 114.285,71 o 114285.71)
-    // Buscamos un separador (, o .) seguido de exactamente 1 o 2 dígitos al final.
-    const hasDecimals = /[.,]\d{1,2}$/.test(rawInput);
-    if (hasDecimals) {
-      // Removemos los decimales y su separador para quedarnos solo con la parte entera (redondeando hacia abajo)
-      rawInput = rawInput.replace(/[.,]\d{1,2}$/, '');
+    // Solo strip coma decimal (formato europeo: 1.234,56 → 1.234).
+    // Los puntos NO se tocan: en Colombia son separadores de miles (1.200.000).
+    // La regex anterior /[.,]\d{1,2}$/ rompía "1.200" → "1" al borrar dígitos.
+    const hasCommaDecimal = /,\d{1,2}$/.test(rawInput);
+    if (hasCommaDecimal) {
+      rawInput = rawInput.replace(/,\d{1,2}$/, '');
     }
 
     const rawStr = rawInput.replace(/\D/g, '');
@@ -404,8 +404,8 @@ export function ProveedorForm({
         uid: editingUid || generateUUID(),
         precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
         costoUnitario: Math.round(costUnit),
-        precioVenta: Math.round(sellPrice / 100) * 100,
-        precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1) / 100) * 100,
+        precioVenta: Math.round(sellPrice),
+        precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1)),
         stockRecibido: prodActual.stockRecibido,
       };
       if (editingUid) {
@@ -452,8 +452,8 @@ export function ProveedorForm({
       uid: editingUid || generateUUID(),
       precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
       costoUnitario: Math.round(costUnit),
-      precioVenta: Math.round(sellPrice / 100) * 100,
-      precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1) / 100) * 100,
+      precioVenta: Math.round(sellPrice),
+      precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1)),
       stockRecibido: prodActual.stockRecibido
     };
 

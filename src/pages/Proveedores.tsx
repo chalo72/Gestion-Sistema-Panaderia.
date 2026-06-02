@@ -263,14 +263,11 @@ export function Proveedores({
         notas: p.notas || '',
         createdAt: p.created_at || new Date().toISOString(),
       };
-      // Limpiar tombstone del ID actual (por si existe) y todos los tombstones
-      // de proveedores con este mismo nombre (IDs viejos de versiones anteriores)
-      const tombedProvIds = await db.getTombstones('proveedores').catch(() => [] as string[]);
-      await Promise.all(tombedProvIds.map((tid: string) => db.removeTombstone('proveedores', tid).catch(() => {})));
+      // Solo limpiar el tombstone de este proveedor específico
+      await db.removeTombstone('proveedores', p.id).catch(() => {});
       await db.addProveedor(provData);
-      // Restaurar precios limpiando tombstones previos también
-      const tombedPrecioIds = await db.getTombstones('precios').catch(() => [] as string[]);
-      await Promise.all(tombedPrecioIds.map((tid: string) => db.removeTombstone('precios', tid).catch(() => {})));
+      // Solo limpiar tombstones de los precios que pertenecen a este proveedor
+      await Promise.all(entry.precios.map(pr => db.removeTombstone('precios', pr.id).catch(() => {})));
       for (const precio of entry.precios) {
         const precioData = {
           id: precio.id,
@@ -563,10 +560,10 @@ export function Proveedores({
                 nombre: item.nombre,
                 categoria: item.categoria || 'Otro',
                 descripcion: descripcionGenerada,
-                precioVenta: Math.round((Number(item.precioVenta) || 0) / 100) * 100,
+                precioVenta: Math.round(Number(item.precioVenta) || 0),
                 margenUtilidad: Number(item.margenVenta) || 30,
                 tipo,
-                costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
+                costoBase: Math.round(Number(item.costoUnitario) || 0),
               });
               productoId = np.id;
             }
@@ -575,7 +572,7 @@ export function Proveedores({
               await onAddOrUpdatePrecio({
                 productoId,
                 proveedorId: provId,
-                precioCosto: Math.round((Number(item.precioCosto) || 0) / 100) * 100,
+                precioCosto: Math.round(Number(item.precioCosto) || 0),
                 notas: item.notas || descripcionGenerada,
                 destino: item.destino,
                 tipoEmbalaje: item.tipoEmbalaje,
@@ -597,9 +594,9 @@ export function Proveedores({
                 updatedAt: new Date().toISOString(),
                 ...(!esCompartido && {
                   categoria: item.categoria || 'Otro',
-                  costoBase: Math.round((Number(item.costoUnitario) || 0) / 100) * 100,
+                  costoBase: Math.round(Number(item.costoUnitario) || 0),
                   margenUtilidad: Number(item.margenVenta) || 30,
-                  precioVenta: Math.round((Number(item.precioVenta) || 0) / 100) * 100,
+                  precioVenta: Math.round(Number(item.precioVenta) || 0),
                 }),
               });
 
@@ -652,9 +649,9 @@ export function Proveedores({
         // Fallback inteligente: primero el campo guardado, luego el tipo del producto
         destino: precio.destino || (prod?.tipo === 'elaborado' ? 'venta' : 'insumo'),
         notas: precio.notas || '',
-        costoUnitario: precio.cantidadEmbalaje ? Math.round(precio.precioCosto / precio.cantidadEmbalaje / 100) * 100 : precio.precioCosto,
-        precioVenta: Math.round((prod?.precioVenta || 0) / 100) * 100,
-        precioVentaPack: prod?.precioVenta ? Math.round(prod.precioVenta * (precio.cantidadEmbalaje || 1) / 100) * 100 : 0,
+        costoUnitario: (precio.cantidadEmbalaje && precio.cantidadEmbalaje > 0) ? Math.round(precio.precioCosto / precio.cantidadEmbalaje) : precio.precioCosto,
+        precioVenta: Math.round(prod?.precioVenta || 0),
+        precioVentaPack: prod?.precioVenta ? Math.round(prod.precioVenta * (precio.cantidadEmbalaje || 1)) : 0,
         stockRecibido: 0, // Campo requerido por la interfaz ProductoCatalogo
       };
     });
@@ -1228,7 +1225,7 @@ export function Proveedores({
                                           </p>
                                         </td>
                                         <td className="px-6 py-4 text-center">
-                                          <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <div className="flex items-center justify-center gap-1">
                                             <button
                                               onClick={() => {
                                                 if (window.confirm(`¿Eliminar "${nombre}" del catálogo de ${prov.nombre}?`)) {
