@@ -1,5 +1,6 @@
 import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { db } from '@/lib/database';
 import {
     Plus, Search, Edit2, Trash2, ChevronRight, Layers, ChefHat,
     UtensilsCrossed, Save, AlertCircle, Thermometer, Timer, Gauge, Clock,
@@ -118,6 +119,16 @@ const Recetas: React.FC<RecetasProps> = ({
     formatCurrency
 }) => {
 
+    // ── Config de categorías (tipo: 'venta' | 'insumo') ──────────────────
+    const [catTipoMap, setCatTipoMap] = useState<Map<string, string>>(new Map());
+    useEffect(() => {
+        db.getConfiguracion().then(cfg => {
+            if (cfg?.categorias?.length) {
+                setCatTipoMap(new Map(cfg.categorias.map(c => [c.nombre, c.tipo || 'venta'])));
+            }
+        }).catch(() => {});
+    }, []);
+
     // ── Búsqueda global ───────────────────────────────────────────────────
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -173,14 +184,17 @@ const Recetas: React.FC<RecetasProps> = ({
     }, [isDistribucionOpen]);
 
     // ── Listas derivadas ──────────────────────────────────────────────────
-    const productosElaborados = useMemo(() =>
-        productos.filter(p => p.tipo !== 'ingrediente').sort((a, b) => a.nombre.localeCompare(b.nombre)),
-        [productos]
-    );
     const ingredientesDisponibles = useMemo(() => productos.filter(p => p.tipo === 'ingrediente'), [productos]);
 
+    // Categorías que son de insumos: usa el tipo configurado en la BD; si no hay config, usa
+    // heurística estricta (100% de productos deben ser tipo 'ingrediente')
     const categoriasDeInsumos = useMemo(() => {
-        // Solo categorías donde la mayoría (>50%) de productos son tipo 'ingrediente'
+        if (catTipoMap.size > 0) {
+            return Array.from(catTipoMap.entries())
+                .filter(([, t]) => t === 'insumo')
+                .map(([nombre]) => nombre)
+                .sort();
+        }
         const catMap = new Map<string, { total: number; ing: number }>();
         productos.filter(p => p.categoria).forEach(p => {
             const e = catMap.get(p.categoria!) ?? { total: 0, ing: 0 };
@@ -189,10 +203,29 @@ const Recetas: React.FC<RecetasProps> = ({
             catMap.set(p.categoria!, e);
         });
         return Array.from(catMap.entries())
-            .filter(([, v]) => v.total > 0 && v.ing / v.total > 0.5)
+            .filter(([, v]) => v.total > 0 && v.ing === v.total)
             .map(([cat]) => cat)
             .sort();
-    }, [productos]);
+    }, [productos, catTipoMap]);
+
+    // Productos elaborados en la panadería: excluye categorías de insumos y categorías de venta
+    // que claramente son de reventa (bebidas, snacks). Si catTipoMap está cargado, solo muestra
+    // productos cuya categoría es 'venta'; si no, excluye las categorías de insumos detectadas.
+    const productosElaborados = useMemo(() => {
+        if (catTipoMap.size > 0) {
+            return productos
+                .filter(p => {
+                    if (p.tipo === 'ingrediente') return false;
+                    if (!p.categoria) return true;
+                    return catTipoMap.get(p.categoria) === 'venta';
+                })
+                .sort((a, b) => a.nombre.localeCompare(b.nombre));
+        }
+        const insumoCats = new Set(categoriasDeInsumos);
+        return productos
+            .filter(p => p.tipo !== 'ingrediente' && !insumoCats.has(p.categoria || ''))
+            .sort((a, b) => a.nombre.localeCompare(b.nombre));
+    }, [productos, catTipoMap, categoriasDeInsumos]);
 
     const ingredientesFiltrados = useMemo(() =>
         categoriasInsumosFiltro.length === 0
