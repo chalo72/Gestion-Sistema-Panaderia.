@@ -1,5 +1,5 @@
 import { generateUUID } from '@/lib/safe-utils';
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
     Plus, Search, Edit2, Trash2, ChevronRight, Layers, ChefHat,
     UtensilsCrossed, Save, AlertCircle, Thermometer, Timer, Gauge, Clock,
@@ -173,7 +173,10 @@ const Recetas: React.FC<RecetasProps> = ({
     }, [isDistribucionOpen]);
 
     // ── Listas derivadas ──────────────────────────────────────────────────
-    const productosElaborados = useMemo(() => productos.filter(p => p.tipo === 'elaborado'), [productos]);
+    const productosElaborados = useMemo(() =>
+        productos.filter(p => p.tipo !== 'ingrediente').sort((a, b) => a.nombre.localeCompare(b.nombre)),
+        [productos]
+    );
     const ingredientesDisponibles = useMemo(() => productos.filter(p => p.tipo === 'ingrediente'), [productos]);
 
     const categoriasDeInsumos = useMemo(() => {
@@ -279,6 +282,15 @@ const Recetas: React.FC<RecetasProps> = ({
         }));
 
     const totalReceta = () => recipeIngredients.reduce((s, i) => s + (i.costoCalculado || 0), 0);
+
+    // Auto-poblar porciones desde receta anterior del mismo producto (solo al crear nueva)
+    useEffect(() => {
+        if (!selectedProductoId || editingReceta) return;
+        const anterior = recetas.find(r => r.productoId === selectedProductoId);
+        if (anterior?.porcionesResultantes && anterior.porcionesResultantes > 0) {
+            setPorciones(anterior.porcionesResultantes);
+        }
+    }, [selectedProductoId]);
 
     const saveReceta = async () => {
         if (!selectedProductoId) { toast.error('Selecciona un producto'); return; }
@@ -862,14 +874,29 @@ const Recetas: React.FC<RecetasProps> = ({
                                     <div className="md:col-span-1 space-y-6">
                                         <div className="space-y-3">
                                             <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Producto que se elabora</Label>
-                                            <Select value={selectedProductoId} onValueChange={setSelectedProductoId}>
-                                                <SelectTrigger className="rounded-2xl bg-slate-50 dark:bg-slate-800 border-slate-200 h-12"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
-                                                <SelectContent>{productosElaborados.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)}</SelectContent>
+                                            <Select key={`elaborado-${selectedProductoId}`} value={selectedProductoId} onValueChange={setSelectedProductoId}>
+                                                <SelectTrigger className="rounded-2xl bg-slate-50 dark:bg-slate-800 border-slate-200 h-12">
+                                                    <SelectValue placeholder="Buscar producto..." />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {productosElaborados.length === 0
+                                                        ? <div className="px-4 py-3 text-xs text-slate-400">No hay productos elaborados registrados</div>
+                                                        : productosElaborados.map(p => <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>)
+                                                    }
+                                                </SelectContent>
                                             </Select>
                                         </div>
-                                        <div className="space-y-3">
-                                            <Label className="text-xs font-black uppercase tracking-widest text-slate-500">¿Cuántas unidades produce esta receta?</Label>
-                                            <Input type="number" min={1} value={porciones} onChange={e => setPorciones(Number(e.target.value))} className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg" placeholder="Ej: 20 panes" />
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Unidades por tanda</Label>
+                                                {selectedProductoId && !editingReceta && recetas.find(r => r.productoId === selectedProductoId) && (
+                                                    <span className="text-[10px] text-indigo-500 font-bold">
+                                                        ↑ Cargado de receta anterior
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <Input type="number" min={1} value={porciones} onChange={e => setPorciones(Number(e.target.value))} className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg" placeholder="Ej: 20" />
+                                            <p className="text-[10px] text-slate-400 px-1">Cuántos panes / unidades sale de esta receta</p>
                                         </div>
                                         <div className="p-6 rounded-[2rem] bg-slate-950 text-white relative overflow-hidden">
                                             <Label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 block mb-2">Costo total de insumos</Label>
@@ -903,20 +930,26 @@ const Recetas: React.FC<RecetasProps> = ({
                                             </Button>
                                         </div>
 
-                                        {categoriasDeInsumos.length > 1 && (
-                                            <div className="px-2">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <Filter className="w-3.5 h-3.5 text-slate-400" />
-                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Filtrar por categoría:</span>
-                                                    {categoriasInsumosFiltro.length > 0 && <button onClick={() => setCategoriasInsumosFiltro([])} className="text-[10px] text-rose-500 font-black ml-auto">Limpiar</button>}
+                                        {categoriasDeInsumos.length > 0 && (
+                                            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 p-3 space-y-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Filter className="w-3 h-3 text-indigo-400" />
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Filtrar insumos</span>
+                                                    {categoriasInsumosFiltro.length > 0 && (
+                                                        <button onClick={() => setCategoriasInsumosFiltro([])} className="ml-auto text-[10px] text-rose-500 font-black hover:text-rose-700 transition-colors">
+                                                            ✕ Limpiar
+                                                        </button>
+                                                    )}
                                                 </div>
                                                 <div className="flex flex-wrap gap-1.5">
                                                     {categoriasDeInsumos.map(cat => (
-                                                        <button key={cat} onClick={() => setCategoriasInsumosFiltro(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
-                                                            className={cn("px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border transition-all",
+                                                        <button key={cat}
+                                                            onClick={() => setCategoriasInsumosFiltro(p => p.includes(cat) ? p.filter(c => c !== cat) : [...p, cat])}
+                                                            className={cn(
+                                                                "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase border transition-all",
                                                                 categoriasInsumosFiltro.includes(cat)
                                                                     ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                                                                    : "bg-white dark:bg-slate-800 text-slate-500 border-slate-200 hover:border-indigo-300 hover:text-indigo-500"
+                                                                    : "bg-white dark:bg-slate-700 text-slate-500 border-slate-200 dark:border-slate-600 hover:border-indigo-300 hover:text-indigo-600"
                                                             )}>
                                                             {cat}
                                                         </button>
