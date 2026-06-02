@@ -114,10 +114,10 @@ export function IceCreamAssistantModal({
     }), [productos]);
 
     // ── Helados existentes (historial) ───────────────────────────────────────
-    // Solo productos elaborados con asistente (tipo=elaborado, no las cajas de 10L que son insumos)
+    // El asistente guarda siempre categoria='Helados' (exacto) + tipo='elaborado'
     const heladosProductos = useMemo(() =>
         productos
-            .filter(p => p.tipo === 'elaborado' && (p.categoria || '').toLowerCase().includes('helado'))
+            .filter(p => p.tipo === 'elaborado' && p.categoria === 'Helados')
             .sort((a, b) => a.nombre.localeCompare(b.nombre))
     , [productos]);
 
