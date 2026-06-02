@@ -470,14 +470,17 @@ function Configuracion(props: ConfiguracionProps) {
 
                 <Button
                   onClick={async () => {
-                    const id = toast.loading('Sincronizando con la nube activa...');
+                    const id = toast.loading('Sincronización bidireccional en curso...');
                     try {
-                      if (onSyncWithCloud) {
-                        await onSyncWithCloud();
-                        toast.success('✨ Datos sincronizados correctamente', { id });
-                      } else {
-                        toast.error('Función de sincronización no disponible', { id });
-                      }
+                      // Paso 1: Subir local → Firebase (desde este dispositivo)
+                      await db.syncLocalToCloud?.();
+                      // Paso 2: Descargar Firebase → local (recibe de todos los dispositivos)
+                      await db.syncCloudToLocal?.();
+                      // Paso 3: Refrescar estado React sin recargar página
+                      ['productos', 'proveedores', 'precios'].forEach(table =>
+                        window.dispatchEvent(new CustomEvent('nexus-realtime-change', { detail: { table, eventType: 'INSERT', id: '' } }))
+                      );
+                      toast.success('✨ Sincronización completa — productos actualizados', { id });
                     } catch (e) {
                       toast.error('Error al sincronizar: ' + (e as Error).message, { id });
                     }
