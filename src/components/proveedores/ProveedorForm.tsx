@@ -1,4 +1,4 @@
-import { generateUUID } from '@/lib/safe-utils';
+﻿import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
@@ -1649,19 +1649,17 @@ const TableRow = React.memo(({
       })()}
     </td>
     <td className="px-6 py-4 text-center">
-      <div className={cn(
-        "flex items-center justify-center gap-1 transition-opacity",
-        isEditing ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-      )}>
+      <div className="flex items-center justify-center gap-1">
         <button
           type="button"
           onClick={onEdit}
-          disabled={isEditing}
           className={cn(
-            "w-9 h-9 rounded-xl flex items-center justify-center transition-all bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 border",
-            isEditing ? "text-indigo-400 cursor-default" : "text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
+            "w-9 h-9 rounded-xl flex items-center justify-center transition-all border",
+            isEditing
+              ? "bg-indigo-500 text-white border-indigo-400 cursor-default"
+              : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30"
           )}
-          title="Editar"
+          title={isEditing ? "Editando..." : "Editar"}
         >
           <Edit2 className="w-4 h-4" />
         </button>
