@@ -918,397 +918,226 @@ export default function Recepciones({
         );
     }
 
-    const STEP_INFO = [
-        { num: 1, label: 'Proveedor', Icon: Truck },
-        { num: 2, label: 'Factura',   Icon: Receipt },
-        { num: 3, label: 'Productos', Icon: Package },
-        { num: 4, label: 'Confirmar', Icon: ClipboardCheck },
-    ];
-
     if (view === 'new') {
         const totalItems = newRecepcion.items.length;
         const totalUnidades = newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0);
         const totalDinero = newRecepcion.items.reduce((s, i) => s + (i.cantidadRecibida * i.precioFacturado), 0);
         const proveedorActual = proveedores.find(p => p.id === newRecepcion.proveedorId);
         const prepedidosPendientes = prepedidosConfirmados.filter(p => p.proveedorId === newRecepcion.proveedorId);
-        const ultimaRecepcionProv = recepciones
-            .filter(r => r.proveedorId === newRecepcion.proveedorId)
-            .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
+        const paleta = ['bg-indigo-600','bg-violet-500','bg-emerald-600','bg-rose-500','bg-amber-500','bg-sky-600','bg-teal-600','bg-pink-500'];
 
-        return (
-            <div className={cn("animate-ag-fade-in", step === 3 ? "flex flex-col min-h-0" : "space-y-4 pb-24")}>
-                {/* ─── CABECERA CON PASOS (4-col grid innovador) ────────── */}
-                <div className="sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shadow-sm px-4 pt-3 pb-3 space-y-3">
-                    {/* Fila superior: back + título + total */}
+        /* ── PANTALLA A: selección de proveedor ── */
+        if (!newRecepcion.proveedorId) {
+            return (
+                <div className="space-y-4 animate-ag-fade-in pb-24">
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => { if (step > 1) setStep(step - 1); else setView('list'); }}
-                            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors shrink-0"
-                        >
+                        <button onClick={() => setView('list')}
+                            className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors shrink-0">
                             <ArrowLeft className="w-4 h-4" />
                         </button>
-                        <div className="flex-1 min-w-0">
-                            <h1 className="text-sm font-black uppercase tracking-tight leading-none truncate">Entrada de Mercancía</h1>
-                            {proveedorActual && step > 1 && (
-                                <p className="text-[10px] font-bold text-indigo-500 mt-0.5 truncate">{proveedorActual.nombre}</p>
-                            )}
+                        <div>
+                            <h1 className="text-base font-black uppercase tracking-tight">Entrada de Mercancía</h1>
+                            <p className="text-[10px] text-slate-400 font-bold">¿Quién llega hoy?</p>
                         </div>
-                        {step >= 3 && totalItems > 0 && (
-                            <div className="flex flex-col items-end shrink-0">
-                                <span className="text-xs font-black text-indigo-600 tabular-nums">{formatCurrency(totalDinero)}</span>
-                                <span className="text-[9px] text-slate-400 font-bold uppercase">{totalItems} prod · {totalUnidades} uds</span>
-                            </div>
-                        )}
                     </div>
-                    {/* Indicadores de paso: 4-col grid */}
-                    <div className="grid grid-cols-4 gap-1.5">
-                        {STEP_INFO.map(({ num, label, Icon }) => {
-                            const isActive = step === num;
-                            const isDone = step > num;
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input type="text" placeholder="Buscar proveedor..." value={busquedaProveedor}
+                            onChange={e => setBusquedaProveedor(e.target.value)} autoFocus
+                            className="w-full h-12 pl-9 pr-4 rounded-xl border-2 border-indigo-100 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {proveedoresFiltrados.length === 0 && (
+                            <div className="col-span-full text-center py-12 text-slate-400 text-sm font-bold">Sin resultados</div>
+                        )}
+                        {proveedoresFiltrados.map((p, idx) => {
+                            const lastRec = recepciones
+                                .filter(r => r.proveedorId === p.id)
+                                .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
+                            const pedidosPend = prepedidosConfirmados.filter(pp => pp.proveedorId === p.id).length;
                             return (
-                                <button
-                                    key={num}
-                                    onClick={() => { if (isDone) setStep(num); }}
-                                    className={cn(
-                                        'flex flex-col items-center gap-0.5 py-2 px-1 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all',
-                                        isActive
-                                            ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                                            : isDone
-                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 cursor-pointer'
-                                            : 'bg-slate-50 dark:bg-slate-800 text-slate-400 cursor-default'
-                                    )}
+                                <button key={p.id}
+                                    onClick={() => { setNewRecepcion(prev => ({ ...prev, proveedorId: p.id })); setBusquedaProveedor(''); }}
+                                    className="flex flex-col items-center gap-2.5 p-4 rounded-2xl border-2 border-slate-100 bg-white dark:bg-slate-800 hover:border-indigo-300 hover:shadow-md active:scale-95 text-center transition-all"
                                 >
-                                    {isDone
-                                        ? <Check className="w-3.5 h-3.5" />
-                                        : <Icon className="w-3.5 h-3.5" />
-                                    }
-                                    <span>{label}</span>
+                                    <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-sm shrink-0", paleta[idx % paleta.length])}>
+                                        {p.nombre.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="w-full space-y-0.5">
+                                        <p className="font-black text-sm text-slate-900 dark:text-white line-clamp-2 leading-tight">{p.nombre}</p>
+                                        <p className="text-[9px] text-slate-400 font-bold">
+                                            {lastRec ? `Últ: ${new Date(lastRec.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}` : 'Nueva recepción'}
+                                        </p>
+                                    </div>
+                                    {pedidosPend > 0 && (
+                                        <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                            {pedidosPend} pedido{pedidosPend > 1 ? 's' : ''}
+                                        </span>
+                                    )}
                                 </button>
                             );
                         })}
                     </div>
+                    <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
                 </div>
-                {/* ─── PASO 1: PROVEEDOR ─────────────────────────────────── */}
-                {step === 1 && (
-                    <div className="space-y-4 animate-ag-fade-in max-w-3xl mx-auto w-full">
-                        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">¿Quién llega hoy?</h2>
+            );
+        }
 
-                        {/* Buscador */}
-                        <div className="relative">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Buscar proveedor..."
-                                value={busquedaProveedor}
-                                onChange={e => setBusquedaProveedor(e.target.value)}
-                                autoFocus
-                                className="w-full h-12 pl-9 pr-4 rounded-xl border-2 border-indigo-100 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
-                            />
-                        </div>
-
-                        {/* Grid de tarjetas de proveedor */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                            {proveedoresFiltrados.length === 0 && (
-                                <div className="col-span-full text-center py-12 text-slate-400 text-sm font-bold">Sin resultados</div>
-                            )}
-                            {proveedoresFiltrados.map((p, idx) => {
-                                const lastRec = recepciones
-                                    .filter(r => r.proveedorId === p.id)
-                                    .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
-                                const pedidosPend = prepedidosConfirmados.filter(pp => pp.proveedorId === p.id).length;
-                                const paleta = [
-                                    'bg-indigo-600','bg-violet-500','bg-emerald-600',
-                                    'bg-rose-500','bg-amber-500','bg-sky-600','bg-teal-600','bg-pink-500',
-                                ];
-                                const colorAvatar = paleta[idx % paleta.length];
-                                return (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => {
-                                            setNewRecepcion(prev => ({ ...prev, proveedorId: p.id }));
-                                            setBusquedaProveedor('');
-                                            setStep(2);
-                                        }}
-                                        className={cn(
-                                            "flex flex-col items-center gap-2.5 p-4 rounded-2xl border-2 text-center transition-all hover:shadow-md active:scale-95",
-                                            newRecepcion.proveedorId === p.id
-                                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
-                                                : "border-slate-100 bg-white dark:bg-slate-800 hover:border-indigo-200"
-                                        )}
-                                    >
-                                        <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-sm shrink-0", colorAvatar)}>
-                                            {p.nombre.charAt(0).toUpperCase()}
-                                        </div>
-                                        <div className="w-full space-y-0.5">
-                                            <p className="font-black text-sm text-slate-900 dark:text-white line-clamp-2 leading-tight">{p.nombre}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold">
-                                                {lastRec
-                                                    ? `Últ: ${new Date(lastRec.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}`
-                                                    : 'Nueva recepción'}
-                                            </p>
-                                        </div>
-                                        {pedidosPend > 0 && (
-                                            <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                                                {pedidosPend} pedido{pedidosPend > 1 ? 's' : ''}
-                                            </span>
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        </div>
+        /* ── PANTALLA B: POS directo (catálogo + ticket) ── */
+        return (
+            <div className="flex flex-col animate-ag-fade-in" style={{ height: 'calc(100dvh - 56px)' }}>
+                {/* Cabecera compacta */}
+                <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-3 py-2 flex items-center gap-2 z-20">
+                    <button
+                        onClick={() => setNewRecepcion(p => ({ ...p, proveedorId: '', items: [] }))}
+                        className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors shrink-0"
+                    ><ArrowLeft className="w-4 h-4" /></button>
+                    <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm shrink-0", paleta[proveedores.findIndex(p => p.id === newRecepcion.proveedorId) % paleta.length] || 'bg-indigo-600')}>
+                        {proveedorActual?.nombre.charAt(0).toUpperCase()}
                     </div>
-                )}
-
-                {/* ─── PASO 2: FACTURA ───────────────────────────────────── */}
-                {step === 2 && (
-                    <div className="space-y-4 animate-ag-fade-in max-w-2xl mx-auto w-full">
-                        <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">Datos de la factura</h2>
-
-                        {/* Pre-pedido pendiente — destacado */}
-                        {prepedidosPendientes.length > 0 && (
-                            <div className="p-4 rounded-2xl bg-blue-600 text-white space-y-3">
-                                <div className="flex items-center gap-2">
-                                    <GitCompareArrows className="w-4 h-4" />
-                                    <span className="text-xs font-black uppercase tracking-widest">
-                                        {prepedidosPendientes.length} pedido{prepedidosPendientes.length > 1 ? 's' : ''} pendiente{prepedidosPendientes.length > 1 ? 's' : ''}
-                                    </span>
-                                </div>
-                                {prepedidosPendientes.map(p => (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => { handleVincularPrePedido(p.id); setStep(3); }}
-                                        className="w-full flex items-center justify-between bg-white/15 hover:bg-white/25 rounded-xl px-4 py-3 transition-colors"
-                                    >
-                                        <div className="text-left">
-                                            <p className="font-black text-sm">{p.nombre}</p>
-                                            <p className="text-xs text-blue-200">{p.items.length} productos · {formatCurrency(p.total)}</p>
-                                        </div>
-                                        <span className="text-xs font-black bg-white text-blue-600 px-3 py-1 rounded-lg">Cargar</span>
-                                    </button>
-                                ))}
-                            </div>
+                    <span className="font-black text-sm truncate flex-1">{proveedorActual?.nombre}</span>
+                    <input
+                        value={newRecepcion.numeroFactura}
+                        onChange={e => setNewRecepcion(p => ({ ...p, numeroFactura: e.target.value }))}
+                        placeholder="# Factura"
+                        className="w-24 h-8 px-2 text-xs font-bold rounded-lg border border-slate-200 bg-slate-50 outline-none focus:border-indigo-400 shrink-0"
+                    />
+                    <input
+                        type="date"
+                        value={newRecepcion.fechaFactura}
+                        onChange={e => setNewRecepcion(p => ({ ...p, fechaFactura: e.target.value }))}
+                        className="w-32 h-8 px-2 text-xs font-bold rounded-lg border border-slate-200 bg-slate-50 outline-none focus:border-indigo-400 shrink-0 hidden sm:block"
+                    />
+                    <button onClick={() => fileInputRef.current?.click()}
+                        className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-colors shrink-0",
+                            newRecepcion.imagenFactura ? "bg-amber-100 text-amber-600" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
                         )}
-
-                        {/* Cargar desde última recepción */}
-                        {ultimaRecepcionProv && (
-                            <button
-                                onClick={() => cargarUltimaRecepcion(newRecepcion.proveedorId)}
-                                className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-dashed border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all text-left"
-                            >
-                                <History className="w-5 h-5 text-slate-400 shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-black text-slate-700">Usar la última recepción como base</p>
-                                    <p className="text-[10px] text-slate-400">
-                                        {new Date(ultimaRecepcionProv.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })}
-                                        · {ultimaRecepcionProv.items.length} productos · {formatCurrency(ultimaRecepcionProv.totalFactura)}
-                                    </p>
-                                </div>
-                                <ArrowRight className="w-4 h-4 text-slate-300 shrink-0" />
-                            </button>
-                        )}
-
-                        {/* Número + Fecha */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Nº Factura</Label>
-                                <Input
-                                    value={newRecepcion.numeroFactura}
-                                    onChange={e => setNewRecepcion(p => ({ ...p, numeroFactura: e.target.value }))}
-                                    placeholder="Ej: F-2024-001"
-                                    className="h-12 rounded-xl bg-slate-50 border-slate-200 font-bold"
-                                    autoFocus
-                                />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label className="text-[10px] font-black uppercase text-slate-400">Fecha Factura</Label>
-                                <Input
-                                    type="date"
-                                    value={newRecepcion.fechaFactura}
-                                    onChange={e => setNewRecepcion(p => ({ ...p, fechaFactura: e.target.value }))}
-                                    className="h-12 rounded-xl bg-slate-50 border-slate-200 font-bold"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Foto de factura */}
-                        <div className={cn(
-                            "rounded-2xl border-2 overflow-hidden transition-all",
-                            newRecepcion.imagenFactura ? "border-amber-400" : "border-slate-100"
-                        )}>
-                            {newRecepcion.imagenFactura ? (
-                                <div className="p-4 bg-amber-50 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-[10px] font-black uppercase text-amber-600 flex items-center gap-1.5">
-                                            <Camera className="w-3.5 h-3.5" /> Foto cargada
-                                        </span>
-                                        <button onClick={() => setNewRecepcion(p => ({ ...p, imagenFactura: null }))}
-                                            className="text-[10px] font-black text-rose-500 hover:text-rose-700">Quitar</button>
-                                    </div>
-                                    <img src={newRecepcion.imagenFactura} className="w-full max-h-40 object-contain rounded-xl" alt="Factura" />
-                                    <button
-                                        onClick={handleScanFactura}
-                                        disabled={isScanning}
-                                        className="w-full h-11 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-widest rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
-                                    >
-                                        {isScanning ? <><Loader2 className="w-4 h-4 animate-spin" /> Escaneando {scanProgress}%...</> : <><Sparkles className="w-4 h-4" /> Escanear con IA</>}
-                                    </button>
-                                </div>
-                            ) : (
-                                <button onClick={() => fileInputRef.current?.click()}
-                                    className="w-full p-4 flex items-center gap-4 hover:bg-slate-50 transition-colors"
-                                >
-                                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                                        <Camera className="w-5 h-5 text-amber-600" />
-                                    </div>
-                                    <div className="text-left flex-1">
-                                        <p className="font-black text-sm text-slate-800">Tomar foto de la factura</p>
-                                        <p className="text-xs text-slate-400">Opcional · La IA puede leer los productos automáticamente</p>
-                                    </div>
-                                    <Plus className="w-4 h-4 text-slate-300 shrink-0" />
-                                </button>
-                            )}
-                        </div>
-
-                        {/* CTA */}
-                        <button
-                            onClick={() => setStep(3)}
-                            className="w-full h-13 py-3.5 bg-slate-900 hover:bg-black text-white rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg"
-                        >
-                            {newRecepcion.items.length > 0
-                                ? <><Package className="w-4 h-4" /> Ver lista de productos ({newRecepcion.items.length})</>
-                                : <><Plus className="w-4 h-4" /> Agregar productos</>
-                            } <ArrowRight className="w-4 h-4" />
+                        title="Foto de factura / escanear con IA"
+                    ><Camera className="w-4 h-4" /></button>
+                    {newRecepcion.imagenFactura && !isScanning && (
+                        <button onClick={handleScanFactura}
+                            className="h-8 px-2 rounded-lg bg-indigo-600 text-white text-[10px] font-black flex items-center gap-1 shrink-0">
+                            <Sparkles className="w-3 h-3" /> IA
                         </button>
+                    )}
+                    {isScanning && (
+                        <span className="text-[10px] font-black text-indigo-500 shrink-0 flex items-center gap-1">
+                            <Loader2 className="w-3 h-3 animate-spin" />{scanProgress}%
+                        </span>
+                    )}
+                </div>
+
+                {/* Pre-pedido banner */}
+                {prepedidosPendientes.length > 0 && (
+                    <div className="shrink-0 bg-blue-600 text-white px-3 py-2 flex items-center gap-2 overflow-x-auto scrollbar-none">
+                        <GitCompareArrows className="w-3.5 h-3.5 shrink-0" />
+                        <span className="text-[10px] font-black uppercase shrink-0">Pre-pedidos:</span>
+                        {prepedidosPendientes.map(p => (
+                            <button key={p.id}
+                                onClick={() => handleVincularPrePedido(p.id)}
+                                className="shrink-0 text-[10px] font-black bg-white/20 hover:bg-white/30 px-2.5 py-1 rounded-lg transition-colors whitespace-nowrap"
+                            >{p.nombre} ({p.items.length} prod)</button>
+                        ))}
                     </div>
                 )}
 
-                {/* ─── PASO 3: POS BICOLUMNA ─────────────────────────────── */}
-                {step === 3 && (
-                    <div className="flex flex-col lg:flex-row flex-1 min-h-0 animate-ag-slide-up" style={{ height: 'calc(100dvh - 130px)' }}>
+                {/* Cuerpo bicolumna */}
+                <div className="flex flex-col lg:flex-row flex-1 min-h-0">
 
-                        {/* ══ PANEL IZQUIERDO — CATÁLOGO ═══════════════════════════ */}
-                        <div className={cn(
-                            "flex flex-col flex-1 min-h-0 overflow-hidden",
-                            mobilePanelRec === 'ticket' ? "hidden lg:flex" : "flex"
-                        )}>
-                            {/* Buscador + botón nuevo */}
-                            <div className="px-3 pt-3 pb-2 flex gap-2 shrink-0">
-                                <div className="relative flex-1">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar producto..."
-                                        value={busquedaProducto}
-                                        onChange={e => { setBusquedaProducto(e.target.value); setCategoriaFiltroRecepcion(''); }}
-                                        className="w-full h-10 pl-9 pr-4 rounded-xl border-2 border-slate-100 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
-                                    />
-                                    {busquedaProducto && (
-                                        <button onClick={() => setBusquedaProducto('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
-                                            <X className="w-3.5 h-3.5" />
-                                        </button>
-                                    )}
-                                </div>
-                                <button
-                                    onClick={() => setIsProductModalOpen(true)}
-                                    className="h-10 px-3 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 hover:border-indigo-500 hover:bg-indigo-50 flex items-center gap-1.5 text-xs font-black transition-all shrink-0"
-                                >
-                                    <Plus className="w-3.5 h-3.5" /> Nuevo
-                                </button>
+                    {/* ── Panel izquierdo: catálogo ── */}
+                    <div className={cn("flex flex-col flex-1 min-h-0 overflow-hidden", mobilePanelRec === 'ticket' ? "hidden lg:flex" : "flex")}>
+                        {/* Buscador + nuevo */}
+                        <div className="px-3 pt-2.5 pb-2 flex gap-2 shrink-0">
+                            <div className="relative flex-1">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input type="text" placeholder="Buscar producto..."
+                                    value={busquedaProducto}
+                                    onChange={e => setBusquedaProducto(e.target.value)}
+                                    className="w-full h-9 pl-9 pr-8 rounded-xl border border-slate-200 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
+                                />
+                                {busquedaProducto && (
+                                    <button onClick={() => setBusquedaProducto('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                                        <X className="w-3.5 h-3.5" />
+                                    </button>
+                                )}
                             </div>
+                            <button onClick={() => setIsProductModalOpen(true)}
+                                className="h-9 px-3 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 hover:bg-indigo-50 flex items-center gap-1 text-xs font-black transition-all shrink-0">
+                                <Plus className="w-3.5 h-3.5" /> Nuevo
+                            </button>
+                        </div>
 
-                            {/* Chips de categoría */}
-                            <div className="px-3 pb-2 flex gap-1.5 overflow-x-auto scrollbar-none shrink-0">
-                                <button
-                                    onClick={() => setCategoriaFiltroRecepcion('')}
-                                    className={cn(
-                                        "px-3 py-1 rounded-full text-[10px] font-black whitespace-nowrap transition-all shrink-0",
-                                        !categoriaFiltroRecepcion && !busquedaProducto
-                                            ? "bg-indigo-600 text-white shadow-sm"
-                                            : "bg-white dark:bg-slate-700 text-slate-600 border border-slate-200 hover:bg-indigo-50"
-                                    )}
-                                >Todos</button>
-                                {categoriasProductos.map(cat => {
-                                    const count = productos.filter(p => p.categoria === cat && !newRecepcion.items.some(i => i.productoId === p.id)).length;
-                                    if (count === 0) return null;
-                                    return (
-                                        <button key={cat}
-                                            onClick={() => { setCategoriaFiltroRecepcion(cat === categoriaFiltroRecepcion ? '' : cat); setBusquedaProducto(''); }}
-                                            className={cn(
-                                                "px-3 py-1 rounded-full text-[10px] font-black whitespace-nowrap transition-all shrink-0",
-                                                cat === categoriaFiltroRecepcion
-                                                    ? "bg-indigo-600 text-white shadow-sm"
-                                                    : "bg-white dark:bg-slate-700 text-slate-600 border border-slate-200 hover:bg-indigo-50"
-                                            )}
-                                        >{cat} <span className="opacity-50">({count})</span></button>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Acordeones por categoría (o resultado de búsqueda plano) */}
-                            <div className="flex-1 overflow-y-auto px-3 pb-20 lg:pb-4 space-y-2">
-                                {busquedaProducto.trim() ? (
-                                    /* Modo búsqueda: grid plano */
-                                    productosParaPanel.length === 0 ? (
-                                        <div className="py-10 text-center text-slate-400 text-sm font-bold">Sin resultados</div>
-                                    ) : (
-                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-                                            {productosParaPanel.map(p => (
-                                                <button key={p.id}
-                                                    onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
-                                                    className="flex flex-col items-start p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-1 group"
-                                                >
-                                                    <span className="font-black text-xs text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
-                                                    <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
-                                                        {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
-                                                    </span>
-                                                    {p.unidad && <span className="text-[9px] text-slate-400 uppercase">{p.unidad}</span>}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )
+                        {/* Catálogo scrollable */}
+                        <div className="flex-1 overflow-y-auto px-3 pb-20 lg:pb-3 space-y-2">
+                            {busquedaProducto.trim() ? (
+                                /* Búsqueda: grid plano */
+                                productosAgrupados.todos.length === 0 && productosAgrupados.habituales.length === 0 ? (
+                                    <div className="py-10 text-center text-slate-400 text-sm font-bold">Sin resultados</div>
                                 ) : (
-                                    /* Modo categorías: acordeones */
-                                    (() => {
-                                        const catsActivas = categoriaFiltroRecepcion
-                                            ? [categoriaFiltroRecepcion]
-                                            : categoriasProductos;
-                                        return catsActivas.map(cat => {
-                                            const prods = productos.filter(p =>
-                                                p.categoria === cat &&
-                                                !newRecepcion.items.some(i => i.productoId === p.id)
-                                            );
-                                            if (prods.length === 0) return null;
-                                            const isOpen = categoriasExpandidas.has(cat) || !!categoriaFiltroRecepcion;
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                                        {[...productosAgrupados.habituales, ...productosAgrupados.todos].map(p => (
+                                            <button key={p.id} onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
+                                                className="flex flex-col items-start p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-0.5 group">
+                                                <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
+                                                    {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )
+                            ) : (
+                                <>
+                                    {/* Sección: habituales de este proveedor */}
+                                    {productosAgrupados.habituales.length > 0 && (
+                                        <div className="rounded-xl border border-indigo-100 overflow-hidden bg-white dark:bg-slate-800">
+                                            <div className="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">De este proveedor</span>
+                                                <span className="text-[9px] font-black bg-indigo-100 text-indigo-500 px-1.5 py-0.5 rounded-full">{productosAgrupados.habituales.length}</span>
+                                            </div>
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2">
+                                                {productosAgrupados.habituales.map(p => (
+                                                    <button key={p.id} onClick={() => handleAddItem(p.id)}
+                                                        className="flex flex-col items-start p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-900/20 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-300 active:scale-95 transition-all text-left gap-0.5 group">
+                                                        <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                        <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
+                                                            {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
+                                                        </span>
+                                                        {(p as any).unidad && <span className="text-[9px] text-slate-400 uppercase">{(p as any).unidad}</span>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Sección: todos los demás (colapsables por categoría) */}
+                                    {productosAgrupados.todos.length > 0 && (() => {
+                                        const cats = [...new Set(productosAgrupados.todos.map(p => p.categoria).filter(Boolean))] as string[];
+                                        return cats.map(cat => {
+                                            const prods = productosAgrupados.todos.filter(p => p.categoria === cat);
+                                            const isOpen = categoriasExpandidas.has(cat);
                                             return (
                                                 <div key={cat} className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
                                                     <button
-                                                        onClick={() => {
-                                                            setCategoriasExpandidas(prev => {
-                                                                const next = new Set(prev);
-                                                                if (next.has(cat)) next.delete(cat); else next.add(cat);
-                                                                return next;
-                                                            });
-                                                        }}
+                                                        onClick={() => setCategoriasExpandidas(prev => { const n = new Set(prev); n.has(cat) ? n.delete(cat) : n.add(cat); return n; })}
                                                         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
                                                     >
-                                                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">{cat}</span>
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{cat}</span>
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-[9px] font-black bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded-full">{prods.length}</span>
+                                                            <span className="text-[9px] font-black bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-full">{prods.length}</span>
                                                             <ChevronDown className={cn("w-3.5 h-3.5 text-slate-400 transition-transform", isOpen ? "rotate-180" : "")} />
                                                         </div>
                                                     </button>
                                                     {isOpen && (
                                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 pt-0 border-t border-slate-50 dark:border-slate-700">
                                                             {prods.map(p => (
-                                                                <button key={p.id}
-                                                                    onClick={() => handleAddItem(p.id)}
-                                                                    className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group"
-                                                                >
+                                                                <button key={p.id} onClick={() => handleAddItem(p.id)}
+                                                                    className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-indigo-50 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group">
                                                                     <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
                                                                     <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
                                                                         {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
                                                                     </span>
-                                                                    {p.unidad && <span className="text-[9px] text-slate-400 uppercase">{p.unidad}</span>}
                                                                 </button>
                                                             ))}
                                                         </div>
@@ -1316,343 +1145,160 @@ export default function Recepciones({
                                                 </div>
                                             );
                                         });
-                                    })()
-                                )}
-                            </div>
-                        </div>
-
-                        {/* ══ PANEL DERECHO — TICKET ════════════════════════════════ */}
-                        <div className={cn(
-                            "lg:w-[370px] lg:border-l border-slate-100 dark:border-slate-700 flex flex-col min-h-0",
-                            mobilePanelRec === 'productos' ? "hidden lg:flex" : "flex flex-1"
-                        )}>
-                            {/* Header oscuro del ticket */}
-                            <div className="bg-[#1a1c2e] text-white px-4 py-3 shrink-0">
-                                <p className="text-[9px] font-black uppercase tracking-[0.25em] text-indigo-300">Ticket Recepción</p>
-                                <p className="font-black text-sm truncate">{proveedorActual?.nombre ?? '—'}</p>
-                            </div>
-
-                            {/* Lista de ítems */}
-                            <div className="flex-1 overflow-y-auto bg-[#1e2033]">
-                                {newRecepcion.items.length === 0 ? (
-                                    <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 py-12">
-                                        <Package className="w-10 h-10 opacity-30" />
-                                        <p className="text-xs font-bold text-center px-4">Toca un producto del catálogo para agregarlo aquí</p>
-                                    </div>
-                                ) : (
-                                    <div className="divide-y divide-white/5">
-                                        {newRecepcion.items.map((item, idx) => {
-                                            const prod = getProductoById(item.productoId);
-                                            const precioAnt = prod?.costoBase || 0;
-                                            const diff = precioAnt > 0 ? ((item.precioFacturado - precioAnt) / precioAnt) * 100 : 0;
-                                            const subio = diff > 5;
-                                            const bajo = diff < -2;
-                                            const subtotal = item.cantidadRecibida * item.precioFacturado;
-                                            return (
-                                                <div key={item.id} className="px-3 py-2.5 space-y-2">
-                                                    {/* Fila 1: nombre + eliminar */}
-                                                    <div className="flex items-start gap-2">
-                                                        <span className="text-[9px] font-black text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx + 1}</span>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="font-black text-xs text-white leading-tight">{prod?.nombre || '??'}</p>
-                                                            {precioAnt > 0 && (
-                                                                <p className={cn("text-[9px] font-bold tabular-nums",
-                                                                    subio ? "text-rose-400" : bajo ? "text-emerald-400" : "text-slate-500"
-                                                                )}>
-                                                                    Ant: {formatCurrency(precioAnt)}
-                                                                    {Math.abs(diff) > 2 && <span className="ml-1">{diff > 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%</span>}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        <button
-                                                            onClick={() => setNewRecepcion(p => ({ ...p, items: p.items.filter(i => i.id !== item.id) }))}
-                                                            className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:text-rose-400 transition-colors shrink-0 mt-0.5"
-                                                        ><X className="w-3 h-3" /></button>
-                                                    </div>
-                                                    {/* Fila 2: precio + qty + OK toggles + subtotal */}
-                                                    <div className="flex items-center gap-1.5 pl-6">
-                                                        {/* Precio */}
-                                                        <input
-                                                            type="number"
-                                                            value={item.precioFacturado || ''}
-                                                            onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
-                                                            placeholder="$"
-                                                            className={cn(
-                                                                "w-20 h-8 rounded-lg px-2 text-center font-black text-xs outline-none border transition-colors",
-                                                                subio ? "bg-rose-900/40 border-rose-700 text-rose-300" :
-                                                                bajo ? "bg-emerald-900/40 border-emerald-700 text-emerald-300" :
-                                                                "bg-white/10 border-white/10 text-white"
-                                                            )}
-                                                        />
-                                                        {/* Stepper */}
-                                                        <div className="flex items-center bg-white/10 rounded-lg overflow-hidden shrink-0">
-                                                            <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: Math.max(0, item.cantidadRecibida - 1) })}
-                                                                className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">−</button>
-                                                            <input
-                                                                type="number"
-                                                                value={item.cantidadRecibida || ''}
-                                                                onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseFloat(e.target.value) || 0 })}
-                                                                className="w-9 h-8 bg-transparent text-center font-black text-xs text-white outline-none"
-                                                            />
-                                                            <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: item.cantidadRecibida + 1 })}
-                                                                className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">+</button>
-                                                        </div>
-                                                        {/* OK prod */}
-                                                        <button
-                                                            onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
-                                                            title="Estado producto"
-                                                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0",
-                                                                item.productoOk ? "bg-emerald-600/30 text-emerald-400" : "bg-rose-600/30 text-rose-400"
-                                                            )}
-                                                        >{item.productoOk ? <Check className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}</button>
-                                                        {/* OK embalaje */}
-                                                        <button
-                                                            onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })}
-                                                            title="Estado embalaje"
-                                                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0",
-                                                                item.embalajeOk ? "bg-sky-600/30 text-sky-400" : "bg-amber-600/30 text-amber-400"
-                                                            )}
-                                                        ><Package className="w-3.5 h-3.5" /></button>
-                                                        {/* Subtotal */}
-                                                        <div className="flex-1 text-right">
-                                                            <p className="font-black text-xs text-white tabular-nums">
-                                                                {subtotal > 0 ? formatCurrency(subtotal) : '—'}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                    {/* Novedad si hay incidencia */}
-                                                    {(!item.productoOk || !item.embalajeOk) && (
-                                                        <input
-                                                            placeholder="Describe la novedad..."
-                                                            value={item.observaciones || ''}
-                                                            onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
-                                                            className="w-full h-7 rounded-lg bg-amber-900/30 border border-amber-700/50 text-amber-300 px-3 text-[10px] font-bold outline-none ml-6"
-                                                            style={{ width: 'calc(100% - 1.5rem)', marginLeft: '1.5rem' }}
-                                                        />
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Footer del ticket */}
-                            <div className="bg-[#1a1c2e] border-t border-white/10 p-3 space-y-2 shrink-0">
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <p className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">
-                                            {totalItems} prod · {totalUnidades} uds
-                                        </p>
-                                        <p className="text-xl font-black text-white tabular-nums">{formatCurrency(totalDinero)}</p>
-                                    </div>
-                                    <textarea
-                                        value={newRecepcion.observaciones}
-                                        onChange={e => setNewRecepcion(p => ({ ...p, observaciones: e.target.value }))}
-                                        placeholder="Notas..."
-                                        rows={2}
-                                        className="hidden sm:block h-12 px-2.5 py-1.5 rounded-xl bg-white/10 border border-white/10 text-[10px] text-white placeholder:text-white/30 outline-none resize-none w-32"
-                                    />
-                                </div>
-                                <button
-                                    disabled={newRecepcion.items.length === 0}
-                                    onClick={() => { setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.productoId))); setStep(4); }}
-                                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
-                                >
-                                    Confirmar recepción <ArrowRight className="w-3.5 h-3.5" />
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* ══ TOGGLE MÓVIL (solo < lg) ══════════════════════════════ */}
-                        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex">
-                            <button
-                                onClick={() => setMobilePanelRec('productos')}
-                                className={cn(
-                                    "flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-black uppercase transition-colors",
-                                    mobilePanelRec === 'productos' ? "text-indigo-600 border-t-2 border-indigo-600" : "text-slate-400"
-                                )}
-                            >
-                                <Package className="w-4 h-4" /> Catálogo
-                            </button>
-                            <button
-                                onClick={() => setMobilePanelRec('ticket')}
-                                className={cn(
-                                    "flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-black uppercase transition-colors relative",
-                                    mobilePanelRec === 'ticket' ? "text-indigo-600 border-t-2 border-indigo-600" : "text-slate-400"
-                                )}
-                            >
-                                <Receipt className="w-4 h-4" />
-                                Ticket
-                                {totalItems > 0 && (
-                                    <span className="absolute top-1.5 right-[calc(50%-18px)] w-4 h-4 bg-indigo-600 text-white rounded-full text-[8px] font-black flex items-center justify-center">{totalItems}</span>
-                                )}
-                            </button>
+                                    })()}
+                                </>
+                            )}
                         </div>
                     </div>
-                )}
 
-                {/* --- PASO 4: CONFIRMAR Y SINCRONIZAR --- */}
-                {step === 4 && (
-                    <div className="max-w-2xl mx-auto animate-ag-slide-up space-y-4 pb-8">
-
-                        {/* Resumen de la recepción */}
-                        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                            <div className="h-1.5 bg-indigo-600" />
-                            <div className="p-5 space-y-3">
-                                <p className="text-[10px] font-black uppercase text-indigo-500 tracking-[0.2em]">Resumen de Recepción</p>
-                                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Proveedor</span>
-                                        <span className="font-black text-slate-800 truncate">{proveedorActual?.nombre ?? '—'}</span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Nº Factura</span>
-                                        <span className="font-black text-slate-800">{newRecepcion.numeroFactura || <span className="text-slate-400 font-medium italic">Sin número</span>}</span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Fecha</span>
-                                        <span className="font-black text-slate-800">{newRecepcion.fechaFactura ? new Date(newRecepcion.fechaFactura + 'T12:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('es-CO')}</span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] font-bold text-slate-400 uppercase">Productos</span>
-                                        <span className="font-black text-slate-800">{newRecepcion.items.length} ítems · {newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0)} uds</span>
-                                    </div>
+                    {/* ── Panel derecho: ticket ── */}
+                    <div className={cn("lg:w-[370px] lg:border-l border-slate-100 dark:border-slate-700 flex flex-col min-h-0", mobilePanelRec === 'productos' ? "hidden lg:flex" : "flex flex-1")}>
+                        {/* Header ticket */}
+                        <div className="bg-[#1a1c2e] text-white px-4 py-2.5 shrink-0 flex items-center justify-between">
+                            <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.25em] text-indigo-300">Ticket</p>
+                                <p className="font-black text-xs truncate">{proveedorActual?.nombre ?? '—'}</p>
+                            </div>
+                            {totalItems > 0 && (
+                                <div className="text-right">
+                                    <p className="text-[9px] text-indigo-400 font-bold">{totalItems} prod · {totalUnidades} uds</p>
+                                    <p className="text-sm font-black tabular-nums">{formatCurrency(totalDinero)}</p>
                                 </div>
-                                {/* Mini-lista de ítems */}
-                                <div className="border-t border-slate-100 pt-3 space-y-1.5 max-h-40 overflow-y-auto">
+                            )}
+                        </div>
+
+                        {/* Lista de ítems */}
+                        <div className="flex-1 overflow-y-auto bg-[#1e2033]">
+                            {newRecepcion.items.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 py-12">
+                                    <Package className="w-10 h-10 opacity-30" />
+                                    <p className="text-xs font-bold text-center px-4">Toca un producto del catálogo para agregarlo</p>
+                                </div>
+                            ) : (
+                                <div className="divide-y divide-white/5">
                                     {newRecepcion.items.map((item, idx) => {
                                         const prod = getProductoById(item.productoId);
+                                        const precioAnt = prod?.costoBase || 0;
+                                        const diff = precioAnt > 0 ? ((item.precioFacturado - precioAnt) / precioAnt) * 100 : 0;
+                                        const subio = diff > 5;
+                                        const bajo = diff < -2;
                                         return (
-                                            <div key={idx} className="flex justify-between items-center text-xs">
-                                                <div className="flex gap-2 items-center min-w-0">
-                                                    <span className="font-black text-indigo-500 shrink-0">{item.cantidadRecibida}×</span>
-                                                    <span className="font-semibold text-slate-700 truncate">{prod?.nombre ?? item.productoId}</span>
+                                            <div key={item.id} className="px-3 py-2.5 space-y-2">
+                                                <div className="flex items-start gap-2">
+                                                    <span className="text-[9px] font-black text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx + 1}</span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="font-black text-xs text-white leading-tight">{prod?.nombre || '??'}</p>
+                                                        {precioAnt > 0 && (
+                                                            <p className={cn("text-[9px] font-bold tabular-nums", subio ? "text-rose-400" : bajo ? "text-emerald-400" : "text-slate-500")}>
+                                                                Ant: {formatCurrency(precioAnt)}{Math.abs(diff) > 2 && <span className="ml-1">{diff > 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%</span>}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <button onClick={() => setNewRecepcion(p => ({ ...p, items: p.items.filter(i => i.id !== item.id) }))}
+                                                        className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:text-rose-400 transition-colors shrink-0">
+                                                        <X className="w-3 h-3" />
+                                                    </button>
                                                 </div>
-                                                <span className="font-black tabular-nums text-slate-800 shrink-0 ml-2">{formatCurrency(item.cantidadRecibida * item.precioFacturado)}</span>
+                                                <div className="flex items-center gap-1.5 pl-6">
+                                                    <input type="number" value={item.precioFacturado || ''} placeholder="$"
+                                                        onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
+                                                        className={cn("w-20 h-8 rounded-lg px-2 text-center font-black text-xs outline-none border transition-colors",
+                                                            subio ? "bg-rose-900/40 border-rose-700 text-rose-300" : bajo ? "bg-emerald-900/40 border-emerald-700 text-emerald-300" : "bg-white/10 border-white/10 text-white"
+                                                        )}
+                                                    />
+                                                    <div className="flex items-center bg-white/10 rounded-lg overflow-hidden shrink-0">
+                                                        <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: Math.max(0, item.cantidadRecibida - 1) })}
+                                                            className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">−</button>
+                                                        <input type="number" value={item.cantidadRecibida || ''}
+                                                            onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseFloat(e.target.value) || 0 })}
+                                                            className="w-9 h-8 bg-transparent text-center font-black text-xs text-white outline-none" />
+                                                        <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: item.cantidadRecibida + 1 })}
+                                                            className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">+</button>
+                                                    </div>
+                                                    <button onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })} title="Estado producto"
+                                                        className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0",
+                                                            item.productoOk ? "bg-emerald-600/30 text-emerald-400" : "bg-rose-600/30 text-rose-400"
+                                                        )}>
+                                                        {item.productoOk ? <Check className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
+                                                    </button>
+                                                    <button onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })} title="Estado embalaje"
+                                                        className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0",
+                                                            item.embalajeOk ? "bg-sky-600/30 text-sky-400" : "bg-amber-600/30 text-amber-400"
+                                                        )}>
+                                                        <Package className="w-3.5 h-3.5" />
+                                                    </button>
+                                                    <div className="flex-1 text-right">
+                                                        <p className="font-black text-xs text-white tabular-nums">
+                                                            {item.cantidadRecibida * item.precioFacturado > 0 ? formatCurrency(item.cantidadRecibida * item.precioFacturado) : '—'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                {(!item.productoOk || !item.embalajeOk) && (
+                                                    <input placeholder="Describe la novedad..."
+                                                        value={item.observaciones || ''}
+                                                        onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
+                                                        className="h-7 rounded-lg bg-amber-900/30 border border-amber-700/50 text-amber-300 px-3 text-[10px] font-bold outline-none"
+                                                        style={{ width: 'calc(100% - 1.5rem)', marginLeft: '1.5rem' }}
+                                                    />
+                                                )}
                                             </div>
                                         );
                                     })}
                                 </div>
-                                {/* Total */}
-                                <div className="border-t border-indigo-100 pt-3 flex justify-between items-center">
-                                    <span className="text-[10px] font-black uppercase text-indigo-500 tracking-widest">Total Facturado</span>
-                                    <span className="text-2xl font-black tabular-nums text-indigo-600">{formatCurrency(totalDinero)}</span>
-                                </div>
-                            </div>
+                            )}
                         </div>
 
-                        {/* Cambios de precio detectados */}
-                        {cambiosPrecio.length > 0 && (
-                            <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
-                                <div className="h-1.5 bg-amber-400" />
-                                <div className="p-5 space-y-3">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-amber-500">⚠️</span>
-                                            <p className="text-[10px] font-black uppercase text-amber-600 tracking-[0.2em]">Cambios de Precio Detectados</p>
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.productoId)))}
-                                                className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition-colors"
-                                            >Actualizar todos</button>
-                                            <button
-                                                onClick={() => setPreciosAActualizar(new Set())}
-                                                className="text-[10px] font-black uppercase px-2.5 py-1 rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
-                                            >No actualizar</button>
-                                        </div>
-                                    </div>
-                                    <p className="text-[11px] text-slate-500">Selecciona qué productos actualizan su costo base en el catálogo al confirmar.</p>
-                                    <div className="space-y-2">
-                                        {cambiosPrecio.map(item => {
-                                            const prod = getProductoById(item.productoId);
-                                            const costoBase = prod?.costoBase ?? 0;
-                                            const diff = costoBase > 0 ? ((item.precioFacturado - costoBase) / costoBase) * 100 : 0;
-                                            const subiendo = diff > 0;
-                                            const checked = preciosAActualizar.has(item.productoId);
-                                            return (
-                                                <label
-                                                    key={item.productoId}
-                                                    className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${checked ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50 border border-slate-100'}`}
-                                                >
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={checked}
-                                                        onChange={e => {
-                                                            setPreciosAActualizar(prev => {
-                                                                const next = new Set(prev);
-                                                                if (e.target.checked) next.add(item.productoId);
-                                                                else next.delete(item.productoId);
-                                                                return next;
-                                                            });
-                                                        }}
-                                                        className="w-4 h-4 rounded accent-amber-500 shrink-0"
-                                                    />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-xs font-black text-slate-800 truncate">{prod?.nombre ?? item.productoId}</p>
-                                                        <p className="text-[10px] text-slate-500 tabular-nums">
-                                                            {formatCurrency(costoBase)} → <span className={`font-black ${subiendo ? 'text-rose-600' : 'text-emerald-600'}`}>{formatCurrency(item.precioFacturado)}</span>
-                                                        </p>
-                                                    </div>
-                                                    <span className={`text-[11px] font-black shrink-0 px-2 py-0.5 rounded-lg ${subiendo ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                                        {subiendo ? '▲' : '▼'} {Math.abs(diff).toFixed(1)}%
-                                                    </span>
-                                                </label>
-                                            );
-                                        })}
-                                    </div>
+                        {/* Footer ticket */}
+                        <div className="bg-[#1a1c2e] border-t border-white/10 p-3 space-y-2 shrink-0">
+                            <div className="flex items-end justify-between gap-2">
+                                <div>
+                                    <p className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">{totalItems} productos · {totalUnidades} unidades</p>
+                                    <p className="text-2xl font-black text-white tabular-nums">{formatCurrency(totalDinero)}</p>
                                 </div>
+                                <textarea value={newRecepcion.observaciones}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, observaciones: e.target.value }))}
+                                    placeholder="Notas..." rows={2}
+                                    className="hidden sm:block h-12 px-2 py-1.5 rounded-xl bg-white/10 border border-white/10 text-[10px] text-white placeholder:text-white/30 outline-none resize-none w-28"
+                                />
                             </div>
-                        )}
-
-                        {/* Notas finales */}
-                        {newRecepcion.observaciones && (
-                            <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4">
-                                <p className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1">Notas</p>
-                                <p className="text-xs text-slate-600">{newRecepcion.observaciones}</p>
-                            </div>
-                        )}
-
-                        {/* Acciones */}
-                        <div className="grid grid-cols-2 gap-3">
                             <button
-                                onClick={() => setStep(3)}
-                                className="h-14 rounded-2xl font-black uppercase tracking-widest text-sm border-2 border-slate-200 hover:bg-slate-50 text-slate-500 transition-colors"
-                            >← Corregir</button>
-                            <button
-                                onClick={handleSave}
-                                className="h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-sm shadow-xl shadow-indigo-600/30 flex items-center justify-center gap-2 transition-colors"
+                                disabled={newRecepcion.items.length === 0}
+                                onClick={() => handleSave(new Set(cambiosPrecio.map(i => i.productoId)))}
+                                className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-900/50"
                             >
-                                <CheckCircle className="w-4 h-4" /> Confirmar y Sincronizar
+                                <CheckCircle className="w-4 h-4" /> Confirmar y guardar
                             </button>
                         </div>
                     </div>
-                )}
-                
-                {/* MODAL MAESTRO DE PRODUCTOS */}
+                </div>
+
+                {/* Toggle móvil */}
+                <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex">
+                    <button onClick={() => setMobilePanelRec('productos')}
+                        className={cn("flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-black uppercase transition-colors",
+                            mobilePanelRec === 'productos' ? "text-indigo-600 border-t-2 border-indigo-600" : "text-slate-400"
+                        )}>
+                        <Package className="w-4 h-4" /> Catálogo
+                    </button>
+                    <button onClick={() => setMobilePanelRec('ticket')}
+                        className={cn("flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-black uppercase transition-colors relative",
+                            mobilePanelRec === 'ticket' ? "text-indigo-600 border-t-2 border-indigo-600" : "text-slate-400"
+                        )}>
+                        <Receipt className="w-4 h-4" /> Ticket
+                        {totalItems > 0 && (
+                            <span className="absolute top-1.5 right-[calc(50%-18px)] w-4 h-4 bg-indigo-600 text-white rounded-full text-[8px] font-black flex items-center justify-center">{totalItems}</span>
+                        )}
+                    </button>
+                </div>
+
+                {/* Modales */}
                 {isProductModalOpen && (
-                    <ProductFormModal
-                        isOpen={isProductModalOpen}
-                        onClose={() => {
-                            setIsProductModalOpen(false);
-                            setProductToEdit(null);
-                        }}
-                        onSave={handleProductSaved}
-                        categorias={categorias}
-                        initialData={productToEdit || undefined}
+                    <ProductFormModal isOpen={isProductModalOpen}
+                        onClose={() => { setIsProductModalOpen(false); setProductToEdit(null); }}
+                        onSave={handleProductSaved} categorias={categorias} initialData={productToEdit || undefined}
                     />
                 )}
-
-                {/* File Input Oculto */}
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                />
+                <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
             </div>
         );
     }

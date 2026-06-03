@@ -173,8 +173,8 @@ export function IceCreamAssistantModal({
         const costoH  = totalG * costoPorMl;
         const costoE  = extrasProducto.reduce((s, e) => s + e.costoPorCopa, 0);
         const costoT  = costoH + costoE;
-        const pvpCalc = margenVenta < 100 ? costoT / (1 - margenVenta / 100) : costoT * 2;
-        const pvpFin  = precioVentaManual ? (parseFloat(precioVentaManual) || pvpCalc) : pvpCalc;
+        const pvpCalc = margenVenta < 100 ? roundTo50(costoT / (1 - margenVenta / 100)) : roundTo50(costoT * 2);
+        const pvpFin  = precioVentaManual ? (roundTo50(parseFloat(precioVentaManual) || pvpCalc)) : pvpCalc;
         const mReal   = pvpFin > 0 ? ((pvpFin - costoT) / pvpFin) * 100 : 0;
         const copas   = totalG > 0 ? Math.floor(totalMlDisponible / totalG) : 0;
         return {
@@ -330,7 +330,7 @@ export function IceCreamAssistantModal({
             nombre,
             categoria:      'HELADOS PRE',
             descripcion:    `${bolasLista.length} bola(s) × ${bolasLista.map(b => b.pesoGramos + 'g').join(' + ')} = ${totalGramos}g. Costo: ${formatCurrency(costoTotal)}.`,
-            precioVenta:    Math.round(precioFinal),
+            precioVenta:    roundTo50(precioFinal),
             margenUtilidad: margenReal.toFixed(0),
             tipo:           'elaborado',
             unidadMedida:   'unidad',
