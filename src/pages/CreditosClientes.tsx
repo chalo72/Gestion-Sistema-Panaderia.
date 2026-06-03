@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import {
     CreditCard, Plus, Search, Trash2, DollarSign,
     CheckCircle, Clock, AlertTriangle, ChevronDown, ChevronUp,
-    Camera, X, Package, Image, UserCircle2, Scissors, Edit2, FolderOpen, Users, ArrowLeft
+    Camera, X, Package, Image, UserCircle2, Scissors, Edit2, FolderOpen, Users, ArrowLeft, Eye
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -152,6 +152,7 @@ export default function CreditosClientes({
     const [formEditCliente, setFormEditCliente] = useState({ estado: 'activo', descripcion: '', fecha: '', fechaVencimiento: '' });
     const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
     const [selectedCreditosIds, setSelectedCreditosIds] = useState<Set<string>>(new Set());
+    const [detalleCredito, setDetalleCredito] = useState<CreditoCliente | null>(null);
 
     // ── Carpetas (Categorías) ────────────────────────────────────────────────
     const [carpetas, setCarpetas] = useState<string[]>(() => {
@@ -827,6 +828,27 @@ export default function CreditosClientes({
                                                         <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                                                             <Clock className="w-4 h-4" /> Historial y Abonos
                                                         </h4>
+                                                        <div className="flex items-center gap-2">
+                                                        {/* Botón Seleccionar todos */}
+                                                        {(() => {
+                                                            const todos = [...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados];
+                                                            if (todos.length === 0) return null;
+                                                            const todosSelec = todos.every(c => selectedCreditosIds.has(c.id));
+                                                            return (
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (todosSelec) {
+                                                                            setSelectedCreditosIds(new Set());
+                                                                        } else {
+                                                                            setSelectedCreditosIds(new Set(todos.map(c => c.id)));
+                                                                        }
+                                                                    }}
+                                                                    className="text-[9px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-700 underline underline-offset-2 transition-colors"
+                                                                >
+                                                                    {todosSelec ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                                                                </button>
+                                                            );
+                                                        })()}
                                                         {/* Botón WA masivo — aparece solo cuando hay selección */}
                                                         {selectedCreditosIds.size > 0 && (() => {
                                                             const creditosTodos = [...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados];
@@ -867,6 +889,7 @@ export default function CreditosClientes({
                                                                 </div>
                                                             );
                                                         })()}
+                                                        </div>
                                                     </div>
 
                                                     {cliente.creditosActivos.length === 0 && cliente.creditosVencidos.length === 0 && cliente.creditosPagados.length === 0 ? (
@@ -962,8 +985,9 @@ export default function CreditosClientes({
                                                                                 </Button>
                                                                             )}
                                                                             <div className="flex gap-1">
-                                                                                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); abrirEditarCredito(credito); }} className="h-7 w-7 p-0 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg"><Edit2 className="w-3.5 h-3.5" /></Button>
-                                                                                <Button size="sm" variant="ghost" onClick={async (e) => { e.stopPropagation(); await onDeleteCreditoCliente(credito.id); toast.success('Crédito eliminado'); }} className="h-7 w-7 p-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
+                                                                                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setDetalleCredito(credito); }} className="h-7 w-7 p-0 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 dark:hover:bg-cyan-900/30 rounded-lg" title="Ver detalle"><Eye className="w-3.5 h-3.5" /></Button>
+                                                                                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); abrirEditarCredito(credito); }} className="h-7 w-7 p-0 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg" title="Editar"><Edit2 className="w-3.5 h-3.5" /></Button>
+                                                                                <Button size="sm" variant="ghost" onClick={async (e) => { e.stopPropagation(); await onDeleteCreditoCliente(credito.id); toast.success('Crédito eliminado'); }} className="h-7 w-7 p-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg" title="Eliminar"><Trash2 className="w-3.5 h-3.5" /></Button>
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -1678,6 +1702,224 @@ export default function CreditosClientes({
                             {isSavingTrab ? 'Guardando...' : 'Confirmar Pago'}
                         </Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Modal: Detalle completo de Ticket */}
+            <Dialog open={!!detalleCredito} onOpenChange={v => { if (!v) { setDetalleCredito(null); setEditandoCredito(null); } }}>
+                <DialogContent className="max-w-lg rounded-[28px] p-0 overflow-hidden border-none shadow-2xl">
+                    {detalleCredito && (() => {
+                        const c = detalleCredito;
+                        const totalAbonado = (c.pagos || []).reduce((s, p) => s + p.monto, 0);
+                        const editando = editandoCredito?.id === c.id;
+                        const headerColor = c.estado === 'pagado' ? 'from-emerald-600 to-emerald-700'
+                            : c.estado === 'vencido' ? 'from-red-600 to-red-700'
+                            : 'from-blue-600 to-blue-700';
+                        return (
+                            <>
+                                {/* Header */}
+                                <div className={`bg-gradient-to-r ${headerColor} p-5 text-white`}>
+                                    <DialogHeader>
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <DialogTitle className="text-white font-black text-base leading-tight truncate">
+                                                    {c.descripcion || 'Ticket sin descripción'}
+                                                </DialogTitle>
+                                                <p className="text-white/70 text-[10px] font-bold uppercase tracking-widest mt-1">
+                                                    {new Date(c.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'long', year: 'numeric' })}
+                                                    {c.fechaVencimiento && ` · Vence ${new Date(c.fechaVencimiento).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })}`}
+                                                </p>
+                                            </div>
+                                            <span className={`shrink-0 text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg ${
+                                                c.estado === 'pagado' ? 'bg-white/20 text-white' :
+                                                c.estado === 'vencido' ? 'bg-white/20 text-white' :
+                                                'bg-white/20 text-white'
+                                            }`}>{c.estado}</span>
+                                        </div>
+                                    </DialogHeader>
+                                    {/* Resumen financiero en header */}
+                                    <div className="mt-3 grid grid-cols-3 gap-2">
+                                        {[
+                                            { label: 'Deuda total', value: formatCurrency(c.monto), dim: false },
+                                            { label: 'Abonado', value: formatCurrency(totalAbonado), dim: false },
+                                            { label: 'Saldo', value: formatCurrency(c.saldo), dim: c.saldo === 0 },
+                                        ].map(item => (
+                                            <div key={item.label} className="bg-white/15 rounded-xl px-3 py-2 text-center">
+                                                <p className="text-[8px] font-black uppercase tracking-widest text-white/60">{item.label}</p>
+                                                <p className={`text-sm font-black mt-0.5 ${item.dim ? 'text-white/50' : 'text-white'}`}>{item.value}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Cuerpo */}
+                                <div className="p-5 space-y-4 max-h-[55vh] overflow-y-auto bg-white dark:bg-slate-900">
+
+                                    {/* Modo edición */}
+                                    {editando ? (
+                                        <div className="space-y-3 bg-blue-50 dark:bg-blue-950/20 rounded-2xl p-4 border border-blue-200 dark:border-blue-800">
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">✏️ Editando ticket</p>
+                                            <div>
+                                                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Estado</Label>
+                                                <Select value={formEditCliente.estado} onValueChange={v => setFormEditCliente(p => ({ ...p, estado: v }))}>
+                                                    <SelectTrigger className="mt-1 h-10 rounded-xl"><SelectValue /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="activo">Activo</SelectItem>
+                                                        <SelectItem value="pagado">Pagado</SelectItem>
+                                                        <SelectItem value="vencido">Vencido</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div>
+                                                <Label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Descripción</Label>
+                                                <Input value={formEditCliente.descripcion}
+                                                    onChange={e => setFormEditCliente(p => ({ ...p, descripcion: e.target.value }))}
+                                                    className="mt-1 h-10 rounded-xl" />
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <Label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Fecha del crédito</Label>
+                                                    <Input type="date" value={formEditCliente.fecha}
+                                                        onChange={e => setFormEditCliente(p => ({ ...p, fecha: e.target.value }))}
+                                                        className="mt-1 h-10 rounded-xl" />
+                                                </div>
+                                                <div>
+                                                    <Label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Fecha vencimiento</Label>
+                                                    <Input type="date" value={formEditCliente.fechaVencimiento}
+                                                        onChange={e => setFormEditCliente(p => ({ ...p, fechaVencimiento: e.target.value }))}
+                                                        className="mt-1 h-10 rounded-xl" />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        /* Modo vista — info del ticket */
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="bg-slate-50 dark:bg-slate-800/50 rounded-xl p-3">
+                                                <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Fecha crédito</p>
+                                                <p className="text-sm font-black text-slate-800 dark:text-slate-200 mt-0.5">
+                                                    {new Date(c.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                </p>
+                                            </div>
+                                            {c.fechaVencimiento && (
+                                                <div className="bg-amber-50 dark:bg-amber-950/20 rounded-xl p-3 border border-amber-100 dark:border-amber-800">
+                                                    <p className="text-[8px] font-black uppercase tracking-widest text-amber-500">Vencimiento</p>
+                                                    <p className="text-sm font-black text-amber-700 dark:text-amber-300 mt-0.5">
+                                                        {new Date(c.fechaVencimiento).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Productos / Items */}
+                                    {c.items && c.items.length > 0 && (
+                                        <div>
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+                                                <Package className="w-3 h-3" /> Productos ({c.items.length})
+                                            </p>
+                                            <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+                                                {c.items.map((item, idx) => (
+                                                    <div key={item.productoId || idx}
+                                                        className={`flex items-center justify-between px-4 py-2.5 text-sm ${idx !== 0 ? 'border-t border-slate-50 dark:border-slate-800' : ''} ${idx % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-slate-50/50 dark:bg-slate-800/30'}`}>
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 dark:bg-slate-700 px-1.5 py-0.5 rounded-md w-6 text-center shrink-0">{item.cantidad}</span>
+                                                            <span className="font-bold text-slate-700 dark:text-slate-300 truncate">{item.nombre}</span>
+                                                        </div>
+                                                        <span className="font-black text-slate-800 dark:text-slate-200 shrink-0 ml-2">{formatCurrency(item.subtotal)}</span>
+                                                    </div>
+                                                ))}
+                                                <div className="flex justify-between px-4 py-2.5 bg-slate-100 dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Total productos</span>
+                                                    <span className="font-black text-slate-700 dark:text-slate-300">{formatCurrency(c.items.reduce((s, i) => s + i.subtotal, 0))}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Abonos / Pagos */}
+                                    <div>
+                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+                                            <DollarSign className="w-3 h-3" /> Abonos realizados {c.pagos?.length > 0 && `(${c.pagos.length})`}
+                                        </p>
+                                        {!c.pagos || c.pagos.length === 0 ? (
+                                            <div className="text-center py-4 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                                                <p className="text-xs text-slate-400 font-bold">Sin abonos registrados</p>
+                                            </div>
+                                        ) : (
+                                            <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden">
+                                                {[...c.pagos].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()).map((pago, idx) => (
+                                                    <div key={pago.id || idx}
+                                                        className={`flex items-center justify-between px-4 py-2.5 ${idx !== 0 ? 'border-t border-slate-50 dark:border-slate-800' : ''} bg-white dark:bg-slate-900`}>
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <div className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                                            <div className="min-w-0">
+                                                                <p className="text-[10px] font-black text-slate-500">
+                                                                    {new Date(pago.fecha).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                                </p>
+                                                                <p className="text-[9px] text-slate-400 capitalize">{pago.metodoPago}{pago.nota && ` · ${pago.nota}`}</p>
+                                                            </div>
+                                                        </div>
+                                                        <span className="font-black text-emerald-600 dark:text-emerald-400 shrink-0">{formatCurrency(pago.monto)}</span>
+                                                    </div>
+                                                ))}
+                                                <div className="flex justify-between px-4 py-2.5 bg-emerald-50 dark:bg-emerald-950/20 border-t border-emerald-100 dark:border-emerald-800">
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Total abonado</span>
+                                                    <span className="font-black text-emerald-600">{formatCurrency(totalAbonado)}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Foto de evidencia */}
+                                    {c.fotoEvidencia && (
+                                        <div>
+                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
+                                                <Image className="w-3 h-3" /> Evidencia
+                                            </p>
+                                            <button onClick={() => setShowFotoModal(c.fotoEvidencia!)}
+                                                className="w-full rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700 hover:ring-2 hover:ring-blue-400 transition-all">
+                                                <img src={c.fotoEvidencia} alt="Evidencia" className="w-full max-h-40 object-cover" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Footer */}
+                                <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex gap-2 flex-wrap">
+                                    {editando ? (
+                                        <>
+                                            <Button variant="ghost" onClick={() => setEditandoCredito(null)}
+                                                className="h-10 px-4 rounded-xl text-xs font-black uppercase text-slate-400">
+                                                Cancelar
+                                            </Button>
+                                            <Button onClick={async () => { await handleGuardarEditCliente(); setDetalleCredito(null); }}
+                                                disabled={isSavingEditCliente}
+                                                className="h-10 flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase shadow-sm">
+                                                {isSavingEditCliente ? 'Guardando…' : '✓ Guardar cambios'}
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Button variant="ghost" onClick={() => setDetalleCredito(null)}
+                                                className="h-10 px-4 rounded-xl text-xs font-black uppercase text-slate-400">
+                                                Cerrar
+                                            </Button>
+                                            <Button variant="outline" onClick={() => abrirEditarCredito(c)}
+                                                className="h-10 px-4 rounded-xl text-xs font-black uppercase border-blue-200 text-blue-600 hover:bg-blue-50 gap-1.5">
+                                                <Edit2 className="w-3.5 h-3.5" /> Editar
+                                            </Button>
+                                            {c.estado !== 'pagado' && (
+                                                <Button onClick={() => { setSelectedCredito(c); setShowPagoClienteModal(true); }}
+                                                    className="h-10 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase shadow-sm gap-1.5">
+                                                    <DollarSign className="w-3.5 h-3.5" /> Registrar abono
+                                                </Button>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        );
+                    })()}
                 </DialogContent>
             </Dialog>
 
