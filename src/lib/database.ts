@@ -543,8 +543,14 @@ class NexusDatabase implements IDatabase {
   async updateGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
   async deleteGasto(id: string) { return this._delete('gastos', id); }
 
-  async addCreditoCliente(c: any) { return this.adapter.setDocument('creditos_clientes', c.id, c); }
-  async updateCreditoCliente(c: any) { return this.adapter.setDocument('creditos_clientes', c.id, c); }
+  async addCreditoCliente(c: any) {
+    await this.adapter.setDocument('creditos_clientes', c.id, c);
+    new SupabaseDatabase().addCreditoCliente(c).catch(() => {});
+  }
+  async updateCreditoCliente(c: any) {
+    await this.adapter.setDocument('creditos_clientes', c.id, c);
+    new SupabaseDatabase().updateCreditoCliente(c).catch(() => {});
+  }
   async deleteCreditoCliente(id: string) { return this._delete('creditos_clientes', id); }
 
   async addCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
