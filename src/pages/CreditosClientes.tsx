@@ -127,6 +127,7 @@ export default function CreditosClientes({
     const [dataReady, setDataReady] = useState(
         () => creditosClientes.length > 0 || clientes.length > 0
     );
+    const [busquedaCredito, setBusquedaCredito] = useState('');
     useEffect(() => {
         if (creditosClientes.length > 0 || clientes.length > 0) {
             setDataReady(true);
@@ -164,6 +165,7 @@ export default function CreditosClientes({
         nota: '',
     });
     const [editandoCredito, setEditandoCredito] = useState<CreditoCliente | null>(null);
+    const [editandoDetalleId, setEditandoDetalleId] = useState<string | null>(null);
     const [formEditCliente, setFormEditCliente] = useState<{ estado: string; descripcion: string; fecha: string; fechaVencimiento: string; items: ItemCredito[] }>({ estado: 'activo', descripcion: '', fecha: '', fechaVencimiento: '', items: [] });
     const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
     const [selectedCreditosIds, setSelectedCreditosIds] = useState<Set<string>>(new Set());
@@ -469,7 +471,8 @@ export default function CreditosClientes({
     };
 
     const handleGuardarEditCliente = async () => {
-        if (!editandoCredito) return;
+        const creditoOriginal = editandoCredito || creditosClientes.find(c => c.id === editandoDetalleId);
+        if (!creditoOriginal) return;
         setIsSavingEditCliente(true);
         try {
             const itemsActualizados = formEditCliente.items.map(i => ({
@@ -478,19 +481,20 @@ export default function CreditosClientes({
             }));
             const nuevoMonto = itemsActualizados.length > 0
                 ? itemsActualizados.reduce((s, i) => s + i.subtotal, 0)
-                : editandoCredito.monto;
-            const totalAbonado = (editandoCredito.pagos || []).reduce((s, p) => s + p.monto, 0);
+                : creditoOriginal.monto;
+            const totalAbonado = (creditoOriginal.pagos || []).reduce((s, p) => s + p.monto, 0);
             const nuevoSaldo = Math.max(0, nuevoMonto - totalAbonado);
-            await onUpdateCreditoCliente(editandoCredito.id, {
+            await onUpdateCreditoCliente(creditoOriginal.id, {
                 estado: formEditCliente.estado as CreditoCliente['estado'],
-                descripcion: formEditCliente.descripcion.trim() || editandoCredito.descripcion,
-                fecha: formEditCliente.fecha ? new Date(formEditCliente.fecha + 'T12:00:00').toISOString() : editandoCredito.fecha,
+                descripcion: formEditCliente.descripcion.trim() || creditoOriginal.descripcion,
+                fecha: formEditCliente.fecha ? new Date(formEditCliente.fecha + 'T12:00:00').toISOString() : creditoOriginal.fecha,
                 fechaVencimiento: formEditCliente.fechaVencimiento || undefined,
                 items: itemsActualizados,
                 monto: nuevoMonto,
                 saldo: nuevoSaldo,
             });
             setEditandoCredito(null);
+            setEditandoDetalleId(null);
             toast.success('Crédito actualizado');
         } catch { toast.error('Error al actualizar crédito'); }
         finally { setIsSavingEditCliente(false); }
@@ -942,11 +946,58 @@ export default function CreditosClientes({
                                                         <div className="text-center p-8 border border-slate-200 dark:border-slate-800 rounded-2xl bg-white dark:bg-slate-950">
                                                             <p className="text-xs font-bold text-slate-400">Cliente sin historial de créditos.</p>
                                                         </div>
-                                                    ) : (
+                                                    ) : (() => {
+                                                        const todosTickets = [...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados]
+                                                            .sort((a, b) => new Date(b.fecha || b.createdAt || 0).getTime() - new Date(a.fecha || a.createdAt || 0).getTime());
+                                                        const qC = busquedaCredito.trim().toLowerCase();
+                                                        const ticketsFiltrados = qC ? todosTickets.filter(cr => {
+                                                            const d = new Date(cr.fecha || cr.createdAt || '');
+                                                            const fechaTxt = isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+                                                            const productosTxt = (cr.items || []).map(i => i.nombre).join(' ').toLowerCase();
+                                                            return (
+                                                                fechaTxt.toLowerCase().includes(qC) ||
+                                                                productosTxt.includes(qC) ||
+                                                                cr.monto.toString().includes(qC) ||
+                                                                cr.saldo.toString().includes(qC) ||
+                                                                (cr.descripcion || '').toLowerCase().includes(qC) ||
+                                                                (cr.estado || '').toLowerCase().includes(qC)
+                                                            );
+                                                        }) : todosTickets;
+                                                        return (
+                                                        <>
+                                                        {/* Buscador de tickets */}
+                                                        {todosTickets.length > 2 && (
+                                                            <div className="mb-3">
+                                                                <div className="relative">
+                                                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                                                                    <input
+                                                                        type="text"
+                                                                        value={busquedaCredito}
+                                                                        onChange={e => setBusquedaCredito(e.target.value)}
+                                                                        placeholder="Buscar por fecha, monto, producto…"
+                                                                        className="w-full h-9 pl-9 pr-8 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 placeholder:text-slate-400 outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200 transition-all"
+                                                                    />
+                                                                    {busquedaCredito && (
+                                                                        <button onClick={() => setBusquedaCredito('')}
+                                                                            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                                            <X className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                                {busquedaCredito && (
+                                                                    <p className="text-[9px] text-slate-400 font-bold mt-1.5 pl-1">
+                                                                        {ticketsFiltrados.length} de {todosTickets.length} tickets
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                         <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                                                            {[...cliente.creditosVencidos, ...cliente.creditosActivos, ...cliente.creditosPagados]
-                                                              .sort((a, b) => new Date(b.fecha || b.createdAt || 0).getTime() - new Date(a.fecha || a.createdAt || 0).getTime())
-                                                              .map(credito => {
+                                                            {ticketsFiltrados.length === 0 && busquedaCredito ? (
+                                                                <div className="text-center py-8 border border-dashed border-slate-200 dark:border-slate-700 rounded-2xl">
+                                                                    <Search className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+                                                                    <p className="text-xs font-bold text-slate-400">Sin resultados para "{busquedaCredito}"</p>
+                                                                </div>
+                                                            ) : ticketsFiltrados.map(credito => {
                                                                 const isSelected = selectedCreditosIds.has(credito.id);
                                                                 return (
                                                                 <div key={credito.id} 
@@ -1076,8 +1127,10 @@ export default function CreditosClientes({
                                                             );
                                                         })}
                                                         </div>
-                                                    )}
-                                                    
+                                                        </>
+                                                        );
+                                                    })()}
+
                                                     {/* Compras al Contado */}
                                                     {cliente.ventasContado && cliente.ventasContado.length > 0 && (
                                                         <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-4">
@@ -1752,12 +1805,12 @@ export default function CreditosClientes({
             </Dialog>
 
             {/* Modal: Detalle completo de Ticket */}
-            <Dialog open={!!detalleCredito} onOpenChange={v => { if (!v) { setDetalleCredito(null); setEditandoCredito(null); } }}>
+            <Dialog open={!!detalleCredito} onOpenChange={v => { if (!v) { setDetalleCredito(null); setEditandoCredito(null); setEditandoDetalleId(null); } }}>
                 <DialogContent className="max-w-lg rounded-[28px] p-0 overflow-hidden border-none shadow-2xl">
                     {detalleCredito && (() => {
                         const c = detalleCredito;
                         const totalAbonado = (c.pagos || []).reduce((s, p) => s + p.monto, 0);
-                        const editando = editandoCredito?.id === c.id;
+                        const editando = editandoDetalleId === c.id;
                         const headerColor = c.estado === 'pagado' ? 'from-emerald-600 to-emerald-700'
                             : c.estado === 'vencido' ? 'from-red-600 to-red-700'
                             : 'from-blue-600 to-blue-700';
@@ -2005,7 +2058,7 @@ export default function CreditosClientes({
                                 <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex gap-2 flex-wrap">
                                     {editando ? (
                                         <>
-                                            <Button variant="ghost" onClick={() => setEditandoCredito(null)}
+                                            <Button variant="ghost" onClick={() => setEditandoDetalleId(null)}
                                                 className="h-10 px-4 rounded-xl text-xs font-black uppercase text-slate-400">
                                                 Cancelar
                                             </Button>
@@ -2021,7 +2074,16 @@ export default function CreditosClientes({
                                                 className="h-10 px-4 rounded-xl text-xs font-black uppercase text-slate-400">
                                                 Cerrar
                                             </Button>
-                                            <Button variant="outline" onClick={() => abrirEditarCredito(c)}
+                                            <Button variant="outline" onClick={() => {
+                                                setFormEditCliente({
+                                                    estado: c.estado,
+                                                    descripcion: c.descripcion,
+                                                    fecha: c.fecha ? c.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
+                                                    fechaVencimiento: c.fechaVencimiento || '',
+                                                    items: (c.items || []).map(i => ({ ...i })),
+                                                });
+                                                setEditandoDetalleId(c.id);
+                                            }}
                                                 className="h-10 px-4 rounded-xl text-xs font-black uppercase border-blue-200 text-blue-600 hover:bg-blue-50 gap-1.5">
                                                 <Edit2 className="w-3.5 h-3.5" /> Editar
                                             </Button>
