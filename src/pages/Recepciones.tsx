@@ -27,6 +27,7 @@ interface RecepcionesProps {
     recepciones: Recepcion[];
     proveedores: Proveedor[];
     productos: Producto[];
+    precios: PrecioProveedor[];
     prepedidos: PrePedido[];
     categorias: CategoriaTipo[];
     onAddRecepcion: (data: Omit<Recepcion, 'id'>) => Promise<Recepcion>;
@@ -39,7 +40,7 @@ interface RecepcionesProps {
 }
 
 export default function Recepciones({
-    recepciones, proveedores, productos, prepedidos, categorias,
+    recepciones, proveedores, productos, precios, prepedidos, categorias,
     onAddRecepcion, onConfirmarRecepcion, onAddProducto, onUpdateProducto,
     getProveedorById, getProductoById, formatCurrency
 }: RecepcionesProps) {
@@ -183,15 +184,12 @@ export default function Recepciones({
     const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
     const [draftRestorado, setDraftRestorado] = useState(false);
     const [scanStep, setScanStep] = useState('');
-    const [preciosDelProveedor, setPreciosDelProveedor] = useState<PrecioProveedor[]>([]);
-
-    // Cargar catálogo de precios del proveedor seleccionado
-    useEffect(() => {
-        if (!newRecepcion.proveedorId) { setPreciosDelProveedor([]); return; }
-        db.getAllPrecios().then((todos: PrecioProveedor[]) => {
-            setPreciosDelProveedor(todos.filter(p => p.proveedorId === newRecepcion.proveedorId));
-        }).catch(() => setPreciosDelProveedor([]));
-    }, [newRecepcion.proveedorId]);
+    // Precios del proveedor seleccionado (sincrónico desde prop — sin async)
+    const preciosDelProveedor = useMemo(() =>
+        newRecepcion.proveedorId
+            ? precios.filter(p => p.proveedorId === newRecepcion.proveedorId)
+            : [],
+    [precios, newRecepcion.proveedorId]);
 
     // Cargar desde la última recepción del proveedor
     const cargarUltimaRecepcion = (proveedorId: string) => {
