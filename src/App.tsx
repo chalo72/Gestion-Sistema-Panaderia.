@@ -625,11 +625,12 @@ const App = () => {
         );
       case 'recepciones':
         return (
-          <Recepciones 
+          <Recepciones
             recepciones={recepciones}
             prepedidos={prepedidos}
             proveedores={proveedores}
             productos={productos}
+            precios={precios}
             categorias={configuracion.categorias}
             onAddRecepcion={onAddRecepcion}
             onConfirmarRecepcion={async (recepcion) => {
