@@ -143,9 +143,20 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
   };
 
   const handleToggleActivo = async (user: Usuario) => {
-    const success = await updateUsuario(user.id, { activo: !user.activo });
+    const nuevoActivo = !user.activo;
+    const success = await updateUsuario(user.id, { activo: nuevoActivo });
     if (success) {
-      toast.success(`Estado de entidad conmutado: ${!user.activo ? 'ACTIVO' : 'INACTIVO'}`);
+      // Push a Supabase inmediatamente para que cualquier dispositivo lo reciba
+      try {
+        const raw = localStorage.getItem('pricecontrol_local_user_list');
+        const all: any[] = raw ? JSON.parse(raw) : [];
+        const updated = all.find((u: any) => u.id === user.id);
+        if (updated) await pushUserToCloud(updated);
+      } catch { /* silencioso */ }
+      toast.success(nuevoActivo
+        ? `✅ ${user.nombre} reactivado — ya puede entrar`
+        : `${user.nombre} desactivado`
+      );
     }
   };
 

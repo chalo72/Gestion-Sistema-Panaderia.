@@ -21,21 +21,37 @@ export function Login({ onLoginSuccess }: LoginProps) {
   const [accessCode, setAccessCode] = useState('');
   const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
+  const [failCount, setFailCount] = useState(0);
   const syncDone = useRef(false);
   const { login } = useAuth();
 
-  // Al montar: intentar traer usuarios del cloud para sincronizar dispositivos de trabajadores
+  // Al montar: traer usuarios del cloud
   useEffect(() => {
     if (syncDone.current) return;
     syncDone.current = true;
     setSyncStatus('syncing');
     pullUsersFromCloud()
-      .then(remote => {
-        mergeUsersToLocalStorage(remote);
-        setSyncStatus('done');
-      })
+      .then(remote => { mergeUsersToLocalStorage(remote); setSyncStatus('done'); })
       .catch(() => setSyncStatus('idle'));
   }, []);
+
+  const handleForceSyncAndRetry = async () => {
+    setSyncStatus('syncing');
+    try {
+      const remote = await pullUsersFromCloud();
+      const added = mergeUsersToLocalStorage(remote);
+      setSyncStatus('done');
+      setError('');
+      setFailCount(0);
+      if (added > 0) {
+        setError('');
+        // Pequeño toast orientativo
+        setTimeout(() => setError(''), 100);
+      }
+    } catch {
+      setSyncStatus('idle');
+    }
+  };
 
   const handleApplyCode = () => {
     if (!accessCode.trim()) return;
@@ -58,10 +74,12 @@ export function Login({ onLoginSuccess }: LoginProps) {
         onLoginSuccess();
       } else {
         setError(result.error || 'Error al iniciar sesión');
+        setFailCount(prev => prev + 1);
       }
     } catch (err: any) {
       console.error(err);
       setError('Error inesperado al iniciar sesión');
+      setFailCount(prev => prev + 1);
     } finally {
       setIsLoading(false);
     }
@@ -178,6 +196,17 @@ export function Login({ onLoginSuccess }: LoginProps) {
                 <AlertDescription>
                   <span className="font-bold block">Error de Acceso</span>
                   <span className="text-sm">{error}</span>
+                  {failCount >= 1 && (
+                    <button
+                      type="button"
+                      onClick={handleForceSyncAndRetry}
+                      disabled={syncStatus === 'syncing'}
+                      className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-black uppercase tracking-widest transition-colors disabled:opacity-50"
+                    >
+                      <CloudDownload className="w-3.5 h-3.5" />
+                      {syncStatus === 'syncing' ? 'Sincronizando…' : 'Sincronizar con la nube e intentar de nuevo'}
+                    </button>
+                  )}
                 </AlertDescription>
               </Alert>
             )}

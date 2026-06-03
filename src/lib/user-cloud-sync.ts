@@ -81,10 +81,11 @@ export function mergeUsersToLocalStorage(remoteUsers: Record<string, unknown>[])
             localUsers.push(remote);
             changed++;
         } else {
-            // LOCAL GANA en todo, EXCEPTO reactivar usuarios que estén inactivos localmente
-            // pero activos en la nube (el admin los reactivó desde otro dispositivo)
+            // LOCAL GANA en todo, EXCEPTO cuando la nube dice activo=true y local dice
+            // activo=false: en ese caso el admin reactivó al usuario desde otro dispositivo
+            // y su perfil completo (incluida contraseña) debe restaurarse.
             if (remote.activo === true && localUsers[idx].activo === false) {
-                localUsers[idx] = { ...localUsers[idx], activo: true };
+                localUsers[idx] = { ...localUsers[idx], ...remote, activo: true };
                 changed++;
             }
         }
