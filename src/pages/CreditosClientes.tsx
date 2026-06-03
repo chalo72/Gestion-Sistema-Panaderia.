@@ -164,7 +164,7 @@ export default function CreditosClientes({
         nota: '',
     });
     const [editandoCredito, setEditandoCredito] = useState<CreditoCliente | null>(null);
-    const [formEditCliente, setFormEditCliente] = useState({ estado: 'activo', descripcion: '', fecha: '', fechaVencimiento: '' });
+    const [formEditCliente, setFormEditCliente] = useState<{ estado: string; descripcion: string; fecha: string; fechaVencimiento: string; items: ItemCredito[] }>({ estado: 'activo', descripcion: '', fecha: '', fechaVencimiento: '', items: [] });
     const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
     const [selectedCreditosIds, setSelectedCreditosIds] = useState<Set<string>>(new Set());
     const [detalleCredito, setDetalleCredito] = useState<CreditoCliente | null>(null);
@@ -464,6 +464,7 @@ export default function CreditosClientes({
             descripcion: c.descripcion,
             fecha: c.fecha ? c.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
             fechaVencimiento: c.fechaVencimiento || '',
+            items: (c.items || []).map(i => ({ ...i })),
         });
     };
 
@@ -471,11 +472,23 @@ export default function CreditosClientes({
         if (!editandoCredito) return;
         setIsSavingEditCliente(true);
         try {
+            const itemsActualizados = formEditCliente.items.map(i => ({
+                ...i,
+                subtotal: Math.round(i.cantidad * i.precioUnitario * 100) / 100,
+            }));
+            const nuevoMonto = itemsActualizados.length > 0
+                ? itemsActualizados.reduce((s, i) => s + i.subtotal, 0)
+                : editandoCredito.monto;
+            const totalAbonado = (editandoCredito.pagos || []).reduce((s, p) => s + p.monto, 0);
+            const nuevoSaldo = Math.max(0, nuevoMonto - totalAbonado);
             await onUpdateCreditoCliente(editandoCredito.id, {
                 estado: formEditCliente.estado as CreditoCliente['estado'],
                 descripcion: formEditCliente.descripcion.trim() || editandoCredito.descripcion,
                 fecha: formEditCliente.fecha ? new Date(formEditCliente.fecha + 'T12:00:00').toISOString() : editandoCredito.fecha,
                 fechaVencimiento: formEditCliente.fechaVencimiento || undefined,
+                items: itemsActualizados,
+                monto: nuevoMonto,
+                saldo: nuevoSaldo,
             });
             setEditandoCredito(null);
             toast.success('Crédito actualizado');
@@ -1821,6 +1834,77 @@ export default function CreditosClientes({
                                                     <Input type="date" value={formEditCliente.fechaVencimiento}
                                                         onChange={e => setFormEditCliente(p => ({ ...p, fechaVencimiento: e.target.value }))}
                                                         className="mt-1 h-10 rounded-xl" />
+                                                </div>
+                                            </div>
+
+                                            {/* Items editables */}
+                                            <div>
+                                                <div className="flex items-center justify-between mb-2">
+                                                    <Label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Productos</Label>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setFormEditCliente(p => ({
+                                                            ...p,
+                                                            items: [...p.items, { productoId: '', nombre: '', cantidad: 1, precioUnitario: 0, subtotal: 0 }]
+                                                        }))}
+                                                        className="text-[9px] font-black uppercase tracking-widest text-blue-600 hover:text-blue-800 flex items-center gap-1">
+                                                        <Plus className="w-3 h-3" /> Agregar fila
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-1.5">
+                                                    {formEditCliente.items.map((item, idx) => (
+                                                        <div key={idx} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 px-3 py-2 space-y-1.5">
+                                                            <Input
+                                                                value={item.nombre}
+                                                                onChange={e => setFormEditCliente(p => {
+                                                                    const items = p.items.map((it, i) => i === idx ? { ...it, nombre: e.target.value } : it);
+                                                                    return { ...p, items };
+                                                                })}
+                                                                placeholder="Nombre del producto"
+                                                                className="h-7 text-xs rounded-lg" />
+                                                            <div className="flex items-center gap-2">
+                                                                <div className="flex items-center gap-1 flex-1">
+                                                                    <span className="text-[8px] font-black text-slate-400 uppercase shrink-0">Cant</span>
+                                                                    <Input
+                                                                        type="number" min="0.01" step="1"
+                                                                        value={item.cantidad}
+                                                                        onChange={e => setFormEditCliente(p => {
+                                                                            const cant = parseFloat(e.target.value) || 0;
+                                                                            const items = p.items.map((it, i) => i === idx ? { ...it, cantidad: cant, subtotal: Math.round(cant * it.precioUnitario * 100) / 100 } : it);
+                                                                            return { ...p, items };
+                                                                        })}
+                                                                        className="h-7 text-xs rounded-lg text-center" />
+                                                                </div>
+                                                                <div className="flex items-center gap-1 flex-1">
+                                                                    <span className="text-[8px] font-black text-slate-400 uppercase shrink-0">$ c/u</span>
+                                                                    <Input
+                                                                        type="number" min="0" step="100"
+                                                                        value={item.precioUnitario}
+                                                                        onChange={e => setFormEditCliente(p => {
+                                                                            const precio = parseFloat(e.target.value) || 0;
+                                                                            const items = p.items.map((it, i) => i === idx ? { ...it, precioUnitario: precio, subtotal: Math.round(it.cantidad * precio * 100) / 100 } : it);
+                                                                            return { ...p, items };
+                                                                        })}
+                                                                        className="h-7 text-xs rounded-lg text-center" />
+                                                                </div>
+                                                                <span className="text-xs font-black text-slate-700 dark:text-slate-300 shrink-0 min-w-[60px] text-right">
+                                                                    {formatCurrency(item.subtotal)}
+                                                                </span>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setFormEditCliente(p => ({ ...p, items: p.items.filter((_, i) => i !== idx) }))}
+                                                                    className="shrink-0 text-red-400 hover:text-red-600 p-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20">
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                    {formEditCliente.items.length > 0 && (
+                                                        <div className="flex justify-between px-3 py-2 bg-blue-50 dark:bg-blue-950/20 rounded-xl border border-blue-100 dark:border-blue-800">
+                                                            <span className="text-[9px] font-black uppercase tracking-widest text-blue-600">Nuevo total</span>
+                                                            <span className="text-sm font-black text-blue-700 dark:text-blue-400">{formatCurrency(formEditCliente.items.reduce((s, i) => s + i.subtotal, 0))}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
