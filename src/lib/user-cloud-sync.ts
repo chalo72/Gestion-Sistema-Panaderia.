@@ -66,22 +66,31 @@ export async function pullUsersFromCloud(): Promise<Record<string, unknown>[]> {
     }
 }
 
-// Agrega usuarios remotos al localStorage SIN sobrescribir los locales (LOCAL SIEMPRE GANA)
+// Agrega usuarios remotos al localStorage. LOCAL SIEMPRE GANA en conflictos,
+// EXCEPTO: si el remoto tiene activo=true y el local tiene activo=false,
+// se reactiva (corrige desactivaciones accidentales por sync).
 export function mergeUsersToLocalStorage(remoteUsers: Record<string, unknown>[]): number {
     if (!remoteUsers.length) return 0;
     const localRaw = localStorage.getItem(LOCAL_KEY);
     const localUsers: Record<string, unknown>[] = localRaw ? JSON.parse(localRaw) : [];
-    const localIds = new Set(localUsers.map(u => u.id));
 
-    let added = 0;
+    let changed = 0;
     for (const remote of remoteUsers) {
-        if (!localIds.has(remote.id)) {
+        const idx = localUsers.findIndex(u => u.id === remote.id || u.email === remote.email);
+        if (idx < 0) {
             localUsers.push(remote);
-            added++;
+            changed++;
+        } else {
+            // LOCAL GANA en todo, EXCEPTO reactivar usuarios que estén inactivos localmente
+            // pero activos en la nube (el admin los reactivó desde otro dispositivo)
+            if (remote.activo === true && localUsers[idx].activo === false) {
+                localUsers[idx] = { ...localUsers[idx], activo: true };
+                changed++;
+            }
         }
     }
 
-    if (added > 0) {
+    if (changed > 0) {
         localStorage.setItem(LOCAL_KEY, JSON.stringify(localUsers));
     }
     return added;
@@ -123,12 +132,15 @@ export function applyAccessCode(code: string): { ok: boolean; nombre?: string; e
     const localRaw = localStorage.getItem(LOCAL_KEY);
     const localUsers: Record<string, unknown>[] = localRaw ? JSON.parse(localRaw) : [];
 
-    const existing = localUsers.find(u => u.id === user.id || u.email === user.email);
-    if (existing) {
-        return { ok: true, nombre: user.nombre as string };
+    const existingIdx = localUsers.findIndex(u => u.id === user.id || u.email === user.email);
+    if (existingIdx >= 0) {
+        // El código del admin SIEMPRE corrige los datos existentes.
+        // Esto resuelve contraseñas corruptas o cuentas desactivadas por error.
+        localUsers[existingIdx] = { ...localUsers[existingIdx], ...user, activo: true };
+    } else {
+        localUsers.push(user);
     }
 
-    localUsers.push(user);
     localStorage.setItem(LOCAL_KEY, JSON.stringify(localUsers));
     return { ok: true, nombre: user.nombre as string };
 }
