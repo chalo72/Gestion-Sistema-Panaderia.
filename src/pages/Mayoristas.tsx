@@ -192,7 +192,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     useEffect(() => {
         if (viendoPerfilCliente) sessionStorage.setItem('ag_viewing_client', viendoPerfilCliente.id);
         else sessionStorage.removeItem('ag_viewing_client');
-    }, [viendoPerfilCliente]);
+        setBusquedaTicket('');
+    }, [viendoPerfilCliente?.id]);
 
     // Restaurar cliente tras recarga cuando allClientes ya cargó
     useEffect(() => {
@@ -645,6 +646,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     // Fichas del historial del cliente: créditos pendientes / tickets pagados
     const [perfilTab, setPerfilTab] = useState<'creditos' | 'pagados'>('creditos');
+    const [busquedaTicket, setBusquedaTicket] = useState('');
 
     const registrarAbono = async (historialId: string, metodo: MetodoPago, montoEspecifico?: number) => {
         const monto = montoEspecifico ?? parseFloat(montoAbono);
@@ -1486,6 +1488,26 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         const ab = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                         return h.total - ab <= 0;
                     }).sort(byDateDesc);
+
+                    // ── Filtro de búsqueda ──
+                    const q = busquedaTicket.trim().toLowerCase();
+                    const matchTicket = (h: typeof histCliente[0]) => {
+                        if (!q) return true;
+                        const d = new Date(h.fecha);
+                        const fechaTexto = isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+                        const productosTexto = h.items.map(i => i.nombre).join(' ').toLowerCase();
+                        const totalTexto = h.total.toString();
+                        return (
+                            fechaTexto.toLowerCase().includes(q) ||
+                            productosTexto.includes(q) ||
+                            totalTexto.includes(q) ||
+                            (h.metodoPago ?? '').toLowerCase().includes(q) ||
+                            (notasClientes[h.id] ?? '').toLowerCase().includes(q)
+                        );
+                    };
+                    const creditosFiltrados = creditosPendientes.filter(matchTicket);
+                    const pagadosFiltrados = ticketsPagados.filter(matchTicket);
+
                     const totalDeuda = creditosPendientes.reduce((s, h) => {
                         const ab = (h.abonos ?? []).reduce((sa, a) => sa + a.monto, 0);
                         return s + (h.total - ab);
@@ -1527,6 +1549,33 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 </button>
                             </div>
 
+                            {/* Buscador de tickets */}
+                            {histCliente.length > 2 && (
+                                <div className="px-4 py-2.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/30">
+                                    <div className="relative">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                                        <input
+                                            type="text"
+                                            value={busquedaTicket}
+                                            onChange={e => setBusquedaTicket(e.target.value)}
+                                            placeholder="Buscar por fecha, producto o monto…"
+                                            className="w-full h-8 pl-9 pr-8 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-300 placeholder:text-slate-400 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-200 transition-all"
+                                        />
+                                        {busquedaTicket && (
+                                            <button onClick={() => setBusquedaTicket('')}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                <X className="w-3.5 h-3.5" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    {busquedaTicket && (
+                                        <p className="text-[9px] text-slate-400 font-bold mt-1.5">
+                                            {creditosFiltrados.length + pagadosFiltrados.length} resultado(s) de {histCliente.length} tickets
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Contenido de la ficha activa */}
                             <div className="p-4 max-h-80 overflow-y-auto">
                                 {perfilTab === 'creditos' ? (
@@ -1550,14 +1599,23 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         )}
 
                                         {/* Lista de créditos pendientes */}
-                                        {creditosPendientes.length === 0 ? (
+                                        {creditosFiltrados.length === 0 ? (
                                             <div className="py-8 flex flex-col items-center gap-2 opacity-50">
-                                                <CheckCircle2 className="w-10 h-10 text-emerald-500"/>
-                                                <p className="text-xs text-slate-400 font-black uppercase">Sin créditos pendientes · Cliente al día</p>
+                                                {busquedaTicket ? (
+                                                    <>
+                                                        <Search className="w-8 h-8 text-slate-300"/>
+                                                        <p className="text-xs text-slate-400 font-black uppercase">Sin resultados para "{busquedaTicket}"</p>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <CheckCircle2 className="w-10 h-10 text-emerald-500"/>
+                                                        <p className="text-xs text-slate-400 font-black uppercase">Sin créditos pendientes · Cliente al día</p>
+                                                    </>
+                                                )}
                                             </div>
                                         ) : (
                                             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                                                {creditosPendientes.map(h => {
+                                                {creditosFiltrados.map(h => {
                                                     const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                                                     const saldo = h.total - abonado;
                                                     const expanded = expandedCreditos.has(h.id);
@@ -2152,14 +2210,23 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         ) : (
                                             /* ── Ficha: Pagados ── */
                                             <>
-                                                {ticketsPagados.length === 0 ? (
+                                                {pagadosFiltrados.length === 0 ? (
                                                     <div className="py-8 flex flex-col items-center gap-2 opacity-50">
-                                                        <Receipt className="w-8 h-8 text-slate-300"/>
-                                                        <p className="text-[10px] text-slate-400 font-black uppercase">Sin tickets pagados aún</p>
+                                                        {busquedaTicket ? (
+                                                            <>
+                                                                <Search className="w-8 h-8 text-slate-300"/>
+                                                                <p className="text-[10px] text-slate-400 font-black uppercase">Sin resultados para "{busquedaTicket}"</p>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <Receipt className="w-8 h-8 text-slate-300"/>
+                                                                <p className="text-[10px] text-slate-400 font-black uppercase">Sin tickets pagados aún</p>
+                                                            </>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-2">
-                                                        {ticketsPagados.map(h => {
+                                                        {pagadosFiltrados.map(h => {
                                                             const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                                                             const metodoLabel: Record<string,string> = { efectivo:'Efectivo', nequi:'Nequi', transferencia:'Cuenta', credito:'Crédito' };
                                                             const metodoCls: Record<string,string> = { efectivo:'bg-emerald-100 text-emerald-700', nequi:'bg-violet-100 text-violet-700', transferencia:'bg-blue-100 text-blue-700', credito:'bg-indigo-100 text-indigo-700' };
