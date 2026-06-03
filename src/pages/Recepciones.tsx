@@ -177,6 +177,7 @@ export default function Recepciones({
     const [busquedaProveedor, setBusquedaProveedor] = useState('');
     const [busquedaProducto, setBusquedaProducto] = useState('');
     const [mostrarDropProducto, setMostrarDropProducto] = useState(false);
+    const [categoriaFiltroRecepcion, setCategoriaFiltroRecepcion] = useState('');
     const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
     const [draftRestorado, setDraftRestorado] = useState(false);
     const [scanStep, setScanStep] = useState('');
@@ -217,6 +218,29 @@ export default function Recepciones({
             (p.categoria || '').toLowerCase().includes(busquedaProducto.toLowerCase())
         ).slice(0, 10);
     }, [productos, busquedaProducto, newRecepcion.items]);
+
+    // Categorías únicas de productos (para chips del mini POS)
+    const categoriasProductos = useMemo(() => {
+        const cats = [...new Set(productos.map(p => p.categoria).filter(Boolean))].sort() as string[];
+        return cats;
+    }, [productos]);
+
+    // Productos para el panel mini-POS (filtrados por búsqueda + categoría)
+    const productosParaPanel = useMemo(() => {
+        const idsEnRecepcion = new Set(newRecepcion.items.map(i => i.productoId));
+        let base = productos.filter(p => !idsEnRecepcion.has(p.id));
+        if (categoriaFiltroRecepcion) {
+            base = base.filter(p => p.categoria === categoriaFiltroRecepcion);
+        }
+        if (busquedaProducto.trim()) {
+            const q = busquedaProducto.toLowerCase();
+            base = base.filter(p =>
+                p.nombre.toLowerCase().includes(q) ||
+                (p.categoria || '').toLowerCase().includes(q)
+            );
+        }
+        return base;
+    }, [productos, busquedaProducto, newRecepcion.items, categoriaFiltroRecepcion]);
 
     // Cambios de precio detectados (para paso 4)
     const cambiosPrecio = useMemo(() => {
@@ -1142,56 +1166,87 @@ export default function Recepciones({
                 {/* ─── PASO 3: LISTA DE PRODUCTOS (MODO RÁPIDO) ─────────── */}
                 {step === 3 && (
                     <div className="space-y-3 animate-ag-slide-up">
-                        {/* Buscador de producto + botón nuevo */}
-                        <div className="flex gap-2">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar producto para agregar..."
-                                    value={busquedaProducto}
-                                    onChange={e => { setBusquedaProducto(e.target.value); setMostrarDropProducto(true); }}
-                                    onFocus={() => setMostrarDropProducto(true)}
-                                    className="w-full h-11 pl-9 pr-4 rounded-xl border-2 border-indigo-100 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
-                                />
-                                {/* Dropdown de sugerencias */}
-                                {mostrarDropProducto && productosFiltradosAutocomplete.length > 0 && (
-                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 rounded-xl shadow-xl z-20 overflow-hidden max-h-64 overflow-y-auto">
-                                        {productosFiltradosAutocomplete.map(p => (
-                                            <button
-                                                key={p.id}
-                                                onMouseDown={e => e.preventDefault()}
-                                                onClick={() => {
-                                                    handleAddItem(p.id);
-                                                    setBusquedaProducto('');
-                                                    setMostrarDropProducto(false);
-                                                }}
-                                                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 text-left transition-colors"
-                                            >
-                                                <div className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-                                                    <Package className="w-3.5 h-3.5 text-indigo-600" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-black text-xs text-slate-800 truncate">{p.nombre}</p>
-                                                    <p className="text-[9px] text-slate-400 font-bold">{p.categoria || 'Sin categoría'}{p.costoBase ? ` · ${formatCurrency(p.costoBase)}` : ''}</p>
-                                                </div>
-                                                <Plus className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
+                        {/* ── MINI POS: Buscador + chips de categoría + grid de productos ── */}
+                        <div className="rounded-2xl border border-indigo-100 dark:border-slate-700 bg-indigo-50/40 dark:bg-slate-800/40 p-3 space-y-2.5">
+                            {/* Fila: buscador + botón nuevo */}
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar producto..."
+                                        value={busquedaProducto}
+                                        onChange={e => setBusquedaProducto(e.target.value)}
+                                        className="w-full h-10 pl-9 pr-4 rounded-xl border-2 border-white dark:border-slate-700 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors shadow-sm"
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => setIsProductModalOpen(true)}
+                                    className="h-10 px-3 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 hover:border-indigo-500 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-black transition-all shrink-0"
+                                >
+                                    <Plus className="w-3.5 h-3.5" /> Nuevo
+                                </button>
                             </div>
-                            <button
-                                onClick={() => setIsProductModalOpen(true)}
-                                className="h-11 px-3 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 hover:border-indigo-400 hover:bg-indigo-50 flex items-center gap-1.5 text-xs font-black transition-all shrink-0"
-                            >
-                                <Plus className="w-3.5 h-3.5" /> Nuevo
-                            </button>
+
+                            {/* Chips de categoría */}
+                            <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                                <button
+                                    onClick={() => setCategoriaFiltroRecepcion('')}
+                                    className={cn(
+                                        "px-3 py-1 rounded-full text-[10px] font-black whitespace-nowrap transition-all shrink-0",
+                                        !categoriaFiltroRecepcion
+                                            ? "bg-indigo-600 text-white shadow-sm"
+                                            : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-100 border border-slate-200 dark:border-slate-600"
+                                    )}
+                                >Todos ({productos.filter(p => !newRecepcion.items.some(i => i.productoId === p.id)).length})</button>
+                                {categoriasProductos.map(cat => {
+                                    const count = productos.filter(p => p.categoria === cat && !newRecepcion.items.some(i => i.productoId === p.id)).length;
+                                    if (count === 0) return null;
+                                    return (
+                                        <button
+                                            key={cat}
+                                            onClick={() => setCategoriaFiltroRecepcion(cat === categoriaFiltroRecepcion ? '' : cat)}
+                                            className={cn(
+                                                "px-3 py-1 rounded-full text-[10px] font-black whitespace-nowrap transition-all shrink-0",
+                                                cat === categoriaFiltroRecepcion
+                                                    ? "bg-indigo-600 text-white shadow-sm"
+                                                    : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-100 border border-slate-200 dark:border-slate-600"
+                                            )}
+                                        >{cat} <span className="opacity-60">({count})</span></button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Grid de productos (mini POS) */}
+                            {productosParaPanel.length > 0 ? (
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 max-h-44 overflow-y-auto">
+                                    {productosParaPanel.map(p => (
+                                        <button
+                                            key={p.id}
+                                            onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
+                                            className="flex flex-col items-start p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 active:scale-95 transition-all text-left gap-0.5 group"
+                                        >
+                                            <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                            {p.costoBase ? (
+                                                <span className="text-[10px] font-black text-indigo-600 tabular-nums">{formatCurrency(p.costoBase)}</span>
+                                            ) : (
+                                                <span className="text-[9px] text-slate-400">Sin precio</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-center text-xs text-slate-400 py-2">
+                                    {newRecepcion.items.length > 0 && productosParaPanel.length === 0 && !busquedaProducto && !categoriaFiltroRecepcion
+                                        ? '✅ Todos los productos de esta categoría están en la lista'
+                                        : 'Sin productos que coincidan'}
+                                </p>
+                            )}
                         </div>
 
                         {/* Leyenda de columnas (solo desktop) */}
                         {newRecepcion.items.length > 0 && (
-                            <div className="hidden md:grid grid-cols-[24px_1fr_auto_100px_32px_32px_80px_28px] gap-2 px-3 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                            <div className="hidden md:grid grid-cols-[24px_1fr_auto_100px_32px_32px_80px_28px] gap-2 px-3 text-[9px] font-black uppercase text-slate-500 tracking-wider">
                                 <span>#</span>
                                 <span>Producto</span>
                                 <span>Ant.</span>
@@ -1233,9 +1288,9 @@ export default function Recepciones({
                                                 <p className="font-black text-sm text-slate-800 dark:text-white truncate leading-tight">{prod?.nombre || '??'}</p>
                                                 {precioAnt > 0 && (
                                                     <p className={cn("text-[9px] font-bold tabular-nums",
-                                                        subio ? "text-rose-500" : bajo ? "text-emerald-600" : "text-slate-400"
+                                                        subio ? "text-rose-500" : bajo ? "text-emerald-600" : "text-slate-500"
                                                     )}>
-                                                        Ant: {formatCurrency(precioAnt)}
+                                                        Costo ant: {formatCurrency(precioAnt)}
                                                         {Math.abs(diff) > 2 && <span className="ml-1 font-black">{diff > 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%</span>}
                                                     </p>
                                                 )}
@@ -1298,11 +1353,16 @@ export default function Recepciones({
                                             </button>
 
                                             {/* Subtotal */}
-                                            <span className="w-20 text-right font-black text-sm tabular-nums shrink-0 hidden sm:block">
-                                                {item.precioFacturado > 0 && item.cantidadRecibida > 0
-                                                    ? formatCurrency(item.cantidadRecibida * item.precioFacturado)
-                                                    : '—'}
-                                            </span>
+                                            <div className="flex flex-col items-end shrink-0 w-20">
+                                                <span className="font-black text-sm tabular-nums text-right">
+                                                    {item.precioFacturado > 0 && item.cantidadRecibida > 0
+                                                        ? formatCurrency(item.cantidadRecibida * item.precioFacturado)
+                                                        : '—'}
+                                                </span>
+                                                {item.precioFacturado > 0 && item.cantidadRecibida > 0 && (
+                                                    <span className="text-[8px] text-slate-400 tabular-nums">{item.cantidadRecibida}×{formatCurrency(item.precioFacturado)}</span>
+                                                )}
+                                            </div>
 
                                             {/* Eliminar */}
                                             <button
@@ -1469,7 +1529,7 @@ export default function Recepciones({
                         {/* Notas finales */}
                         {newRecepcion.observaciones && (
                             <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4">
-                                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Notas</p>
+                                <p className="text-[10px] font-black uppercase text-slate-600 dark:text-slate-400 tracking-wider mb-1">Notas</p>
                                 <p className="text-xs text-slate-600">{newRecepcion.observaciones}</p>
                             </div>
                         )}
@@ -1783,7 +1843,7 @@ export default function Recepciones({
                             <AlertTriangle className="w-7 h-7 text-rose-500" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Tasa de Incidencia</p>
+                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">Tasa de Incidencia</p>
                             <h2 className="text-2xl font-black text-rose-600 tabular-nums">{stats.tasaIncidencia.toFixed(1)}%</h2>
                             <p className="text-[9px] font-bold text-slate-500 mt-0.5">Entregas con novedad física o precio</p>
                         </div>
@@ -1796,7 +1856,7 @@ export default function Recepciones({
                              <History className="w-7 h-7 text-amber-500" />
                         </div>
                         <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Auditoría Pendiente</p>
+                            <p className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">Auditoría Pendiente</p>
                             <h2 className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{prepedidosConfirmados.length}</h2>
                             <p className="text-[9px] font-bold text-slate-500 mt-0.5">Pedidos por confirmar recepción</p>
                         </div>
@@ -1808,7 +1868,7 @@ export default function Recepciones({
                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold uppercase tracking-tighter">📥 Gestión de Recepciones</h1>
-                        <p className="text-xs text-muted-foreground uppercase font-black tracking-widest leading-none mt-1">Scanner Forense & Control de Stock v5.1</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 uppercase font-black tracking-wider leading-none mt-1">Scanner Forense & Control de Stock v5.1</p>
                     </div>
                     <div className="flex gap-2">
                         <Button 
