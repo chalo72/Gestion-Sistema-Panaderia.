@@ -478,8 +478,6 @@ export default function Recepciones({
                         </span>
                     </div>
                 );
-                // Si encontramos productos, saltamos al paso de la lista
-                setStep(3);
             }
         } catch (err) {
             console.error("ANTIGRAVITY: Error crítico en Scanner:", err);
