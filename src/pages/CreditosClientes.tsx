@@ -423,8 +423,8 @@ export default function CreditosClientes({
                 monto,
                 saldo: monto,
                 descripcion: formCliente.descripcion.trim(),
-                fecha: formCliente.fecha,
-                fechaVencimiento: formCliente.fechaVencimiento || undefined,
+                fecha: new Date(formCliente.fecha + 'T12:00:00').toISOString(),
+                fechaVencimiento: formCliente.fechaVencimiento ? new Date(formCliente.fechaVencimiento + 'T12:00:00').toISOString() : undefined,
                 estado: 'activo',
                 items: [],
                 fotoEvidencia: fotoEvidenciaCliente,
@@ -961,7 +961,7 @@ export default function CreditosClientes({
                                                                                     {credito.estado === 'vencido' && <AlertTriangle className="w-3 h-3" />}
                                                                                     {credito.estado}
                                                                                 </Badge>
-                                                                                <span className="text-[10px] text-slate-500 font-bold">{new Date(credito.createdAt || credito.fecha).toLocaleDateString()}</span>
+                                                                                <span className="text-[10px] text-slate-500 font-bold">{(() => { const f = credito.fecha || credito.createdAt || ''; return (f.includes('T') ? new Date(f) : new Date(f + 'T12:00:00')).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }); })()}</span>
                                                                             </div>
                                                                             {credito.descripcion && <p className="text-xs text-slate-600 dark:text-slate-400 truncate mb-1 ml-6">{credito.descripcion}</p>}
                                                                             <div className="flex items-center gap-4 mt-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl ml-6">
@@ -1113,7 +1113,7 @@ export default function CreditosClientes({
                                                                             <img src={c.fotoEvidencia} alt="Evidencia" className="w-full h-full object-cover" />
                                                                             <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center transition-opacity">
                                                                                 <Search className="w-6 h-6 text-white mb-1" />
-                                                                                <span className="text-[10px] font-bold text-white text-center px-1 bg-black/50 rounded-full py-0.5">{new Date(c.createdAt || c.fecha).toLocaleDateString()}</span>
+                                                                                <span className="text-[10px] font-bold text-white text-center px-1 bg-black/50 rounded-full py-0.5">{(() => { const f = c.fecha || c.createdAt || ''; return (f.includes('T') ? new Date(f) : new Date(f + 'T12:00:00')).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }); })()}</span>
                                                                             </div>
                                                                         </button>
                                                                     ))}
