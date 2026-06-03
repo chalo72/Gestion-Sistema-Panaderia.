@@ -1000,7 +1000,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 // Permite ver insumos (si venden insumos al por mayor) y productos sin precio.
                 return true;
             })
-            .filter(p => !busqueda || p.nombre.toLowerCase().includes(busqueda.toLowerCase()))
+            .filter(p => !busqueda ||
+                p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+                (p.categoria || '').toLowerCase().includes(busqueda.toLowerCase())
+            )
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
                 let costo = calcularCosto(p, mejorPrecio);

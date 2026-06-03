@@ -70,12 +70,28 @@ export function Login({ onLoginSuccess }: LoginProps) {
     setIsLoading(true);
     try {
       const result = await login(email, password);
-      if (result.success) {
-        onLoginSuccess();
-      } else {
-        setError(result.error || 'Error al iniciar sesión');
-        setFailCount(prev => prev + 1);
+      if (result.success) { onLoginSuccess(); return; }
+
+      // Si el usuario no existe localmente → sync automático con nube y reintento
+      if (result.error === 'Usuario no registrado.') {
+        setSyncStatus('syncing');
+        try {
+          const remote = await pullUsersFromCloud();
+          const added = mergeUsersToLocalStorage(remote);
+          setSyncStatus('done');
+          if (added > 0) {
+            // Reintento automático tras sync
+            const retry = await login(email, password);
+            if (retry.success) { onLoginSuccess(); return; }
+            setError(retry.error || 'Error al iniciar sesión');
+            setFailCount(prev => prev + 1);
+            return;
+          }
+        } catch { setSyncStatus('idle'); }
       }
+
+      setError(result.error || 'Error al iniciar sesión');
+      setFailCount(prev => prev + 1);
     } catch (err: any) {
       console.error(err);
       setError('Error inesperado al iniciar sesión');
@@ -191,11 +207,23 @@ export function Login({ onLoginSuccess }: LoginProps) {
           {/* ── FORMULARIO ── */}
           <form onSubmit={handleSubmit} className="space-y-3">
 
+            {syncStatus === 'syncing' && !error && (
+              <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-black animate-pulse">
+                <CloudDownload className="w-4 h-4" />
+                Buscando tu cuenta en la nube…
+              </div>
+            )}
+
             {error && (
               <Alert variant="destructive" className="bg-red-500/10 border-red-500/30 text-red-300 rounded-xl">
                 <AlertDescription>
                   <span className="font-bold block">Error de Acceso</span>
                   <span className="text-sm">{error}</span>
+                  {error === 'Usuario no registrado.' && (
+                    <p className="text-[10px] text-amber-300 mt-1 font-bold">
+                      💡 Pídele al admin que abra Usuarios → Sync Nube, o que te envíe un código de acceso por WhatsApp.
+                    </p>
+                  )}
                   {failCount >= 1 && (
                     <button
                       type="button"
