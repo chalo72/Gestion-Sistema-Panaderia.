@@ -96,9 +96,9 @@ export function useInventario({ productos }: UseInventarioParams) {
       }
     }
 
-    // 3. Si venía de un pre-pedido, marcarlo como completado/recibido (opcional)
+    // 3. Si venía de un pre-pedido, marcarlo como recibido para que salga de pendientes
     if (prePedido && db.updatePrePedido) {
-      await db.updatePrePedido({ ...prePedido, estado: 'confirmado' } as any);
+      await db.updatePrePedido({ ...prePedido, estado: 'recibido' } as any);
     }
 
     toast.success('Insumos cargados al inventario con éxito');

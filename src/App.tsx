@@ -632,7 +632,10 @@ const App = () => {
             productos={productos}
             categorias={configuracion.categorias}
             onAddRecepcion={onAddRecepcion}
-            onConfirmarRecepcion={async (r) => {}} // Placeholder si no hay hook
+            onConfirmarRecepcion={async (recepcion) => {
+              const pedidoVinculado = prepedidos.find(p => p.id === recepcion.prePedidoId);
+              await onConfirmarRecepcion(recepcion, pedidoVinculado);
+            }}
             onAddProducto={addProducto}
             onUpdateProducto={updateProducto}
             getProductoById={getProductoById}
