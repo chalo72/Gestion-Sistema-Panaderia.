@@ -121,6 +121,21 @@ export default function CreditosClientes({
 
     const [tab, setTab] = useState<Tab>('clientes');
 
+    // ── Detección de carga inicial desde IndexedDB ────────────────────────
+    // creditosClientes llega como [] mientras IndexedDB responde; evitamos
+    // mostrar "sin datos" hasta confirmar que realmente está vacío.
+    const [dataReady, setDataReady] = useState(
+        () => creditosClientes.length > 0 || clientes.length > 0
+    );
+    useEffect(() => {
+        if (creditosClientes.length > 0 || clientes.length > 0) {
+            setDataReady(true);
+            return;
+        }
+        const t = setTimeout(() => setDataReady(true), 900);
+        return () => clearTimeout(t);
+    }, [creditosClientes.length, clientes.length]);
+
     // ── Estado tab clientes ────────────────────────────────────────────────
     const [searchCliente, setSearchCliente] = useState('');
     const [filtroEstadoCliente, setFiltroEstadoCliente] = useState<string>('todos');
@@ -676,7 +691,25 @@ export default function CreditosClientes({
 
                     {/* Lista créditos clientes */}
                     <div className="flex-1 space-y-3 overflow-y-auto">
-                        {clientesAgrupados.length === 0 ? (
+                        {!dataReady ? (
+                            /* Skeleton — mientras IndexedDB carga los datos */
+                            <div className="space-y-3 animate-pulse">
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 p-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="space-y-2 flex-1">
+                                                <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded-lg w-1/3" />
+                                                <div className="h-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg w-1/4" />
+                                            </div>
+                                            <div className="h-8 w-8 bg-slate-100 dark:bg-slate-800 rounded-full" />
+                                        </div>
+                                    </div>
+                                ))}
+                                <p className="text-center text-[10px] font-bold uppercase tracking-widest text-slate-300 dark:text-slate-600 pt-1">
+                                    Cargando clientes…
+                                </p>
+                            </div>
+                        ) : clientesAgrupados.length === 0 ? (
                             <Card className="rounded-2xl border-dashed">
                                 <CardContent className="p-12 text-center text-muted-foreground">
                                     <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
