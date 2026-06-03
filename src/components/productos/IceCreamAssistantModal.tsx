@@ -249,7 +249,7 @@ export function IceCreamAssistantModal({
     const openAddExtra = () => {
         setEditingExtraIdx(null);
         setAddingExtra(true);
-        setExtraForm({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
+        setExtraForm({ productoId: '', precioPack: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
     };
 
     const openEditExtra = (idx: number) => {
@@ -257,15 +257,16 @@ export function IceCreamAssistantModal({
         setEditingExtraIdx(idx);
         setAddingExtra(true);
         setExtraForm({
-            productoId:     ex.productoId,
-            unidadesEnPack: ex.unidadesEnPack.toString(),
-            unidad:         ex.unidad,
+            productoId:      ex.productoId,
+            precioPack:      ex.costoPackTotal > 0 ? ex.costoPackTotal.toString() : '',
+            unidadesEnPack:  ex.unidadesEnPack.toString(),
+            unidad:          ex.unidad,
             cantidadPorCopa: ex.cantidadPorCopa.toString(),
         });
     };
 
     const confirmAddExtra = () => {
-        if (!extraForm.productoId || !extraForm.unidadesEnPack) return;
+        if (!extraForm.productoId || !extraForm.unidadesEnPack || !extraForm.precioPack) return;
         const prod = productos.find(p => p.id === extraForm.productoId);
         if (!prod) return;
         const costoPackTotal  = extraPackCosto;
@@ -361,7 +362,7 @@ export function IceCreamAssistantModal({
         setAddingExtra(false);
         setEditingExtraIdx(null);
         setEditingProductoId(null);
-        setExtraForm({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
+        setExtraForm({ productoId: '', precioPack: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
     };
 
     const reset = () => {
@@ -787,12 +788,25 @@ export function IceCreamAssistantModal({
 
                                         {/* 1. Seleccionar producto */}
                                         <select value={extraForm.productoId}
-                                            onChange={e => setExtraForm(f => ({ ...f, productoId: e.target.value, unidadesEnPack: '' }))}
+                                            onChange={e => {
+                                                const pid = e.target.value;
+                                                const precObj = precios.find(pr => pr.productoId === pid);
+                                                const desdePrecio = parseFloat(precObj?.precioCosto?.toString() || '0');
+                                                let autoPrice = '';
+                                                if (desdePrecio > 0) {
+                                                    autoPrice = desdePrecio.toString();
+                                                } else if (pid) {
+                                                    const prod = productos.find(p => p.id === pid);
+                                                    const fallback = parseFloat(prod?.costoBase?.toString() || prod?.precioVenta?.toString() || '0');
+                                                    if (fallback > 0) autoPrice = fallback.toString();
+                                                }
+                                                setExtraForm(f => ({ ...f, productoId: pid, precioPack: autoPrice, unidadesEnPack: '' }));
+                                            }}
                                             className="w-full h-8 bg-white border border-cyan-200 rounded-lg px-2 text-[10px] font-bold text-slate-700 outline-none cursor-pointer">
                                             <option value="">① Seleccionar insumo…</option>
                                             {extrasDisponibles.map(e => {
                                                 const c = parseFloat(precios.find(pr => pr.productoId === e.id)?.precioCosto?.toString() || '0');
-                                                return <option key={e.id} value={e.id}>{e.nombre} — {formatCurrency(c)}/paquete</option>;
+                                                return <option key={e.id} value={e.id}>{e.nombre}{c > 0 ? ` — ${formatCurrency(c)}/paquete` : ''}</option>;
                                             })}
                                         </select>
 
@@ -802,10 +816,25 @@ export function IceCreamAssistantModal({
 
                                         {extraForm.productoId && (
                                             <>
-                                                {/* Precio del paquete */}
-                                                <div className="flex items-center justify-between bg-white rounded-lg border border-slate-200 px-3 py-2">
-                                                    <span className="text-[9px] text-slate-500 font-bold">Precio registrado del paquete</span>
-                                                    <span className="font-black text-slate-800">{formatCurrency(extraPackCosto)}</span>
+                                                {/* Precio del paquete — editable */}
+                                                <div>
+                                                    <p className="text-[8px] font-black text-slate-600 mb-1">
+                                                        ① ¿Cuánto costó el paquete?
+                                                        <span className="font-normal text-slate-400 ml-1">(precio total que pagaste)</span>
+                                                    </p>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[9px] text-slate-400 font-bold">$</span>
+                                                        <Input type="number" min="0" placeholder="ej: 3000"
+                                                            value={extraForm.precioPack}
+                                                            onChange={e => setExtraForm(f => ({ ...f, precioPack: e.target.value }))}
+                                                            className="h-8 w-32 text-center font-black text-sm border-cyan-300 bg-white" />
+                                                        {extraForm.precioPack && parseFloat(extraForm.precioPack) > 0 && (
+                                                            <span className="text-[9px] font-bold text-emerald-600">✓ {formatCurrency(parseFloat(extraForm.precioPack))}</span>
+                                                        )}
+                                                        {!extraForm.precioPack && (
+                                                            <span className="text-[9px] text-amber-500 font-bold">Ingresa el precio del paquete</span>
+                                                        )}
+                                                    </div>
                                                 </div>
 
                                                 {/* 2. Unidades en el paquete */}
@@ -814,6 +843,7 @@ export function IceCreamAssistantModal({
                                                         ② ¿Cuántas unidades trae ese paquete?
                                                         <span className="font-normal text-slate-400 ml-1">(ej: 100 cucharitas, 50 vasos)</span>
                                                     </p>
+
                                                     <div className="flex items-center gap-2">
                                                         <Input type="number" min="1" placeholder="ej: 100"
                                                             value={extraForm.unidadesEnPack}
@@ -821,7 +851,7 @@ export function IceCreamAssistantModal({
                                                             className="h-8 w-24 text-center font-black text-sm border-cyan-300 bg-white" />
                                                         <select value={extraForm.unidad}
                                                             onChange={e => setExtraForm(f => ({ ...f, unidad: e.target.value }))}
-                                                            className="h-8 bg-white border border-cyan-200 rounded-lg px-2 text-[10px] font-bold outline-none cursor-pointer">
+                                                            className="h-8 bg-white border border-cyan-200 rounded-lg px-2 text-[10px] font-bold text-slate-700 outline-none cursor-pointer">
                                                             {UNIDADES.map(u => <option key={u}>{u}</option>)}
                                                         </select>
                                                         {extraForm.unidadesEnPack && parseFloat(extraForm.unidadesEnPack) > 0 && (
@@ -857,7 +887,7 @@ export function IceCreamAssistantModal({
 
                                         <div className="flex gap-2">
                                             <button onClick={confirmAddExtra}
-                                                disabled={!extraForm.productoId || !extraForm.unidadesEnPack}
+                                                disabled={!extraForm.productoId || !extraForm.precioPack || !extraForm.unidadesEnPack}
                                                 className="flex-1 h-8 bg-cyan-700 text-white rounded-lg text-[10px] font-black hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed">
                                                 {editingExtraIdx !== null ? '✓ Guardar cambios' : '✓ Agregar'}
                                             </button>

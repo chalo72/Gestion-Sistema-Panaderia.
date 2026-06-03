@@ -1164,252 +1164,313 @@ export default function Recepciones({
                     </div>
                 )}
 
-                {/* ─── PASO 3: LISTA DE PRODUCTOS (MODO RÁPIDO) ─────────── */}
+                {/* ─── PASO 3: POS BICOLUMNA ─────────────────────────────── */}
                 {step === 3 && (
-                    <div className="space-y-3 animate-ag-slide-up">
-                        {/* ── MINI POS: Buscador + chips de categoría + grid de productos ── */}
-                        <div className="rounded-2xl border border-indigo-100 dark:border-slate-700 bg-indigo-50/40 dark:bg-slate-800/40 p-3 space-y-2.5">
-                            {/* Fila: buscador + botón nuevo */}
-                            <div className="flex gap-2">
+                    <div className="flex flex-col lg:flex-row flex-1 min-h-0 animate-ag-slide-up" style={{ height: 'calc(100dvh - 130px)' }}>
+
+                        {/* ══ PANEL IZQUIERDO — CATÁLOGO ═══════════════════════════ */}
+                        <div className={cn(
+                            "flex flex-col flex-1 min-h-0 overflow-hidden",
+                            mobilePanelRec === 'ticket' ? "hidden lg:flex" : "flex"
+                        )}>
+                            {/* Buscador + botón nuevo */}
+                            <div className="px-3 pt-3 pb-2 flex gap-2 shrink-0">
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                     <input
                                         type="text"
                                         placeholder="Buscar producto..."
                                         value={busquedaProducto}
-                                        onChange={e => setBusquedaProducto(e.target.value)}
-                                        className="w-full h-10 pl-9 pr-4 rounded-xl border-2 border-white dark:border-slate-700 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors shadow-sm"
+                                        onChange={e => { setBusquedaProducto(e.target.value); setCategoriaFiltroRecepcion(''); }}
+                                        className="w-full h-10 pl-9 pr-4 rounded-xl border-2 border-slate-100 focus:border-indigo-400 bg-white dark:bg-slate-800 font-bold text-sm outline-none transition-colors"
                                     />
+                                    {busquedaProducto && (
+                                        <button onClick={() => setBusquedaProducto('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                                            <X className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
                                 </div>
                                 <button
                                     onClick={() => setIsProductModalOpen(true)}
-                                    className="h-10 px-3 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 hover:border-indigo-500 hover:bg-indigo-100 flex items-center gap-1.5 text-xs font-black transition-all shrink-0"
+                                    className="h-10 px-3 rounded-xl border-2 border-dashed border-indigo-300 text-indigo-600 hover:border-indigo-500 hover:bg-indigo-50 flex items-center gap-1.5 text-xs font-black transition-all shrink-0"
                                 >
                                     <Plus className="w-3.5 h-3.5" /> Nuevo
                                 </button>
                             </div>
 
                             {/* Chips de categoría */}
-                            <div className="flex gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+                            <div className="px-3 pb-2 flex gap-1.5 overflow-x-auto scrollbar-none shrink-0">
                                 <button
                                     onClick={() => setCategoriaFiltroRecepcion('')}
                                     className={cn(
                                         "px-3 py-1 rounded-full text-[10px] font-black whitespace-nowrap transition-all shrink-0",
-                                        !categoriaFiltroRecepcion
+                                        !categoriaFiltroRecepcion && !busquedaProducto
                                             ? "bg-indigo-600 text-white shadow-sm"
-                                            : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-100 border border-slate-200 dark:border-slate-600"
+                                            : "bg-white dark:bg-slate-700 text-slate-600 border border-slate-200 hover:bg-indigo-50"
                                     )}
-                                >Todos ({productos.filter(p => !newRecepcion.items.some(i => i.productoId === p.id)).length})</button>
+                                >Todos</button>
                                 {categoriasProductos.map(cat => {
                                     const count = productos.filter(p => p.categoria === cat && !newRecepcion.items.some(i => i.productoId === p.id)).length;
                                     if (count === 0) return null;
                                     return (
-                                        <button
-                                            key={cat}
-                                            onClick={() => setCategoriaFiltroRecepcion(cat === categoriaFiltroRecepcion ? '' : cat)}
+                                        <button key={cat}
+                                            onClick={() => { setCategoriaFiltroRecepcion(cat === categoriaFiltroRecepcion ? '' : cat); setBusquedaProducto(''); }}
                                             className={cn(
                                                 "px-3 py-1 rounded-full text-[10px] font-black whitespace-nowrap transition-all shrink-0",
                                                 cat === categoriaFiltroRecepcion
                                                     ? "bg-indigo-600 text-white shadow-sm"
-                                                    : "bg-white dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-indigo-100 border border-slate-200 dark:border-slate-600"
+                                                    : "bg-white dark:bg-slate-700 text-slate-600 border border-slate-200 hover:bg-indigo-50"
                                             )}
-                                        >{cat} <span className="opacity-60">({count})</span></button>
+                                        >{cat} <span className="opacity-50">({count})</span></button>
                                     );
                                 })}
                             </div>
 
-                            {/* Grid de productos (mini POS) */}
-                            {productosParaPanel.length > 0 ? (
-                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1.5 max-h-44 overflow-y-auto">
-                                    {productosParaPanel.map(p => (
-                                        <button
-                                            key={p.id}
-                                            onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
-                                            className="flex flex-col items-start p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 active:scale-95 transition-all text-left gap-0.5 group"
-                                        >
-                                            <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
-                                            {p.costoBase ? (
-                                                <span className="text-[10px] font-black text-indigo-600 tabular-nums">{formatCurrency(p.costoBase)}</span>
-                                            ) : (
-                                                <span className="text-[9px] text-slate-400">Sin precio</span>
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-center text-xs text-slate-400 py-2">
-                                    {newRecepcion.items.length > 0 && productosParaPanel.length === 0 && !busquedaProducto && !categoriaFiltroRecepcion
-                                        ? '✅ Todos los productos de esta categoría están en la lista'
-                                        : 'Sin productos que coincidan'}
-                                </p>
-                            )}
-                        </div>
-
-                        {/* Leyenda de columnas (solo desktop) */}
-                        {newRecepcion.items.length > 0 && (
-                            <div className="hidden md:grid grid-cols-[24px_1fr_auto_100px_32px_32px_80px_28px] gap-2 px-3 text-[9px] font-black uppercase text-slate-500 tracking-wider">
-                                <span>#</span>
-                                <span>Producto</span>
-                                <span>Ant.</span>
-                                <span className="text-center">Cantidad</span>
-                                <span className="text-center">Prod</span>
-                                <span className="text-center">Emb</span>
-                                <span className="text-right">Subtotal</span>
-                                <span />
-                            </div>
-                        )}
-
-                        {/* Filas compactas */}
-                        <div className="space-y-1.5" onClick={() => setMostrarDropProducto(false)}>
-                            {newRecepcion.items.length === 0 ? (
-                                <div className="py-12 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center gap-3 text-slate-400">
-                                    <Package className="w-10 h-10 opacity-30" />
-                                    <p className="text-sm font-bold">Busca arriba o toca para agregar productos</p>
-                                </div>
-                            ) : (
-                                newRecepcion.items.map((item, idx) => {
-                                    const prod = getProductoById(item.productoId);
-                                    const precioAnt = prod?.costoBase || 0;
-                                    const diff = precioAnt > 0 ? ((item.precioFacturado - precioAnt) / precioAnt) * 100 : 0;
-                                    const subio = diff > 5;
-                                    const bajo = diff < -2;
-                                    return (
-                                        <div key={item.id} className={cn(
-                                            "flex flex-wrap md:flex-nowrap items-center gap-2 p-2.5 rounded-2xl border transition-all",
-                                            subio ? "bg-rose-50 border-rose-200 dark:bg-rose-950/20 dark:border-rose-800" :
-                                            bajo ? "bg-emerald-50 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-800" :
-                                            !item.productoOk || !item.embalajeOk ? "bg-amber-50 border-amber-200 dark:bg-amber-950/20" :
-                                            "bg-white dark:bg-slate-800 border-slate-100 hover:border-indigo-200"
-                                        )}>
-                                            {/* Número */}
-                                            <span className="w-6 text-xs font-black text-slate-400 text-center shrink-0">{idx + 1}</span>
-
-                                            {/* Nombre + precio anterior */}
-                                            <div className="flex-1 min-w-[110px]">
-                                                <p className="font-black text-sm text-slate-800 dark:text-white truncate leading-tight">{prod?.nombre || '??'}</p>
-                                                {precioAnt > 0 && (
-                                                    <p className={cn("text-[9px] font-bold tabular-nums",
-                                                        subio ? "text-rose-500" : bajo ? "text-emerald-600" : "text-slate-500"
-                                                    )}>
-                                                        Costo ant: {formatCurrency(precioAnt)}
-                                                        {Math.abs(diff) > 2 && <span className="ml-1 font-black">{diff > 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%</span>}
-                                                    </p>
-                                                )}
-                                            </div>
-
-                                            {/* Precio */}
-                                            <input
-                                                type="number"
-                                                value={item.precioFacturado || ''}
-                                                onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
-                                                placeholder="Precio"
-                                                className={cn(
-                                                    "w-24 h-9 rounded-xl px-2 text-center font-black text-sm outline-none border transition-colors",
-                                                    subio ? "bg-rose-100 border-rose-200 text-rose-700" :
-                                                    bajo ? "bg-emerald-100 border-emerald-200 text-emerald-700" :
-                                                    "bg-slate-50 border-slate-200"
-                                                )}
-                                            />
-
-                                            {/* Stepper cantidad */}
-                                            <div className="flex items-center bg-slate-100 dark:bg-slate-700 rounded-xl overflow-hidden shrink-0">
-                                                <button
-                                                    onClick={() => handleUpdateItem(item.id, { cantidadRecibida: Math.max(0, item.cantidadRecibida - 1) })}
-                                                    className="w-8 h-9 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 font-black transition-colors text-lg leading-none"
-                                                >−</button>
-                                                <input
-                                                    type="number"
-                                                    value={item.cantidadRecibida || ''}
-                                                    onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseFloat(e.target.value) || 0 })}
-                                                    className="w-10 h-9 bg-transparent text-center font-black text-sm outline-none"
-                                                />
-                                                <button
-                                                    onClick={() => handleUpdateItem(item.id, { cantidadRecibida: item.cantidadRecibida + 1 })}
-                                                    className="w-8 h-9 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-200 font-black transition-colors text-lg leading-none"
-                                                >+</button>
-                                            </div>
-
-                                            {/* Producto OK */}
-                                            <button
-                                                onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
-                                                className={cn(
-                                                    "w-8 h-9 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0",
-                                                    item.productoOk ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : "bg-rose-100 text-rose-600 hover:bg-rose-200"
-                                                )}
-                                                title="Estado del producto"
-                                            >
-                                                {item.productoOk ? <Check className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}
-                                            </button>
-
-                                            {/* Embalaje OK */}
-                                            <button
-                                                onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })}
-                                                className={cn(
-                                                    "w-8 h-9 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0",
-                                                    item.embalajeOk ? "bg-sky-100 text-sky-700 hover:bg-sky-200" : "bg-amber-100 text-amber-600 hover:bg-amber-200"
-                                                )}
-                                                title="Estado del embalaje"
-                                            >
-                                                <Package className="w-3.5 h-3.5" />
-                                            </button>
-
-                                            {/* Subtotal */}
-                                            <div className="flex flex-col items-end shrink-0 w-20">
-                                                <span className="font-black text-sm tabular-nums text-right">
-                                                    {item.precioFacturado > 0 && item.cantidadRecibida > 0
-                                                        ? formatCurrency(item.cantidadRecibida * item.precioFacturado)
-                                                        : '—'}
-                                                </span>
-                                                {item.precioFacturado > 0 && item.cantidadRecibida > 0 && (
-                                                    <span className="text-[8px] text-slate-400 tabular-nums">{item.cantidadRecibida}×{formatCurrency(item.precioFacturado)}</span>
-                                                )}
-                                            </div>
-
-                                            {/* Eliminar */}
-                                            <button
-                                                onClick={() => setNewRecepcion(p => ({ ...p, items: p.items.filter(i => i.id !== item.id) }))}
-                                                className="w-7 h-7 rounded-lg flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all shrink-0"
-                                            ><X className="w-3.5 h-3.5" /></button>
-
-                                            {/* Novedad expandida */}
-                                            {(!item.productoOk || !item.embalajeOk) && (
-                                                <input
-                                                    placeholder={`Novedad: ${!item.productoOk ? 'producto' : ''}${!item.productoOk && !item.embalajeOk ? ' · ' : ''}${!item.embalajeOk ? 'embalaje' : ''}...`}
-                                                    value={item.observaciones || ''}
-                                                    onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
-                                                    className="w-full h-8 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 px-3 text-xs font-bold outline-none col-span-full"
-                                                />
-                                            )}
+                            {/* Acordeones por categoría (o resultado de búsqueda plano) */}
+                            <div className="flex-1 overflow-y-auto px-3 pb-20 lg:pb-4 space-y-2">
+                                {busquedaProducto.trim() ? (
+                                    /* Modo búsqueda: grid plano */
+                                    productosParaPanel.length === 0 ? (
+                                        <div className="py-10 text-center text-slate-400 text-sm font-bold">Sin resultados</div>
+                                    ) : (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                                            {productosParaPanel.map(p => (
+                                                <button key={p.id}
+                                                    onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
+                                                    className="flex flex-col items-start p-3 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-1 group"
+                                                >
+                                                    <span className="font-black text-xs text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                    <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
+                                                        {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
+                                                    </span>
+                                                    {p.unidad && <span className="text-[9px] text-slate-400 uppercase">{p.unidad}</span>}
+                                                </button>
+                                            ))}
                                         </div>
-                                    );
-                                })
-                            )}
+                                    )
+                                ) : (
+                                    /* Modo categorías: acordeones */
+                                    (() => {
+                                        const catsActivas = categoriaFiltroRecepcion
+                                            ? [categoriaFiltroRecepcion]
+                                            : categoriasProductos;
+                                        return catsActivas.map(cat => {
+                                            const prods = productos.filter(p =>
+                                                p.categoria === cat &&
+                                                !newRecepcion.items.some(i => i.productoId === p.id)
+                                            );
+                                            if (prods.length === 0) return null;
+                                            const isOpen = categoriasExpandidas.has(cat) || !!categoriaFiltroRecepcion;
+                                            return (
+                                                <div key={cat} className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+                                                    <button
+                                                        onClick={() => {
+                                                            setCategoriasExpandidas(prev => {
+                                                                const next = new Set(prev);
+                                                                if (next.has(cat)) next.delete(cat); else next.add(cat);
+                                                                return next;
+                                                            });
+                                                        }}
+                                                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                                                    >
+                                                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300">{cat}</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-[9px] font-black bg-slate-100 dark:bg-slate-700 text-slate-500 px-1.5 py-0.5 rounded-full">{prods.length}</span>
+                                                            <ChevronDown className={cn("w-3.5 h-3.5 text-slate-400 transition-transform", isOpen ? "rotate-180" : "")} />
+                                                        </div>
+                                                    </button>
+                                                    {isOpen && (
+                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 pt-0 border-t border-slate-50 dark:border-slate-700">
+                                                            {prods.map(p => (
+                                                                <button key={p.id}
+                                                                    onClick={() => handleAddItem(p.id)}
+                                                                    className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group"
+                                                                >
+                                                                    <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                                    <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
+                                                                        {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
+                                                                    </span>
+                                                                    {p.unidad && <span className="text-[9px] text-slate-400 uppercase">{p.unidad}</span>}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        });
+                                    })()
+                                )}
+                            </div>
                         </div>
 
-                        {/* Barra inferior sticky con totales + CTA */}
-                        {newRecepcion.items.length > 0 && (
-                            <div className="sticky bottom-4 bg-indigo-600 text-white rounded-2xl p-4 flex items-center justify-between gap-4 shadow-xl shadow-indigo-600/30">
-                                <div>
-                                    <p className="text-[10px] font-black uppercase text-indigo-200">Total · {totalItems} prod · {totalUnidades} uds</p>
-                                    <p className="text-xl font-black tabular-nums">{formatCurrency(totalDinero)}</p>
-                                </div>
-                                <div className="flex gap-2">
+                        {/* ══ PANEL DERECHO — TICKET ════════════════════════════════ */}
+                        <div className={cn(
+                            "lg:w-[370px] lg:border-l border-slate-100 dark:border-slate-700 flex flex-col min-h-0",
+                            mobilePanelRec === 'productos' ? "hidden lg:flex" : "flex flex-1"
+                        )}>
+                            {/* Header oscuro del ticket */}
+                            <div className="bg-[#1a1c2e] text-white px-4 py-3 shrink-0">
+                                <p className="text-[9px] font-black uppercase tracking-[0.25em] text-indigo-300">Ticket Recepción</p>
+                                <p className="font-black text-sm truncate">{proveedorActual?.nombre ?? '—'}</p>
+                            </div>
+
+                            {/* Lista de ítems */}
+                            <div className="flex-1 overflow-y-auto bg-[#1e2033]">
+                                {newRecepcion.items.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center h-full gap-3 text-slate-500 py-12">
+                                        <Package className="w-10 h-10 opacity-30" />
+                                        <p className="text-xs font-bold text-center px-4">Toca un producto del catálogo para agregarlo aquí</p>
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-white/5">
+                                        {newRecepcion.items.map((item, idx) => {
+                                            const prod = getProductoById(item.productoId);
+                                            const precioAnt = prod?.costoBase || 0;
+                                            const diff = precioAnt > 0 ? ((item.precioFacturado - precioAnt) / precioAnt) * 100 : 0;
+                                            const subio = diff > 5;
+                                            const bajo = diff < -2;
+                                            const subtotal = item.cantidadRecibida * item.precioFacturado;
+                                            return (
+                                                <div key={item.id} className="px-3 py-2.5 space-y-2">
+                                                    {/* Fila 1: nombre + eliminar */}
+                                                    <div className="flex items-start gap-2">
+                                                        <span className="text-[9px] font-black text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx + 1}</span>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="font-black text-xs text-white leading-tight">{prod?.nombre || '??'}</p>
+                                                            {precioAnt > 0 && (
+                                                                <p className={cn("text-[9px] font-bold tabular-nums",
+                                                                    subio ? "text-rose-400" : bajo ? "text-emerald-400" : "text-slate-500"
+                                                                )}>
+                                                                    Ant: {formatCurrency(precioAnt)}
+                                                                    {Math.abs(diff) > 2 && <span className="ml-1">{diff > 0 ? '▲' : '▼'}{Math.abs(diff).toFixed(0)}%</span>}
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setNewRecepcion(p => ({ ...p, items: p.items.filter(i => i.id !== item.id) }))}
+                                                            className="w-5 h-5 rounded flex items-center justify-center text-slate-600 hover:text-rose-400 transition-colors shrink-0 mt-0.5"
+                                                        ><X className="w-3 h-3" /></button>
+                                                    </div>
+                                                    {/* Fila 2: precio + qty + OK toggles + subtotal */}
+                                                    <div className="flex items-center gap-1.5 pl-6">
+                                                        {/* Precio */}
+                                                        <input
+                                                            type="number"
+                                                            value={item.precioFacturado || ''}
+                                                            onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
+                                                            placeholder="$"
+                                                            className={cn(
+                                                                "w-20 h-8 rounded-lg px-2 text-center font-black text-xs outline-none border transition-colors",
+                                                                subio ? "bg-rose-900/40 border-rose-700 text-rose-300" :
+                                                                bajo ? "bg-emerald-900/40 border-emerald-700 text-emerald-300" :
+                                                                "bg-white/10 border-white/10 text-white"
+                                                            )}
+                                                        />
+                                                        {/* Stepper */}
+                                                        <div className="flex items-center bg-white/10 rounded-lg overflow-hidden shrink-0">
+                                                            <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: Math.max(0, item.cantidadRecibida - 1) })}
+                                                                className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">−</button>
+                                                            <input
+                                                                type="number"
+                                                                value={item.cantidadRecibida || ''}
+                                                                onChange={e => handleUpdateItem(item.id, { cantidadRecibida: parseFloat(e.target.value) || 0 })}
+                                                                className="w-9 h-8 bg-transparent text-center font-black text-xs text-white outline-none"
+                                                            />
+                                                            <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: item.cantidadRecibida + 1 })}
+                                                                className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">+</button>
+                                                        </div>
+                                                        {/* OK prod */}
+                                                        <button
+                                                            onClick={() => handleUpdateItem(item.id, { productoOk: !item.productoOk })}
+                                                            title="Estado producto"
+                                                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0",
+                                                                item.productoOk ? "bg-emerald-600/30 text-emerald-400" : "bg-rose-600/30 text-rose-400"
+                                                            )}
+                                                        >{item.productoOk ? <Check className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5" />}</button>
+                                                        {/* OK embalaje */}
+                                                        <button
+                                                            onClick={() => handleUpdateItem(item.id, { embalajeOk: !item.embalajeOk })}
+                                                            title="Estado embalaje"
+                                                            className={cn("w-8 h-8 rounded-lg flex items-center justify-center transition-all shrink-0",
+                                                                item.embalajeOk ? "bg-sky-600/30 text-sky-400" : "bg-amber-600/30 text-amber-400"
+                                                            )}
+                                                        ><Package className="w-3.5 h-3.5" /></button>
+                                                        {/* Subtotal */}
+                                                        <div className="flex-1 text-right">
+                                                            <p className="font-black text-xs text-white tabular-nums">
+                                                                {subtotal > 0 ? formatCurrency(subtotal) : '—'}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    {/* Novedad si hay incidencia */}
+                                                    {(!item.productoOk || !item.embalajeOk) && (
+                                                        <input
+                                                            placeholder="Describe la novedad..."
+                                                            value={item.observaciones || ''}
+                                                            onChange={e => handleUpdateItem(item.id, { observaciones: e.target.value })}
+                                                            className="w-full h-7 rounded-lg bg-amber-900/30 border border-amber-700/50 text-amber-300 px-3 text-[10px] font-bold outline-none ml-6"
+                                                            style={{ width: 'calc(100% - 1.5rem)', marginLeft: '1.5rem' }}
+                                                        />
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Footer del ticket */}
+                            <div className="bg-[#1a1c2e] border-t border-white/10 p-3 space-y-2 shrink-0">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <p className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">
+                                            {totalItems} prod · {totalUnidades} uds
+                                        </p>
+                                        <p className="text-xl font-black text-white tabular-nums">{formatCurrency(totalDinero)}</p>
+                                    </div>
                                     <textarea
                                         value={newRecepcion.observaciones}
                                         onChange={e => setNewRecepcion(p => ({ ...p, observaciones: e.target.value }))}
                                         placeholder="Notas..."
-                                        rows={1}
-                                        className="hidden sm:block h-10 px-3 py-2 rounded-xl bg-white/10 border border-white/20 text-xs placeholder:text-white/40 outline-none resize-none w-40"
+                                        rows={2}
+                                        className="hidden sm:block h-12 px-2.5 py-1.5 rounded-xl bg-white/10 border border-white/10 text-[10px] text-white placeholder:text-white/30 outline-none resize-none w-32"
                                     />
-                                    <button
-                                        onClick={() => { setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.productoId))); setStep(4); }}
-                                        className="h-10 px-5 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl font-black text-xs uppercase tracking-widest flex items-center gap-2 transition-colors"
-                                    >
-                                        Confirmar <ArrowRight className="w-3.5 h-3.5" />
-                                    </button>
                                 </div>
+                                <button
+                                    disabled={newRecepcion.items.length === 0}
+                                    onClick={() => { setPreciosAActualizar(new Set(cambiosPrecio.map(i => i.productoId))); setStep(4); }}
+                                    className="w-full h-11 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
+                                >
+                                    Confirmar recepción <ArrowRight className="w-3.5 h-3.5" />
+                                </button>
                             </div>
-                        )}
+                        </div>
+
+                        {/* ══ TOGGLE MÓVIL (solo < lg) ══════════════════════════════ */}
+                        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-30 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-700 flex">
+                            <button
+                                onClick={() => setMobilePanelRec('productos')}
+                                className={cn(
+                                    "flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-black uppercase transition-colors",
+                                    mobilePanelRec === 'productos' ? "text-indigo-600 border-t-2 border-indigo-600" : "text-slate-400"
+                                )}
+                            >
+                                <Package className="w-4 h-4" /> Catálogo
+                            </button>
+                            <button
+                                onClick={() => setMobilePanelRec('ticket')}
+                                className={cn(
+                                    "flex-1 py-3 flex flex-col items-center gap-0.5 text-[10px] font-black uppercase transition-colors relative",
+                                    mobilePanelRec === 'ticket' ? "text-indigo-600 border-t-2 border-indigo-600" : "text-slate-400"
+                                )}
+                            >
+                                <Receipt className="w-4 h-4" />
+                                Ticket
+                                {totalItems > 0 && (
+                                    <span className="absolute top-1.5 right-[calc(50%-18px)] w-4 h-4 bg-indigo-600 text-white rounded-full text-[8px] font-black flex items-center justify-center">{totalItems}</span>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 )}
 
