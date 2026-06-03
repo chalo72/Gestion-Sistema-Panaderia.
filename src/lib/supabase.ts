@@ -1,15 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
 
 // PROTEGIDO: Validación segura de credenciales Supabase
-// 🛡️ [NEXUS-EMERGENCY-RESCUE]: Credenciales inyectadas directamente para rescate de meses de trabajo
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://hurlzmarkmkjhwmkwqld.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_mGKq_fDLcp_u1GoXKVGlBQ_8Gz4t9cj';
+// 🛡️ [ANTIGRAVITY-SECURITY]: Exigir credenciales desde .env (sin hardcode inseguro)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!import.meta.env.VITE_SUPABASE_URL) {
-    console.info("🛡️ [Nexus-Security] Operando en Modo Rescate: Usando llaves de persistencia inyectadas.");
+// 🔐 Validación: si no están configuradas, error explícito
+if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error(
+        '❌ [SECURITY] Supabase credentials missing!\n' +
+        'Configura en .env:\n' +
+        '  VITE_SUPABASE_URL=tu_url\n' +
+        '  VITE_SUPABASE_ANON_KEY=tu_key'
+    );
 }
 
-const isConfigured = true; // ✅ Forzamos configuración activa
+const isConfigured = true; // ✅ Validado en build time
 
 export const supabase = createClient(
     supabaseUrl,

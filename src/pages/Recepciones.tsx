@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/database';
-import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada } from '@/types';
+import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor } from '@/types';
 import { procesarImagenFactura, matchProductoEnCatalogo, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import type { Categoria as CategoriaTipo } from '@/types';
@@ -183,6 +183,15 @@ export default function Recepciones({
     const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
     const [draftRestorado, setDraftRestorado] = useState(false);
     const [scanStep, setScanStep] = useState('');
+    const [preciosDelProveedor, setPreciosDelProveedor] = useState<PrecioProveedor[]>([]);
+
+    // Cargar catálogo de precios del proveedor seleccionado
+    useEffect(() => {
+        if (!newRecepcion.proveedorId) { setPreciosDelProveedor([]); return; }
+        db.getAllPrecios().then((todos: PrecioProveedor[]) => {
+            setPreciosDelProveedor(todos.filter(p => p.proveedorId === newRecepcion.proveedorId));
+        }).catch(() => setPreciosDelProveedor([]));
+    }, [newRecepcion.proveedorId]);
 
     // Cargar desde la última recepción del proveedor
     const cargarUltimaRecepcion = (proveedorId: string) => {
@@ -244,26 +253,32 @@ export default function Recepciones({
         return base;
     }, [productos, busquedaProducto, newRecepcion.items, categoriaFiltroRecepcion]);
 
-    // Productos agrupados por historial del proveedor seleccionado
+    // Productos del proveedor seleccionado (fuente: PrecioProveedor + historial recepciones)
     const productosAgrupados = useMemo(() => {
         const enTicket = new Set(newRecepcion.items.map(i => i.productoId));
-        if (!newRecepcion.proveedorId) return { habituales: [], todos: [] };
-        const idsHabituales = new Set<string>();
+        if (!newRecepcion.proveedorId) return { delProveedor: [], otros: [] };
+
+        // IDs con precio configurado para este proveedor (fuente principal)
+        const idsConPrecio = new Set(preciosDelProveedor.map(p => p.productoId));
+        // IDs del historial de recepciones (fuente secundaria)
         recepciones
             .filter(r => r.proveedorId === newRecepcion.proveedorId)
-            .forEach(r => r.items.forEach(i => idsHabituales.add(i.productoId)));
+            .forEach(r => r.items.forEach(i => idsConPrecio.add(i.productoId)));
+
         const base = productos.filter(p => !enTicket.has(p.id));
+
         if (busquedaProducto.trim()) {
             const q = busquedaProducto.toLowerCase();
-            return {
-                habituales: [],
-                todos: base.filter(p => p.nombre.toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q))
-            };
+            const todos = base.filter(p =>
+                p.nombre.toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q)
+            );
+            return { delProveedor: [], otros: todos };
         }
-        const habituales = base.filter(p => idsHabituales.has(p.id));
-        const todos = base.filter(p => !idsHabituales.has(p.id));
-        return { habituales, todos };
-    }, [newRecepcion.proveedorId, newRecepcion.items, productos, recepciones, busquedaProducto]);
+
+        const delProveedor = base.filter(p => idsConPrecio.has(p.id));
+        // "otros" se muestra colapsado solo si el usuario busca — no se lista por defecto
+        return { delProveedor, otros: [] };
+    }, [newRecepcion.proveedorId, newRecepcion.items, productos, recepciones, busquedaProducto, preciosDelProveedor]);
 
     // Cambios de precio detectados
     const cambiosPrecio = useMemo(() => {
@@ -1069,82 +1084,89 @@ export default function Recepciones({
                         {/* Catálogo scrollable */}
                         <div className="flex-1 overflow-y-auto px-3 pb-20 lg:pb-3 space-y-2">
                             {busquedaProducto.trim() ? (
-                                /* Búsqueda: grid plano */
-                                productosAgrupados.todos.length === 0 && productosAgrupados.habituales.length === 0 ? (
+                                /* Modo búsqueda: muestra TODOS los productos (para agregar algo nuevo) */
+                                productosAgrupados.otros.length === 0 ? (
                                     <div className="py-10 text-center text-slate-400 text-sm font-bold">Sin resultados</div>
                                 ) : (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
-                                        {[...productosAgrupados.habituales, ...productosAgrupados.todos].map(p => (
-                                            <button key={p.id} onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
-                                                className="flex flex-col items-start p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-0.5 group">
-                                                <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
-                                                <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
-                                                    {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
-                                                </span>
-                                            </button>
-                                        ))}
+                                        {productosAgrupados.otros.map(p => {
+                                            const esDeEsteProv = preciosDelProveedor.some(pp => pp.productoId === p.id);
+                                            return (
+                                                <button key={p.id} onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
+                                                    className={cn("flex flex-col items-start p-2.5 rounded-xl border active:scale-95 transition-all text-left gap-0.5 group",
+                                                        esDeEsteProv
+                                                            ? "bg-indigo-50 border-indigo-200 hover:border-indigo-400"
+                                                            : "bg-white dark:bg-slate-800 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50"
+                                                    )}>
+                                                    <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                    <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
+                                                        {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 )
+                            ) : productosAgrupados.delProveedor.length === 0 ? (
+                                /* Sin productos configurados para este proveedor */
+                                <div className="py-12 flex flex-col items-center gap-3 text-slate-400 text-center">
+                                    <Package className="w-10 h-10 opacity-30" />
+                                    <p className="text-sm font-bold">Este proveedor no tiene productos configurados</p>
+                                    <p className="text-xs">Ve a <strong>Gestión de Proveedores</strong> y asigna productos,<br/>o usa el buscador para agregar cualquier producto.</p>
+                                </div>
                             ) : (
-                                <>
-                                    {/* Sección: habituales de este proveedor */}
-                                    {productosAgrupados.habituales.length > 0 && (
-                                        <div className="rounded-xl border border-indigo-100 overflow-hidden bg-white dark:bg-slate-800">
-                                            <div className="px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-between">
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-600">De este proveedor</span>
-                                                <span className="text-[9px] font-black bg-indigo-100 text-indigo-500 px-1.5 py-0.5 rounded-full">{productosAgrupados.habituales.length}</span>
-                                            </div>
-                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2">
-                                                {productosAgrupados.habituales.map(p => (
+                                /* Modo normal: solo productos DE ESTE PROVEEDOR agrupados por categoría */
+                                (() => {
+                                    const cats = [...new Set(productosAgrupados.delProveedor.map(p => p.categoria).filter(Boolean))] as string[];
+                                    // Si solo hay 1 categoría o pocos productos, mostrar directo sin acordeones
+                                    if (cats.length <= 1 || productosAgrupados.delProveedor.length <= 12) {
+                                        return (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
+                                                {productosAgrupados.delProveedor.map(p => (
                                                     <button key={p.id} onClick={() => handleAddItem(p.id)}
-                                                        className="flex flex-col items-start p-2.5 rounded-lg bg-indigo-50/60 dark:bg-indigo-900/20 hover:bg-indigo-100 border border-indigo-100 hover:border-indigo-300 active:scale-95 transition-all text-left gap-0.5 group">
+                                                        className="flex flex-col items-start p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-0.5 group">
                                                         <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
                                                         <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
                                                             {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
                                                         </span>
-                                                        {(p as any).unidad && <span className="text-[9px] text-slate-400 uppercase">{(p as any).unidad}</span>}
                                                     </button>
                                                 ))}
                                             </div>
-                                        </div>
-                                    )}
-
-                                    {/* Sección: todos los demás (colapsables por categoría) */}
-                                    {productosAgrupados.todos.length > 0 && (() => {
-                                        const cats = [...new Set(productosAgrupados.todos.map(p => p.categoria).filter(Boolean))] as string[];
-                                        return cats.map(cat => {
-                                            const prods = productosAgrupados.todos.filter(p => p.categoria === cat);
-                                            const isOpen = categoriasExpandidas.has(cat);
-                                            return (
-                                                <div key={cat} className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
-                                                    <button
-                                                        onClick={() => setCategoriasExpandidas(prev => { const n = new Set(prev); n.has(cat) ? n.delete(cat) : n.add(cat); return n; })}
-                                                        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
-                                                    >
-                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{cat}</span>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-[9px] font-black bg-slate-100 dark:bg-slate-700 text-slate-400 px-1.5 py-0.5 rounded-full">{prods.length}</span>
-                                                            <ChevronDown className={cn("w-3.5 h-3.5 text-slate-400 transition-transform", isOpen ? "rotate-180" : "")} />
-                                                        </div>
-                                                    </button>
-                                                    {isOpen && (
-                                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 pt-0 border-t border-slate-50 dark:border-slate-700">
-                                                            {prods.map(p => (
-                                                                <button key={p.id} onClick={() => handleAddItem(p.id)}
-                                                                    className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-indigo-50 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group">
-                                                                    <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
-                                                                    <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
-                                                                        {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
-                                                                    </span>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            );
-                                        });
-                                    })()}
-                                </>
+                                        );
+                                    }
+                                    // Muchas categorías: acordeones
+                                    return cats.map(cat => {
+                                        const prods = productosAgrupados.delProveedor.filter(p => p.categoria === cat);
+                                        const isOpen = categoriasExpandidas.has(cat);
+                                        return (
+                                            <div key={cat} className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-800">
+                                                <button
+                                                    onClick={() => setCategoriasExpandidas(prev => { const n = new Set(prev); n.has(cat) ? n.delete(cat) : n.add(cat); return n; })}
+                                                    className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                                                >
+                                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">{cat}</span>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[9px] font-black bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded-full">{prods.length}</span>
+                                                        <ChevronDown className={cn("w-3.5 h-3.5 text-slate-400 transition-transform", isOpen ? "rotate-180" : "")} />
+                                                    </div>
+                                                </button>
+                                                {isOpen && (
+                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 border-t border-slate-50">
+                                                        {prods.map(p => (
+                                                            <button key={p.id} onClick={() => handleAddItem(p.id)}
+                                                                className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group">
+                                                                <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                                <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
+                                                                    {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
+                                                                </span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    });
+                                })()
                             )}
                         </div>
                     </div>
