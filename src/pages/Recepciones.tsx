@@ -291,13 +291,50 @@ export default function Recepciones({
     // Cambios de precio detectados
     const cambiosPrecio = useMemo(() => {
         return newRecepcion.items.filter(item => {
+            if (!item.precioFacturado) return false;
+            const pp = preciosDelProveedor.find(p => p.productoId === item.productoId);
             const prod = getProductoById(item.productoId);
-            if (!prod || !item.precioFacturado) return false;
-            const base = prod.costoBase || 0;
+            const base = pp?.precioCosto || prod?.costoBase || 0;
             if (!base) return false;
             return Math.abs((item.precioFacturado - base) / base) > 0.02;
         });
-    }, [newRecepcion.items, getProductoById]);
+    }, [newRecepcion.items, preciosDelProveedor, getProductoById]);
+
+    const handleSubmitModal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!formDataModal.nombre || !formDataModal.categoria) {
+            toast.error('Nombre y categoría son obligatorios');
+            return;
+        }
+        const precioVenta = parseFloat(formDataModal.precioVenta) || 0;
+        const costo = parseFloat(formDataModal.precioCosto) || 0;
+        const productoData = {
+            nombre: formDataModal.nombre,
+            categoria: formDataModal.categoria,
+            descripcion: formDataModal.descripcion,
+            precioVenta,
+            costoBase: costo,
+            imagen: formDataModal.imagen,
+            tipo: formDataModal.tipo || 'elaborado',
+            unidadMedida: formDataModal.unidadMedida || 'unidad',
+            stockActual: formDataModal.stockActual === '' ? undefined : parseInt(formDataModal.stockActual) || 0,
+            stockMinimo: parseInt(formDataModal.stockMinimo) || 5,
+        };
+        try {
+            if (productToEdit) {
+                await onUpdateProducto(productToEdit.id, productoData);
+                toast.success('Producto actualizado');
+            } else {
+                await onAddProducto(productoData);
+                setIsCreatingNewFromAction(true);
+            }
+            setIsProductModalOpen(false);
+            setProductToEdit(null);
+            setFormDataModal(FORM_DATA_VACIO);
+        } catch {
+            toast.error('Error al guardar el producto');
+        }
+    };
 
     const handleProductSaved = async (productoData: any) => {
         try {
@@ -305,19 +342,13 @@ export default function Recepciones({
                 await onUpdateProducto(productToEdit.id, productoData);
                 toast.success('Producto maestro actualizado');
             } else {
-                // Si es nuevo, necesitamos obtener el ID generado por la DB o similar
-                // Como onAddProducto es async y los efectos de React refrescarán el array de productos,
-                // vamos a buscar el producto por nombre o esperar que el padre lo actualice.
                 await onAddProducto(productoData);
-                
-                // Si estamos en medio de una recepción, intentamos agregarlo automáticamente
-                // Nota: Esto requiere que el array 'productos' ya tenga el nuevo ítem.
-                // En un sistema real, onAddProducto devolvería el producto creado.
-                setIsCreatingNewFromAction(true); // Flag para el useEffect de abajo
+                setIsCreatingNewFromAction(true);
             }
             setIsProductModalOpen(false);
             setProductToEdit(null);
-        } catch (error) {
+            setFormDataModal(FORM_DATA_VACIO);
+        } catch {
             toast.error('Error al guardar el producto maestro');
         }
     };
@@ -607,14 +638,17 @@ export default function Recepciones({
     const handleAddItem = (productoId: string) => {
         const producto = getProductoById(productoId);
         if (!producto) return;
+        // Precio preferido: precioCosto del proveedor > costoBase del producto
+        const precioProveedor = preciosDelProveedor.find(pp => pp.productoId === productoId);
+        const precioBase = precioProveedor?.precioCosto || producto.costoBase || 0;
 
         const newItem: RecepcionItem = {
             id: generateUUID(),
             productoId,
             cantidadEsperada: 0,
             cantidadRecibida: 1,
-            precioEsperado: producto.costoBase || 0,
-            precioFacturado: producto.costoBase || 0,
+            precioEsperado: precioBase,
+            precioFacturado: precioBase,
             embalajeOk: true,
             productoOk: true,
             cantidadOk: true,
@@ -1098,17 +1132,18 @@ export default function Recepciones({
                                 ) : (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
                                         {productosAgrupados.otros.map(p => {
-                                            const esDeEsteProv = preciosDelProveedor.some(pp => pp.productoId === p.id);
+                                            const ppEntry = preciosDelProveedor.find(pp => pp.productoId === p.id);
+                                            const precioMostrar = ppEntry?.precioCosto || p.costoBase || 0;
                                             return (
                                                 <button key={p.id} onClick={() => { handleAddItem(p.id); setBusquedaProducto(''); }}
                                                     className={cn("flex flex-col items-start p-2.5 rounded-xl border active:scale-95 transition-all text-left gap-0.5 group",
-                                                        esDeEsteProv
+                                                        ppEntry
                                                             ? "bg-indigo-50 border-indigo-200 hover:border-indigo-400"
                                                             : "bg-white dark:bg-slate-800 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50"
                                                     )}>
                                                     <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
-                                                    <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
-                                                        {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
+                                                    <span className={cn("text-[10px] font-black tabular-nums", precioMostrar ? "text-indigo-600" : "text-slate-400")}>
+                                                        {precioMostrar ? formatCurrency(precioMostrar) : 'Sin precio'}
                                                     </span>
                                                 </button>
                                             );
@@ -1130,15 +1165,19 @@ export default function Recepciones({
                                     if (cats.length <= 1 || productosAgrupados.delProveedor.length <= 12) {
                                         return (
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 pt-1">
-                                                {productosAgrupados.delProveedor.map(p => (
-                                                    <button key={p.id} onClick={() => handleAddItem(p.id)}
-                                                        className="flex flex-col items-start p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-0.5 group">
-                                                        <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
-                                                        <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
-                                                            {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
-                                                        </span>
-                                                    </button>
-                                                ))}
+                                                {productosAgrupados.delProveedor.map(p => {
+                                                    const ppEntry = preciosDelProveedor.find(pp => pp.productoId === p.id);
+                                                    const precioMostrar = ppEntry?.precioCosto || p.costoBase || 0;
+                                                    return (
+                                                        <button key={p.id} onClick={() => handleAddItem(p.id)}
+                                                            className="flex flex-col items-start p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-0.5 group">
+                                                            <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                            <span className={cn("text-[10px] font-black tabular-nums", precioMostrar ? "text-indigo-600" : "text-slate-400")}>
+                                                                {precioMostrar ? formatCurrency(precioMostrar) : 'Sin precio'}
+                                                            </span>
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
                                         );
                                     }
@@ -1160,15 +1199,19 @@ export default function Recepciones({
                                                 </button>
                                                 {isOpen && (
                                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 border-t border-slate-50">
-                                                        {prods.map(p => (
-                                                            <button key={p.id} onClick={() => handleAddItem(p.id)}
-                                                                className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group">
-                                                                <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
-                                                                <span className={cn("text-[10px] font-black tabular-nums", p.costoBase ? "text-indigo-600" : "text-slate-400")}>
-                                                                    {p.costoBase ? formatCurrency(p.costoBase) : 'Sin precio'}
-                                                                </span>
-                                                            </button>
-                                                        ))}
+                                                        {prods.map(p => {
+                                                            const ppEntry = preciosDelProveedor.find(pp => pp.productoId === p.id);
+                                                            const precioMostrar = ppEntry?.precioCosto || p.costoBase || 0;
+                                                            return (
+                                                                <button key={p.id} onClick={() => handleAddItem(p.id)}
+                                                                    className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group">
+                                                                    <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                                    <span className={cn("text-[10px] font-black tabular-nums", precioMostrar ? "text-indigo-600" : "text-slate-400")}>
+                                                                        {precioMostrar ? formatCurrency(precioMostrar) : 'Sin precio'}
+                                                                    </span>
+                                                                </button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 )}
                                             </div>
@@ -1206,7 +1249,8 @@ export default function Recepciones({
                                 <div className="divide-y divide-white/5">
                                     {newRecepcion.items.map((item, idx) => {
                                         const prod = getProductoById(item.productoId);
-                                        const precioAnt = prod?.costoBase || 0;
+                                        const ppItem = preciosDelProveedor.find(pp => pp.productoId === item.productoId);
+                                        const precioAnt = ppItem?.precioCosto || prod?.costoBase || 0;
                                         const diff = precioAnt > 0 ? ((item.precioFacturado - precioAnt) / precioAnt) * 100 : 0;
                                         const subio = diff > 5;
                                         const bajo = diff < -2;
@@ -1321,9 +1365,16 @@ export default function Recepciones({
 
                 {/* Modales */}
                 {isProductModalOpen && (
-                    <ProductFormModal isOpen={isProductModalOpen}
-                        onClose={() => { setIsProductModalOpen(false); setProductToEdit(null); }}
-                        onSave={handleProductSaved} categorias={categorias} initialData={productToEdit || undefined}
+                    <ProductFormModal
+                        isOpen={isProductModalOpen}
+                        onOpenChange={(open) => { if (!open) { setIsProductModalOpen(false); setProductToEdit(null); setFormDataModal(FORM_DATA_VACIO); } }}
+                        editingProducto={productToEdit}
+                        categorias={categorias}
+                        proveedores={proveedores}
+                        formData={formDataModal}
+                        setFormData={setFormDataModal}
+                        onSubmit={handleSubmitModal}
+                        formatCurrency={formatCurrency}
                     />
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
