@@ -64,6 +64,8 @@ const saveConfig = (name: string, config: BaseConfig) => {
 
 const UNIDADES = ['und', 'g', 'ml', 'kg'];
 
+const roundTo50 = (v: number) => Math.ceil(v / 50) * 50;
+
 let _nextId = 10;
 const nextId = () => `b${_nextId++}`;
 
@@ -266,14 +268,14 @@ export function IceCreamAssistantModal({
     };
 
     const confirmAddExtra = () => {
-        if (!extraForm.productoId || !extraForm.unidadesEnPack || !extraForm.precioPack) return;
+        if (!extraForm.productoId || !extraForm.unidadesEnPack) return;
         const prod = productos.find(p => p.id === extraForm.productoId);
         if (!prod) return;
         const costoPackTotal  = extraPackCosto;
         const unidadesEnPack  = parseFloat(extraForm.unidadesEnPack) || 1;
         const costoUnitario   = costoPackTotal / unidadesEnPack;
         const cantidadPorCopa = parseFloat(extraForm.cantidadPorCopa) || 1;
-        const costoPorCopa    = costoUnitario * cantidadPorCopa;
+        const costoPorCopa    = roundTo50(costoUnitario * cantidadPorCopa);
         const item = { productoId: prod.id, nombre: prod.nombre, costoPackTotal, unidadesEnPack, costoUnitario, unidad: extraForm.unidad, cantidadPorCopa, costoPorCopa };
         if (editingExtraIdx !== null) {
             setExtrasProducto(prev => prev.map((ex, i) => i === editingExtraIdx ? item : ex));
@@ -816,25 +818,20 @@ export function IceCreamAssistantModal({
 
                                         {extraForm.productoId && (
                                             <>
-                                                {/* Precio del paquete — editable */}
-                                                <div>
-                                                    <p className="text-[8px] font-black text-slate-600 mb-1">
-                                                        ① ¿Cuánto costó el paquete?
-                                                        <span className="font-normal text-slate-400 ml-1">(precio total que pagaste)</span>
-                                                    </p>
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-[9px] text-slate-400 font-bold">$</span>
-                                                        <Input type="number" min="0" placeholder="ej: 3000"
-                                                            value={extraForm.precioPack}
-                                                            onChange={e => setExtraForm(f => ({ ...f, precioPack: e.target.value }))}
-                                                            className="h-8 w-32 text-center font-black text-sm border-cyan-300 bg-white" />
-                                                        {extraForm.precioPack && parseFloat(extraForm.precioPack) > 0 && (
-                                                            <span className="text-[9px] font-bold text-emerald-600">✓ {formatCurrency(parseFloat(extraForm.precioPack))}</span>
-                                                        )}
-                                                        {!extraForm.precioPack && (
-                                                            <span className="text-[9px] text-amber-500 font-bold">Ingresa el precio del paquete</span>
+                                                {/* Precio del paquete — automático, editable si es incorrecto */}
+                                                <div className="flex items-center gap-2 bg-white rounded-lg border border-slate-200 px-3 py-2">
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-wide">Precio del paquete</p>
+                                                        {extraPackCosto > 0 ? (
+                                                            <p className="text-sm font-black text-slate-800">{formatCurrency(extraPackCosto)}</p>
+                                                        ) : (
+                                                            <p className="text-[9px] font-bold text-amber-500">No se encontró precio — escríbelo →</p>
                                                         )}
                                                     </div>
+                                                    <Input type="number" min="0" placeholder="corregir"
+                                                        value={extraForm.precioPack}
+                                                        onChange={e => setExtraForm(f => ({ ...f, precioPack: e.target.value }))}
+                                                        className="h-8 w-24 text-center font-black text-xs border-slate-200 bg-slate-50 placeholder:text-slate-300" />
                                                 </div>
 
                                                 {/* 2. Unidades en el paquete */}
@@ -878,8 +875,13 @@ export function IceCreamAssistantModal({
                                                 {/* Resultado */}
                                                 {extraForm.unidadesEnPack && parseFloat(extraForm.unidadesEnPack) > 0 && (
                                                     <div className="flex items-center justify-between bg-cyan-600 rounded-lg px-3 py-2">
-                                                        <span className="text-[9px] text-white/80 font-bold">Costo por copa</span>
-                                                        <span className="text-base font-black text-white">{formatCurrency(extraPreviewCosto)}</span>
+                                                        <div>
+                                                            <p className="text-[9px] text-white/80 font-bold">Costo por copa</p>
+                                                            {extraPreviewCosto !== roundTo50(extraPreviewCosto) && (
+                                                                <p className="text-[8px] text-white/50">{formatCurrency(extraPreviewCosto)} → redondeado ↑</p>
+                                                            )}
+                                                        </div>
+                                                        <span className="text-base font-black text-white">{formatCurrency(roundTo50(extraPreviewCosto))}</span>
                                                     </div>
                                                 )}
                                             </>
@@ -887,7 +889,7 @@ export function IceCreamAssistantModal({
 
                                         <div className="flex gap-2">
                                             <button onClick={confirmAddExtra}
-                                                disabled={!extraForm.productoId || !extraForm.precioPack || !extraForm.unidadesEnPack}
+                                                disabled={!extraForm.productoId || !extraForm.unidadesEnPack}
                                                 className="flex-1 h-8 bg-cyan-700 text-white rounded-lg text-[10px] font-black hover:bg-cyan-800 disabled:opacity-40 disabled:cursor-not-allowed">
                                                 {editingExtraIdx !== null ? '✓ Guardar cambios' : '✓ Agregar'}
                                             </button>

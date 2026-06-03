@@ -244,7 +244,28 @@ export default function Recepciones({
         return base;
     }, [productos, busquedaProducto, newRecepcion.items, categoriaFiltroRecepcion]);
 
-    // Cambios de precio detectados (para paso 4)
+    // Productos agrupados por historial del proveedor seleccionado
+    const productosAgrupados = useMemo(() => {
+        const enTicket = new Set(newRecepcion.items.map(i => i.productoId));
+        if (!newRecepcion.proveedorId) return { habituales: [], todos: [] };
+        const idsHabituales = new Set<string>();
+        recepciones
+            .filter(r => r.proveedorId === newRecepcion.proveedorId)
+            .forEach(r => r.items.forEach(i => idsHabituales.add(i.productoId)));
+        const base = productos.filter(p => !enTicket.has(p.id));
+        if (busquedaProducto.trim()) {
+            const q = busquedaProducto.toLowerCase();
+            return {
+                habituales: [],
+                todos: base.filter(p => p.nombre.toLowerCase().includes(q) || (p.categoria || '').toLowerCase().includes(q))
+            };
+        }
+        const habituales = base.filter(p => idsHabituales.has(p.id));
+        const todos = base.filter(p => !idsHabituales.has(p.id));
+        return { habituales, todos };
+    }, [newRecepcion.proveedorId, newRecepcion.items, productos, recepciones, busquedaProducto]);
+
+    // Cambios de precio detectados
     const cambiosPrecio = useMemo(() => {
         return newRecepcion.items.filter(item => {
             const prod = getProductoById(item.productoId);
@@ -593,11 +614,12 @@ export default function Recepciones({
     };
 
     // Guardar Recepción
-    const handleSave = async () => {
-        if (!newRecepcion.proveedorId || !newRecepcion.numeroFactura || newRecepcion.items.length === 0) {
-            toast.error('Por favor completa los campos obligatorios y agrega al menos un producto.');
+    const handleSave = async (preciosSet?: Set<string>) => {
+        if (!newRecepcion.proveedorId || newRecepcion.items.length === 0) {
+            toast.error('Selecciona un proveedor y agrega al menos un producto.');
             return;
         }
+        const numFactura = newRecepcion.numeroFactura || `F-${Date.now().toString().slice(-6)}`;
 
         try {
             const total = Math.round(newRecepcion.items.reduce((sum, item) => sum + (item.cantidadRecibida * item.precioFacturado), 0) * 100) / 100;
@@ -605,7 +627,7 @@ export default function Recepciones({
             const recepcionData: Omit<Recepcion, 'id'> = {
                 prePedidoId: newRecepcion.prePedidoId,
                 proveedorId: newRecepcion.proveedorId,
-                numeroFactura: newRecepcion.numeroFactura,
+                numeroFactura: numFactura,
                 fechaFactura: new Date(newRecepcion.fechaFactura).toISOString(),
                 totalFactura: total,
                 items: newRecepcion.items,
@@ -619,35 +641,31 @@ export default function Recepciones({
             const saved = await onAddRecepcion(recepcionData);
             await onConfirmarRecepcion(saved);
 
-            // === ACTUALIZAR COSTOS SELECCIONADOS EN EL CATÁLOGO ===
-            if (preciosAActualizar.size > 0) {
+            // Actualizar costos que cambiaron
+            const preciosParaActualizar = preciosSet ?? preciosAActualizar;
+            if (preciosParaActualizar.size > 0) {
                 await Promise.all(
                     newRecepcion.items
-                        .filter(item => preciosAActualizar.has(item.productoId))
+                        .filter(item => preciosParaActualizar.has(item.productoId))
                         .map(item => onUpdateProducto(item.productoId, { costoBase: Math.round(item.precioFacturado * 100) / 100 }))
                 );
             }
 
-            // === GUARDAR FACTURA EN ARCHIVO SI HAY IMAGEN ===
+            // Guardar factura en archivo si hay imagen
             if (newRecepcion.imagenFactura) {
                 await guardarFacturaEnArchivo(saved, newRecepcion.imagenFactura);
             }
 
-            // Calcular totales para el mensaje
-            const totalItems = newRecepcion.items.reduce((sum, i) => sum + i.cantidadRecibida, 0);
-            
+            const totalUnidadesSaved = newRecepcion.items.reduce((sum, i) => sum + i.cantidadRecibida, 0);
             toast.success(
                 <div className="flex flex-col gap-1">
                     <span className="font-semibold flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-emerald-500" />
-                        ¡Recepción completada!
+                        <CheckCircle className="w-4 h-4 text-emerald-500" /> ¡Recepción completada!
                     </span>
                     <div className="text-xs text-muted-foreground space-y-0.5">
-                        <p>✓ {newRecepcion.items.length} productos procesados</p>
-                        <p>✓ {totalItems} unidades agregadas a inventario</p>
-                        {preciosAActualizar.size > 0 && <p>✓ {preciosAActualizar.size} precios de costo actualizados</p>}
-                        {newRecepcion.imagenFactura && <p>✓ Factura guardada en archivo</p>}
-                        <p className="text-emerald-600 font-medium">→ Productos listos para vender</p>
+                        <p>✓ {newRecepcion.items.length} productos · {totalUnidadesSaved} unidades al inventario</p>
+                        {preciosParaActualizar.size > 0 && <p>✓ {preciosParaActualizar.size} precios de costo actualizados</p>}
+                        <p className="text-emerald-600 font-medium">→ Listos para vender</p>
                     </div>
                 </div>,
                 { duration: 5000 }

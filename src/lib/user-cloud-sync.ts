@@ -94,7 +94,7 @@ export function mergeUsersToLocalStorage(remoteUsers: Record<string, unknown>[])
     if (changed > 0) {
         localStorage.setItem(LOCAL_KEY, JSON.stringify(localUsers));
     }
-    return added;
+    return changed;
 }
 
 // ── Códigos de acceso offline ──────────────────────────────────────────────────
