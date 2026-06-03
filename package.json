@@ -62,6 +62,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@supabase/supabase-js": "^2.97.0",
     "appwrite": "^25.0.0",
+
     "better-sqlite3": "^9.2.2",
     "browserslist": "^4.28.2",
     "caniuse-lite": "^1.0.30001793",
