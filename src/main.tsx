@@ -93,16 +93,14 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// Registro de Service Worker para PWA — recargar SOLO después de confirmar datos guardados
+// Registro de Service Worker para PWA
+// onNeedRefresh no fuerza la activación — useAutoUpdate muestra el banner y el usuario decide
 const updateSW = registerSW({
-  onNeedRefresh() {
-    // Esperar 3 segundos para que operaciones pendientes de IndexedDB se completen
-    setTimeout(() => updateSW(true), 3000);
-  },
-  onOfflineReady() {
-    // App lista para uso offline — sin aviso al usuario
-  },
-})
+  onNeedRefresh() { /* banner manejado por useAutoUpdate/CentinelaProvider */ },
+  onOfflineReady() { /* sin aviso al usuario */ },
+});
+// Exponer para diagnóstico (ej: window.__updateSW(true) desde consola)
+(window as any).__updateSW = updateSW;
 
 console.log("⚙️ main.tsx: Iniciando montaje de React...");
 
