@@ -47,6 +47,7 @@ interface IceCreamAssistantModalProps {
 // ─── Storage ──────────────────────────────────────────────────────────────────
 
 const CONFIGS_KEY = 'ice_cream_base_configs_v3';
+const EXTRA_PRICES_KEY = 'ice_cream_extra_prices_v1';
 
 const getStoredConfigs = (): Record<string, BaseConfig> => {
     try { return JSON.parse(localStorage.getItem(CONFIGS_KEY) || '{}'); } catch { return {}; }
@@ -58,6 +59,17 @@ const saveConfig = (name: string, config: BaseConfig) => {
     const keys = Object.keys(all);
     if (keys.length > 12) delete all[keys[0]];
     localStorage.setItem(CONFIGS_KEY, JSON.stringify(all));
+};
+
+// Cache de precios de insumos extras (vasos, cucharitas, etc.)
+const getExtraPrices = (): Record<string, number> => {
+    try { return JSON.parse(localStorage.getItem(EXTRA_PRICES_KEY) || '{}'); } catch { return {}; }
+};
+
+const saveExtraPrice = (productoId: string, precio: number) => {
+    const all = getExtraPrices();
+    all[productoId] = precio;
+    localStorage.setItem(EXTRA_PRICES_KEY, JSON.stringify(all));
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -191,16 +203,16 @@ export function IceCreamAssistantModal({
     // ── Preview costo insumo ──────────────────────────────────────────────────
 
     const extraPackCosto = useMemo(() => {
-        // Campo manual tiene prioridad
         if (extraForm.precioPack) return parseFloat(extraForm.precioPack) || 0;
         if (!extraForm.productoId) return 0;
-        // Buscar en tabla de precios
         const precObj = precios.find(pr => pr.productoId === extraForm.productoId);
         const desdePrecio = parseFloat(precObj?.precioCosto?.toString() || '0');
         if (desdePrecio > 0) return desdePrecio;
-        // Fallback a costoBase del producto
         const prod = productos.find(p => p.id === extraForm.productoId);
-        return parseFloat(prod?.costoBase?.toString() || prod?.precioVenta?.toString() || '0');
+        const desdeProd = parseFloat(prod?.costoBase?.toString() || '0') || parseFloat(prod?.precioVenta?.toString() || '0');
+        if (desdeProd > 0) return desdeProd;
+        // Cache local (precio guardado manualmente en sesión anterior)
+        return getExtraPrices()[extraForm.productoId] || 0;
     }, [extraForm.productoId, extraForm.precioPack, precios, productos]);
 
     const extraUnitarioCosto = useMemo(() => {
@@ -276,6 +288,8 @@ export function IceCreamAssistantModal({
         const costoUnitario   = costoPackTotal / unidadesEnPack;
         const cantidadPorCopa = parseFloat(extraForm.cantidadPorCopa) || 1;
         const costoPorCopa    = roundTo50(costoUnitario * cantidadPorCopa);
+        // Guardar precio en cache para auto-detectar la próxima vez
+        if (costoPackTotal > 0) saveExtraPrice(prod.id, costoPackTotal);
         const item = { productoId: prod.id, nombre: prod.nombre, costoPackTotal, unidadesEnPack, costoUnitario, unidad: extraForm.unidad, cantidadPorCopa, costoPorCopa };
         if (editingExtraIdx !== null) {
             setExtrasProducto(prev => prev.map((ex, i) => i === editingExtraIdx ? item : ex));
@@ -792,23 +806,37 @@ export function IceCreamAssistantModal({
                                         <select value={extraForm.productoId}
                                             onChange={e => {
                                                 const pid = e.target.value;
-                                                const precObj = precios.find(pr => pr.productoId === pid);
-                                                const desdePrecio = parseFloat(precObj?.precioCosto?.toString() || '0');
                                                 let autoPrice = '';
-                                                if (desdePrecio > 0) {
-                                                    autoPrice = desdePrecio.toString();
-                                                } else if (pid) {
-                                                    const prod = productos.find(p => p.id === pid);
-                                                    const fallback = parseFloat(prod?.costoBase?.toString() || prod?.precioVenta?.toString() || '0');
-                                                    if (fallback > 0) autoPrice = fallback.toString();
+                                                if (pid) {
+                                                    // 1. Tabla de precios (proveedor)
+                                                    const precObj = precios.find(pr => pr.productoId === pid);
+                                                    const desdePrecio = parseFloat(precObj?.precioCosto?.toString() || '0');
+                                                    if (desdePrecio > 0) {
+                                                        autoPrice = desdePrecio.toString();
+                                                    } else {
+                                                        // 2. costoBase / precioVenta del producto
+                                                        const prod = productos.find(p => p.id === pid);
+                                                        const desdeProd = parseFloat(prod?.costoBase?.toString() || '0')
+                                                            || parseFloat(prod?.precioVenta?.toString() || '0');
+                                                        if (desdeProd > 0) {
+                                                            autoPrice = desdeProd.toString();
+                                                        } else {
+                                                            // 3. Cache local (precio ingresado manualmente antes)
+                                                            const cached = getExtraPrices()[pid];
+                                                            if (cached > 0) autoPrice = cached.toString();
+                                                        }
+                                                    }
                                                 }
                                                 setExtraForm(f => ({ ...f, productoId: pid, precioPack: autoPrice, unidadesEnPack: '' }));
                                             }}
                                             className="w-full h-8 bg-white border border-cyan-200 rounded-lg px-2 text-[10px] font-bold text-slate-700 outline-none cursor-pointer">
                                             <option value="">① Seleccionar insumo…</option>
                                             {extrasDisponibles.map(e => {
-                                                const c = parseFloat(precios.find(pr => pr.productoId === e.id)?.precioCosto?.toString() || '0');
-                                                return <option key={e.id} value={e.id}>{e.nombre}{c > 0 ? ` — ${formatCurrency(c)}/paquete` : ''}</option>;
+                                                const precObj = precios.find(pr => pr.productoId === e.id);
+                                                const c = parseFloat(precObj?.precioCosto?.toString() || '0')
+                                                    || parseFloat(e.costoBase?.toString() || '0')
+                                                    || parseFloat(e.precioVenta?.toString() || '0');
+                                                return <option key={e.id} value={e.id}>{e.nombre}{c > 0 ? ` — ${formatCurrency(c)}/paquete` : ' — sin precio'}</option>;
                                             })}
                                         </select>
 

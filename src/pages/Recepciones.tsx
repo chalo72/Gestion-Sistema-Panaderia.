@@ -184,6 +184,16 @@ export default function Recepciones({
     const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
     const [draftRestorado, setDraftRestorado] = useState(false);
     const [scanStep, setScanStep] = useState('');
+    // formData para ProductFormModal (necesita su propio estado)
+    const FORM_DATA_VACIO = {
+        nombre: '', categoria: '', descripcion: '', precioVenta: '',
+        margenUtilidad: '30', proveedorId: '', precioCosto: '', notasPrecio: '', imagen: '',
+        tipo: 'elaborado' as 'elaborado' | 'ingrediente', unidadMedida: '',
+        useHeladeriaCalc: false, costoCaja: '', unidadesPorCaja: '', costoInsumoExtra: '',
+        stockActual: '', stockMinimo: '5', descuentoMayorista: ''
+    };
+    const [formDataModal, setFormDataModal] = useState(FORM_DATA_VACIO);
+
     // Precios del proveedor seleccionado (sincrónico desde prop — sin async)
     const preciosDelProveedor = useMemo(() =>
         newRecepcion.proveedorId
