@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload, MessageCircle, Phone, Lock, Unlock, ToggleLeft, ToggleRight } from 'lucide-react';
-import { usePermisosModulos, guardarPermisos, MODULOS_CONFIGURABLES, ROLES_CONFIGURABLES, cargarPermisos, type PermisosModulos } from '@/hooks/usePermisosModulos';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload, MessageCircle, Phone } from 'lucide-react';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import {
@@ -53,44 +52,12 @@ function Configuracion(props: ConfiguracionProps) {
 
   // Cargar snapshots al abrir
   useEffect(() => { setSnapshots(leerTodos()); }, [showSnapshots]);
-  const [showRolePass, setShowRolePass] = useState(false);
-  const [passGerente, setPassGerente] = useState('');
-  const [passComprador, setPassComprador] = useState('');
-  const [passVendedor, setPassVendedor] = useState('');
-  const [passPanadero, setPassPanadero] = useState('');
-  const [passAuxiliar, setPassAuxiliar] = useState('');
+
   const [publicUrl, setPublicUrl] = useState('');
   const [aiMode, setAiMode] = useState<'local' | 'hybrid' | 'off'>('hybrid');
   const [telefonoNegocio, setTelefonoNegocio] = useState('');
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
   const [showWaKey, setShowWaKey] = useState(false);
-  const [permisosModulos, setPermisosModulos] = useState<PermisosModulos>(cargarPermisos);
-  const [rolActivo, setRolActivo] = useState('VENDEDOR');
-
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
-    setPassGerente(saved.GERENTE || '');
-    setPassComprador(saved.COMPRADOR || '');
-    setPassVendedor(saved.VENDEDOR || '');
-    setPassPanadero(saved.PANADERO || '');
-    setPassAuxiliar(saved.AUXILIAR || '');
-  }, []);
-
-  const handleGuardarPassRoles = () => {
-    if (!passGerente || !passComprador || !passVendedor || !passPanadero || !passAuxiliar) {
-      toast.error('Completa todas las contraseñas antes de guardar.');
-      return;
-    }
-    const passwords = {
-      GERENTE: passGerente,
-      COMPRADOR: passComprador,
-      VENDEDOR: passVendedor,
-      PANADERO: passPanadero,
-      AUXILIAR: passAuxiliar,
-    };
-    localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(passwords));
-    toast.success('Contraseñas por rol guardadas ☁️');
-  };
 
   useEffect(() => {
     if (configuracion) {
@@ -570,165 +537,6 @@ function Configuracion(props: ConfiguracionProps) {
                   Iniciar Rescate desde Supabase
                 </Button>
               </div>
-            </CardContent>
-          </Card>
-          {/* ══ Permisos de Módulos por Rol ══ */}
-          <Card className="border-none shadow-xl bg-gradient-to-br from-slate-900/5 to-card dark:from-slate-900/40 dark:to-card backdrop-blur-sm overflow-hidden relative">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Shield className="w-5 h-5 text-indigo-500" />
-                Permisos de Módulos por Rol
-              </CardTitle>
-              <CardDescription>
-                Activá o desactivá qué puede ver y qué puede eliminar cada rol. ADMIN siempre tiene acceso completo.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {/* Tabs de roles */}
-              <div className="flex flex-wrap gap-2">
-                {ROLES_CONFIGURABLES.map(r => (
-                  <button
-                    key={r.id}
-                    onClick={() => setRolActivo(r.id)}
-                    className={cn(
-                      'h-9 px-4 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all',
-                      rolActivo === r.id
-                        ? `${r.color} text-white shadow-lg scale-105`
-                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:opacity-80'
-                    )}
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Botones masivos */}
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => {
-                    const todos = Object.fromEntries(MODULOS_CONFIGURABLES.map(m => [m.id, { ver: true, eliminar: permisosModulos[rolActivo]?.[m.id]?.eliminar ?? false }]));
-                    setPermisosModulos(p => ({ ...p, [rolActivo]: todos }));
-                  }}
-                  className="h-7 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-200 transition-colors"
-                >
-                  Habilitar todo
-                </button>
-                <button
-                  onClick={() => {
-                    const ninguno = Object.fromEntries(MODULOS_CONFIGURABLES.map(m => [m.id, { ver: false, eliminar: false }]));
-                    setPermisosModulos(p => ({ ...p, [rolActivo]: ninguno }));
-                  }}
-                  className="h-7 px-3 rounded-lg text-[10px] font-black uppercase tracking-wider bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400 hover:bg-rose-200 transition-colors"
-                >
-                  Deshabilitar todo
-                </button>
-              </div>
-
-              {/* Módulos agrupados por sección */}
-              {(() => {
-                const secciones = [...new Set(MODULOS_CONFIGURABLES.map(m => m.seccion))];
-                return secciones.map(sec => {
-                  const modulos = MODULOS_CONFIGURABLES.filter(m => m.seccion === sec);
-                  return (
-                    <div key={sec} className="space-y-1.5">
-                      <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">{sec}</p>
-                      <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">
-                        {modulos.map(m => {
-                          const ver      = permisosModulos[rolActivo]?.[m.id]?.ver ?? true;
-                          const eliminar = permisosModulos[rolActivo]?.[m.id]?.eliminar ?? false;
-                          const toggle = (campo: 'ver' | 'eliminar') => {
-                            setPermisosModulos(prev => ({
-                              ...prev,
-                              [rolActivo]: {
-                                ...prev[rolActivo],
-                                [m.id]: {
-                                  ver:      campo === 'ver'      ? !ver      : ver,
-                                  eliminar: campo === 'eliminar' ? !eliminar : (campo === 'ver' && ver ? false : eliminar),
-                                },
-                              },
-                            }));
-                          };
-                          return (
-                            <div key={m.id} className={cn('flex items-center gap-3 px-4 py-2.5 transition-colors', ver ? 'bg-white dark:bg-slate-900' : 'bg-slate-50 dark:bg-slate-900/50 opacity-60')}>
-                              <span className="flex-1 text-[12px] font-semibold text-slate-700 dark:text-slate-300 truncate">{m.label}</span>
-
-                              {/* Toggle Ver */}
-                              <button
-                                onClick={() => toggle('ver')}
-                                className={cn('flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[10px] font-black transition-all', ver ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400')}
-                              >
-                                {ver ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                                Ver
-                              </button>
-
-                              {/* Toggle Eliminar */}
-                              <button
-                                onClick={() => ver && toggle('eliminar')}
-                                disabled={!ver}
-                                title={!ver ? 'Habilita Ver primero' : ''}
-                                className={cn('flex items-center gap-1.5 h-7 px-2.5 rounded-lg text-[10px] font-black transition-all', !ver ? 'opacity-30 cursor-not-allowed bg-slate-100 dark:bg-slate-800 text-slate-400' : eliminar ? 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400' : 'bg-slate-100 dark:bg-slate-800 text-slate-400 hover:bg-rose-50')}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                                Eliminar
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                });
-              })()}
-
-              <button
-                onClick={() => { guardarPermisos(permisosModulos); toast.success('Permisos guardados'); }}
-                className="w-full h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-500/20"
-              >
-                <Shield className="w-4 h-4" /> Guardar permisos
-              </button>
-            </CardContent>
-          </Card>
-
-          {/* Contraseñas por Rol */}
-          <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none"></div>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-pink-500" />
-                Contraseñas por Rol
-              </CardTitle>
-              <CardDescription>Define la contraseña que usará cada tipo de usuario para entrar al sistema</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted-foreground">Mostrar contraseñas</span>
-                <button type="button" onClick={() => setShowRolePass(p => !p)} className="text-slate-400 hover:text-slate-600">
-                  {showRolePass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {[
-                { label: '👔 Gerente', value: passGerente, setter: setPassGerente },
-                { label: '🍞 Panadero', value: passPanadero, setter: setPassPanadero },
-                { label: '🛒 Comprador', value: passComprador, setter: setPassComprador },
-                { label: '💰 Vendedor/a', value: passVendedor, setter: setPassVendedor },
-                { label: '🔧 Auxiliar', value: passAuxiliar, setter: setPassAuxiliar },
-              ].map(({ label, value, setter }) => (
-                <div key={label} className="space-y-1">
-                  <Label className="text-xs font-bold uppercase tracking-widest opacity-70">{label}</Label>
-                  <Input
-                    type={showRolePass ? 'text' : 'password'}
-                    value={value}
-                    onChange={(e) => setter(e.target.value)}
-                    placeholder="Contraseña para este rol"
-                    className="h-10 rounded-xl border border-slate-200 dark:border-slate-700"
-                  />
-                </div>
-              ))}
-              <Button onClick={handleGuardarPassRoles} className="w-full h-10 bg-pink-600 hover:bg-pink-500 text-white rounded-xl font-bold mt-2">
-                <Save className="w-4 h-4 mr-2" />
-                Guardar Contraseñas
-              </Button>
             </CardContent>
           </Card>
         </div>
