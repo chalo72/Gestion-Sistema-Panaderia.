@@ -184,6 +184,7 @@ export default function Recepciones({
     const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
     const [draftRestorado, setDraftRestorado] = useState(false);
     const [scanStep, setScanStep] = useState('');
+    const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
     // formData para ProductFormModal (necesita su propio estado)
     const FORM_DATA_VACIO = {
         nombre: '', categoria: '', descripcion: '', precioVenta: '',
@@ -598,11 +599,10 @@ export default function Recepciones({
     const filteredRecepciones = useMemo(() => {
         try {
             if (!recepciones || !Array.isArray(recepciones)) return [];
-            
             return recepciones.filter(recepcion => {
-                if (!recepcion) return false;
+                if (!recepcion || deletedIds.has(recepcion.id)) return false;
                 const proveedor = getProveedorById(recepcion.proveedorId);
-                const matchBusqueda = 
+                const matchBusqueda =
                     (recepcion.numeroFactura?.toLowerCase() || "").includes(busqueda.toLowerCase()) ||
                     (proveedor?.nombre?.toLowerCase() || "").includes(busqueda.toLowerCase());
                 const matchProveedor = proveedorFiltro === 'todos' || recepcion.proveedorId === proveedorFiltro;
@@ -616,7 +616,42 @@ export default function Recepciones({
             console.error("Shield-Guardian: Error filtrando recepciones", error);
             return [];
         }
-    }, [recepciones, busqueda, proveedorFiltro, getProveedorById]);
+    }, [recepciones, busqueda, proveedorFiltro, getProveedorById, deletedIds]);
+
+    // Eliminar recepción del historial
+    const handleDeleteRecepcion = async (id: string) => {
+        if (!confirm('¿Eliminar esta recepción del historial?')) return;
+        setDeletedIds(prev => new Set([...prev, id]));
+        try {
+            await db.deleteRecepcion(id);
+        } catch {
+            setDeletedIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+            toast.error('Error al eliminar');
+        }
+    };
+
+    // Reutilizar recepción: pre-llena el formulario con los datos de una existente
+    const handleReutilizarRecepcion = (recepcion: Recepcion) => {
+        const items: RecepcionItem[] = recepcion.items.map(i => ({
+            ...i,
+            id: generateUUID(),
+            cantidadRecibida: i.cantidadRecibida,
+            precioFacturado: i.precioFacturado,
+            embalajeOk: true,
+            productoOk: true,
+        }));
+        setNewRecepcion({
+            proveedorId: recepcion.proveedorId,
+            prePedidoId: undefined,
+            numeroFactura: '',
+            fechaFactura: new Date().toISOString().split('T')[0],
+            imagenFactura: null,
+            items,
+            observaciones: ''
+        });
+        setView('new');
+        toast.success(`${items.length} productos cargados de la recepción anterior`);
+    };
 
     // Manejar subida de imagen
     const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -679,7 +714,10 @@ export default function Recepciones({
         try {
             const total = Math.round(newRecepcion.items.reduce((sum, item) => sum + (item.cantidadRecibida * item.precioFacturado), 0) * 100) / 100;
 
-            const recepcionData: Omit<Recepcion, 'id'> = {
+            // Generar ID aquí para no depender del retorno de onAddRecepcion (que devuelve void)
+            const recepcionId = generateUUID();
+            const recepcionCompleta: Recepcion = {
+                id: recepcionId,
                 prePedidoId: newRecepcion.prePedidoId,
                 proveedorId: newRecepcion.proveedorId,
                 numeroFactura: numFactura,
@@ -693,8 +731,8 @@ export default function Recepciones({
                 observaciones: newRecepcion.observaciones
             };
 
-            const saved = await onAddRecepcion(recepcionData);
-            await onConfirmarRecepcion(saved);
+            await onAddRecepcion(recepcionCompleta as any);
+            await onConfirmarRecepcion(recepcionCompleta);
 
             // Actualizar costos que cambiaron
             const preciosParaActualizar = preciosSet ?? preciosAActualizar;
@@ -708,7 +746,7 @@ export default function Recepciones({
 
             // Guardar factura en archivo si hay imagen
             if (newRecepcion.imagenFactura) {
-                await guardarFacturaEnArchivo(saved, newRecepcion.imagenFactura);
+                await guardarFacturaEnArchivo(recepcionCompleta, newRecepcion.imagenFactura);
             }
 
             const totalUnidadesSaved = newRecepcion.items.reduce((sum, i) => sum + i.cantidadRecibida, 0);
@@ -1013,7 +1051,16 @@ export default function Recepciones({
                             const pedidosPend = prepedidosConfirmados.filter(pp => pp.proveedorId === p.id).length;
                             return (
                                 <button key={p.id}
-                                    onClick={() => { setNewRecepcion(prev => ({ ...prev, proveedorId: p.id })); setBusquedaProveedor(''); }}
+                                    onClick={() => {
+                                        setBusquedaProveedor('');
+                                        // Si hay una orden de compra pendiente para este proveedor, cargarla automáticamente
+                                        const pedidoPendiente = prepedidosConfirmados.find(pp => pp.proveedorId === p.id);
+                                        if (pedidoPendiente) {
+                                            handleVincularPrePedido(pedidoPendiente.id);
+                                        } else {
+                                            setNewRecepcion(prev => ({ ...prev, proveedorId: p.id }));
+                                        }
+                                    }}
                                     className="flex flex-col items-center gap-2.5 p-4 rounded-2xl border-2 border-slate-100 bg-white dark:bg-slate-800 hover:border-indigo-300 hover:shadow-md active:scale-95 text-center transition-all"
                                 >
                                     <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-sm shrink-0", paleta[idx % paleta.length])}>
@@ -1724,21 +1771,22 @@ export default function Recepciones({
                         const iniciales = (proveedor?.nombre || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
                         return (
-                            <button
+                            <div
                                 key={recepcion.id}
-                                className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-200 dark:hover:border-indigo-700 hover:shadow-md transition-all text-left group"
-                                onClick={() => { setSelectedRecepcion(recepcion); setView('details'); }}
+                                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-indigo-200 dark:hover:border-indigo-700 hover:shadow-md transition-all"
                             >
-                                {/* Avatar */}
-                                <div className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center">
+                                {/* Avatar — click va al detalle */}
+                                <button onClick={() => { setSelectedRecepcion(recepcion); setView('details'); }}
+                                    className="w-12 h-12 rounded-xl overflow-hidden shrink-0 bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center hover:opacity-80 transition-opacity">
                                     {recepcion.imagenFactura
                                         ? <img src={recepcion.imagenFactura} className="w-full h-full object-cover" alt="" />
                                         : <span className="text-base font-black text-indigo-600 dark:text-indigo-300">{iniciales}</span>
                                     }
-                                </div>
+                                </button>
 
-                                {/* Info central */}
-                                <div className="flex-1 min-w-0">
+                                {/* Info central — click va al detalle */}
+                                <button onClick={() => { setSelectedRecepcion(recepcion); setView('details'); }}
+                                    className="flex-1 min-w-0 text-left">
                                     <p className="font-black text-sm text-slate-900 dark:text-white truncate leading-tight">{proveedor?.nombre || 'Sin proveedor'}</p>
                                     <p className="text-[10px] font-bold text-slate-400 truncate mt-0.5">
                                         {recepcion.numeroFactura || 'S/N'}
@@ -1748,7 +1796,7 @@ export default function Recepciones({
                                         <span className="mx-1.5">·</span>
                                         {itemsCount} uds
                                     </p>
-                                </div>
+                                </button>
 
                                 {/* Total + estado */}
                                 <div className="flex flex-col items-end gap-1 shrink-0">
@@ -1759,12 +1807,26 @@ export default function Recepciones({
                                             ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
                                             : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
                                     )}>
-                                        {hasIssues ? '⚠ Incidencia' : '✓ Sin novedad'}
+                                        {hasIssues ? '⚠ Incidencia' : '✓ OK'}
                                     </span>
                                 </div>
 
-                                <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-indigo-400 transition-colors shrink-0" />
-                            </button>
+                                {/* Acciones */}
+                                <div className="flex flex-col gap-1 shrink-0">
+                                    <button
+                                        onClick={() => handleReutilizarRecepcion(recepcion)}
+                                        title="Usar como base para nueva recepción"
+                                        className="w-8 h-8 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-600 flex items-center justify-center transition-colors">
+                                        <History className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                        onClick={() => handleDeleteRecepcion(recepcion.id)}
+                                        title="Eliminar"
+                                        className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-500 flex items-center justify-center transition-colors">
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                </div>
+                            </div>
                         );
                     })}
 
@@ -1781,13 +1843,14 @@ export default function Recepciones({
             {isProductModalOpen && (
                 <ProductFormModal
                     isOpen={isProductModalOpen}
-                    onClose={() => {
-                        setIsProductModalOpen(false);
-                        setProductToEdit(null);
-                    }}
-                    onSave={handleProductSaved}
+                    onOpenChange={(open) => { if (!open) { setIsProductModalOpen(false); setProductToEdit(null); setFormDataModal(FORM_DATA_VACIO); } }}
+                    editingProducto={productToEdit}
                     categorias={categorias}
-                    initialData={productToEdit || undefined}
+                    proveedores={proveedores}
+                    formData={formDataModal}
+                    setFormData={setFormDataModal}
+                    onSubmit={handleSubmitModal}
+                    formatCurrency={formatCurrency}
                 />
             )}
         </div>
