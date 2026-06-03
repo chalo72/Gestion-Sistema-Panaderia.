@@ -166,7 +166,7 @@ export default function CreditosClientes({
     });
     const [editandoCredito, setEditandoCredito] = useState<CreditoCliente | null>(null);
     const [editandoDetalleId, setEditandoDetalleId] = useState<string | null>(null);
-    const [formEditCliente, setFormEditCliente] = useState<{ estado: string; descripcion: string; fecha: string; fechaVencimiento: string; items: ItemCredito[] }>({ estado: 'activo', descripcion: '', fecha: '', fechaVencimiento: '', items: [] });
+    const [formEditCliente, setFormEditCliente] = useState<{ estado: string; descripcion: string; fecha: string; fechaVencimiento: string; items: ItemCredito[]; montoManual: string }>({ estado: 'activo', descripcion: '', fecha: '', fechaVencimiento: '', items: [], montoManual: '' });
     const [isSavingEditCliente, setIsSavingEditCliente] = useState(false);
     const [selectedCreditosIds, setSelectedCreditosIds] = useState<Set<string>>(new Set());
     const [detalleCredito, setDetalleCredito] = useState<CreditoCliente | null>(null);
@@ -467,6 +467,7 @@ export default function CreditosClientes({
             fecha: c.fecha ? c.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
             fechaVencimiento: c.fechaVencimiento || '',
             items: (c.items || []).map(i => ({ ...i })),
+            montoManual: c.monto ? c.monto.toString() : '',
         });
     };
 
@@ -479,9 +480,13 @@ export default function CreditosClientes({
                 ...i,
                 subtotal: Math.round(i.cantidad * i.precioUnitario * 100) / 100,
             }));
-            const nuevoMonto = itemsActualizados.length > 0
-                ? itemsActualizados.reduce((s, i) => s + i.subtotal, 0)
-                : creditoOriginal.monto;
+            const montoDesdeItems = itemsActualizados.reduce((s, i) => s + i.subtotal, 0);
+            const montoManualNum = parseFloat(formEditCliente.montoManual) || 0;
+            const nuevoMonto = montoManualNum > 0
+                ? montoManualNum
+                : montoDesdeItems > 0
+                    ? montoDesdeItems
+                    : creditoOriginal.monto;
             const totalAbonado = (creditoOriginal.pagos || []).reduce((s, p) => s + p.monto, 0);
             const nuevoSaldo = Math.max(0, nuevoMonto - totalAbonado);
             await onUpdateCreditoCliente(creditoOriginal.id, {
@@ -1858,6 +1863,19 @@ export default function CreditosClientes({
                                     {editando ? (
                                         <div className="space-y-3 bg-blue-50 dark:bg-blue-950/20 rounded-2xl p-4 border border-blue-200 dark:border-blue-800">
                                             <p className="text-[9px] font-black uppercase tracking-widest text-blue-600">✏️ Editando ticket</p>
+
+                                            {/* Monto total editable — campo directo */}
+                                            <div className="bg-white dark:bg-slate-900 rounded-xl border border-blue-300 dark:border-blue-700 px-4 py-3">
+                                                <Label className="text-[9px] font-black uppercase tracking-widest text-blue-600">Monto total del crédito</Label>
+                                                <Input
+                                                    type="number" min="0" step="100"
+                                                    value={formEditCliente.montoManual}
+                                                    onChange={e => setFormEditCliente(p => ({ ...p, montoManual: e.target.value }))}
+                                                    placeholder={`Actual: ${formatCurrency(c.monto)}`}
+                                                    className="mt-1 h-11 rounded-xl text-lg font-black text-center border-blue-200 focus:border-blue-500" />
+                                                <p className="text-[8px] text-slate-400 font-bold mt-1 text-center">Escribe el monto total de la deuda</p>
+                                            </div>
+
                                             <div>
                                                 <Label className="text-[9px] font-black uppercase tracking-widest text-slate-500">Estado</Label>
                                                 <Select value={formEditCliente.estado} onValueChange={v => setFormEditCliente(p => ({ ...p, estado: v }))}>
@@ -1981,8 +1999,8 @@ export default function CreditosClientes({
                                         </div>
                                     )}
 
-                                    {/* Productos / Items */}
-                                    {c.items && c.items.length > 0 && (
+                                    {/* Productos / Items — solo en modo vista */}
+                                    {!editando && c.items && c.items.length > 0 && (
                                         <div>
                                             <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-2 flex items-center gap-1.5">
                                                 <Package className="w-3 h-3" /> Productos ({c.items.length})
@@ -2081,6 +2099,7 @@ export default function CreditosClientes({
                                                     fecha: c.fecha ? c.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
                                                     fechaVencimiento: c.fechaVencimiento || '',
                                                     items: (c.items || []).map(i => ({ ...i })),
+                                                    montoManual: c.monto ? c.monto.toString() : '',
                                                 });
                                                 setEditandoDetalleId(c.id);
                                             }}
