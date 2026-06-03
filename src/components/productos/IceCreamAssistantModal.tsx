@@ -94,7 +94,7 @@ export function IceCreamAssistantModal({
     const [configsGuardadas, setConfigsGuardadas] = useState<Record<string, BaseConfig>>({});
     const [addingExtra, setAddingExtra]           = useState(false);
     const [editingExtraIdx, setEditingExtraIdx]   = useState<number | null>(null);
-    const [extraForm, setExtraForm]               = useState({ productoId: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
+    const [extraForm, setExtraForm]               = useState({ productoId: '', precioPack: '', unidadesEnPack: '', unidad: 'und', cantidadPorCopa: '1' });
 
     // ── Filtros ───────────────────────────────────────────────────────────────
 
@@ -189,10 +189,17 @@ export function IceCreamAssistantModal({
     // ── Preview costo insumo ──────────────────────────────────────────────────
 
     const extraPackCosto = useMemo(() => {
+        // Campo manual tiene prioridad
+        if (extraForm.precioPack) return parseFloat(extraForm.precioPack) || 0;
         if (!extraForm.productoId) return 0;
+        // Buscar en tabla de precios
         const precObj = precios.find(pr => pr.productoId === extraForm.productoId);
-        return parseFloat(precObj?.precioCosto?.toString() || '0');
-    }, [extraForm.productoId, precios]);
+        const desdePrecio = parseFloat(precObj?.precioCosto?.toString() || '0');
+        if (desdePrecio > 0) return desdePrecio;
+        // Fallback a costoBase del producto
+        const prod = productos.find(p => p.id === extraForm.productoId);
+        return parseFloat(prod?.costoBase?.toString() || prod?.precioVenta?.toString() || '0');
+    }, [extraForm.productoId, extraForm.precioPack, precios, productos]);
 
     const extraUnitarioCosto = useMemo(() => {
         const pack = parseFloat(extraForm.unidadesEnPack) || 0;

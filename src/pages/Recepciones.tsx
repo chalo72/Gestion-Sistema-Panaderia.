@@ -8,7 +8,7 @@ import {
     TrendingUp, TrendingDown, Sparkles, Loader2,
     Camera, Zap, Check, FolderOpen,
     Trash2, ZoomIn, Filter, History,
-    Truck, Receipt, ClipboardCheck
+    Truck, Receipt, ClipboardCheck, ChevronDown
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -178,6 +178,8 @@ export default function Recepciones({
     const [busquedaProducto, setBusquedaProducto] = useState('');
     const [mostrarDropProducto, setMostrarDropProducto] = useState(false);
     const [categoriaFiltroRecepcion, setCategoriaFiltroRecepcion] = useState('');
+    const [mobilePanelRec, setMobilePanelRec] = useState<'productos' | 'ticket'>('productos');
+    const [categoriasExpandidas, setCategoriasExpandidas] = useState<Set<string>>(new Set());
     const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
     const [draftRestorado, setDraftRestorado] = useState(false);
     const [scanStep, setScanStep] = useState('');
@@ -916,7 +918,7 @@ export default function Recepciones({
             .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
 
         return (
-            <div className="space-y-4 animate-ag-fade-in pb-24">
+            <div className={cn("animate-ag-fade-in", step === 3 ? "flex flex-col min-h-0" : "space-y-4 pb-24")}>
                 {/* ─── CABECERA CON PASOS (4-col grid innovador) ────────── */}
                 <div className="sticky top-0 z-20 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 shadow-sm px-4 pt-3 pb-3 space-y-3">
                     {/* Fila superior: back + título + total */}
@@ -970,7 +972,7 @@ export default function Recepciones({
                 </div>
                 {/* ─── PASO 1: PROVEEDOR ─────────────────────────────────── */}
                 {step === 1 && (
-                    <div className="space-y-4 animate-ag-fade-in max-w-2xl mx-auto w-full">
+                    <div className="space-y-4 animate-ag-fade-in max-w-3xl mx-auto w-full">
                         <h2 className="text-lg font-black text-slate-800 dark:text-slate-100">¿Quién llega hoy?</h2>
 
                         {/* Buscador */}
@@ -986,16 +988,21 @@ export default function Recepciones({
                             />
                         </div>
 
-                        {/* Lista de proveedores */}
-                        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+                        {/* Grid de tarjetas de proveedor */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                             {proveedoresFiltrados.length === 0 && (
-                                <div className="text-center py-8 text-slate-400 text-sm font-bold">Sin resultados</div>
+                                <div className="col-span-full text-center py-12 text-slate-400 text-sm font-bold">Sin resultados</div>
                             )}
                             {proveedoresFiltrados.map((p, idx) => {
                                 const lastRec = recepciones
                                     .filter(r => r.proveedorId === p.id)
                                     .sort((a, b) => new Date(b.fechaRecepcion).getTime() - new Date(a.fechaRecepcion).getTime())[0];
                                 const pedidosPend = prepedidosConfirmados.filter(pp => pp.proveedorId === p.id).length;
+                                const paleta = [
+                                    'bg-indigo-600','bg-violet-500','bg-emerald-600',
+                                    'bg-rose-500','bg-amber-500','bg-sky-600','bg-teal-600','bg-pink-500',
+                                ];
+                                const colorAvatar = paleta[idx % paleta.length];
                                 return (
                                     <button
                                         key={p.id}
@@ -1005,34 +1012,28 @@ export default function Recepciones({
                                             setStep(2);
                                         }}
                                         className={cn(
-                                            "w-full flex items-center gap-4 p-4 rounded-2xl border-2 text-left transition-all hover:border-indigo-300 hover:shadow-sm bg-white dark:bg-slate-800",
-                                            newRecepcion.proveedorId === p.id ? "border-indigo-500 bg-indigo-50" : "border-slate-100"
+                                            "flex flex-col items-center gap-2.5 p-4 rounded-2xl border-2 text-center transition-all hover:shadow-md active:scale-95",
+                                            newRecepcion.proveedorId === p.id
+                                                ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
+                                                : "border-slate-100 bg-white dark:bg-slate-800 hover:border-indigo-200"
                                         )}
                                     >
-                                        <div className={cn(
-                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shrink-0",
-                                            idx === 0 ? "bg-indigo-600 text-white" :
-                                            idx === 1 ? "bg-violet-100 text-violet-700" :
-                                            "bg-slate-100 text-slate-600"
-                                        )}>
+                                        <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl text-white shadow-sm shrink-0", colorAvatar)}>
                                             {p.nombre.charAt(0).toUpperCase()}
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-black text-sm text-slate-900 dark:text-white truncate">{p.nombre}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold">
+                                        <div className="w-full space-y-0.5">
+                                            <p className="font-black text-sm text-slate-900 dark:text-white line-clamp-2 leading-tight">{p.nombre}</p>
+                                            <p className="text-[9px] text-slate-400 font-bold">
                                                 {lastRec
-                                                    ? `Últ. recepción: ${new Date(lastRec.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}`
-                                                    : 'Sin recepciones'}
+                                                    ? `Últ: ${new Date(lastRec.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}`
+                                                    : 'Nueva recepción'}
                                             </p>
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            {pedidosPend > 0 && (
-                                                <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
-                                                    {pedidosPend} pedido{pedidosPend > 1 ? 's' : ''}
-                                                </span>
-                                            )}
-                                            <ArrowRight className="w-4 h-4 text-slate-300" />
-                                        </div>
+                                        {pedidosPend > 0 && (
+                                            <span className="text-[9px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+                                                {pedidosPend} pedido{pedidosPend > 1 ? 's' : ''}
+                                            </span>
+                                        )}
                                     </button>
                                 );
                             })}
