@@ -100,6 +100,7 @@ export function useAutoUpdate() {
   // Solo muestra el banner si ya había un controller activo (es decir,
   // hay un SW anterior que fue REEMPLAZADO por uno nuevo). Si no había
   // controller previo es la primera instalación — no hay nada nuevo.
+  // IMPORTANTE: no recargamos automáticamente — el usuario decide con el banner.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
@@ -107,10 +108,8 @@ export function useAutoUpdate() {
 
     const handleControllerChange = () => {
       if (hadController && !reloadingRef.current) {
-        // SW nuevo tomó el control → recargar automáticamente con caché limpio
-        reloadingRef.current = true;
-        setIsUpdating(true);
-        nuclearReload();
+        // SW nuevo tomó el control → solo mostrar banner, el usuario decide cuándo recargar
+        iniciarContadorYRecargar('');
       }
     };
 
@@ -121,7 +120,7 @@ export function useAutoUpdate() {
       navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [recargar]);
+  }, [iniciarContadorYRecargar]);
 
   // ── Canal A + B: recibir señales de otras pestañas ────────────────────────
   useEffect(() => {
