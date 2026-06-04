@@ -1497,11 +1497,23 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     const matchTicket = (h: typeof histCliente[0]) => {
                         if (!q) return true;
                         const d = new Date(h.fecha);
-                        const fechaTexto = isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+                        const fechasTexto: string[] = [];
+                        if (!isNaN(d.getTime())) {
+                            // "25 de mayo de 2026"
+                            fechasTexto.push(d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' }));
+                            // "25/05/2026"
+                            fechasTexto.push(d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' }));
+                            // "25/05/26"
+                            fechasTexto.push(d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: '2-digit' }));
+                            // "25 may 2026"
+                            fechasTexto.push(d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' }));
+                            // versión con guiones: "25-05-2026", "25-05-26"
+                            fechasTexto.push(...fechasTexto.map(f => f.replace(/\//g, '-')));
+                        }
                         const productosTexto = h.items.map(i => i.nombre).join(' ').toLowerCase();
                         const totalTexto = h.total.toString();
                         return (
-                            fechaTexto.toLowerCase().includes(q) ||
+                            fechasTexto.some(f => f.toLowerCase().includes(q)) ||
                             productosTexto.includes(q) ||
                             totalTexto.includes(q) ||
                             (h.metodoPago ?? '').toLowerCase().includes(q) ||
