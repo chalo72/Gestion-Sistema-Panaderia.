@@ -2,7 +2,8 @@ import { useState, useMemo, useRef } from 'react';
 import {
     UserCircle2, Users, Plus, Search, Trash2, Edit2,
     CreditCard, DollarSign, Camera, X, Package,
-    CheckCircle, Clock, Scissors, ChevronDown, ChevronUp, Image, Printer
+    CheckCircle, Clock, Scissors, ChevronDown, ChevronUp, Image, Printer,
+    KeyRound, Eye, EyeOff
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,9 +17,10 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import type {
     Trabajador, TrabajadorRol, TrabajadorEstado,
-    CreditoTrabajador, MetodoPago, Usuario
+    CreditoTrabajador, MetodoPago, Usuario, UserRole
 } from '@/types';
 
 interface TrabajadoresProps {
@@ -66,6 +68,15 @@ const CREDITO_ESTADO_COLOR: Record<string, string> = {
     descontado: 'bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-300',
 };
 
+const ROL_TO_SYSTEM_ROLE: Record<TrabajadorRol, UserRole> = {
+    panadero: 'PANADERO',
+    vendedor: 'VENDEDOR',
+    cajero: 'VENDEDOR',
+    repartidor: 'AUXILIAR',
+    administrador: 'ADMIN',
+    otro: 'AUXILIAR',
+};
+
 const FORM_VACIO: Omit<Trabajador, 'id' | 'createdAt'> = {
     nombre: '',
     cedula: '',
@@ -105,9 +116,17 @@ export default function Trabajadores({
     onRegistrarPagoCreditoTrabajador,
     usuario,
 }: TrabajadoresProps) {
+    const { usuarios, addUsuario } = useAuth();
     const [tab, setTab] = useState<Tab>('empleados');
     const [searchTerm, setSearchTerm] = useState('');
     const [filtroEstado, setFiltroEstado] = useState<string>('todos');
+
+    // Estado modal "Crear Acceso al Sistema"
+    const [showAccesoModal, setShowAccesoModal] = useState(false);
+    const [trabajadorParaAcceso, setTrabajadorParaAcceso] = useState<Trabajador | null>(null);
+    const [accesoPassword, setAccesoPassword] = useState('');
+    const [showAccesoPassword, setShowAccesoPassword] = useState(false);
+    const [isSavingAcceso, setIsSavingAcceso] = useState(false);
 
     // Estado modal trabajador
     const [showModal, setShowModal] = useState(false);
@@ -143,6 +162,37 @@ export default function Trabajadores({
         metodoPago: 'efectivo' as MetodoPago,
         nota: '',
     });
+
+    const handleCrearAcceso = async () => {
+        if (!trabajadorParaAcceso || !accesoPassword.trim()) {
+            toast.error('La contraseña es obligatoria');
+            return;
+        }
+        setIsSavingAcceso(true);
+        try {
+            const username = (trabajadorParaAcceso.email?.trim() || trabajadorParaAcceso.nombre.toLowerCase().replace(/\s+/g, '.')).toLowerCase();
+            const ok = await addUsuario({
+                email: username,
+                nombre: trabajadorParaAcceso.nombre.split(' ')[0],
+                apellido: trabajadorParaAcceso.nombre.split(' ').slice(1).join(' ') || '',
+                rol: ROL_TO_SYSTEM_ROLE[trabajadorParaAcceso.rol],
+                activo: true,
+                password: accesoPassword,
+            });
+            if (ok) {
+                toast.success(`Acceso creado para ${trabajadorParaAcceso.nombre}`);
+                setShowAccesoModal(false);
+                setAccesoPassword('');
+                setTrabajadorParaAcceso(null);
+            } else {
+                toast.error('No se pudo crear. ¿Ya existe ese usuario?');
+            }
+        } catch {
+            toast.error('Error al crear acceso');
+        } finally {
+            setIsSavingAcceso(false);
+        }
+    };
 
     // Filtros trabajadores
     const trabajadoresFiltrados = useMemo(() => {
@@ -587,6 +637,11 @@ export default function Trabajadores({
                         ) : (
                             trabajadoresFiltrados.map(t => {
                                 const creditosTrabajador = creditosTrabajadores.filter(c => c.trabajadorId === t.id && c.estado === 'activo');
+                                const usernameEsperado = (t.email?.trim() || t.nombre.toLowerCase().replace(/\s+/g, '.')).toLowerCase();
+                                const tieneAcceso = usuarios.some(u =>
+                                    u.email.toLowerCase() === (t.email || '').toLowerCase() ||
+                                    u.email.toLowerCase() === usernameEsperado
+                                );
                                 return (
                                     <Card key={t.id} className="rounded-2xl shadow-sm hover:shadow-md transition-shadow">
                                         <CardContent className="p-4">
@@ -616,6 +671,10 @@ export default function Trabajadores({
                                                             💰 {formatCurrency(t.salarioBase)}/mes
                                                         </p>
                                                         {t.horario && <p className="text-xs text-muted-foreground">🕐 {t.horario}</p>}
+                                                        <p className={`text-[10px] font-bold uppercase tracking-widest flex items-center gap-1 mt-1 ${tieneAcceso ? 'text-emerald-600' : 'text-red-400'}`}>
+                                                            <KeyRound className="w-3 h-3" />
+                                                            {tieneAcceso ? 'Con acceso al sistema' : 'Sin acceso al sistema'}
+                                                        </p>
                                                     </div>
                                                     {/* Créditos activos del trabajador */}
                                                     {creditosTrabajador.length > 0 && (
@@ -638,6 +697,17 @@ export default function Trabajadores({
                                                     >
                                                         <Edit2 className="w-3.5 h-3.5" />
                                                     </Button>
+                                                    {!tieneAcceso && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => { setTrabajadorParaAcceso(t); setShowAccesoModal(true); }}
+                                                            className="h-8 w-8 p-0 rounded-xl text-violet-500 hover:text-violet-700 hover:bg-violet-50"
+                                                            title="Crear acceso al sistema"
+                                                        >
+                                                            <KeyRound className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                    )}
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
@@ -1242,6 +1312,71 @@ export default function Trabajadores({
                             className="bg-emerald-600 hover:bg-emerald-700 text-white"
                         >
                             {isSaving ? 'Guardando...' : 'Confirmar Pago'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            {/* Modal: Crear Acceso al Sistema */}
+            <Dialog open={showAccesoModal} onOpenChange={open => { setShowAccesoModal(open); if (!open) { setAccesoPassword(''); setShowAccesoPassword(false); } }}>
+                <DialogContent className="max-w-sm rounded-[32px] p-0 overflow-hidden border-none shadow-2xl">
+                    <div className="bg-violet-600 p-5 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-white/20 rounded-2xl">
+                                <KeyRound className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h2 className="font-black text-lg leading-tight">Crear Acceso</h2>
+                                <p className="text-violet-200 text-xs font-medium mt-0.5">
+                                    {trabajadorParaAcceso?.nombre}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-5 bg-white dark:bg-slate-900 space-y-4">
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Usuario</Label>
+                            <Input
+                                readOnly
+                                value={trabajadorParaAcceso ? (trabajadorParaAcceso.email?.trim() || trabajadorParaAcceso.nombre.toLowerCase().replace(/\s+/g, '.')).toLowerCase() : ''}
+                                className="mt-1 bg-slate-50 dark:bg-slate-800 text-muted-foreground"
+                            />
+                        </div>
+                        <div>
+                            <Label className="text-xs font-bold uppercase tracking-widest">Contraseña *</Label>
+                            <div className="relative mt-1">
+                                <Input
+                                    type={showAccesoPassword ? 'text' : 'password'}
+                                    placeholder="Asigna una contraseña..."
+                                    value={accesoPassword}
+                                    onChange={e => setAccesoPassword(e.target.value)}
+                                    onKeyDown={e => e.key === 'Enter' && handleCrearAcceso()}
+                                    className="pr-10"
+                                    autoFocus
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAccesoPassword(v => !v)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                >
+                                    {showAccesoPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-3 rounded-xl bg-violet-50 dark:bg-violet-950/30">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">Rol asignado</p>
+                            <p className="text-sm font-black text-violet-800 dark:text-violet-300 mt-0.5">
+                                {trabajadorParaAcceso ? ROL_TO_SYSTEM_ROLE[trabajadorParaAcceso.rol] : ''}
+                            </p>
+                        </div>
+                    </div>
+                    <DialogFooter className="px-5 pb-5 gap-2">
+                        <Button variant="ghost" onClick={() => setShowAccesoModal(false)}>Cancelar</Button>
+                        <Button
+                            onClick={handleCrearAcceso}
+                            disabled={isSavingAcceso || !accesoPassword.trim()}
+                            className="bg-violet-600 hover:bg-violet-700 text-white"
+                        >
+                            {isSavingAcceso ? 'Creando...' : 'Crear acceso'}
                         </Button>
                     </DialogFooter>
                 </DialogContent>
