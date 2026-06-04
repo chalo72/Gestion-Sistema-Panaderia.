@@ -1732,8 +1732,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                     </div>
 
                                                                     {(h.abonos??[]).length>0 && (
-                                                                        <div className="space-y-1">
-                                                                            <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Abonos recibidos</p>
+                                                                        <div className="space-y-1.5 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800 rounded-xl p-2.5">
+                                                                            <div className="flex items-center gap-1.5 mb-1">
+                                                                                <Banknote className="w-3.5 h-3.5 text-emerald-600"/>
+                                                                                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400">Abonos recibidos</p>
+                                                                                <span className="ml-auto text-[9px] font-black text-emerald-600 bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded-full">
+                                                                                    {formatCurrency((h.abonos??[]).reduce((s,a)=>s+a.monto,0))} total
+                                                                                </span>
+                                                                            </div>
                                                                             {(h.abonos??[]).map((a,idx)=>(
                                                                                 <div key={a.id||idx}>
                                                                                     {editandoAbonoInfo?.histId===h.id&&(editandoAbonoInfo.abonoId===a.id||editandoAbonoInfo.idx===idx) ? (
@@ -1746,15 +1752,15 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                             <button onClick={()=>setEditandoAbonoInfo(null)} className="w-5 h-5 rounded bg-slate-200 text-slate-600 flex items-center justify-center"><X className="w-2.5 h-2.5"/></button>
                                                                                         </div>
                                                                                     ) : (
-                                                                                        <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800 px-2 py-1 rounded-lg">
-                                                                                            <div className="flex items-center gap-1.5">
-                                                                                                <span className={`text-[7px] font-black uppercase px-1 py-0.5 rounded-sm ${metodoBadgeCls[a.metodoPago]??'bg-slate-100 text-slate-600'}`}>{a.metodoPago}</span>
-                                                                                                <span className="text-[8px] text-slate-500">{new Date(a.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'short'})}</span>
-                                                                                                <span className="text-[10px] font-black text-emerald-700">+{formatCurrency(a.monto)}</span>
+                                                                                        <div className="flex items-center justify-between bg-white dark:bg-slate-900 border border-emerald-100 dark:border-emerald-800 px-2.5 py-1.5 rounded-lg shadow-sm">
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md ${metodoBadgeCls[a.metodoPago]??'bg-slate-100 text-slate-600'}`}>{a.metodoPago}</span>
+                                                                                                <span className="text-[10px] text-slate-500">{new Date(a.fecha).toLocaleDateString('es-CO',{day:'numeric',month:'short'})}</span>
+                                                                                                <span className="text-[13px] font-black text-emerald-700 dark:text-emerald-400">+{formatCurrency(a.monto)}</span>
                                                                                             </div>
                                                                                             <div className="flex items-center gap-0.5">
-                                                                                                <button onClick={e=>{e.stopPropagation();setEditandoAbonoInfo({histId:h.id,abonoId:a.id,idx,monto:String(a.monto),metodo:a.metodoPago});}} className="w-4 h-4 rounded bg-indigo-50 text-indigo-500 hover:bg-indigo-100 flex items-center justify-center"><Edit2 className="w-2 h-2"/></button>
-                                                                                                <button onClick={e=>{e.stopPropagation();eliminarAbono(h.id,a.id,idx);}} className="w-4 h-4 rounded bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center"><Trash2 className="w-2 h-2"/></button>
+                                                                                                <button onClick={e=>{e.stopPropagation();setEditandoAbonoInfo({histId:h.id,abonoId:a.id,idx,monto:String(a.monto),metodo:a.metodoPago});}} className="w-5 h-5 rounded bg-indigo-50 text-indigo-500 hover:bg-indigo-100 flex items-center justify-center"><Edit2 className="w-2.5 h-2.5"/></button>
+                                                                                                <button onClick={e=>{e.stopPropagation();eliminarAbono(h.id,a.id,idx);}} className="w-5 h-5 rounded bg-rose-50 text-rose-500 hover:bg-rose-100 flex items-center justify-center"><Trash2 className="w-2.5 h-2.5"/></button>
                                                                                             </div>
                                                                                         </div>
                                                                                     )}
@@ -1851,8 +1857,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 <p className="text-[9px] text-slate-500 truncate">
                                                                     {h.items.slice(0,3).map(i=>`${i.nombre}×${i.cantidad}`).join(' · ')}{h.items.length>3?` +${h.items.length-3} más`:''}
                                                                 </p>
-                                                                {h.metodoPago === 'credito' && abonado > 0 && (
-                                                                    <p className="text-[8px] text-emerald-600 mt-0.5">Abonado: {formatCurrency(abonado)}</p>
+                                                                {abonado > 0 && (
+                                                                    <div className="flex items-center gap-1.5 mt-1.5 bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 rounded-lg px-2 py-1">
+                                                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0"/>
+                                                                        <span className="text-[11px] font-black text-emerald-700 dark:text-emerald-400">Abonado: {formatCurrency(abonado)}</span>
+                                                                    </div>
                                                                 )}
                                                             </div>
                                                             <div className="text-right shrink-0">
