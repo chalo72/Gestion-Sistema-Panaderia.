@@ -11,6 +11,7 @@ interface UserRow {
     rol: string;
     activo: boolean;
     pwd: string | null;
+    updated_at: string | null;
 }
 
 function toRow(user: Record<string, unknown>): UserRow {
@@ -22,6 +23,7 @@ function toRow(user: Record<string, unknown>): UserRow {
         rol: user.rol as string,
         activo: user.activo !== false,
         pwd: (user as Record<string, unknown> & { password?: string }).password || null,
+        updated_at: (user.updatedAt as string) || new Date().toISOString(),
     };
 }
 
@@ -34,6 +36,7 @@ function fromRow(row: UserRow): Record<string, unknown> {
         rol: row.rol,
         activo: row.activo,
         password: row.pwd || '',
+        updatedAt: row.updated_at || '',
     };
 }
 
@@ -81,11 +84,12 @@ export function mergeUsersToLocalStorage(remoteUsers: Record<string, unknown>[])
             localUsers.push(remote);
             changed++;
         } else {
-            // LOCAL GANA en todo, EXCEPTO cuando la nube dice activo=true y local dice
-            // activo=false: en ese caso el admin reactivó al usuario desde otro dispositivo
-            // y su perfil completo (incluida contraseña) debe restaurarse.
-            if (remote.activo === true && localUsers[idx].activo === false) {
-                localUsers[idx] = { ...localUsers[idx], ...remote, activo: true };
+            // El más reciente gana (basado en updatedAt)
+            const remoteUpdate = remote.updatedAt ? new Date(remote.updatedAt as string).getTime() : 0;
+            const localUpdate = localUsers[idx].updatedAt ? new Date(localUsers[idx].updatedAt as string).getTime() : 0;
+
+            if (remoteUpdate >= localUpdate) {
+                localUsers[idx] = { ...localUsers[idx], ...remote };
                 changed++;
             }
         }

@@ -121,18 +121,41 @@ export default function Productos({
             descuentoMayorista: formData.descuentoMayorista === '' ? undefined : parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0
         };
 
-        try {
+        const savePromise = async () => {
             if (editingProducto) {
-                onUpdateProducto(editingProducto.id, data);
-                if (formData.proveedorId && formData.precioCosto) onAddOrUpdatePrecio({ productoId: editingProducto.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
-                toast.success('Producto actualizado');
+                await onUpdateProducto(editingProducto.id, data);
+                if (formData.proveedorId && formData.precioCosto) {
+                    await onAddOrUpdatePrecio({
+                        productoId: editingProducto.id,
+                        proveedorId: formData.proveedorId,
+                        precioCosto: parseFloat(formData.precioCosto),
+                        notas: formData.notasPrecio
+                    });
+                }
+                return 'Producto actualizado con éxito';
             } else {
                 const np = await onAddProducto(data);
-                if (formData.proveedorId && formData.precioCosto) onAddOrUpdatePrecio({ productoId: np.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
-                toast.success('Producto creado');
+                if (formData.proveedorId && formData.precioCosto) {
+                    await onAddOrUpdatePrecio({
+                        productoId: np.id,
+                        proveedorId: formData.proveedorId,
+                        precioCosto: parseFloat(formData.precioCosto),
+                        notas: formData.notasPrecio
+                    });
+                }
+                return 'Nuevo producto registrado en el catálogo';
             }
-            setIsDialogOpen(false); resetForm();
-        } catch { toast.error('Error al procesar'); }
+        };
+
+        toast.promise(savePromise(), {
+            loading: 'Sincronizando con Nexus-Vault...',
+            success: (msg) => {
+                setIsDialogOpen(false);
+                resetForm();
+                return msg;
+            },
+            error: 'Error al salvar cambios en la base de datos'
+        });
     };
 
     const handleHandleAddCategoria = (e: React.FormEvent) => {

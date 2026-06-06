@@ -602,7 +602,8 @@ class NexusDatabase implements IDatabase {
     // 1️⃣ Intentar Firebase (legacy)
     if (firebaseAdapter) {
       try {
-        await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
+        // MERGE INTELIGENTE (force: false) para respetar tombstones locales
+        await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, false);
         cloudExito = true;
       } catch (error) {
         console.error('❌ [NEXUS] Falla al conectar con Firebase. Usando BUNDLE DE RESCATE LOCAL.', error);

@@ -736,7 +736,30 @@ const App = () => {
                </div>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+               {/* 🚀 Mando Superior (IA) — Acceso Rápido Premium */}
+               {check('VER_DASHBOARD') && (
+                 <button
+                   onClick={() => setCurrentView('agentes-ia')}
+                   className={cn(
+                     "relative h-10 px-4 rounded-xl flex items-center gap-2.5 transition-all group overflow-hidden border",
+                     currentView === 'agentes-ia'
+                       ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-500/30"
+                       : "bg-slate-900/5 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:border-indigo-400/50"
+                   )}
+                 >
+                   <div className="absolute inset-0 bg-gradient-to-r from-indigo-600/20 to-purple-600/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                   <div className="relative flex items-center gap-2">
+                     <BrainCircuit className={cn("w-4 h-4", currentView === 'agentes-ia' ? "text-white" : "text-indigo-500")} />
+                     <span className="text-[10px] font-black uppercase tracking-widest hidden sm:block">Mando Superior</span>
+                   </div>
+                   {/* Indicador de actividad IA */}
+                   <span className="absolute top-2 right-2 w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                 </button>
+               )}
+
+               <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-2 hidden sm:block" />
+
                {/* Botones de Caja — solo visibles en POS con caja abierta */}
                {currentView === 'ventas' && cajaActiva && (
                  <div className="flex items-center gap-1">

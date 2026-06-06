@@ -1049,32 +1049,25 @@ export function usePriceControl() {
     return receta.porcionesResultantes > 0 ? costoTotal / receta.porcionesResultantes : costoTotal;
   }, [recetas, getMejorPrecio, productos]);
 
-  // Sincronización proactiva de costos de productos elaborados
-  // SE OPTIMIZA: Se añade una guarda para evitar loops infinitos y se usa una comparación profunda
+  // Sincronización proactiva de costos de productos elaborados e ingredientes
+  // SE OPTIMIZA: Solo se ejecuta cuando hay cambios en dependencias críticas, con debounce.
   useEffect(() => {
     if (!loaded) return;
 
-    const actualizarCostosElaborados = async () => {
+    const actualizarCostosInternos = async () => {
       let huboCambio = false;
       const nuevosProductos = productos.map(p => {
         if (p.tipo === 'elaborado') {
           const nuevoCosto = getCostoReceta(p.id);
-          // Usar una pequeña tolerancia para floating point
-          if (Math.abs((p.costoBase || 0) - nuevoCosto) > 0.01) {
+          if (Math.abs((p.costoBase || 0) - nuevoCosto) > 0.1) { // Tolerancia $0.1
             huboCambio = true;
             return { ...p, costoBase: nuevoCosto, updatedAt: new Date().toISOString() };
           }
         } else if (p.tipo === 'ingrediente') {
-          // PROTECCIÓN-PRECIO-003: Solo actualiza costoBase (costo por unidad real).
-          // precioVenta NUNCA se recalcula automáticamente — es responsabilidad exclusiva del usuario.
-          // Bug anterior: usaba precioCosto del pack como costoBase → precio de venta inflado ×cantidadEmbalaje.
           const mejorPrecio = getMejorPrecio(p.id);
           if (mejorPrecio) {
-            const costoUnitario = Math.round(
-              (mejorPrecio.precioCosto / (mejorPrecio.cantidadEmbalaje || 1)) * 100
-            ) / 100;
-            const costoDistinto = Math.abs((p.costoBase || 0) - costoUnitario) > 0.01;
-            if (costoDistinto) {
+            const costoUnitario = Math.round((mejorPrecio.precioCosto / (mejorPrecio.cantidadEmbalaje || 1)) * 100) / 100;
+            if (Math.abs((p.costoBase || 0) - costoUnitario) > 0.1) {
               huboCambio = true;
               return { ...p, costoBase: costoUnitario, updatedAt: new Date().toISOString() };
             }
@@ -1084,19 +1077,20 @@ export function usePriceControl() {
       });
 
       if (huboCambio) {
-        console.log("♻️ [Nexus-Volt] Sincronizando costos base detectados...");
+        const changedOnly = nuevosProductos.filter((p, i) => p !== productos[i]);
+        console.log(`♻️ [Nexus-Volt] Optimizando costos para ${changedOnly.length} productos...`);
+
+        // Actualizar estado una sola vez
         setProductos(nuevosProductos);
-        // Persistir individualmente para evitar re-escritura masiva lenta
-        for (const p of nuevosProductos.filter((_, i) => nuevosProductos[i] !== productos[i])) {
-          await db.updateProducto(p);
-        }
+
+        // Persistencia asíncrona sin bloquear
+        changedOnly.forEach(p => db.updateProducto(p).catch(() => {}));
       }
     };
 
-    // Usar un timeout pequeño para evitar disparos en ráfaga durante la carga inicial
-    const timer = setTimeout(actualizarCostosElaborados, 1000);
+    const timer = setTimeout(actualizarCostosInternos, 1500); // Debounce más amplio (1.5s)
     return () => clearTimeout(timer);
-  }, [precios, recetas, loaded]); // productos NO debe estar aquí para evitar el loop directo
+  }, [precios.length, recetas.length, loaded]); // Usar .length para evitar ejecuciones por referencia de objeto
 
   // Funciones de Reabastecimiento Inteligente
   const generarSugerenciasPedido = useCallback(async () => {
