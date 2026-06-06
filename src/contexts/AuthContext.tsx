@@ -40,6 +40,7 @@ const toFirestoreDoc = (u: Usuario): Record<string, unknown> => {
   if (u.password !== undefined) d.password = u.password;
   if (u.avatar !== undefined) d.avatar = u.avatar;
   if (u.ultimoAcceso !== undefined) d.ultimoAcceso = u.ultimoAcceso;
+  if (u.updatedAt !== undefined) d.updatedAt = u.updatedAt;
   return d;
 };
 
@@ -94,10 +95,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch { /* usar baseList como fallback */ }
 
-          // LOCAL SIEMPRE GANA: nube solo agrega usuarios que no existen localmente
+          // FUSIÓN INTELIGENTE: El más reciente gana (basado en updatedAt)
           const mergedMap = new Map<string, Usuario>();
-          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // nube — prioridad baja
-          freshLocalList.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // local gana siempre
+
+          // Primero cargamos lo local
+          freshLocalList.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
+
+          // Luego fusionamos con la nube si es más reciente o el usuario no existe localmente
+          cloudUsers.forEach(cloudUser => {
+            const emailKey = cloudUser.email.toLowerCase();
+            const localUser = mergedMap.get(emailKey);
+
+            if (!localUser) {
+              mergedMap.set(emailKey, cloudUser);
+            } else {
+              // Comparar fechas de actualización si existen
+              const cloudUpdate = cloudUser.updatedAt ? new Date(cloudUser.updatedAt).getTime() : 0;
+              const localUpdate = localUser.updatedAt ? new Date(localUser.updatedAt).getTime() : 0;
+
+              if (cloudUpdate >= localUpdate) {
+                mergedMap.set(emailKey, cloudUser);
+              }
+            }
+          });
+
           // Los usuarios base siempre presentes
           USUARIOS_PRUEBA.forEach(up => {
             if (!mergedMap.has(up.email.toLowerCase())) mergedMap.set(up.email.toLowerCase(), up);
@@ -193,56 +214,59 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localUserList = [...USUARIOS_PRUEBA];
     }
 
-    // Buscar usuario por email — con fallback a Firebase si no está local
-    let localUser = localUserList.find(u => (u.email || '').toLowerCase().trim() === emailLower);
+    // Buscar usuario por email
+    let userToAuth = localUserList.find(u => (u.email || '').toLowerCase().trim() === emailLower);
 
-    if (!localUser && firestore) {
+    // Si no está local o si la contraseña falla, intentamos refrescar desde la nube
+    const passwordClean = password.trim();
+    const isPasswordCorrect = (u: Usuario) => u.password ? passwordClean === u.password.trim() : true;
+
+    if ((!userToAuth || !isPasswordCorrect(userToAuth)) && firestore) {
       try {
-        console.log('[Login] No encontrado local — buscando en nube...');
+        console.log(`[Login] ${!userToAuth ? 'No encontrado local' : 'Contraseña local incorrecta'} — buscando/refrescando desde nube...`);
         const snapshot = await getDocs(collection(firestore, 'usuarios_sistema'));
         const cloudUser = snapshot.docs
           .map(d => d.data() as Usuario)
           .find(u => (u.email || '').toLowerCase().trim() === emailLower);
+
         if (cloudUser) {
-          // Guardar en localStorage para próximos logins sin conexión
-          localUserList.push(cloudUser);
-          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(localUserList));
-          localUser = cloudUser;
-          console.log(`[Login] Usuario "${emailLower}" recuperado de la nube y guardado localmente.`);
+          // Actualizar lista local con la versión de la nube
+          const updatedList = userToAuth
+            ? localUserList.map(u => u.email.toLowerCase() === emailLower ? cloudUser : u)
+            : [...localUserList, cloudUser];
+
+          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(updatedList));
+          setUsuarios(updatedList);
+          userToAuth = cloudUser;
+          console.log(`[Login] Usuario "${emailLower}" actualizado desde la nube.`);
         }
       } catch (e) {
-        console.warn('[Login] Firebase no disponible como fallback:', e);
+        console.warn('[Login] Firebase no disponible para validación en tiempo real:', e);
       }
     }
 
-    if (!localUser) {
+    if (!userToAuth) {
       setIsLoading(false);
-      console.warn(`[Login] Usuario no encontrado: "${emailLower}". Usuarios disponibles:`, localUserList.map(u => u.email));
+      console.warn(`[Login] Usuario no encontrado: "${emailLower}".`);
       toast.error('No existe un usuario con ese identificador.');
       return { success: false, error: 'Usuario no registrado.' };
     }
 
-    if (!localUser.activo) {
+    if (!userToAuth.activo) {
       setIsLoading(false);
-      toast.error('Este usuario está desactivado. Contacta al administrador.');
+      toast.error('Este usuario está desactivado.');
       return { success: false, error: 'Usuario inactivo.' };
     }
 
-    // Verificar contraseña (quitamos los espacios al inicio/final por si acaso en el input)
-    const passwordClean = password.trim();
-    const passwordOk = localUser.password
-      ? passwordClean === localUser.password.trim()
-      : true;
-
-    if (!passwordOk) {
+    if (!isPasswordCorrect(userToAuth)) {
       setIsLoading(false);
-      console.warn(`[Login] Contraseña incorrecta para: "${emailLower}"`);
+      console.warn(`[Login] Contraseña incorrecta definitiva para: "${emailLower}"`);
       toast.error('Contraseña incorrecta.');
       return { success: false, error: 'Contraseña incorrecta.' };
     }
 
     // ✅ Login exitoso
-    const userData = { ...localUser, ultimoAcceso: new Date().toISOString() };
+    const userData = { ...userToAuth, ultimoAcceso: new Date().toISOString() };
     setUsuario(userData);
     localStorage.setItem('pricecontrol_local_user', JSON.stringify(userData));
     setIsLoading(false);
@@ -310,7 +334,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hasAllPermissions = useCallback((perms: Permission[]): boolean => perms.every(p => permissions.includes(p)), [permissions]);
 
   const addUsuario = useCallback(async (userData: Omit<Usuario, 'id' | 'createdAt'>): Promise<boolean> => {
-    const nuevo: Usuario = { ...userData, id: generateUUID(), createdAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const nuevo: Usuario = { ...userData, id: generateUUID(), createdAt: now, updatedAt: now };
     const newList = [...usuarios, nuevo];
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
@@ -327,7 +352,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [usuarios]);
 
   const updateUsuario = useCallback(async (id: string, updates: Partial<Usuario>): Promise<boolean> => {
-    const newList = usuarios.map(u => u.id === id ? { ...u, ...updates } : u);
+    const now = new Date().toISOString();
+    const newList = usuarios.map(u => u.id === id ? { ...u, ...updates, updatedAt: now } : u);
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
     if (usuario && id === usuario.id) {
