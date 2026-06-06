@@ -221,7 +221,7 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
             onClick={handleSyncCloud}
             disabled={isSyncingCloud}
             variant="outline"
-            className="h-10 px-3 rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs border-violet-300 text-violet-600 hover:bg-violet-50"
+            className="h-10 px-3 rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
             title="Sincronizar todos los usuarios a la nube para que puedan entrar desde otros dispositivos"
           >
             <CloudUpload className="w-4 h-4" />
@@ -231,13 +231,14 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button
-              className="h-10 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs"
+              variant="premium"
+              className="h-10 px-4 rounded-xl gap-2 text-xs"
               onClick={() => {
                 setEditingUser(null);
                 setFormData({ email: '', nombre: '', apellido: '', rol: 'VENDEDOR', activo: true, password: '' });
               }}
             >
-              <UserPlus className="w-5 h-5" />
+              <UserPlus className="w-4 h-4" />
               Nuevo Usuario
             </Button>
           </DialogTrigger>
@@ -340,9 +341,20 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
                   type="button"
                   onClick={handleGuardarUsuario}
                   disabled={isSavingUser}
-                  className="w-full h-10 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-sm"
+                  variant="success"
+                  className="w-full h-12 rounded-xl text-xs"
                 >
-                  {isSavingUser ? 'Guardando...' : editingUser ? 'Guardar Cambios' : 'Crear Usuario'}
+                  {isSavingUser ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Sincronizando...
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <Database className="w-4 h-4" />
+                      {editingUser ? 'Actualizar Entidad' : 'Garantizar Acceso'}
+                    </span>
+                  )}
                 </Button>
               </DialogFooter>
             </div>

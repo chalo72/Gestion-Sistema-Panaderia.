@@ -1557,27 +1557,29 @@ export function ProveedorForm({
             </div>
 
             {/* ── PIE DE FORMULARIO ── */}
-            <div className="flex gap-3 pt-6 md:pt-8 sticky bottom-0 bg-white dark:bg-slate-950 bg-opacity-90 backdrop-blur-sm pb-2">
+            <div className="flex gap-3 pt-6 md:pt-8 sticky bottom-0 bg-white/90 dark:bg-slate-950/90 backdrop-blur-md pb-2 z-50">
                 <Button 
                     type="button" variant="outline" 
-                    className="h-16 flex-1 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] border-2 border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 transition-all" 
+                    className="h-16 flex-1 rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] border-2 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-900 transition-all"
                     onClick={onClose}
                 >
                     Cancelar
                 </Button>
                 <Button 
-                    type="submit" disabled={guardando} 
-                    className="h-16 flex-[2] bg-indigo-600 hover:bg-blue-700 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.3em] shadow-2xl shadow-blue-500/30 border-none transition-all flex items-center justify-center gap-3 active:scale-[0.98]"
+                    type="submit"
+                    disabled={guardando}
+                    variant="success"
+                    className="h-16 flex-[2] rounded-2xl text-[11px] tracking-[0.3em] flex items-center justify-center gap-3"
                 >
                     {guardando ? (
                        <span className="flex items-center gap-2">
                           <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                          Procesando...
+                          Sincronizando Nexus...
                        </span>
                     ) : (
                        <>
-                          {editingProveedor ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
-                          {editingProveedor ? 'Actualizar Aliado' : 'Confirmar Registro'}
+                          {editingProveedor ? <Save className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                          {editingProveedor ? 'Actualizar Aliado' : 'Garantizar Suministro'}
                        </>
                     )}
                 </Button>

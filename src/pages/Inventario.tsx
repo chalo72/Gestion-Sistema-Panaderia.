@@ -1231,9 +1231,10 @@ export function Inventario({
 
                             {/* Botón finalizar — abre resumen primero */}
                             {productosContados > 0 && (
-                                <div className="sticky bottom-4">
+                                <div className="sticky bottom-4 z-40">
                                     <Button onClick={() => setShowResumenRonda(true)}
-                                        className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black uppercase tracking-widest text-sm border-none shadow-2xl shadow-emerald-600/30 gap-3">
+                                        variant="success"
+                                        className="w-full h-14 rounded-2xl text-xs gap-3">
                                         <CheckCircle2 className="w-5 h-5" />
                                         Ver resumen y finalizar · {productosContados} contados
                                     </Button>
@@ -1742,8 +1743,9 @@ export function Inventario({
                                     Volver a revisar
                                 </Button>
                                 <Button onClick={() => { setShowResumenRonda(false); finalizarRonda(); }}
-                                    className="flex-[2] h-11 rounded-xl font-black uppercase text-xs bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-lg gap-2">
-                                    <CheckCircle2 className="w-4 h-4" />
+                                    variant="success"
+                                    className="flex-[2] h-11 rounded-xl text-[10px] gap-2">
+                                    <Database className="w-4 h-4" />
                                     Aplicar {resumenRondaData.contados.length} ajustes
                                 </Button>
                             </div>
