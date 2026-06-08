@@ -791,6 +791,18 @@ export class SupabaseDatabase implements IDatabase {
         await supabase.from('trabajadores').delete().eq('id', id);
     }
 
+    // --- Asistencia ---
+    async getAllAsistencia(): Promise<any[]> {
+        const { data, error } = await supabase.from('asistencia').select('*');
+        if (error) return [];
+        return data;
+    }
+
+    async addRegistroAsistencia(registro: any): Promise<void> {
+        const { error } = await supabase.from('asistencia').upsert(registro);
+        if (error) throw error;
+    }
+
     // --- Créditos Trabajadores ---
     async getAllCreditosTrabajadores(): Promise<any[]> {
         const { data, error } = await supabase.from('creditos_trabajadores').select('*');
