@@ -234,6 +234,8 @@ const COLECCIONES_PRINCIPALES = [
   'backups',
   'agente_misiones',
   'agente_hallazgos',
+  'asistencia',
+  'nominas',
 ];
 
 /**
@@ -378,8 +380,14 @@ class NexusDatabase implements IDatabase {
 
   // Proveedores
   async getAllProveedores() { return this.adapter.getCollection('proveedores'); }
-  async addProveedor(p: any) { return this.adapter.setDocument('proveedores', p.id, p); }
-  async updateProveedor(p: any) { return this.adapter.setDocument('proveedores', p.id, p); }
+  async addProveedor(p: any) {
+    await this.adapter.setDocument('proveedores', p.id, p);
+    try { new SupabaseDatabase().addProveedor(p).catch(() => {}); } catch (_) {}
+  }
+  async updateProveedor(p: any) {
+    await this.adapter.setDocument('proveedores', p.id, p);
+    try { new SupabaseDatabase().updateProveedor(p).catch(() => {}); } catch (_) {}
+  }
   async deleteProveedor(id: string) { return this._delete('proveedores', id); }
 
   // Precios
@@ -388,8 +396,14 @@ class NexusDatabase implements IDatabase {
     const precios = await this.getAllPrecios();
     return precios.find(p => p.productoId === productoId && p.proveedorId === proveedorId);
   }
-  async addPrecio(p: any) { return this.adapter.setDocument('precios', p.id, p); }
-  async updatePrecio(p: any) { return this.adapter.setDocument('precios', p.id, p); }
+  async addPrecio(p: any) {
+    await this.adapter.setDocument('precios', p.id, p);
+    try { new SupabaseDatabase().addPrecio(p).catch(() => {}); } catch (_) {}
+  }
+  async updatePrecio(p: any) {
+    await this.adapter.setDocument('precios', p.id, p);
+    try { new SupabaseDatabase().updatePrecio(p).catch(() => {}); } catch (_) {}
+  }
   async deletePrecio(id: string) { return this._delete('precios', id); }
 
   // Lápidas (Tombstones para sincronización)
@@ -425,19 +439,34 @@ class NexusDatabase implements IDatabase {
   async getAllTrabajadores() { return this.adapter.getCollection('trabajadores'); }
   async getAllGastos() { return this.adapter.getCollection('gastos'); }
   async getAllPedidosActivos() { return this.adapter.getCollection('pedidos_activos'); }
-  async addPedidoActivo(p: any) { return this.adapter.setDocument('pedidos_activos', p.id, p); }
-  async updatePedidoActivo(p: any) { return this.adapter.setDocument('pedidos_activos', p.id, p); }
+  async addPedidoActivo(p: any) {
+    await this.adapter.setDocument('pedidos_activos', p.id, p);
+    try { new SupabaseDatabase().addPedidoActivo(p).catch(() => {}); } catch (_) {}
+  }
+  async updatePedidoActivo(p: any) {
+    await this.adapter.setDocument('pedidos_activos', p.id, p);
+    try { new SupabaseDatabase().updatePedidoActivo(p).catch(() => {}); } catch (_) {}
+  }
   async deletePedidoActivo(id: string) { return this._delete('pedidos_activos', id); }
   async getAllMesas() { return this.adapter.getCollection('mesas'); }
-  async updateMesa(m: any) { return this.adapter.setDocument('mesas', m.id, m); }
+  async updateMesa(m: any) {
+    await this.adapter.setDocument('mesas', m.id, m);
+    try { new SupabaseDatabase().updateMesa(m).catch(() => {}); } catch (_) {}
+  }
   async deleteMesa(id: string) { return this._delete('mesas', id); }
   async getAllAhorros() { return this.adapter.getCollection('ahorros'); }
   async updateInventarioItem(item: any) {
     return this.adapter.setDocument('inventario', item.id, item);
   }
   async getAllPrePedidos() { return this.adapter.getCollection('pre_pedidos'); }
-  async addPrePedido(p: any) { return this.adapter.setDocument('pre_pedidos', p.id, p); }
-  async updatePrePedido(p: any) { return this.adapter.setDocument('pre_pedidos', p.id, p); }
+  async addPrePedido(p: any) {
+    await this.adapter.setDocument('pre_pedidos', p.id, p);
+    try { new SupabaseDatabase().addPrePedido(p).catch(() => {}); } catch (_) {}
+  }
+  async updatePrePedido(p: any) {
+    await this.adapter.setDocument('pre_pedidos', p.id, p);
+    try { new SupabaseDatabase().updatePrePedido(p).catch(() => {}); } catch (_) {}
+  }
   async deletePrePedido(id: string) { return this._delete('pre_pedidos', id); }
   async getAllAlertas() { return this.adapter.getCollection('alertas'); }
   async addAlerta(a: any) { return this.adapter.setDocument('alertas', a.id, a); }
@@ -473,7 +502,10 @@ class NexusDatabase implements IDatabase {
 
   // Asistencia
   async getAllAsistencia() { return this.adapter.getCollection('asistencia'); }
-  async addRegistroAsistencia(r: any) { return this.adapter.setDocument('asistencia', r.id, r); }
+  async addRegistroAsistencia(r: any) {
+    await this.adapter.setDocument('asistencia', r.id, r);
+    try { new SupabaseDatabase().addRegistroAsistencia(r).catch(() => {}); } catch (_) {}
+  }
   async getAsistenciaByFecha(fecha: string) {
     const all = await this.adapter.getCollection<any>('asistencia');
     return all.filter((r: any) => r.fecha === fecha);
@@ -481,29 +513,60 @@ class NexusDatabase implements IDatabase {
 
   // Nóminas
   async getAllNominas() { return this.adapter.getCollection('nominas'); }
-  async addNomina(n: any) { return this.adapter.setDocument('nominas', n.id, n); }
-  async updateNomina(n: any) { return this.adapter.setDocument('nominas', n.id, n); }
+  async addNomina(n: any) {
+    await this.adapter.setDocument('nominas', n.id, n);
+    try { new SupabaseDatabase().addNomina(n).catch(() => {}); } catch (_) {}
+  }
+  async updateNomina(n: any) {
+    await this.adapter.setDocument('nominas', n.id, n);
+    try { new SupabaseDatabase().updateNomina(n).catch(() => {}); } catch (_) {}
+  }
 
   // Recetas
   async getAllRecetas() { return this.adapter.getCollection('recetas'); }
-  async addReceta(r: any) { return this.adapter.setDocument('recetas', r.id, r); }
-  async updateReceta(r: any) { return this.adapter.setDocument('recetas', r.id, r); }
+  async addReceta(r: any) {
+    await this.adapter.setDocument('recetas', r.id, r);
+    try { new SupabaseDatabase().addReceta(r).catch(() => {}); } catch (_) {}
+  }
+  async updateReceta(r: any) {
+    await this.adapter.setDocument('recetas', r.id, r);
+    try { new SupabaseDatabase().updateReceta(r).catch(() => {}); } catch (_) {}
+  }
   async deleteReceta(id: string) { return this._delete('recetas', id); }
 
   // Producción & Formulaciones
   async getAllFormulaciones() { return this.adapter.getCollection('formulaciones'); }
-  async addFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
-  async updateFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
+  async addFormulacion(f: any) {
+    await this.adapter.setDocument('formulaciones', f.id, f);
+    // Fallback: si no hay tabla formulaciones en Supabase, falla silencioso
+    try { (new SupabaseDatabase() as any).addFormulacion?.(f).catch(() => {}); } catch (_) {}
+  }
+  async updateFormulacion(f: any) {
+    await this.adapter.setDocument('formulaciones', f.id, f);
+    try { (new SupabaseDatabase() as any).updateFormulacion?.(f).catch(() => {}); } catch (_) {}
+  }
   async deleteFormulacion(id: string) { return this._delete('formulaciones', id); }
 
   async getAllModelosPan() { return this.adapter.getCollection('modelosPan'); }
-  async addModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
-  async updateModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
+  async addModeloPan(m: any) {
+    await this.adapter.setDocument('modelosPan', m.id, m);
+    try { (new SupabaseDatabase() as any).addModeloPan?.(m).catch(() => {}); } catch (_) {}
+  }
+  async updateModeloPan(m: any) {
+    await this.adapter.setDocument('modelosPan', m.id, m);
+    try { (new SupabaseDatabase() as any).updateModeloPan?.(m).catch(() => {}); } catch (_) {}
+  }
   async deleteModeloPan(id: string) { return this._delete('modelosPan', id); }
 
   async getAllOrdenesProduccion() { return this.adapter.getCollection('produccion'); }
-  async addOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
-  async updateOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
+  async addOrdenProduccion(o: any) {
+    await this.adapter.setDocument('produccion', o.id, o);
+    try { new SupabaseDatabase().addOrdenProduccion(o).catch(() => {}); } catch (_) {}
+  }
+  async updateOrdenProduccion(o: any) {
+    await this.adapter.setDocument('produccion', o.id, o);
+    try { new SupabaseDatabase().updateOrdenProduccion(o).catch(() => {}); } catch (_) {}
+  }
 
   // Agentes
   async getAgenteMisiones(agenteId: string) {
@@ -515,7 +578,8 @@ class NexusDatabase implements IDatabase {
     return hallazgos.filter(h => h.agenteId === agenteId);
   }
   async addAgenteHallazgo(agenteId: string, h: any) {
-    return this.adapter.setDocument('agente_hallazgos', h.id, { ...h, agenteId });
+    await this.adapter.setDocument('agente_hallazgos', h.id, { ...h, agenteId });
+    try { new SupabaseDatabase().saveAgenteHallazgo({ ...h, agenteId } as any).catch(() => {}); } catch (_) {}
   }
 
   // Clientes (CRM)
@@ -539,8 +603,14 @@ class NexusDatabase implements IDatabase {
   // Finanzas
 
   // Finanzas
-  async addGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
-  async updateGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
+  async addGasto(g: any) {
+    await this.adapter.setDocument('gastos', g.id, g);
+    try { new SupabaseDatabase().addGasto(g).catch(() => {}); } catch (_) {}
+  }
+  async updateGasto(g: any) {
+    await this.adapter.setDocument('gastos', g.id, g);
+    try { new SupabaseDatabase().updateGasto(g).catch(() => {}); } catch (_) {}
+  }
   async deleteGasto(id: string) { return this._delete('gastos', id); }
 
   async addCreditoCliente(c: any) {
@@ -553,18 +623,39 @@ class NexusDatabase implements IDatabase {
   }
   async deleteCreditoCliente(id: string) { return this._delete('creditos_clientes', id); }
 
-  async addCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
-  async updateCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
+  async addCreditoTrabajador(c: any) {
+    await this.adapter.setDocument('creditos_trabajadores', c.id, c);
+    try { new SupabaseDatabase().addCreditoTrabajador(c).catch(() => {}); } catch (_) {}
+  }
+  async updateCreditoTrabajador(c: any) {
+    await this.adapter.setDocument('creditos_trabajadores', c.id, c);
+    try { new SupabaseDatabase().updateCreditoTrabajador(c).catch(() => {}); } catch (_) {}
+  }
   async deleteCreditoTrabajador(id: string) { return this._delete('creditos_trabajadores', id); }
 
-  async addTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
-  async updateTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
+  async addTrabajador(t: any) {
+    await this.adapter.setDocument('trabajadores', t.id, t);
+    try { new SupabaseDatabase().addTrabajador(t).catch(() => {}); } catch (_) {}
+  }
+  async updateTrabajador(t: any) {
+    await this.adapter.setDocument('trabajadores', t.id, t);
+    try { new SupabaseDatabase().updateTrabajador(t).catch(() => {}); } catch (_) {}
+  }
   async deleteTrabajador(id: string) { return this._delete('trabajadores', id); }
 
   // Movimientos e Inventario
-  async addMovimiento(m: any) { return this.adapter.setDocument('movimientos', m.id, m); }
-  async addRecepcion(r: any) { return this.adapter.setDocument('recepciones', r.id, r); }
-  async updateRecepcion(r: any) { return this.adapter.setDocument('recepciones', r.id, r); }
+  async addMovimiento(m: any) {
+    await this.adapter.setDocument('movimientos', m.id, m);
+    try { new SupabaseDatabase().addMovimiento(m).catch(() => {}); } catch (_) {}
+  }
+  async addRecepcion(r: any) {
+    await this.adapter.setDocument('recepciones', r.id, r);
+    try { new SupabaseDatabase().addRecepcion(r).catch(() => {}); } catch (_) {}
+  }
+  async updateRecepcion(r: any) {
+    await this.adapter.setDocument('recepciones', r.id, r);
+    try { new SupabaseDatabase().updateRecepcion(r).catch(() => {}); } catch (_) {}
+  }
   async deleteRecepcion(id: string) { return this._delete('recepciones', id); }
 
   // Operaciones Atómicas (Simuladas por ahora)
@@ -602,20 +693,24 @@ class NexusDatabase implements IDatabase {
     // 1️⃣ Intentar Firebase (legacy)
     if (firebaseAdapter) {
       try {
-        await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
+        // force: false para respetar tomstones locales y no sobreescribir datos nuevos no sincronizados
+        await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, false);
         cloudExito = true;
       } catch (error) {
         console.error('❌ [NEXUS] Falla al conectar con Firebase. Usando BUNDLE DE RESCATE LOCAL.', error);
       }
     }
 
-    // 2️⃣ Intentar Supabase si Firebase no está disponible
-    if (!cloudExito) {
-      try {
+    // 2️⃣ Intentar Supabase (Sincronización Dual/Merge)
+    // Se intenta Supabase siempre, incluso si Firebase tuvo éxito, para asegurar que
+    // los datos restaurados en Supabase fluyan hacia el cliente local.
+    try {
         const supaDB = new SupabaseDatabase();
-        const remoteProductos = await supaDB.getAllProductos();
+        // Verificación ligera: intentar leer productos
+        const remoteProductos = await supaDB.getAllProductos().catch(() => []);
+
         if (remoteProductos && remoteProductos.length > 0) {
-          console.log('☁️ [NEXUS] Datos encontrados en Supabase. Sincronizando hacia local (MERGE — LOCAL GANA)...');
+          console.log('☁️ [NEXUS] Sincronizando desde Supabase (MERGE — LOCAL GANA)...');
           const tasks: Array<{ col: string; fn: () => Promise<any[]> }> = [
             { col: 'productos',          fn: () => supaDB.getAllProductos() },
             { col: 'proveedores',        fn: () => supaDB.getAllProveedores() },
@@ -631,6 +726,10 @@ class NexusDatabase implements IDatabase {
             { col: 'sesiones_caja',      fn: () => supaDB.getAllSesionesCaja() },
             { col: 'mesas',              fn: () => supaDB.getAllMesas() },
             { col: 'pedidos_activos',    fn: () => supaDB.getAllPedidosActivos() },
+            { col: 'trabajadores',       fn: () => supaDB.getAllTrabajadores() },
+            { col: 'creditos_trabajadores', fn: () => supaDB.getAllCreditosTrabajadores() },
+            { col: 'asistencia',         fn: () => supaDB.getAllAsistencia() },
+            { col: 'nominas',            fn: () => supaDB.getAllNominas() },
           ];
 
           // Precargar tombstones una sola vez para todo el bloque
@@ -665,9 +764,8 @@ class NexusDatabase implements IDatabase {
           cloudExito = true;
           console.log('✅ [NEXUS] Sincronización MERGE desde Supabase completada. Datos locales preservados.');
         }
-      } catch (e) {
+    } catch (e) {
         console.warn('☁️ [NEXUS] Supabase no disponible en este momento:', e);
-      }
     }
 
     // 3️⃣ Fallback: inyectar RESCUE_DATA si aún no hay datos
