@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import {
     Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant,
     Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck, TrendingDown,
-    ArrowDownUp, SunMedium, Layers3, Settings2, Trash2, Edit2, Save, X, CheckCheck, AlertCircle
+    ArrowDownUp, SunMedium, Layers3, Settings2, Trash2, Edit2, Save, X, CheckCheck, AlertCircle, PieChart
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,9 +23,13 @@ import { PlanSemanaView } from '@/components/produccion/PlanSemanaView';
 import { ControlCalidadModal } from '@/components/produccion/ControlCalidadModal';
 import { MermasDashboard } from '@/components/produccion/MermasDashboard';
 import { RotacionBreadView } from '@/components/produccion/RotacionBreadView';
+import { BalanceProduccionVentas } from '@/components/produccion/BalanceProduccionVentas';
+import { DistribuidorArroba } from '@/components/produccion/DistribuidorArroba';
 import { useControlCalidad } from '@/hooks/useControlCalidad';
 import { useLotesStock } from '@/hooks/useLotesStock';
 import { usePlanSemana } from '@/hooks/usePlanSemana';
+import { useAuditorias } from '@/hooks/useAuditorias';
+import { consultarAgente } from '@/constants/agentes';
 import {
     Dialog,
     DialogContent,
@@ -37,11 +41,12 @@ import {
 import type {
     Producto, OrdenProduccion, Receta, ProduccionEstado, InventarioItem,
     FormulacionBase, ModeloPan, Proveedor, TipoLata, CapacidadLata,
-    PlanSemanaItem, PlanSemana
+    PlanSemanaItem, PlanSemana, Venta
 } from '@/types';
 
 interface ProduccionProps {
     produccion: OrdenProduccion[];
+    ventas: Venta[];
     productos: Producto[];
     recetas: Receta[];
     inventario: InventarioItem[];
@@ -66,6 +71,7 @@ interface ProduccionProps {
 
 export function Produccion({
     produccion,
+    ventas,
     productos,
     recetas,
     inventario,
@@ -90,6 +96,56 @@ export function Produccion({
     const [showPlanModal, setShowPlanModal] = useState(false);
     const [activeTab, setActiveTab] = useState('plan-diario');
     const [planSemanaKey, setPlanSemanaKey] = useState(0);
+    const [isGeneratingIA, setIsGeneratingIA] = useState(false);
+    const { addAuditoria } = useAuditorias();
+
+    const handleGuardarAuditoria = async (cortes: any[], formId: string, arrobas: number, masaTotalKg: number, masaConsumidaKg: number, masaLibreKg: number) => {
+        setIsGeneratingIA(true);
+        try {
+            const f = formulaciones.find(x => x.id === formId);
+            if (!f) return;
+            const detalles = cortes.map(c => ({
+                modeloId: c.modeloId,
+                masaReqKg: c.pesoCrudoTotal / 1000,
+                panesReales: c.cantidad,
+                porcentajeArroba: c.porcentajeArroba
+            }));
+            
+            const prompt = `Analiza esta auditoría de producción de un pique de ${arrobas} arrobas.
+Masa Total: ${masaTotalKg.toFixed(2)} kg
+Masa Consumida: ${masaConsumidaKg.toFixed(2)} kg
+Masa Libre (sobrante o no asignada): ${masaLibreKg.toFixed(2)} kg
+Panes producidos: ${detalles.map(d => modelosPan.find(m => m.id === d.modeloId)?.nombre + ' (' + d.panesReales + ' u, ' + d.masaReqKg.toFixed(2) + ' kg)').join(', ')}
+
+Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/robo de masa. Si hay masa libre significativa (mayor a 1 kg), alerta sobre el dinero perdido (asumiendo que 1kg rinde aprox 10 panes de $500). Sé breve, directo y en tono de Jefe de Horno exigente.`;
+
+            let analisisIA = '';
+            try {
+                analisisIA = await consultarAgente('produccion', prompt, () => {}, undefined, 'Módulo Producción (Simulador)');
+            } catch (iaError) {
+                console.error("Error al consultar IA", iaError);
+                analisisIA = 'No se pudo contactar a la IA. La auditoría se guardó sin análisis experto.';
+            }
+            
+            await addAuditoria({
+                fecha: new Date().toISOString().split('T')[0],
+                formulacionId: formId,
+                cantidadArrobas: arrobas,
+                masaTotalKg,
+                masaConsumidaKg,
+                masaLibreKg,
+                detalles,
+                analisisIA
+            });
+            
+            toast.success("Auditoría guardada exitosamente");
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar auditoría");
+        } finally {
+            setIsGeneratingIA(false);
+        }
+    };
 
     // usePlanSemana a nivel de Produccion para poder escribir desde PlanDiarioView
     const { guardarPlan: guardarPlanSemana } = usePlanSemana();
@@ -101,58 +157,15 @@ export function Produccion({
     const { inspecciones, guardarInspeccion, getInspeccionPorOrden } = useControlCalidad();
     const [ordenQC, setOrdenQC] = useState<OrdenProduccion | null>(null);
 
+    // Tipos de lata
+    const tiposLata = useMemo<TipoLata[]>(() => {
+        try { return JSON.parse(localStorage.getItem('dp_tipos_lata') || '[]'); } catch { return []; }
+    }, []);
+
     // FIFO / Lotes en stock
     const { crearLote, lotesConProblema } = useLotesStock();
 
-    // ── Config Latas (localStorage) ───────────────────────────────────────
-    const [tiposLata, setTiposLata] = useState<TipoLata[]>(() => {
-        try { return JSON.parse(localStorage.getItem('dp_tipos_lata') || '[]'); } catch { return []; }
-    });
-    const [editingLata, setEditingLata] = useState<TipoLata | null>(null);
-    const [lNombre, setLNombre] = useState('');
-    const [lAncho, setLAncho] = useState(60);
-    const [lLargo, setLLargo] = useState(40);
-    const [lColor, setLColor] = useState('#10b981');
-    const [lCapacidades, setLCapacidades] = useState<CapacidadLata[]>([]);
-
-    const saveTiposLata = useCallback((lista: TipoLata[]) => {
-        setTiposLata(lista);
-        localStorage.setItem('dp_tipos_lata', JSON.stringify(lista));
-    }, []);
-
-    const openNewLata = () => {
-        setEditingLata(null); setLNombre(''); setLAncho(60); setLLargo(40);
-        setLColor('#10b981'); setLCapacidades([]);
-    };
-
-    const openEditLata = (l: TipoLata) => {
-        setEditingLata(l); setLNombre(l.nombre); setLAncho(l.anchoCm); setLLargo(l.largoCm);
-        setLColor(l.color || '#10b981'); setLCapacidades([...l.capacidades]);
-    };
-
-    const saveLata = () => {
-        if (!lNombre.trim()) return;
-        const lata: TipoLata = {
-            id: editingLata?.id || generateUUID(),
-            nombre: lNombre.trim(), anchoCm: lAncho, largoCm: lLargo,
-            color: lColor, capacidades: lCapacidades, activo: true
-        };
-        saveTiposLata(editingLata
-            ? tiposLata.map(l => l.id === lata.id ? lata : l)
-            : [...tiposLata, lata]
-        );
-        setEditingLata(null); setLNombre('');
-    };
-
-    const deleteLata = (id: string) => saveTiposLata(tiposLata.filter(l => l.id !== id));
-
-    const updateCapacidad = (modeloPanId: string, piezas: number) => {
-        setLCapacidades(prev => {
-            const existe = prev.find(c => c.modeloPanId === modeloPanId);
-            if (existe) return prev.map(c => c.modeloPanId === modeloPanId ? { ...c, piezas } : c);
-            return [...prev, { modeloPanId, piezas }];
-        });
-    };
+    const [simulacionActual, setSimulacionActual] = useState<{ formulacionId: string; arrobas: number; } | null>(null);
 
     // ── Turno del día ─────────────────────────────────────────────────────
     type TipoDiaPreset = { id: string; label: string; color: string; arrobas: Record<string, number> };
@@ -392,7 +405,7 @@ export function Produccion({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-y border-slate-200 dark:border-slate-800/50 py-6 bg-slate-50/20 dark:bg-slate-900/10 -mx-2 px-4 rounded-3xl mb-4">
                 {[
                     { step: '01', title: 'PLANIFICAR', desc: 'Arma el plan del día: masas, arrobas y panes.', icon: CalendarDays, color: 'text-indigo-500', bg: 'bg-indigo-500/10', tab: 'plan-diario' },
-                    { step: '02', title: 'VER SEMANA', desc: 'Revisá la plantilla semanal y ajustá si hace falta.', icon: CalendarRange, color: 'text-violet-500', bg: 'bg-violet-500/10', tab: 'semana' },
+                    { step: '02', title: 'SIMULAR MASA', desc: 'Reparte la masa de 1 arroba entre tus modelos.', icon: PieChart, color: 'text-sky-500', bg: 'bg-sky-500/10', tab: 'simulador' },
                     { step: '03', title: 'CONFIRMAR TURNO', desc: 'Seleccioná arrobas y lanzá las órdenes de hoy.', icon: SunMedium, color: 'text-amber-500', bg: 'bg-amber-500/10', tab: 'turno' },
                     { step: '04', title: 'HORNEAR', desc: 'Seguí el kanban y finalizá cada lote.', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10', tab: 'ordenes' },
                 ].map((item, idx) => (
@@ -417,15 +430,11 @@ export function Produccion({
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-                <TabsList className="bg-muted/40 p-1.5 rounded-2xl flex flex-wrap items-center gap-1 w-full max-w-5xl mx-auto h-auto min-h-[52px]">
+                <TabsList className="bg-muted/40 p-1.5 rounded-2xl flex items-center justify-start gap-1 w-full max-w-5xl mx-auto overflow-x-auto no-scrollbar min-h-[52px]">
                     {/* ── Flujo operativo diario ── */}
                     <TabsTrigger value="plan-diario" className="rounded-xl data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
-                        <CalendarDays className="w-4 h-4" />
-                        <span className="hidden sm:inline font-black text-[11px]">Planificar</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="semana" className="rounded-xl data-[state=active]:bg-violet-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
-                        <CalendarRange className="w-4 h-4" />
-                        <span className="hidden sm:inline font-black text-[11px]">Semana</span>
+                        <PieChart className="w-4 h-4" />
+                        <span className="hidden sm:inline font-black text-[11px]">Planificación</span>
                     </TabsTrigger>
                     <TabsTrigger value="turno" className="rounded-xl data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
                         <SunMedium className="w-4 h-4" />
@@ -434,6 +443,10 @@ export function Produccion({
                     <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
                         <ClipboardList className="w-4 h-4" />
                         <span className="hidden sm:inline font-black text-[11px]">Órdenes</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="balance-ventas" className="rounded-xl data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <ShoppingCart className="w-4 h-4" />
+                        <span className="hidden sm:inline font-black text-[11px]">Ventas</span>
                     </TabsTrigger>
 
                     {/* Separador visual */}
@@ -448,17 +461,9 @@ export function Produccion({
                         <Croissant className="w-4 h-4" />
                         <span className="hidden sm:inline text-[11px]">Modelos</span>
                     </TabsTrigger>
-                    <TabsTrigger value="guias" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
-                        <Package className="w-4 h-4" />
-                        <span className="hidden sm:inline text-[11px]">Guías</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="calculadora" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
-                        <Calculator className="w-4 h-4" />
-                        <span className="hidden sm:inline text-[11px]">Calculadora</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="pedidos" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
-                        <ShoppingCart className="w-4 h-4" />
-                        <span className="hidden sm:inline text-[11px]">Pedidos</span>
+                    <TabsTrigger value="semana" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
+                        <CalendarRange className="w-4 h-4" />
+                        <span className="hidden sm:inline text-[11px]">Semana</span>
                     </TabsTrigger>
                     <TabsTrigger value="mermas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <TrendingDown className="w-4 h-4" />
@@ -471,11 +476,26 @@ export function Produccion({
                             <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-rose-500 rounded-full" />
                         )}
                     </TabsTrigger>
-                    <TabsTrigger value="config-latas" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
-                        <Settings2 className="w-4 h-4" />
-                        <span className="hidden sm:inline text-[11px]">Config</span>
+                    <TabsTrigger value="calculadora" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
+                        <Calculator className="w-4 h-4" />
+                        <span className="hidden sm:inline text-[11px]">Calculadora</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="guias" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
+                        <Package className="w-4 h-4" />
+                        <span className="hidden sm:inline text-[11px]">Guías</span>
                     </TabsTrigger>
                 </TabsList>
+
+                {/* Tab: Balance Producción vs Ventas */}
+                <TabsContent value="balance-ventas" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <BalanceProduccionVentas
+                        produccion={produccion}
+                        ventas={ventas}
+                        productos={productos}
+                    />
+                </TabsContent>
+
+
 
                 {/* Tab: Órdenes de Producción (Kanban) */}
                 <TabsContent value="ordenes" className="space-y-6">
@@ -645,18 +665,78 @@ export function Produccion({
                     </div>
                 </TabsContent>
 
-                {/* Tab: Plan Diario — punto de entrada */}
-                <TabsContent value="plan-diario">
-                    <PlanDiarioView
-                        formulaciones={formulaciones}
-                        modelos={modelosPan}
-                        getProductoById={getProductoById}
-                        inventario={inventario}
-                        configuracion={configuracion}
-                        formatCurrency={formatCurrency}
-                        onLanzarPlan={handleLanzarPlan}
-                        onGuardarComoPlantilla={guardarComoPlantillaSemanal}
-                    />
+                {/* Tab: Plan Diario (Centro de Planificación Inteligente) */}
+                <TabsContent value="plan-diario" className="space-y-6">
+                    <div className="flex flex-col gap-12">
+                        {/* Lado izquierdo: Simulador de Arrobas */}
+                        <div className="space-y-4">
+                            <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2 mb-2">
+                                <PieChart className="w-6 h-6 text-indigo-500" />
+                                1. Simular Arrobas
+                            </h3>
+                            <DistribuidorArroba 
+                                formulaciones={formulaciones}
+                                modelos={modelosPan}
+                                ventas={ventas}
+                                onGuardarAuditoria={handleGuardarAuditoria}
+                                onSimulationChange={(formId, arrobas) => {
+                                    if (formId) {
+                                        setSimulacionActual({ formulacionId: formId, arrobas });
+                                    } else {
+                                        setSimulacionActual(null);
+                                    }
+                                }}
+                                onConfirmarProduccion={async (cortes, formId, arrobas) => {
+                                    try {
+                                        const f = formulaciones.find(x => x.id === formId);
+                                        if (!f) return;
+                                        for (const corte of cortes) {
+                                            const modelo = modelosPan.find(m => m.id === corte.modeloId);
+                                            if (!modelo) continue;
+                                            const prod = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente')
+                                                || productos.find(p => p.tipo !== 'ingrediente');
+                                            if (!prod) continue;
+                                            const fraccionArroba = corte.pesoCrudoTotal / (f.rendimientoBaseKg * 1000 * arrobas);
+                                            const costoTotalAsignado = (f.costoTotalArroba * arrobas) * fraccionArroba;
+                                            await addOrdenProduccion({
+                                                productoId: prod.id, cantidadPlaneada: corte.cantidad, cantidadCompletada: 0,
+                                                usuarioId: 'sistema', costoEstimadoTotal: costoTotalAsignado, formulacionId: f.id,
+                                                modeloPanId: modelo.id, arrobasUsadas: arrobas * fraccionArroba,
+                                                notas: `Simulador: ${arrobas} arroba(s) de ${f.nombre}`
+                                            });
+                                        }
+                                        toast.success('¡Plan lanzado a producción exitosamente!');
+                                        setActiveTab('ordenes');
+                                    } catch (e) {
+                                        toast.error('Error al lanzar simulación a producción.');
+                                    }
+                                }}
+                            />
+                        </div>
+
+                        {/* Lado derecho: Generador de Pedidos de Insumos */}
+                        <div className="space-y-4">
+                            <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2 mb-2">
+                                <ShoppingCart className="w-6 h-6 text-emerald-500" />
+                                2. Insumos Necesarios
+                            </h3>
+                            <GeneradorPedidoInsumos
+                                formulaciones={formulaciones}
+                                modelos={modelosPan}
+                                productos={productos}
+                                inventario={inventario}
+                                proveedores={proveedores}
+                                getProductoById={getProductoById}
+                                getMejorPrecio={getMejorPrecio}
+                                formatCurrency={formatCurrency}
+                                externalPlanificacion={simulacionActual}
+                                onGenerarPedido={(items) => {
+                                    toast.success(`Pedido generado con ${items.length} insumos`);
+                                    if (onNavigateTo) onNavigateTo('prepedidos');
+                                }}
+                            />
+                        </div>
+                    </div>
                 </TabsContent>
 
                 {/* Tab: Semana — Planificador semanal + Vista panadero */}
@@ -759,23 +839,7 @@ export function Produccion({
                     />
                 </TabsContent>
 
-                {/* Tab: Generador de Pedido de Insumos */}
-                <TabsContent value="pedidos">
-                    <GeneradorPedidoInsumos
-                        formulaciones={formulaciones}
-                        modelos={modelosPan}
-                        productos={productos}
-                        inventario={inventario}
-                        proveedores={proveedores}
-                        getProductoById={getProductoById}
-                        getMejorPrecio={getMejorPrecio}
-                        formatCurrency={formatCurrency}
-                        onGenerarPedido={(items) => {
-                            toast.success(`Pedido generado con ${items.length} insumos`);
-                            if (onNavigateTo) onNavigateTo('prepedidos');
-                        }}
-                    />
-                </TabsContent>
+
 
                 {/* Tab: Mermas y Responsabilidades */}
                 <TabsContent value="mermas">
@@ -1031,114 +1095,6 @@ export function Produccion({
                 {/* ═══════════════════════════════════════════════════════
                     TAB: CONFIG LATAS — Solo administrador
                 ═══════════════════════════════════════════════════════ */}
-                <TabsContent value="config-latas" className="space-y-8">
-                    <div className="flex items-center gap-3">
-                        <Settings2 className="w-6 h-6 text-slate-500" />
-                        <h2 className="text-2xl font-black text-slate-800 dark:text-white">Configuración de Latas</h2>
-                    </div>
-
-                    {/* Formulario nueva/editar lata */}
-                    <Card className="rounded-3xl border-slate-200 dark:border-slate-700">
-                        <CardHeader className="pb-3">
-                            <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500">
-                                {editingLata ? `Editando: ${editingLata.nombre}` : 'Nueva Lata'}
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-5">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="md:col-span-2 space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Nombre</Label>
-                                    <Input value={lNombre} onChange={e => setLNombre(e.target.value)} placeholder="Ej: Lata Grande, Lata Mediana, Lata Galletas..." className="rounded-2xl h-11 bg-slate-50 border-slate-200" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Ancho (cm)</Label>
-                                    <Input type="number" min={1} value={lAncho} onChange={e => setLAncho(Number(e.target.value))} className="rounded-2xl h-11 bg-slate-50 border-slate-200 font-black text-center text-lg" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-[10px] font-black uppercase text-slate-400">Largo (cm)</Label>
-                                    <Input type="number" min={1} value={lLargo} onChange={e => setLLargo(Number(e.target.value))} className="rounded-2xl h-11 bg-slate-50 border-slate-200 font-black text-center text-lg" />
-                                </div>
-                            </div>
-
-                            {/* Capacidades por modelo de pan */}
-                            {modelosPan.filter(m => m.activo).length > 0 && (
-                                <div className="space-y-3">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Piezas que caben en esta lata por tipo de pan:</p>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                        {modelosPan.filter(m => m.activo).map(modelo => {
-                                            const cap = lCapacidades.find(c => c.modeloPanId === modelo.id)?.piezas || 0;
-                                            return (
-                                                <div key={modelo.id} className="bg-slate-50 dark:bg-slate-800/40 rounded-2xl p-3 border border-slate-100 dark:border-slate-800 space-y-1.5">
-                                                    <p className="text-[10px] font-black text-slate-600 dark:text-slate-400 truncate" title={modelo.nombre}>{modelo.nombre}</p>
-                                                    <p className="text-[9px] text-slate-400">{modelo.pesoUnitarioGr}gr</p>
-                                                    <Input
-                                                        type="number" min={0} placeholder="0"
-                                                        value={cap || ''}
-                                                        onChange={e => updateCapacidad(modelo.id, Number(e.target.value))}
-                                                        className="h-9 rounded-xl bg-white dark:bg-slate-900 border-slate-200 font-black text-center text-base"
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="flex gap-3">
-                                <Button onClick={saveLata} className="bg-slate-800 hover:bg-slate-900 text-white rounded-2xl px-6 font-black flex items-center gap-2">
-                                    <Save className="w-4 h-4" /> {editingLata ? 'Actualizar Lata' : 'Guardar Lata'}
-                                </Button>
-                                {editingLata && (
-                                    <Button variant="outline" onClick={openNewLata} className="rounded-2xl px-6">
-                                        <X className="w-4 h-4 mr-2" /> Cancelar
-                                    </Button>
-                                )}
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Lista de latas configuradas */}
-                    <div className="space-y-3">
-                        {tiposLata.length === 0 && (
-                            <div className="p-8 rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400 font-medium">
-                                No hay latas configuradas todavía.
-                            </div>
-                        )}
-                        {tiposLata.map(lata => (
-                            <Card key={lata.id} className="rounded-2xl border-slate-100 dark:border-slate-800">
-                                <div className="flex items-start justify-between p-5">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white font-black text-lg shadow-sm" style={{ backgroundColor: lata.color || '#10b981' }}>
-                                            {lata.nombre.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <p className="font-black text-slate-800 dark:text-white">{lata.nombre}</p>
-                                            <p className="text-sm text-slate-400 font-medium">{lata.anchoCm} × {lata.largoCm} cm</p>
-                                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                                                {lata.capacidades.filter(c => c.piezas > 0).map(cap => {
-                                                    const modelo = modelosPan.find(m => m.id === cap.modeloPanId);
-                                                    if (!modelo) return null;
-                                                    return (
-                                                        <span key={cap.modeloPanId} className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-[10px] font-black text-slate-600 dark:text-slate-400">
-                                                            {modelo.nombre}: {cap.piezas} pzas
-                                                        </span>
-                                                    );
-                                                })}
-                                                {lata.capacidades.filter(c => c.piezas > 0).length === 0 && (
-                                                    <span className="text-[10px] text-slate-400">Sin capacidades definidas</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-2 shrink-0">
-                                        <Button variant="ghost" size="icon" onClick={() => openEditLata(lata)} className="h-9 w-9 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl"><Edit2 className="w-4 h-4" /></Button>
-                                        <Button variant="ghost" size="icon" onClick={() => deleteLata(lata.id)} className="h-9 w-9 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl"><Trash2 className="w-4 h-4" /></Button>
-                                    </div>
-                                </div>
-                            </Card>
-                        ))}
-                    </div>
-                </TabsContent>
 
             </Tabs>
 

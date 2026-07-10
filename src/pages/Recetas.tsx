@@ -8,6 +8,10 @@ import {
     ArrowDown, ListOrdered, Filter, Calculator, ChevronDown, ChevronUp,
     Package, Wheat, Percent, Tag, PieChart, Layers3, Check, Wrench, RefreshCw
 } from 'lucide-react';
+import { HistorialAuditoriasModal } from '@/components/produccion/HistorialAuditoriasModal';
+import { DistribuidorArroba } from '@/components/produccion/DistribuidorArroba';
+import { useAuditorias } from '@/hooks/useAuditorias';
+import { consultarAgente } from '@/constants/agentes';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,10 +69,14 @@ async function comprimirImagen(file: File): Promise<string> {
     });
 }
 
-// gr → 0.001 (el precio de proveedores es $/kg), ml → 0.001 ($/l), el resto directo
+// gr → 0.001 (el precio de proveedores es $/kg), ml → 0.001 ($/l), lb → 0.5, und → 0.05, el resto directo
 function factorUnidad(unidad: string): number {
-    if (unidad === 'gr') return 0.001;
-    if (unidad === 'ml') return 0.001;
+    const u = (unidad || 'kg').toLowerCase();
+    if (u === 'gr') return 0.001;
+    if (u === 'ml') return 0.001;
+    if (u === 'lb') return 0.5; // Libra panadera (500g)
+    if (u === 'und' || u === 'unidades') return 0.05; // Promedio de 50g por unidad (ej. huevos)
+    if (u === 'oz') return 0.0283;
     return 1;
 }
 
@@ -118,6 +126,10 @@ const Recetas: React.FC<RecetasProps> = ({
     addModeloPan, updateModeloPan, deleteModeloPan,
     formatCurrency
 }) => {
+    const { addAuditoria } = useAuditorias();
+    const [isGeneratingIA, setIsGeneratingIA] = useState(false);
+    const [isHistorialAuditoriasOpen, setIsHistorialAuditoriasOpen] = useState(false);
+    const [fechaAuditoria, setFechaAuditoria] = useState(() => new Date().toISOString().split('T')[0]);
 
     // ── Config de categorías (tipo: 'venta' | 'insumo') ──────────────────
     const [catTipoMap, setCatTipoMap] = useState<Map<string, string>>(new Map());
@@ -222,6 +234,8 @@ const Recetas: React.FC<RecetasProps> = ({
     const [mPrecioVenta, setMPrecioVenta] = useState(0);
     const [mMerma, setMMerma] = useState(5);
     const [mPiezasLata, setMPiezasLata] = useState<number | undefined>();
+    const [mSimLatas, setMSimLatas] = useState<number>(1);
+    const [mIngredientes, setMIngredientes] = useState<{productoId: string, cantidad: number, unidad: string, costo: number}[]>([]);
 
     // ── Calculadora de producción ─────────────────────────────────────────
     const [calcFormulacionId, setCalcFormulacionId] = useState('');
@@ -232,6 +246,7 @@ const Recetas: React.FC<RecetasProps> = ({
     const [isDistribucionOpen, setIsDistribucionOpen] = useState(false);
     const [distribucionFormulacion, setDistribucionFormulacion] = useState<FormulacionBase | null>(null);
     const [dMix, setDMix] = useState<Partial<MixItemProduccion>[]>([]);
+    const [auditoriaArrobas, setAuditoriaArrobas] = useState(1);
     // Tipos de lata: configurados en Producción → Config (se guardan en localStorage)
     const tiposLata = useMemo<TipoLata[]>(() => {
         try { return JSON.parse(localStorage.getItem('dp_tipos_lata') || '[]'); } catch { return []; }
@@ -396,7 +411,7 @@ const Recetas: React.FC<RecetasProps> = ({
 
     const calcularCostoIng = (productoId: string, cantidad: number, unidad: string) => {
         const mp = getMejorPrecio(productoId);
-        const cu = mp ? mp.precioCosto : (getProductoById(productoId)?.costoBase || 0);
+        const cu = mp ? (mp.precioCosto / (mp.cantidadEmbalaje || 1)) : (getProductoById(productoId)?.costoBase || 0);
         return cu * cantidad * factorUnidad(unidad);
     };
 
@@ -476,7 +491,7 @@ const Recetas: React.FC<RecetasProps> = ({
             const u = { ...ing, [field]: value };
             if (['productoId', 'cantidadPorArroba', 'unidad'].includes(field)) {
                 const mp = getMejorPrecio(u.productoId as string);
-                const cu = mp ? mp.precioCosto : (getProductoById(u.productoId as string)?.costoBase || 0);
+                const cu = mp ? (mp.precioCosto / (mp.cantidadEmbalaje || 1)) : (getProductoById(u.productoId as string)?.costoBase || 0);
                 u.costoUnitario = cu;
                 u.costoTotalArroba = cu * (u.cantidadPorArroba || 0) * factorUnidad(u.unidad || 'kg');
             }
@@ -544,6 +559,56 @@ const Recetas: React.FC<RecetasProps> = ({
     const updateDMixItem = (idx: number, field: keyof MixItemProduccion, value: any) =>
         setDMix(p => p.map((item, i) => i === idx ? { ...item, [field]: value } : item));
 
+    const handleGuardarAuditoria = async (cortes: any[], formId: string, arrobas: number, masaTotalKg: number, masaConsumidaKg: number, masaLibreKg: number) => {
+        setIsGeneratingIA(true);
+        try {
+            const f = formulaciones.find(x => x.id === formId);
+            if (!f) return;
+            const detalles = cortes.map(c => ({
+                modeloId: c.modeloId,
+                masaReqKg: c.pesoCrudoTotal / 1000,
+                panesReales: c.cantidad,
+                porcentajeArroba: c.porcentajeArroba
+            }));
+            
+            // Contexto para la IA
+            const prompt = `Analiza esta auditoría de producción de un pique de ${arrobas} arrobas.
+Masa Total: ${masaTotalKg.toFixed(2)} kg
+Masa Consumida: ${masaConsumidaKg.toFixed(2)} kg
+Masa Libre (sobrante o no asignada): ${masaLibreKg.toFixed(2)} kg
+Panes producidos: ${detalles.map(d => modelosPan.find(m => m.id === d.modeloId)?.nombre + ' (' + d.panesReales + ' u, ' + d.masaReqKg.toFixed(2) + ' kg)').join(', ')}
+
+Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/robo de masa. Si hay masa libre significativa (mayor a 1 kg), alerta sobre el dinero perdido (asumiendo que 1kg rinde aprox 10 panes de $500). Sé breve, directo y en tono de Jefe de Horno exigente.`;
+
+            let analisisIA = '';
+            try {
+                analisisIA = await consultarAgente('produccion', prompt, () => {}, undefined, 'Módulo Auditoría');
+            } catch (iaError) {
+                console.error("Error al consultar IA", iaError);
+                analisisIA = 'No se pudo contactar a la IA. La auditoría se guardó sin análisis experto.';
+            }
+            
+            await addAuditoria({
+                fecha: fechaAuditoria,
+                formulacionId: formId,
+                cantidadArrobas: arrobas,
+                masaTotalKg,
+                masaConsumidaKg,
+                masaLibreKg,
+                detalles,
+                analisisIA
+            });
+            
+            toast.success("Auditoría guardada exitosamente");
+            setIsDistribucionOpen(false);
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar auditoría");
+        } finally {
+            setIsGeneratingIA(false);
+        }
+    };
+
     const deleteFormulacionHandler = async (id: string) => {
         const modelsCount = modelosPan.filter(m => m.formulacionId === id).length;
         const msg = modelsCount > 0
@@ -558,13 +623,21 @@ const Recetas: React.FC<RecetasProps> = ({
     // MODELOS DE PAN — abrir / guardar
     // ─────────────────────────────────────────────────────────────────────
 
-    const calcPanesPorArroba = (pesoGr: number, merma: number) =>
-        pesoGr > 0 ? Math.floor((ARROBA_KG * 1000 * (1 - merma / 100)) / pesoGr) : 0;
+    const calcPanesPorArroba = (pesoGr: number, merma: number, formulacionId?: string) => {
+        if (pesoGr <= 0) return 0;
+        let masaNetaKg = ARROBA_KG;
+        if (formulacionId) {
+            const f = formulaciones.find(x => x.id === formulacionId);
+            if (f) masaNetaKg = f.rendimientoBaseKg;
+        }
+        return Math.floor((masaNetaKg * 1000 * (1 - merma / 100)) / pesoGr);
+    };
 
     const openCreateModelo = (formulacionId?: string) => {
         setEditingModelo(null); setMNombre('');
         setMFormulacionId(formulacionId || (formulaciones[0]?.id || ''));
         setMPeso(80); setMPrecioVenta(0); setMMerma(5); setMPiezasLata(undefined);
+        setMSimLatas(1); setMIngredientes([]);
         setIsModeloOpen(true);
     };
 
@@ -572,6 +645,7 @@ const Recetas: React.FC<RecetasProps> = ({
         setEditingModelo(m); setMNombre(m.nombre); setMFormulacionId(m.formulacionId);
         setMPeso(m.pesoUnitarioGr); setMPrecioVenta(m.precioVentaUnitario);
         setMMerma(m.mermaEstimada); setMPiezasLata(m.piezasPorLata);
+        setMSimLatas(1); setMIngredientes(m.ingredientesAdicionales || []);
         setIsModeloOpen(true);
     };
 
@@ -580,8 +654,17 @@ const Recetas: React.FC<RecetasProps> = ({
         if (!mFormulacionId) { toast.error('Selecciona una fórmula de masa'); return; }
         if (mPeso <= 0) { toast.error('El peso debe ser mayor a 0'); return; }
         const form = formulaciones.find(f => f.id === mFormulacionId);
-        const panesPorArr = calcPanesPorArroba(mPeso, mMerma);
-        const costoUnit = form && panesPorArr > 0 ? form.costoTotalArroba / panesPorArr : 0;
+        let costoUnit = 0;
+        let panesPorArr = 0;
+        if (form && form.rendimientoBaseKg > 0) {
+            panesPorArr = calcPanesPorArroba(mPeso, mMerma, mFormulacionId);
+            const costoPorGramo = form.costoTotalArroba / (form.rendimientoBaseKg * 1000);
+            const costoMasaUnidad = (mPeso / (1 - (mMerma / 100))) * costoPorGramo;
+            
+            const costoInsumosAdicionales = mIngredientes.reduce((sum, ing) => sum + (ing.costo || 0), 0);
+            costoUnit = costoMasaUnidad + costoInsumosAdicionales;
+        }
+
         const margen = mPrecioVenta > 0 && costoUnit > 0
             ? Math.round(((mPrecioVenta - costoUnit) / mPrecioVenta) * 100)
             : 0;
@@ -591,7 +674,8 @@ const Recetas: React.FC<RecetasProps> = ({
             pesoUnitarioGr: mPeso, panesPorArroba: panesPorArr,
             precioVentaUnitario: mPrecioVenta, costoUnitario: costoUnit,
             margenPorcentaje: margen, mermaEstimada: mMerma,
-            piezasPorLata: mPiezasLata, activo: true, createdAt: new Date().toISOString()
+            piezasPorLata: mPiezasLata, activo: true, createdAt: new Date().toISOString(),
+            ingredientesAdicionales: mIngredientes
         };
         try {
             if (editingModelo) {
@@ -998,16 +1082,35 @@ const Recetas: React.FC<RecetasProps> = ({
                                                                 </div>
                                                             </div>
                                                             <h5 className="font-black text-slate-900 dark:text-white text-[11px] uppercase tracking-tight mb-3 truncate">{m.nombre}</h5>
-                                                            <div className="space-y-1.5 text-[10px]">
-                                                                <div className="flex justify-between"><span className="text-slate-400 font-bold uppercase">Produce/arroba</span><span className="font-black text-slate-800 dark:text-white">{m.panesPorArroba} und</span></div>
-                                                                <div className="flex justify-between"><span className="text-slate-400 font-bold uppercase">Costo unit.</span><span className="font-black text-slate-800 dark:text-white">{formatCurrency(m.costoUnitario)}</span></div>
-                                                                <div className="flex justify-between"><span className="text-slate-400 font-bold uppercase">Precio venta</span><span className="font-black text-emerald-600">{formatCurrency(m.precioVentaUnitario)}</span></div>
-                                                                <div className="flex justify-between"><span className="text-slate-400 font-bold uppercase">Margen</span>
+                                                            <div className="space-y-2 text-[10px]">
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-slate-400 font-bold uppercase">Cortes x Lata</span>
+                                                                    <span className="font-black text-slate-800 dark:text-white">{m.piezasPorLata || '-'} und</span>
+                                                                </div>
+                                                                <div className="flex justify-between items-center">
+                                                                    <span className="text-slate-400 font-bold uppercase">Pique x Lata</span>
+                                                                    <span className="font-black text-slate-800 dark:text-white">
+                                                                        {m.piezasPorLata ? ((m.pesoUnitarioGr * m.piezasPorLata) / 1000).toFixed(2) : '-'} kg
+                                                                    </span>
+                                                                </div>
+                                                                
+                                                                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded-lg border border-slate-100 dark:border-slate-800 my-2">
+                                                                    <span className="text-slate-500 font-black uppercase">Costo unit.</span>
+                                                                    <div className="text-right flex flex-col">
+                                                                        <span className="font-black text-indigo-600 dark:text-indigo-400 text-[11px] leading-tight">{formatCurrency(m.costoUnitario)}</span>
+                                                                        <span className="text-[8px] text-slate-400 font-bold leading-tight" title="Costo Unitario Base + Insumos">
+                                                                            Masa + Insumos
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                
+                                                                <div className="flex justify-between items-center"><span className="text-slate-400 font-bold uppercase">Precio venta</span><span className="font-black text-emerald-600">{formatCurrency(m.precioVentaUnitario)}</span></div>
+                                                                <div className="flex justify-between items-center"><span className="text-slate-400 font-bold uppercase">Margen</span>
                                                                     <Badge className={cn("text-[9px] font-black h-4", m.margenPorcentaje >= 30 ? "bg-emerald-500 text-white" : m.margenPorcentaje >= 0 ? "bg-amber-500 text-white" : "bg-rose-500 text-white")}>
                                                                         {m.margenPorcentaje}%
                                                                     </Badge>
                                                                 </div>
-                                                                {m.piezasPorLata && <div className="flex justify-between"><span className="text-slate-400 font-bold uppercase">Por lata</span><span className="font-black text-slate-800 dark:text-white">{m.piezasPorLata} und</span></div>}
+
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1340,7 +1443,7 @@ const Recetas: React.FC<RecetasProps> = ({
                                                         <Select value={ing.unidad} onValueChange={v => handleIngChange(ing.id!, 'unidad', v)}>
                                                             <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-10 rounded-xl"><SelectValue /></SelectTrigger>
                                                             <SelectContent>
-                                                                {['gr', 'kg', 'ml', 'l', 'und'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                                                {['gr', 'kg', 'lb', 'oz', 'ml', 'l', 'und'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
                                                             </SelectContent>
                                                         </Select>
                                                     </div>
@@ -1583,7 +1686,7 @@ const Recetas: React.FC<RecetasProps> = ({
                                             className="h-9 rounded-lg bg-white dark:bg-slate-900 border-slate-200 text-xs text-center" placeholder="0" />
                                         <Select value={ing.unidad} onValueChange={v => updateIngFormulacion(ing.id!, 'unidad', v)}>
                                             <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-lg text-xs"><SelectValue /></SelectTrigger>
-                                            <SelectContent>{['gr', 'kg', 'ml', 'l', 'und'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+                                            <SelectContent>{['gr', 'kg', 'lb', 'oz', 'ml', 'l', 'und'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
                                         </Select>
                                         <span className="text-xs font-bold text-slate-700 dark:text-slate-300 text-right tabular-nums">{formatCurrency(ing.costoTotalArroba || 0)}</span>
                                         <Button onClick={() => removeIngFormulacion(ing.id!)} variant="ghost" size="icon"
@@ -1609,7 +1712,8 @@ const Recetas: React.FC<RecetasProps> = ({
                                     </div>
                                     <div className="bg-slate-800 p-3 rounded-xl text-center shadow-sm">
                                         <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Masa resultante</p>
-                                        <p className="font-black text-white text-base">{rendimientoMasa().toFixed(2)} kg</p>
+                                        <p className="font-black text-white text-base leading-none mb-1">{rendimientoMasa().toFixed(2)} kg</p>
+                                        <p className="text-[10px] font-bold text-amber-400 bg-amber-400/10 rounded-full inline-block px-2">{(rendimientoMasa() * 2).toFixed(2)} lb</p>
                                     </div>
                                     <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-3 rounded-xl text-center shadow-sm">
                                         <p className="text-[9px] font-black uppercase text-emerald-200 mb-1">Ingredientes</p>
@@ -1655,9 +1759,10 @@ const Recetas: React.FC<RecetasProps> = ({
                 MODAL MODELO DE PAN
             ════════════════════════════════════════════════════════════ */}
             <Dialog open={isModeloOpen} onOpenChange={setIsModeloOpen}>
-                <DialogContent className="max-w-lg rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
-                    <div className="h-2 w-full bg-gradient-to-r from-amber-400 to-orange-500" />
-                    <div className="p-4 sm:p-8">
+                <DialogContent className="max-w-lg rounded-3xl p-0 border-0 bg-white dark:bg-slate-900 overflow-hidden flex flex-col max-h-[90vh]">
+                    <div className="h-2 w-full shrink-0 bg-gradient-to-r from-amber-400 to-orange-500" />
+                    
+                    <div className="p-4 sm:p-6 overflow-y-auto flex-1 scrollbar-thin">
                         <DialogHeader className="mb-6">
                             <div className="flex items-center gap-3 mb-2">
                                 <Package className="w-6 h-6 text-amber-600" />
@@ -1666,7 +1771,7 @@ const Recetas: React.FC<RecetasProps> = ({
                             <DialogDescription>Define el gramaje y precio de este modelo. Las unidades por arroba se calculan solas.</DialogDescription>
                         </DialogHeader>
 
-                        <div className="space-y-5">
+                        <div className="space-y-5 pb-4">
                             <div className="space-y-2">
                                 <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Nombre del modelo</Label>
                                 <Input value={mNombre} onChange={e => setMNombre(e.target.value)} placeholder="Ej: Pan Francés 80gr, Mogolla 50gr, Roscón 120gr..." className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200" />
@@ -1680,237 +1785,235 @@ const Recetas: React.FC<RecetasProps> = ({
                                 </Select>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
                                 <div className="space-y-2">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Peso por unidad (gr)</Label>
-                                    <Input type="number" min={1} value={mPeso} onChange={e => setMPeso(Number(e.target.value))} className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg" />
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500 leading-tight">Peso unid. (gr)</Label>
+                                    <Input type="number" min={1} value={mPeso} onChange={e => setMPeso(Number(e.target.value))} className="rounded-xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg text-center" />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Merma estimada (%)</Label>
-                                    <Input type="number" min={0} max={30} value={mMerma} onChange={e => setMMerma(Number(e.target.value))} className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg" />
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500 leading-tight">Cortes x Lata</Label>
+                                    <Input 
+                                        type="number" 
+                                        min={1} 
+                                        value={mPiezasLata || ''}
+                                        onChange={e => setMPiezasLata(Number(e.target.value))}
+                                        className="rounded-xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg text-center" 
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500 leading-tight">Latas <span className="lowercase text-slate-400 font-normal">(simulador)</span></Label>
+                                    <Input 
+                                        type="number" 
+                                        min={1} 
+                                        value={mSimLatas}
+                                        onChange={e => setMSimLatas(Math.max(1, Number(e.target.value)))}
+                                        className="rounded-xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg text-center" 
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-600 leading-tight">Panes Totales</Label>
+                                    <Input 
+                                        type="number" 
+                                        min={1} 
+                                        value={mPiezasLata ? (mPiezasLata * mSimLatas) : ''}
+                                        onChange={e => {
+                                            const val = Number(e.target.value);
+                                            if (val > 0) setMPiezasLata(Math.round(val / mSimLatas));
+                                        }}
+                                        className="rounded-xl h-12 bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 font-black text-indigo-700 text-lg text-center focus-visible:ring-indigo-500" 
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 leading-tight">Pique Total (gr)</Label>
+                                    <Input 
+                                        type="number" 
+                                        min={1} 
+                                        value={(mPeso > 0 && mPiezasLata && mPiezasLata > 0) ? (mPeso * mPiezasLata * mSimLatas) : ''} 
+                                        onChange={e => {
+                                            const v = Number(e.target.value);
+                                            if (v > 0 && mPiezasLata && mPiezasLata > 0) {
+                                                setMPeso(Math.round(v / (mPiezasLata * mSimLatas)));
+                                            }
+                                        }} 
+                                        className="rounded-xl h-12 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 font-black text-emerald-700 text-lg text-center focus-visible:ring-emerald-500" 
+                                    />
                                 </div>
                             </div>
 
-                            {/* Cálculo automático */}
-                            {mPeso > 0 && (
-                                <div className="grid grid-cols-2 gap-3">
-                                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-2xl text-center border border-indigo-100">
-                                        <p className="text-[10px] font-black uppercase text-indigo-500">Produce/arroba</p>
-                                        <p className="font-black text-indigo-700 dark:text-indigo-300 text-xl">{calcPanesPorArroba(mPeso, mMerma)}</p>
-                                        <p className="text-[9px] text-indigo-400">unidades</p>
-                                    </div>
-                                    {mFormulacionId && (() => {
-                                        const f = formulaciones.find(x => x.id === mFormulacionId);
-                                        const ppa = calcPanesPorArroba(mPeso, mMerma);
-                                        const cu = f && ppa > 0 ? f.costoTotalArroba / ppa : 0;
-                                        return (
-                                            <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-2xl text-center border border-slate-100">
-                                                <p className="text-[10px] font-black uppercase text-slate-400">Costo unit.</p>
-                                                <p className="font-black text-slate-800 dark:text-white text-xl">{formatCurrency(cu)}</p>
-                                                <p className="text-[9px] text-slate-400">por unidad</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Precio Venta ($)</Label>
+                                    <Input type="number" min={0} value={mPrecioVenta} onChange={e => setMPrecioVenta(Number(e.target.value))} className="rounded-xl h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 font-bold" />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Merma de horneo (%)</Label>
+                                    <Input type="number" min={0} max={30} value={mMerma} onChange={e => setMMerma(Number(e.target.value))} className="rounded-xl h-10 bg-slate-50 dark:bg-slate-800 border-slate-200 font-bold" />
+                                </div>
+                            </div>
+
+                            {/* NUEVA SECCIÓN: INSUMOS ADICIONALES (RELLENOS/DECORACIÓN) */}
+                            <div className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Insumos (Rellenos/Decoración por Pan)</Label>
+                                    <Button size="sm" variant="outline" onClick={() => setMIngredientes([...mIngredientes, { productoId: '', cantidad: 0, unidad: 'gr', costo: 0 }])} className="h-7 text-[10px] rounded-lg">
+                                        + Agregar Insumo
+                                    </Button>
+                                </div>
+                                {mIngredientes.length > 0 && (
+                                    <div className="space-y-2">
+                                        {mIngredientes.map((ing, i) => (
+                                            <div key={i} className="flex gap-2 items-center">
+                                                <Select value={ing.productoId} onValueChange={v => {
+                                                    const p = productos.find(x => x.id === v);
+                                                    if (!p) return;
+                                                    const mp = getMejorPrecio(v);
+                                                    const costoPorUnidad = mp ? (mp.precioCosto / (mp.cantidadEmbalaje || 1)) : (p.costoBase || 0);
+                                                    const newIngs = [...mIngredientes];
+                                                    newIngs[i] = { ...ing, productoId: v, costo: costoPorUnidad * ing.cantidad };
+                                                    setMIngredientes(newIngs);
+                                                }}>
+                                                    <SelectTrigger className="flex-1 h-9 rounded-xl text-xs bg-white"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                                    <SelectContent>
+                                                        {ingredientesDisponibles.map((p: any) => (
+                                                            <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <Input type="number" min={0} step={1} placeholder="Cant." value={ing.cantidad || ''} onChange={e => {
+                                                    const val = Number(e.target.value);
+                                                    const newIngs = [...mIngredientes];
+                                                    const p = productos.find(x => x.id === ing.productoId);
+                                                    const mp = p ? getMejorPrecio(p.id) : null;
+                                                    const costoPorUnidad = mp ? (mp.precioCosto / (mp.cantidadEmbalaje || 1)) : (p?.costoBase || 0);
+                                                    newIngs[i] = { ...ing, cantidad: val, costo: costoPorUnidad * val };
+                                                    setMIngredientes(newIngs);
+                                                }} className="w-16 h-9 rounded-xl text-xs text-center" />
+                                                <div className="w-16 h-9 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-500">
+                                                    {formatCurrency(ing.costo)}
+                                                </div>
+                                                <Button variant="ghost" size="icon" onClick={() => {
+                                                    setMIngredientes(mIngredientes.filter((_, idx) => idx !== i));
+                                                }} className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50"><Trash2 className="w-4 h-4" /></Button>
                                             </div>
-                                        );
-                                    })()}
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Precio de venta (cop)</Label>
-                                    <Input type="number" min={0} value={mPrecioVenta} onChange={e => setMPrecioVenta(Number(e.target.value))} className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg" />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Piezas por lata (opcional)</Label>
-                                    <Input type="number" min={1} value={mPiezasLata || ''} onChange={e => setMPiezasLata(e.target.value ? Number(e.target.value) : undefined)} placeholder="Ej: 12" className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg" />
-                                </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
-                        </div>
 
-                        <DialogFooter className="mt-8 flex gap-3 pt-6 border-t border-slate-100 dark:border-slate-800">
-                            <Button variant="outline" onClick={() => setIsModeloOpen(false)} className="rounded-xl px-6">Cancelar</Button>
-                            <Button onClick={saveModelo} className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl px-8 flex items-center gap-2">
-                                <Save className="w-4 h-4" />{editingModelo ? 'Actualizar' : 'Guardar Modelo'}
-                            </Button>
-                        </DialogFooter>
+                            {/* Análisis Detallado de Costos */}
+                            {mPeso > 0 && mFormulacionId && mPiezasLata && mPiezasLata > 0 && (() => {
+                                const f = formulaciones.find(x => x.id === mFormulacionId);
+                                if (!f || f.rendimientoBaseKg <= 0) return null;
+                                
+                                const costoPorGramo = f.costoTotalArroba / (f.rendimientoBaseKg * 1000);
+                                
+                                const piqueLata = mPeso * mPiezasLata;
+                                const masaTotalSimulada = piqueLata * mSimLatas; // Pique total
+                                const masaBrutaRequerida = masaTotalSimulada / (1 - (mMerma / 100)); // Pique + Merma
+                                const costoMasaBruta = masaBrutaRequerida * costoPorGramo;
+                                
+                                const panesTotales = mPiezasLata * mSimLatas;
+                                
+                                const costoInsumosAdicionales = mIngredientes.reduce((sum, ing) => sum + (ing.costo || 0), 0);
+                                const costoUnitarioReal = (costoMasaBruta / panesTotales) + costoInsumosAdicionales;
+
+                                return (
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 mt-4">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+                                            <p className="font-black text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Costo Real por Pan</p>
+                                        </div>
+                                        
+                                        <div className="mb-4">
+                                            <p className="text-xs text-slate-600 dark:text-slate-400 italic leading-relaxed">
+                                                "El pique de {masaTotalSimulada}g cuesta <strong>{formatCurrency(masaTotalSimulada * costoPorGramo)}</strong>. 
+                                                Se suma un {mMerma}% de merma (masa real {Math.round(masaBrutaRequerida)}g a <strong>{formatCurrency(costoMasaBruta)}</strong>). 
+                                                La masa por pan cuesta <strong>{formatCurrency(costoMasaBruta / panesTotales)}</strong>.
+                                                {costoInsumosAdicionales > 0 && <span> Se suman <strong>{formatCurrency(costoInsumosAdicionales)}</strong> en insumos (relleno/decoración) por pan.</span>}
+                                            </p>
+                                        </div>
+                                        
+                                        <div className="flex justify-between items-end border-t border-slate-200 dark:border-slate-700 pt-3">
+                                            <span className="font-black text-slate-500 dark:text-slate-400 text-[10px] uppercase">Costo Unitario Final</span>
+                                            <span className="font-black text-3xl text-indigo-700 dark:text-indigo-400">{formatCurrency(costoUnitarioReal)}</span>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    </div>
+
+                    <div className="shrink-0 p-4 sm:px-6 sm:py-4 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3 rounded-b-3xl">
+                        <Button variant="outline" onClick={() => setIsModeloOpen(false)} className="rounded-xl px-6">Cancelar</Button>
+                        <Button onClick={saveModelo} className="bg-amber-500 hover:bg-amber-600 text-white rounded-xl px-8 flex items-center gap-2">
+                            <Save className="w-4 h-4" />{editingModelo ? 'Actualizar' : 'Guardar Modelo'}
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
 
             {/* ════════════════════════════════════════════════════════════
-                MODAL DISTRIBUCIÓN POR ARROBA — Admin configura latas
+                MODAL DISTRIBUCIÓN POR ARROBA / AUDITORÍA CON BARRA DE PROGRESO
             ════════════════════════════════════════════════════════════ */}
             <Dialog open={isDistribucionOpen} onOpenChange={setIsDistribucionOpen}>
-                <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl p-0 border-0 bg-white dark:bg-slate-900">
-                    <div className="h-2 w-full bg-gradient-to-r from-emerald-400 to-teal-500" />
-                    <div className="p-4 sm:p-8">
-                        <DialogHeader className="mb-6">
-                            <div className="flex items-center gap-3 mb-2">
-                                <PieChart className="w-6 h-6 text-emerald-600" />
-                                <DialogTitle className="text-xl font-bold text-slate-900">
-                                    Distribución por Arroba — {distribucionFormulacion?.nombre}
-                                </DialogTitle>
+                <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto rounded-3xl p-0 border-0 bg-slate-50 dark:bg-slate-900">
+                    <div className="h-2 w-full bg-gradient-to-r from-violet-500 to-indigo-600" />
+                    <div className="p-4 sm:p-8 space-y-6">
+                        <DialogHeader>
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <PieChart className="w-6 h-6 text-violet-600" />
+                                    <DialogTitle className="text-2xl font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                                        Auditoría en Tiempo Real
+                                    </DialogTitle>
+                                </div>
+                                <Button 
+                                    variant="outline" 
+                                    onClick={() => setIsHistorialAuditoriasOpen(true)}
+                                    className="flex text-indigo-600 border-indigo-200 hover:bg-indigo-50 dark:border-indigo-900 dark:hover:bg-indigo-900/30 rounded-xl items-center gap-2"
+                                >
+                                    <HistoryIcon className="w-4 h-4" /> Ver Historial
+                                </Button>
                             </div>
                             <DialogDescription>
-                                Define qué % de la masa va para cada pan y qué lata usa. El sistema calculará panes y latas exactas para el panadero.
+                                Usa el termómetro de masa para registrar cuántos panes se han producido y auditar el rendimiento exacto de la masa para detectar mermas.
                             </DialogDescription>
                         </DialogHeader>
 
-                        {/* Resumen masa disponible */}
-                        {distribucionFormulacion && (
-                            <div className="flex gap-3 mb-6">
-                                <div className="bg-emerald-50 dark:bg-emerald-900/20 px-4 py-2 rounded-2xl border border-emerald-100 text-center">
-                                    <p className="text-[10px] font-black uppercase text-emerald-500">Masa/arroba</p>
-                                    <p className="font-black text-emerald-700 dark:text-emerald-300">{distribucionFormulacion.rendimientoBaseKg.toFixed(2)} kg</p>
-                                </div>
-                                <div className={cn(
-                                    "px-4 py-2 rounded-2xl border text-center",
-                                    dMix.reduce((s, i) => s + (i.porcentaje || 0), 0) > 100
-                                        ? "bg-rose-50 border-rose-200 text-rose-600"
-                                        : "bg-slate-50 dark:bg-slate-800/50 border-slate-100 text-slate-700 dark:text-white"
-                                )}>
-                                    <p className="text-[10px] font-black uppercase text-slate-400">% asignado</p>
-                                    <p className="font-black text-lg">{dMix.reduce((s, i) => s + (i.porcentaje || 0), 0)}%</p>
-                                </div>
-                                <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-2 rounded-2xl border border-slate-100 text-center">
-                                    <p className="text-[10px] font-black uppercase text-slate-400">% libre</p>
-                                    <p className="font-black text-slate-600 dark:text-slate-300 text-lg">{Math.max(0, 100 - dMix.reduce((s, i) => s + (i.porcentaje || 0), 0))}%</p>
-                                </div>
+                        {/* Fecha de Auditoría */}
+                        <div className="flex items-center gap-3 bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm w-fit">
+                            <Clock className="w-5 h-5 text-indigo-500" />
+                            <div className="flex flex-col">
+                                <Label className="text-[10px] font-black uppercase text-slate-400">Fecha de Auditoría</Label>
+                                <input 
+                                    type="date" 
+                                    value={fechaAuditoria}
+                                    onChange={(e) => setFechaAuditoria(e.target.value)}
+                                    className="bg-transparent text-sm font-bold text-slate-700 dark:text-slate-200 outline-none"
+                                />
                             </div>
-                        )}
-
-                        {tiposLata.length === 0 && (
-                            <div className="mb-4 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 text-amber-700 text-xs font-bold flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 shrink-0" />
-                                Configura los tipos de lata en Producción → Turno → Config antes de asignarlos aquí.
-                            </div>
-                        )}
-
-                        {/* Filas de distribución */}
-                        <div className="space-y-3 mb-4">
-                            {/* Header */}
-                            <div className="grid grid-cols-12 gap-2 px-1">
-                                <div className="col-span-4 text-[10px] font-black uppercase text-slate-400">Pan (modelo)</div>
-                                <div className="col-span-2 text-[10px] font-black uppercase text-slate-400 text-center">% masa</div>
-                                <div className="col-span-3 text-[10px] font-black uppercase text-slate-400">Lata</div>
-                                <div className="col-span-2 text-[10px] font-black uppercase text-slate-400 text-center">Resultado</div>
-                                <div className="col-span-1" />
-                            </div>
-
-                            {dMix.map((item, idx) => {
-                                const modelo = modelosPan.find(m => m.id === item.modeloPanId);
-                                const masaKg = distribucionFormulacion?.rendimientoBaseKg || 0;
-                                const masaModelo = masaKg * (item.porcentaje || 0) / 100;
-                                const panes = modelo && modelo.pesoUnitarioGr > 0
-                                    ? Math.floor(masaModelo * 1000 / modelo.pesoUnitarioGr) : 0;
-                                const tipoLata = tiposLata.find(t => t.id === item.tipoLataId);
-                                const capacidad = tipoLata?.capacidades.find(c => c.modeloPanId === item.modeloPanId)?.piezas
-                                    || modelo?.piezasPorLata || 0;
-                                const latas = capacidad > 0 && panes > 0 ? Math.ceil(panes / capacidad) : null;
-                                const modelosFiltrados = distribucionFormulacion
-                                    ? modelosPan.filter(m => m.formulacionId === distribucionFormulacion.id)
-                                    : [];
-
-                                return (
-                                    <div key={idx} className="grid grid-cols-12 gap-2 p-3 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800 items-center">
-                                        {/* Modelo */}
-                                        <div className="col-span-4">
-                                            <Select value={item.modeloPanId || ''} onValueChange={v => updateDMixItem(idx, 'modeloPanId', v)}>
-                                                <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-xl text-xs">
-                                                    <SelectValue placeholder="Seleccionar pan..." />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {modelosFiltrados.length === 0
-                                                        ? <SelectItem value="_none" disabled>No hay modelos — créalos primero</SelectItem>
-                                                        : modelosFiltrados.map(m => <SelectItem key={m.id} value={m.id}>{m.nombre} ({m.pesoUnitarioGr}gr)</SelectItem>)
-                                                    }
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        {/* % masa */}
-                                        <div className="col-span-2">
-                                            <div className="relative">
-                                                <Input type="number" min={0} max={100} value={item.porcentaje || ''} onChange={e => updateDMixItem(idx, 'porcentaje', Number(e.target.value))} className="h-9 rounded-xl bg-white dark:bg-slate-900 border-slate-200 text-center font-black pr-6 text-sm" />
-                                                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
-                                            </div>
-                                        </div>
-                                        {/* Tipo de lata */}
-                                        <div className="col-span-3">
-                                            <Select value={item.tipoLataId || ''} onValueChange={v => updateDMixItem(idx, 'tipoLataId', v || undefined)}>
-                                                <SelectTrigger className="bg-white dark:bg-slate-900 border-slate-200 h-9 rounded-xl text-xs">
-                                                    <SelectValue placeholder={tiposLata.length ? "Tipo lata..." : "Sin latas"} />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="">Sin asignar</SelectItem>
-                                                    {tiposLata.map(l => <SelectItem key={l.id} value={l.id}>{l.nombre} ({l.anchoCm}×{l.largoCm}cm)</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        {/* Resultado */}
-                                        <div className="col-span-2 text-center">
-                                            {panes > 0 ? (
-                                                <div>
-                                                    <p className="text-sm font-black text-slate-800 dark:text-white">{panes} panes</p>
-                                                    {latas !== null
-                                                        ? <p className="text-[10px] font-bold text-emerald-600">{latas} lata{latas !== 1 ? 's' : ''} × {capacidad}</p>
-                                                        : <p className="text-[10px] text-slate-400">sin cap. lata</p>
-                                                    }
-                                                </div>
-                                            ) : <span className="text-[10px] text-slate-300">—</span>}
-                                        </div>
-                                        {/* Eliminar */}
-                                        <div className="col-span-1 flex justify-center">
-                                            <Button onClick={() => removeDMixItem(idx)} variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:bg-rose-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></Button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
                         </div>
 
-                        <Button variant="outline" onClick={addDMixItem} className="w-full rounded-2xl border-dashed border-emerald-300 text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400 mb-2">
-                            <Plus className="w-4 h-4 mr-2" /> Agregar pan a la distribución
-                        </Button>
+                        {/* Componente Integrado */}
+                        <DistribuidorArroba 
+                            formulaciones={distribucionFormulacion ? [distribucionFormulacion] : formulaciones}
+                            modelos={modelosPan}
+                            ventas={[]} // Array vacío ya que Recetas no recibe ventas directamente
+                            onGuardarAuditoria={handleGuardarAuditoria}
+                        />
 
-                        {/* Vista previa del turno */}
-                        {dMix.some(i => i.modeloPanId && (i.porcentaje || 0) > 0) && (
-                            <div className="mt-5 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600 mb-3 flex items-center gap-2">
-                                    <Layers3 className="w-3.5 h-3.5" /> Vista previa del turno (1 arroba)
-                                </p>
-                                <div className="space-y-1.5">
-                                    {dMix.filter(i => i.modeloPanId && (i.porcentaje || 0) > 0).map((item, idx) => {
-                                        const modelo = modelosPan.find(m => m.id === item.modeloPanId);
-                                        const masaKg = distribucionFormulacion?.rendimientoBaseKg || 0;
-                                        const panes = modelo && modelo.pesoUnitarioGr > 0
-                                            ? Math.floor(masaKg * (item.porcentaje! / 100) * 1000 / modelo.pesoUnitarioGr) : 0;
-                                        const tipoLata = tiposLata.find(t => t.id === item.tipoLataId);
-                                        const capacidad = tipoLata?.capacidades.find(c => c.modeloPanId === item.modeloPanId)?.piezas || modelo?.piezasPorLata || 0;
-                                        const latas = capacidad > 0 && panes > 0 ? Math.ceil(panes / capacidad) : 0;
-                                        return (
-                                            <div key={idx} className="flex items-center justify-between text-xs">
-                                                <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-2">
-                                                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                                                    {modelo?.nombre ?? '—'}
-                                                </span>
-                                                <span className="font-black text-slate-800 dark:text-white">
-                                                    {panes} panes
-                                                    {latas > 0 && <span className="text-emerald-600 ml-2">→ {latas} lata{latas !== 1 ? 's' : ''}</span>}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-
-                        <DialogFooter className="mt-6 flex gap-3 pt-6 border-t border-slate-100 dark:border-slate-800">
-                            <Button variant="outline" onClick={() => setIsDistribucionOpen(false)} className="rounded-xl px-6">Cancelar</Button>
-                            <Button onClick={saveDistribucion} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl px-8 flex items-center gap-2">
-                                <Save className="w-4 h-4" /> Guardar Distribución
+                        <DialogFooter className="pt-4 flex justify-start">
+                            <Button variant="outline" onClick={() => setIsDistribucionOpen(false)} className="rounded-2xl px-6">
+                                Cerrar Ventana
                             </Button>
                         </DialogFooter>
                     </div>
                 </DialogContent>
             </Dialog>
+            <HistorialAuditoriasModal 
+                open={isHistorialAuditoriasOpen} 
+                onClose={() => setIsHistorialAuditoriasOpen(false)} 
+            />
         </Tabs>
     );
 };
