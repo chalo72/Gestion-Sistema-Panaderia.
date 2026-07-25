@@ -238,7 +238,13 @@ export function useReportesData(props: ReportesProps) {
             
             const updated = { ...h, [field]: val };
             
-            if (field === 'bandejas') {
+            if (field === 'tipoPan') {
+                const modelo = props.modelosPan?.find(m => m.nombre === value);
+                if (modelo && modelo.piezasPorLata) {
+                    updated.panesPorBandeja = modelo.piezasPorLata;
+                    updated.totalPanes = Math.round(updated.bandejas * updated.panesPorBandeja);
+                }
+            } else if (field === 'bandejas') {
                 updated.totalPanes = Math.round(updated.bandejas * updated.panesPorBandeja);
             } else if (field === 'panesPorBandeja') {
                 if (updated.totalPanes > 0 && updated.bandejas === 0) {
