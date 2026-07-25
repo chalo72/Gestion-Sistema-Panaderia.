@@ -253,6 +253,8 @@ export function useReportesData(props: ReportesProps) {
         }));
     };
 
+    const [editProduccionId, setEditProduccionId] = useState<string | null>(null);
+
     const handleSaveProduccion = () => {
         const validHornadas = hornadas.filter(h => h.tipoPan.trim() && (h.bandejas > 0 || h.totalPanes > 0));
         const data: Omit<RegistroProduccion, 'id'> = {
@@ -266,12 +268,23 @@ export function useReportesData(props: ReportesProps) {
             toast.error('Ingresa al menos una masa o una hornada del día');
             return;
         }
-        const nueva = addProduccion(data);
-        setProducciones(getProducciones());
+
+        if (editProduccionId) {
+            const existentes = getProducciones();
+            const actualizados = existentes.map(p => p.id === editProduccionId ? { ...p, ...data } : p);
+            localStorage.setItem('dp_producciones', JSON.stringify(actualizados));
+            setProducciones(actualizados);
+            setEditProduccionId(null);
+            toast.success(`✅ Producción del ${data.fecha} actualizada`);
+        } else {
+            const nueva = addProduccion(data);
+            setProducciones(getProducciones());
+            toast.success(`✅ Producción del ${nueva.fecha} registrada`);
+        }
+        
         setFormProd(p => ({ ...p, notas: '' }));
         setMasasPreparadas([]);
         setHornadas([{ tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
-        toast.success(`✅ Producción del ${nueva.fecha} registrada`);
     };
     const [pinModal, setPinModal] = useState<{ ventaId: string; pin: string; error: string } | null>(null);
     const [activeTab, setActiveTab] = useState('resumen');
@@ -861,6 +874,8 @@ export function useReportesData(props: ReportesProps) {
         setProducciones,
         formProd,
         setFormProd,
+        setEditProduccionId,
+
         masasPreparadas,
         setMasasPreparadas,
         hornadas,
