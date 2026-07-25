@@ -569,6 +569,7 @@ const App = () => {
             formatCurrency={formatCurrency}
             formulaciones={formulaciones}
             modelosPan={modelosPan}
+            onNavigateTo={(view: any) => setCurrentView(view)}
           />
         );
       case 'boveda':

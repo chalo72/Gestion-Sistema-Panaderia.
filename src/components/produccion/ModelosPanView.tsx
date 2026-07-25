@@ -1,5 +1,5 @@
 import { generateUUID } from '@/lib/safe-utils';
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Croissant,
   Plus,
@@ -123,6 +123,22 @@ export function ModelosPanView({
     setPiezasPorLata(modelo.piezasPorLata || 12);
     setIsDialogOpen(true);
   };
+
+  useEffect(() => {
+    const editId = localStorage.getItem('dp_edit_modelo_id');
+    const openAdd = localStorage.getItem('dp_open_add_modelo_dialog');
+    
+    if (editId) {
+      localStorage.removeItem('dp_edit_modelo_id');
+      const mod = modelos.find(m => m.id === editId);
+      if (mod) {
+        handleOpenEdit(mod);
+      }
+    } else if (openAdd === 'true') {
+      localStorage.removeItem('dp_open_add_modelo_dialog');
+      handleOpenCreate();
+    }
+  }, [modelos]);
 
   // Guardar modelo
   const handleSave = async () => {

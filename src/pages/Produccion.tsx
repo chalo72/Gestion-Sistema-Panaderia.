@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
     Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant,
     Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck, TrendingDown,
@@ -99,7 +99,21 @@ export function Produccion({
     configuracion
 }: ProduccionProps) {
     const [showPlanModal, setShowPlanModal] = useState(false);
-    const [activeTab, setActiveTab] = useState('plan-diario');
+    const [activeTab, setActiveTab] = useState(() => {
+        const savedTab = localStorage.getItem('dp_produccion_active_tab');
+        if (savedTab) {
+            localStorage.removeItem('dp_produccion_active_tab');
+            return savedTab;
+        }
+        return 'plan-diario';
+    });
+    useEffect(() => {
+        const savedTab = localStorage.getItem('dp_produccion_active_tab');
+        if (savedTab) {
+            setActiveTab(savedTab);
+            localStorage.removeItem('dp_produccion_active_tab');
+        }
+    }, []);
     const [planSemanaKey, setPlanSemanaKey] = useState(0);
     const [isGeneratingIA, setIsGeneratingIA] = useState(false);
     const { addAuditoria } = useAuditorias();

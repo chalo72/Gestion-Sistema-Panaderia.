@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { deleteProduccion, getProducciones } from '@/lib/finanzas-personales';
 
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any, addMovimientoBoveda: any }) {
-    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan } = data;
+    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo } = data;
     
     // Add COLORS if needed
     const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
@@ -1309,9 +1309,22 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                                         {/* SALIDA DE PANES (HORNADAS) */}
                                         <div className="space-y-3 pt-2">
-                                            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-2">
-                                                <Flame className="w-4 h-4 text-amber-500" />
-                                                <h3 className="text-[11px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-500">Panes Producidos (Salida)</h3>
+                                            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Flame className="w-4 h-4 text-amber-500" />
+                                                    <h3 className="text-[11px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-500">Panes Producidos (Salida)</h3>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        localStorage.setItem('dp_produccion_active_tab', 'modelos');
+                                                        localStorage.setItem('dp_open_add_modelo_dialog', 'true');
+                                                        if (onNavigateTo) onNavigateTo('produccion');
+                                                    }}
+                                                    className="text-[10px] font-black uppercase tracking-wider text-indigo-500 hover:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800/60 transition-all flex items-center gap-1.5 shadow-sm"
+                                                >
+                                                    🥖 + Modelo de Pan →
+                                                </button>
                                             </div>
                                             
                                             <div className="space-y-3">
@@ -1331,10 +1344,22 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 <div className="flex items-center gap-2 flex-wrap">
                                                                     <Badge variant="outline" className="text-[9px] font-black bg-white dark:bg-black/20">LOTE #{i + 1}</Badge>
                                                                     {faltaConfiguracion && (
-                                                                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-rose-100 dark:bg-rose-500/20 rounded-md border border-rose-200 dark:border-rose-500/30 animate-pulse">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                localStorage.setItem('dp_produccion_active_tab', 'modelos');
+                                                                                if (panSeleccionado) {
+                                                                                    localStorage.setItem('dp_edit_modelo_id', panSeleccionado.id);
+                                                                                } else {
+                                                                                    localStorage.setItem('dp_open_add_modelo_dialog', 'true');
+                                                                                }
+                                                                                if (onNavigateTo) onNavigateTo('produccion');
+                                                                            }}
+                                                                            className="flex items-center gap-1.5 px-2 py-0.5 bg-rose-100 dark:bg-rose-500/20 hover:bg-rose-200 dark:hover:bg-rose-500/30 rounded-md border border-rose-200 dark:border-rose-500/30 animate-pulse transition-all cursor-pointer"
+                                                                        >
                                                                             <BellRing className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
-                                                                            <span className="text-[9px] font-black uppercase text-rose-600 dark:text-rose-400">¡Falta conf. bandejas en la receta!</span>
-                                                                        </div>
+                                                                            <span className="text-[9px] font-black uppercase text-rose-600 dark:text-rose-400">¡Falta conf. bandejas! Configurar ahora →</span>
+                                                                        </button>
                                                                     )}
                                                                 </div>
                                                                 {hornadas.length > 1 && (
