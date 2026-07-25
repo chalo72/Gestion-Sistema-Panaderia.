@@ -3,12 +3,13 @@ import React from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
-import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { deleteProduccion, getProducciones } from '@/lib/finanzas-personales';
 
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any, addMovimientoBoveda: any }) {
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan } = data;
@@ -1549,17 +1550,20 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                         </Card>
                         {/* ──────────────────────────────────────────────────────────── */}
 
-                        {/* Historial de Auditorías */}
-                        <div className="pt-4">
-                            <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-3 flex items-center gap-2">
-                                <ClipboardList className="w-4 h-4" />
-                                Historial de Producción
-                            </h3>
-                            {producciones.length === 0 && (
-                                <p className="text-center text-xs text-muted-foreground py-4 bg-card/30 rounded-2xl border border-white/5">Sin producción registrada aún</p>
-                            )}
-                                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                                    {producciones.slice(0, 30).map(p => {
+                        {/* Historial de Producción Grouped */}
+                        <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-xl overflow-hidden">
+                            <CardHeader className="pb-3 bg-slate-50/50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-white/5">
+                                <CardTitle className="text-base font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                                    <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                        <ClipboardList className="w-4 h-4 text-indigo-500" />
+                                    </div>
+                                    Historial de Producción y Auditorías
+                                </CardTitle>
+                                <CardDescription className="text-xs font-medium">Lotes guardados clasificados por fecha de producción</CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-4 sm:p-5">
+                                {(() => {
+                                    const renderCard = (p: any) => {
                                         const totalMasa = (p.masas || []).reduce((s: number, m: any) => s + (m.cantidadArrobas || 0), 0);
                                         const totalPanes = (p.hornadas || []).reduce((s: number, h: any) => s + h.totalPanes, 0);
                                         
@@ -1578,7 +1582,6 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                                         return (
                                             <div key={p.id} className="relative overflow-hidden bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm flex flex-col">
-                                                
                                                 {/* VEREDICTO HEADER */}
                                                 {hasData && (
                                                     <div className={cn("px-4 py-2 border-b flex items-center justify-between",
@@ -1660,9 +1663,61 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 </div>
                                             </div>
                                         );
-                                    })}
-                                </div>
-                            </div>
+                                    };
+
+                                    const produccionesHoy = producciones.filter(p => p.fecha === formProd.fecha);
+                                    const produccionesAnteriores = producciones.filter(p => p.fecha !== formProd.fecha);
+
+                                    return (
+                                        <div className="space-y-6">
+                                            {/* SECCIÓN 1: PRODUCCIÓN DEL DÍA / SELECCIONADO */}
+                                            <div className="space-y-3">
+                                                <div className="flex items-center justify-between bg-indigo-50/80 dark:bg-indigo-950/40 px-3.5 py-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                                                    <span className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                                                        <Sparkles className="w-4 h-4 text-indigo-500" />
+                                                        Producción del Día ({new Date(formProd.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })})
+                                                    </span>
+                                                    <Badge variant="outline" className="bg-white dark:bg-slate-900 text-[10px] font-bold text-indigo-600 border-indigo-200">
+                                                        {produccionesHoy.length} lotes
+                                                    </Badge>
+                                                </div>
+
+                                                {produccionesHoy.length === 0 ? (
+                                                    <div className="text-center py-8 bg-slate-50/50 dark:bg-white/5 rounded-2xl border border-dashed border-slate-200 dark:border-white/10">
+                                                        <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                                                        <p className="text-xs font-bold text-slate-500">Sin lotes para la fecha {formProd.fecha}</p>
+                                                        <p className="text-[10px] text-slate-400 mt-0.5">Llenando el formulario de arriba y pulsando Guardar se asignará a este día.</p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
+                                                        {produccionesHoy.map(renderCard)}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* SECCIÓN 2: OTRAS FECHAS / HISTORIAL ANTERIOR */}
+                                            {produccionesAnteriores.length > 0 && (
+                                                <div className="space-y-3 pt-4 border-t-2 border-dashed border-slate-200 dark:border-white/10">
+                                                    <div className="flex items-center justify-between px-1">
+                                                        <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                                                            <History className="w-4 h-4 text-slate-400" />
+                                                            Historial de Otros Días
+                                                        </span>
+                                                        <Badge variant="secondary" className="text-[10px] font-bold">
+                                                            {produccionesAnteriores.length} registros
+                                                        </Badge>
+                                                    </div>
+
+                                                    <div className="max-h-72 overflow-y-auto space-y-2.5 pr-1 opacity-90 hover:opacity-100 transition-opacity">
+                                                        {produccionesAnteriores.slice(0, 30).map(renderCard)}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })()}
+                            </CardContent>
+                        </Card>
                     </div>
 
                     {/* ── PLAN DE COMPRAS A PROVEEDORES ── */}
