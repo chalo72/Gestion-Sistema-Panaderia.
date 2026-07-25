@@ -25,6 +25,7 @@ import {
   DialogFooter,
   DialogDescription
 } from '@/components/ui/dialog';
+import { ModeloPanModal } from './ModeloPanModal';
 import {
   Select,
   SelectContent,
@@ -327,186 +328,18 @@ export function ModelosPanView({
         )}
       </div>
 
-      {/* Diálogo de Creación/Edición */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl rounded-2xl p-0 border-0">
-          <div className="h-2 w-full bg-gradient-to-r from-pink-500 to-rose-500" />
-          <div className="p-8">
-            <DialogHeader className="mb-6">
-              <div className="flex items-center gap-3 mb-2">
-                <Croissant className="w-6 h-6 text-pink-600" />
-                <DialogTitle className="text-xl font-bold">
-                  {editingModelo ? 'Editar Modelo de Pan' : 'Nuevo Modelo de Pan'}
-                </DialogTitle>
-              </div>
-              <DialogDescription>
-                Define el peso, la formulación y el precio de venta. Se calculará automáticamente cuántos panes salen por arroba.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Columna Izquierda: Datos */}
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <label className="text-sm font-bold">Nombre del Modelo</label>
-                  <Input
-                    value={nombre}
-                    onChange={(e) => setNombre(e.target.value)}
-                    placeholder="Ej: Pan Francés 80gr"
-                    className="rounded-xl"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold">Formulación Base</label>
-                  <Select value={formulacionId} onValueChange={setFormulacionId}>
-                    <SelectTrigger className="rounded-xl">
-                      <SelectValue placeholder="Seleccionar formulación..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {formulaciones.filter(f => f.activo).map(f => (
-                        <SelectItem key={f.id} value={f.id}>
-                          {f.nombre} - {formatCurrency(f.costoTotalArroba)}/arroba
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold">Peso por Unidad (gramos)</label>
-                  <Input
-                    type="number"
-                    value={pesoUnitarioGr}
-                    onChange={(e) => setPesoUnitarioGr(Number(e.target.value))}
-                    className="rounded-xl"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Peso final del pan horneado</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold">Precio Venta</label>
-                    <Input
-                      type="number"
-                      value={precioVentaUnitario}
-                      onChange={(e) => setPrecioVentaUnitario(Number(e.target.value))}
-                      className="rounded-xl"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-bold">Merma (%)</label>
-                    <Input
-                      type="number"
-                      value={mermaEstimada}
-                      onChange={(e) => setMermaEstimada(Number(e.target.value))}
-                      className="rounded-xl"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-sm font-bold">Piezas por Lata</label>
-                  <Input
-                    type="number"
-                    value={piezasPorLata}
-                    onChange={(e) => setPiezasPorLata(Number(e.target.value))}
-                    className="rounded-xl"
-                  />
-                  <p className="text-[10px] text-muted-foreground">Capacidad de la lata para este pan</p>
-                </div>
-              </div>
-
-              {/* Columna Derecha: Calculadora */}
-              <div className="space-y-4">
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 text-white space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-400 font-bold uppercase tracking-wider">Calculadora de Rendimiento</span>
-                    <Calculator className="w-5 h-5 text-pink-400" />
-                  </div>
-
-                  {/* Panes por Arroba */}
-                  <div className="text-center py-4 border-y border-slate-700">
-                    <p className="text-4xl font-black text-pink-400">{panesPorArroba}</p>
-                    <p className="text-sm text-slate-400">panes por arroba</p>
-                  </div>
-
-                  {/* Desglose */}
-                  <div className="space-y-3 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Masa por arroba:</span>
-                      <span className="font-bold">{ARROBA_GR.toLocaleString()}g</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Merma ({mermaEstimada}%):</span>
-                      <span className="font-bold text-red-400">-{((ARROBA_GR * mermaEstimada) / 100).toFixed(0)}g</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Masa útil:</span>
-                      <span className="font-bold text-emerald-400">{(ARROBA_GR * (1 - mermaEstimada / 100)).toFixed(0)}g</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Peso por pan:</span>
-                      <span className="font-bold">{pesoUnitarioGr}g</span>
-                    </div>
-                  </div>
-
-                  {/* Costos */}
-                  <div className="pt-4 border-t border-slate-700 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Costo formulación/arroba:</span>
-                      <span className="font-bold text-orange-400">
-                        {formulacionSeleccionada ? formatCurrency(formulacionSeleccionada.costoTotalArroba) : '-'}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Costo unitario:</span>
-                      <span className="font-bold text-orange-400">{formatCurrency(costoUnitario)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">Precio venta:</span>
-                      <span className="font-bold">{formatCurrency(precioVentaUnitario)}</span>
-                    </div>
-                    <div className="flex justify-between pt-2 border-t border-slate-700">
-                      <span className="text-slate-400 font-bold">MARGEN:</span>
-                      <Badge className={cn(
-                        "text-sm",
-                        margenPorcentaje >= 30 ? "bg-emerald-500" :
-                          margenPorcentaje >= 15 ? "bg-amber-500" : "bg-red-500"
-                      )}>
-                        {margenPorcentaje.toFixed(1)}%
-                      </Badge>
-                    </div>
-                  </div>
-
-                  {/* Ganancia por arroba */}
-                  <div className="p-3 bg-emerald-500/20 rounded-xl border border-emerald-500/30">
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="text-xs text-emerald-400 uppercase font-bold">Ganancia / Arroba</p>
-                        <p className="text-2xl font-black text-emerald-400">
-                          {formatCurrency((precioVentaUnitario - costoUnitario) * panesPorArroba)}
-                        </p>
-                      </div>
-                      <TrendingUp className="w-8 h-8 text-emerald-500/50" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter className="mt-8 pt-6 border-t">
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="rounded-xl px-6">
-                Cancelar
-              </Button>
-              <Button onClick={handleSave} className="bg-pink-600 hover:bg-pink-700 rounded-xl px-8 gap-2">
-                <Save className="w-4 h-4" />
-                {editingModelo ? 'Actualizar' : 'Guardar Modelo'}
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Diálogo de Creación/Edición integrado con el Modal Global */}
+      <ModeloPanModal 
+        isOpen={isDialogOpen} 
+        onClose={() => setIsDialogOpen(false)} 
+        formulaciones={formulaciones}
+        modeloBase={editingModelo || undefined}
+        onSuccess={() => {
+            // Trigger refresh since the DB was updated
+            // For now, reload window is simplest since props come from parent, or trigger a parent refresh callback
+            window.location.reload();
+        }}
+      />
     </div>
   );
 }
