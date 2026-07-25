@@ -3,11 +3,12 @@ import React from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
-import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ModeloPanModal } from '@/components/produccion/ModeloPanModal';
 import { Button } from '@/components/ui/button';
 import { deleteProduccion, getProducciones } from '@/lib/finanzas-personales';
 
@@ -19,6 +20,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
     // Add COLORS if needed
     const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
     const [pctCrecimiento, setPctCrecimiento] = React.useState(5);
+    const [isModeloModalOpen, setIsModeloModalOpen] = React.useState(false);
 
     const opcionesArrobas = [
         { label: "1 Libra (~500g)", val: 0.04 },
@@ -1318,11 +1320,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => {
-                                                        localStorage.setItem('dp_produccion_active_tab', 'modelos');
-                                                        localStorage.setItem('dp_open_add_modelo_dialog', 'true');
-                                                        if (onNavigateTo) onNavigateTo('produccion');
-                                                    }}
+                                                    onClick={() => setIsModeloModalOpen(true)}
                                                     className="text-[10px] font-black uppercase tracking-wider text-indigo-500 hover:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800/60 transition-all flex items-center gap-1.5 shadow-sm"
                                                 >
                                                     🥖 + Modelo de Pan →
@@ -1862,6 +1860,15 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                     </>
                 );
             })()}
-                </TabsContent>
+                {/* Modal para Crear Modelos de Pan Rápidamente */}
+                <ModeloPanModal 
+                    isOpen={isModeloModalOpen} 
+                    onClose={() => setIsModeloModalOpen(false)} 
+                    formulaciones={formulaciones || []}
+                    onSuccess={() => {
+                        toast.success("Modelo creado exitosamente.");
+                    }}
+                />
+        </TabsContent>
     );
 }
