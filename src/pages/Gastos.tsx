@@ -10,6 +10,7 @@ import { QuickEntryBar }    from '@/components/gastos/QuickEntryBar';
 import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion } from '@/types';
 import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 import { getCompromisos } from '@/lib/finanzas-personales';
+import { getBovedas, addMovimientoBoveda, type Boveda } from '@/lib/boveda-store';
 
 // ── Ingresos virtuales para el libro de caja ────────────────────────────────
 // Los ingresos se persisten en localStorage para no alterar el tipo Gasto en DB
@@ -38,7 +39,7 @@ interface GastosProps {
 }
 
 // ── Tipo extendido para el formulario ────────────────────────────────────────
-type FormGasto = Partial<Gasto & { esIngreso?: boolean }>;
+type FormGasto = Partial<Gasto & { esIngreso?: boolean, bovedaId?: string }>;
 
 // ── Estado vacío del formulario ───────────────────────────────────────────────
 const formVacio = (): FormGasto => ({
@@ -48,6 +49,7 @@ const formVacio = (): FormGasto => ({
     fecha: new Date().toISOString().split('T')[0],
     metodoPago: 'efectivo',
     esIngreso: false,
+    bovedaId: '',
 });
 
 export default function Gastos({
@@ -72,6 +74,12 @@ export default function Gastos({
 
     // ── Ingresos locales ──────────────────────────────────────────────────────
     const [ingresos, setIngresos] = useState<(Gasto & { esIngreso: true })[]>(cargarIngresos);
+    
+    // ── Bóvedas ─────────────────────────────────────────────────────────────
+    const [bovedas, setBovedas] = useState<Boveda[]>([]);
+    useEffect(() => {
+        setBovedas(getBovedas());
+    }, [showModal]); // Reload bovedas when modal opens
 
     // ── Compromisos de salario (pagos rápidos) ────────────────────────────────
     const salarioCompromisos = getCompromisos().filter(c => c.activo && c.esPropietario);
@@ -173,6 +181,18 @@ export default function Gastos({
                     const actualizados = [...ingresos, nuevoIngreso];
                     setIngresos(actualizados);
                     guardarIngresos(actualizados);
+                    
+                    // Sincronizar con Bóveda si aplica (solo al crear)
+                    if (data.bovedaId && data.bovedaId !== '__ninguno__') {
+                        addMovimientoBoveda({
+                            bovedaDestinoId: data.bovedaId, // Entra a esta bóveda
+                            monto: data.monto!,
+                            motivo: `Ingreso Extra: ${data.descripcion}`,
+                            tipo: 'Ingreso',
+                            usuarioResponsable: usuario.nombre || 'Administrador',
+                            metodoPago: data.metodoPago || 'Efectivo',
+                        });
+                    }
                 }
             } else {
                 // Egresos: van a la base de datos real
@@ -196,6 +216,18 @@ export default function Gastos({
                         proveedorId: data.proveedorId,
                         estado: 'pagado',
                     });
+                    
+                    // Sincronizar con Bóveda si aplica (solo al crear)
+                    if (data.bovedaId && data.bovedaId !== '__ninguno__') {
+                        addMovimientoBoveda({
+                            bovedaOrigenId: data.bovedaId, // Sale de esta bóveda
+                            monto: data.monto!,
+                            motivo: `Gasto: ${data.descripcion}`,
+                            tipo: 'Egreso',
+                            usuarioResponsable: usuario.nombre || 'Administrador',
+                            metodoPago: data.metodoPago || 'Efectivo',
+                        });
+                    }
                 }
             }
 
@@ -385,6 +417,7 @@ export default function Gastos({
                 isSaving={isSaving}
                 isEditMode={!!editingId}
                 proveedores={proveedores}
+                bovedas={bovedas}
             />
 
             <QuickEntryBar onSave={handleQuickSave} />

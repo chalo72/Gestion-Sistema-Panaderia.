@@ -17,18 +17,16 @@ interface CentinelaContextType {
 
 const CentinelaContext = createContext<CentinelaContextType | undefined>(undefined);
 
-// Barra de versión — cuenta 5s, parpadea x2, se cierra sola. Sin recarga forzada.
+// Barra de versión — cuenta 5s y ejecuta la recarga automáticamente.
 function VersionBar({ onDismiss, recargar }: { onDismiss: () => void; recargar: () => void }) {
   const [secs, setSecs] = React.useState(5);
   const [flash, setFlash] = React.useState(false);
-  const [hidden, setHidden] = React.useState(false);
   React.useEffect(() => {
     const t = setInterval(() => {
       setSecs(s => {
         if (s <= 1) {
           clearInterval(t);
           setFlash(true);
-          setTimeout(() => { setFlash(false); setTimeout(() => setHidden(true), 200); }, 600);
           return 0;
         }
         return s - 1;
@@ -36,7 +34,7 @@ function VersionBar({ onDismiss, recargar }: { onDismiss: () => void; recargar: 
     }, 1000);
     return () => clearInterval(t);
   }, []);
-  if (hidden) return null;
+  
   return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
@@ -52,11 +50,11 @@ function VersionBar({ onDismiss, recargar }: { onDismiss: () => void; recargar: 
         @keyframes vbSlide{from{transform:translateY(-100%)}to{transform:translateY(0)}}
         @keyframes vbFlash{0%,100%{opacity:1}50%{opacity:0.15}}
       `}</style>
-      <span>&#128260; Nueva versión lista — {secs > 0 ? `cierra en ${secs}s` : '✓'}</span>
+      <span>&#128260; Nueva versión detectada — {secs > 0 ? `recargando en ${secs}s` : 'Actualizando...'}</span>
       <button onClick={recargar} style={{
         background:'rgba(255,255,255,0.18)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',
         borderRadius:6,padding:'1px 10px',fontSize:10,fontWeight:700,cursor:'pointer',
-      }}>Aplicar</button>
+      }}>Aplicar ya</button>
     </div>
   );
 }
@@ -150,10 +148,66 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     const cargarDatos = async () => {
+      await db.init();
       const m = await db.getAgenteMisiones();
       const h = await db.getAgenteHallazgos(20);
       setMisionesActivas(m);
       setHallazgos(h);
+      // ── Sembrar misiones autónomas si no existen ──
+      if (m.length === 0) {
+        const misionesBase: DBMisionAgent[] = [
+          {
+            id: 'mision-pico-claw-ventas',
+            agenteId: 'pico-claw',
+            misionExplicita: 'Analiza las ventas del día y detecta anomalías, tendencias o alertas críticas en los ingresos de la Panadería Dulce Placer.',
+            frecuencia: '1h',
+            estado: 'espera',
+            ultimaEjecucion: '',
+            proximaEjecucion: new Date().toISOString(), // ejecutar inmediatamente
+          },
+          {
+            id: 'mision-inventario-stock',
+            agenteId: 'inventario',
+            misionExplicita: 'Revisa el inventario completo. Identifica insumos bajo el stock mínimo, alertas de caducidad y necesidades urgentes de reabastecimiento.',
+            frecuencia: '1h',
+            estado: 'espera',
+            ultimaEjecucion: '',
+            proximaEjecucion: new Date(Date.now() + 2 * 60000).toISOString(), // en 2 minutos
+          },
+          {
+            id: 'mision-gerente-estrategia',
+            agenteId: 'gerente',
+            misionExplicita: 'Genera un resumen ejecutivo del estado actual del negocio: ventas, caja, inventario y personal. Indica el semaforo general (verde/amarillo/rojo).',
+            frecuencia: '1h',
+            estado: 'espera',
+            ultimaEjecucion: '',
+            proximaEjecucion: new Date(Date.now() + 4 * 60000).toISOString(), // en 4 minutos
+          },
+          {
+            id: 'mision-calidad-produccion',
+            agenteId: 'calidad',
+            misionExplicita: 'Realiza auditoría automática de calidad y produccion. Verifica que los estándares de higiene y recetas se estén cumpliendo. Reporta cualquier desviación.',
+            frecuencia: 'diaria',
+            estado: 'espera',
+            ultimaEjecucion: '',
+            proximaEjecucion: new Date(Date.now() + 6 * 60000).toISOString(),
+          },
+          {
+            id: 'mision-odysseus-seguridad',
+            agenteId: 'odysseus',
+            misionExplicita: 'Revisa el estado de seguridad del sistema. Detecta accesos inusuales, patrones sospechosos o incidentes de fraude en caja o inventario.',
+            frecuencia: '1h',
+            estado: 'espera',
+            ultimaEjecucion: '',
+            proximaEjecucion: new Date(Date.now() + 8 * 60000).toISOString(),
+          },
+        ];
+        for (const mision of misionesBase) {
+          await db.saveAgenteMision(mision);
+        }
+        console.log('[Centinela] ✅ Misiones autónomas sembradas:', misionesBase.length);
+        setMisionesActivas(misionesBase);
+      }
     };
     cargarDatos();
   }, []);
@@ -170,25 +224,48 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       }
       setIsVigilando(false);
     };
-    timerRef.current = setInterval(loop, 60000);
+    // Ejecutar inmediatamente al montar (primer ciclo)
+    loop();
+    // Luego cada 5 minutos
+    timerRef.current = setInterval(loop, 5 * 60 * 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const ejecutarMision = async (mision: DBMisionAgent) => {
-    console.log('[Centinela] Ejecutando mision para ' + mision.agenteId);
+    console.log('[Centinela] 🤖 Ejecutando mision:', mision.agenteId, '-', mision.misionExplicita.substring(0, 40));
     try {
       await db.saveAgenteMision({ ...mision, estado: 'ejecutando' });
       const ahora = new Date().toISOString();
       const contexto = await prepararContextoMision(mision);
-      const respuesta = await consultarAgente(mision.agenteId, 'EJECUTA MISION CRITICA: ' + mision.misionExplicita + '. CONTEXTO: ' + contexto, () => {});
-      if (respuesta.toLowerCase().includes('hallazgo') || respuesta.toLowerCase().includes('alerta')) {
+      let respuesta = '';
+      await consultarAgente(
+        mision.agenteId,
+        'MISION AUTONOMA: ' + mision.misionExplicita + '.\nCONTEXTO REAL: ' + contexto + '\nResponde en máximo 3 oraciones concisas y directas. Usa datos concretos si están disponibles.',
+        (chunk) => { respuesta += chunk; }
+      );
+
+      // ── Escribir en la Bitácora IA ──
+      const nivel = respuesta.toLowerCase().includes('crítico') || respuesta.toLowerCase().includes('alerta') ? 'warning'
+                  : respuesta.toLowerCase().includes('grave') || respuesta.toLowerCase().includes('urgente') ? 'critical'
+                  : 'info';
+      await db.addBitacoraIA({
+        agenteId: mision.agenteId,
+        accion: 'Misión Autónoma: ' + mision.misionExplicita.substring(0, 40),
+        detalle: respuesta.trim() || 'Ciclo completado sin novedades.',
+        nivel,
+      });
+      console.log('[Centinela] ✅ Bitácora actualizada por', mision.agenteId);
+
+      // ── Registrar hallazgo si el agente detectó algo relevante ──
+      if (nivel !== 'info') {
         const nuevoHallazgo: DBHallazgoAgente = {
           id: generateUUID(),
           agenteId: mision.agenteId,
           misionId: mision.id,
           tipo: 'operativo',
-          gravedad: 'media',
-          titulo: 'Resultado de Mision: ' + mision.misionExplicita.substring(0, 30) + '...',
+          gravedad: nivel === 'critical' ? 'alta' : 'media',
+          titulo: 'Alerta de ' + mision.agenteId.toUpperCase() + ': ' + mision.misionExplicita.substring(0, 30) + '...',
           descripcion: respuesta,
           fecha: new Date().toISOString(),
           revisado: false
@@ -196,11 +273,21 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         await db.saveAgenteHallazgo(nuevoHallazgo);
         setHallazgos(prev => [nuevoHallazgo, ...prev]);
       }
+
       const proxima = calcularProximaEjecucion(mision.frecuencia);
       await db.saveAgenteMision({ ...mision, estado: 'espera', ultimaEjecucion: ahora, proximaEjecucion: proxima });
     } catch (error) {
-      console.error('Falla en mision Centinela:', error);
-      await db.saveAgenteMision({ ...mision, estado: 'espera' });
+      console.error('[Centinela] ❌ Falla en mision:', mision.agenteId, error);
+      // Escribir error en Bitácora
+      try {
+        await db.addBitacoraIA({
+          agenteId: mision.agenteId,
+          accion: 'Error en Misión Autónoma',
+          detalle: `Fallo temporal en la misión de ${mision.agenteId}. Se reintentara en el próximo ciclo.`,
+          nivel: 'warning',
+        });
+      } catch {}
+      await db.saveAgenteMision({ ...mision, estado: 'espera', proximaEjecucion: calcularProximaEjecucion(mision.frecuencia) });
     }
   };
 

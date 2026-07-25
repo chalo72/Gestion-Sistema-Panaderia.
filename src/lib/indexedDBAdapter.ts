@@ -14,7 +14,7 @@ import type { DatabaseAdapter } from './dbAdapter';
  */
 
 const DB_NAME = 'dulce-placer-db';
-const DB_VERSION = 4;
+const DB_VERSION = 7;
 
 /** Colecciones conocidas — cada una se convierte en un Object Store de IndexedDB */
 const COLLECTIONS = [
@@ -46,8 +46,13 @@ const COLLECTIONS = [
   'produccion',
   'agente_misiones',
   'agente_hallazgos',
+  'agente_config',
+  'bitacora_ia',
   'asistencia',
   'nominas',
+  'auditorias_produccion',
+  'planes_diarios',
+  'workflows'
 ];
 
 export class IndexedDBAdapter implements DatabaseAdapter {
@@ -253,38 +258,47 @@ export class IndexedDBAdapter implements DatabaseAdapter {
   async hydrateFromCloud<T extends { id: string }>(collection: string, items: T[]): Promise<void> {
     if (!items || items.length === 0) return;
     await this.ensureReady();
-    return new Promise((resolve, reject) => {
-      const db = this.getDB();
-      if (!db.objectStoreNames.contains(collection)) {
-        console.warn(`⚠️ [IndexedDB]: Colección '${collection}' no existe. No se hidrató.`);
-        resolve();
-        return;
-      }
+    
+    const CHUNK_SIZE = 500;
+    let errorOccurred = false;
 
-      const tx = db.transaction(collection, 'readwrite');
-      const store = tx.objectStore(collection);
-      
-      let errorOccurred = false;
-      
-      for (const item of items) {
-        const request = store.put({ ...(item as any), id: item.id });
-        request.onerror = (e) => {
-          errorOccurred = true;
-          console.error(`❌ [IndexedDB]: Error al hidratar en '${collection}' id='${item.id}'`, (e.target as any).error);
-        };
-      }
-
-      tx.oncomplete = () => {
-        if (!errorOccurred) {
-          console.log(`☁️→🏠 [IndexedDB]: Hidratado '${collection}' con ${items.length} items de la nube en una sola transacción.`);
+    // Helper to process a single chunk in one transaction
+    const processChunk = (chunk: T[]): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        const db = this.getDB();
+        if (!db.objectStoreNames.contains(collection)) {
+          console.warn(`⚠️ [IndexedDB]: Colección '${collection}' no existe. No se hidrató.`);
+          resolve();
+          return;
         }
-        resolve();
-      };
 
-      tx.onerror = () => {
-        reject(tx.error);
-      };
-    });
+        const tx = db.transaction(collection, 'readwrite');
+        const store = tx.objectStore(collection);
+
+        for (const item of chunk) {
+          const request = store.put({ ...(item as any), id: item.id });
+          request.onerror = (e) => {
+            errorOccurred = true;
+            console.error(`❌ [IndexedDB]: Error al hidratar en '${collection}' id='${item.id}'`, (e.target as any).error);
+          };
+        }
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+      });
+    };
+
+    // Procesar en chunks para no bloquear el hilo principal (UI)
+    for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+      const chunk = items.slice(i, i + CHUNK_SIZE);
+      await processChunk(chunk);
+      // Ceder el control al event loop para que la UI no se congele
+      await new Promise(res => setTimeout(res, 0));
+    }
+
+    if (!errorOccurred) {
+      console.log(`☁️→🏠 [IndexedDB]: Hidratado '${collection}' con ${items.length} items de la nube (por chunks).`);
+    }
   }
 
   /**

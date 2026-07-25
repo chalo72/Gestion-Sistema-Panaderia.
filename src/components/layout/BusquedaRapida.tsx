@@ -67,14 +67,23 @@ export function BusquedaRapida({
   const resultados = useMemo(() => {
     if (!searchTerm.trim()) return [];
 
-    const term = searchTerm.toLowerCase();
+    const norm = (s: string | undefined) =>
+      (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+    const term = norm(searchTerm);
     return productos
-      .filter(p =>
-        p.nombre.toLowerCase().includes(term) ||
-        p.categoria.toLowerCase().includes(term) ||
-        p.descripcion?.toLowerCase().includes(term)
-      )
-      .slice(0, 10); // Máximo 10 resultados
+      .filter(p => norm(p.nombre).includes(term))
+      .sort((a, b) => {
+        const aName = norm(a.nombre);
+        const bName = norm(b.nombre);
+        const aStarts = aName.startsWith(term);
+        const bStarts = bName.startsWith(term);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+
+        return aName.localeCompare(bName);
+      })
+      .slice(0, 50);
   }, [searchTerm, productos]);
 
   // Calcular estadísticas del producto

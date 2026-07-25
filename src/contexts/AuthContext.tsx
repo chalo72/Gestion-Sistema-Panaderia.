@@ -230,9 +230,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Verificar contraseña (quitamos los espacios al inicio/final por si acaso en el input)
     const passwordClean = password.trim();
-    const passwordOk = localUser.password
-      ? passwordClean === localUser.password.trim()
-      : true;
+    let passwordOk = true;
+
+    if (localUser.password) {
+      const storedPass = localUser.password.trim();
+      if (storedPass.length === 64) {
+        // Hash detectado (SHA-256 es de 64 chars en hex)
+        const { hashPassword } = await import('@/lib/safe-utils');
+        const hashedInput = await hashPassword(passwordClean);
+        passwordOk = hashedInput === storedPass;
+      } else {
+        // Fallback a texto plano (Legacy)
+        passwordOk = passwordClean === storedPass;
+      }
+    }
 
     if (!passwordOk) {
       setIsLoading(false);

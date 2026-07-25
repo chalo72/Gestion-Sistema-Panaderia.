@@ -43,6 +43,7 @@ interface DashboardProps {
     totalRecetas: number;
     ventasHoy: number;
     ingresosHoy: number;
+    gastosHoy?: number;
     ticketPromedio: number;
   };
   alertas: AlertaPrecio[];
@@ -60,6 +61,7 @@ interface DashboardProps {
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
   mesas?: unknown[]; // Reservado para uso futuro (mesas activas en POS)
+  ventas: any[]; // Usando any[] temporalmente o importando Venta
 }
 
 export default function Dashboard(props: DashboardProps) {
@@ -74,7 +76,8 @@ export default function Dashboard(props: DashboardProps) {
     onViewVentas,
     onViewAhorros,
     getProductoById,
-    formatCurrency
+    formatCurrency,
+    ventas
   } = props;
 
   const alertasNoLeidas = alertas.filter(a => !a.leida);
@@ -156,7 +159,7 @@ export default function Dashboard(props: DashboardProps) {
       />
 
       {/* ═══ KPI Cards Grid ═══ */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 sm:gap-10">
         {kpiCards.map((kpi, index) => {
           const Icon = kpi.icon;
           return (
@@ -200,13 +203,16 @@ export default function Dashboard(props: DashboardProps) {
       <FinancialDashboard
         totalSales={estadisticas.ventasHoy}
         totalRevenue={estadisticas.ingresosHoy}
+        totalExpenses={estadisticas.gastosHoy}
         activeOrders={estadisticas.ventasHoy}
         totalCustomers={estadisticas.totalProveedores}
         averageOrderValue={estadisticas.ticketPromedio}
+        ventas={ventas}
+        getProductoById={getProductoById}
       />
 
       {/* ═══ Sección Mixta: Inteligencia CLAW & Alertas ═══ */}
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-10">
 
         {/* Panel Izquierdo: Inteligencia Artificial (3 cols) */}
         <div className="xl:col-span-3 space-y-6">
@@ -226,7 +232,7 @@ export default function Dashboard(props: DashboardProps) {
           <FindingsFeed />
 
           {/* Otros Paneles debajo del Feed si es necesario */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6 mt-8 sm:mt-12">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 mt-10 sm:mt-16">
              {/* Panel: Ahorro */}
             <GlassCard onClick={onViewAhorros} className="border-l-4 border-l-purple-500">
               <div className="flex items-center gap-3 mb-4">

@@ -37,21 +37,22 @@ export function validarItemCatalogo(
   const suaves: string[] = [];
   const nombre = `"${item.nombre}"`;
 
-  // — Bloqueos duros —
+  // — Bloqueos duros — Solo bloquear por datos claramente erróneos
+  // Precio cero: advertencia suave, no bloqueo (puede ser un producto sin precio aún)
   if (!item.precioCosto || item.precioCosto <= 0) {
-    bloqueantes.push(`${nombre}: el precio de costo no puede ser cero o negativo.`);
+    suaves.push(`${nombre}: precio de costo es cero. Verifica el valor.`);
   }
 
+  // Cantidad embalaje 0 o negativa: advertencia suave (se asume 1 unidad)
   if (!item.cantidadEmbalaje || item.cantidadEmbalaje <= 0) {
-    bloqueantes.push(`${nombre}: la cantidad de embalaje debe ser mayor a 0.`);
+    suaves.push(`${nombre}: cantidad de embalaje inválida, se asumirá 1 unidad.`);
   }
 
   if (item.cantidadEmbalaje > LIMITES_PRECIO.MAX_EMBALAJE) {
-    bloqueantes.push(`${nombre}: cantidad de embalaje (${item.cantidadEmbalaje}) parece incorrecta.`);
+    bloqueantes.push(`${nombre}: cantidad de embalaje (${item.cantidadEmbalaje}) parece incorrecta (máx ${LIMITES_PRECIO.MAX_EMBALAJE}).`);
   }
 
   // Solo bloquear por margen excesivo si el costo unitario es válido y positivo
-  // (evita falsos positivos cuando costoUnitario ≈ 0 por rounding)
   if (
     item.costoUnitario > 0 &&
     item.margenVenta > 0 &&
@@ -64,7 +65,6 @@ export function validarItemCatalogo(
   }
 
   // — Advertencias suaves (no bloquean) —
-  // Solo para productos de venta; los insumos pueden tener costo > precio de venta
   if (item.destino !== 'insumo' && item.precioVenta > 0 && item.costoUnitario > item.precioVenta) {
     suaves.push(
       `${nombre}: costo unitario ($${fmt(item.costoUnitario)}) es mayor al precio de venta ($${fmt(item.precioVenta)}).`

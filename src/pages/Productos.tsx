@@ -57,6 +57,7 @@ export default function Productos({
     const [filtroCategoria, setFiltroCategoria] = useState('Todos');
     const [filtroTipo, setFiltroTipo] = useState<'todos' | 'elaborado' | 'ingrediente'>('todos');
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [isCategoriaDialogOpen, setIsCategoriaDialogOpen] = useState(false);
     const [editingProducto, setEditingProducto] = useState<Producto | null>(null);
     const [expandedProducto, setExpandedProducto] = useState<string | null>(null);
@@ -83,12 +84,31 @@ export default function Productos({
 
     const filteredProductos = useMemo(() => {
         return productos.filter(p => {
-            const matchSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || p.categoria.toLowerCase().includes(searchTerm.toLowerCase());
+            const q = searchTerm.toLowerCase().trim();
+            
+            // Buscar proveedores asociados a este producto
+            const pPrecios = _precios.filter(pr => pr.productoId === p.id);
+            const pProveedoresStr = pPrecios.map(pr => {
+                const prov = getProveedorById(pr.proveedorId);
+                return prov ? prov.nombre.toLowerCase() : '';
+            }).join(' ');
+
+            // 🔍 Búsqueda inclusiva: nombre, categoría o proveedor
+            const matchSearch = !q
+                || p.nombre.toLowerCase().includes(q)
+                || (p.categoria && p.categoria.toLowerCase().includes(q))
+                || pProveedoresStr.includes(q);
+                
             const matchCat = filtroCategoria === 'Todos' || p.categoria === filtroCategoria;
             const matchTipo = filtroTipo === 'todos' || (p.tipo || 'elaborado') === filtroTipo;
             return matchSearch && matchCat && matchTipo;
+        }).sort((a, b) => {
+            const tipoA = a.tipo === 'ingrediente' ? 'ingrediente' : 'elaborado';
+            const tipoB = b.tipo === 'ingrediente' ? 'ingrediente' : 'elaborado';
+            if (tipoA !== tipoB) return tipoA.localeCompare(tipoB);
+            return (a.nombre || '').localeCompare(b.nombre || '');
         });
-    }, [productos, searchTerm, filtroCategoria, filtroTipo]);
+    }, [productos, _precios, searchTerm, filtroCategoria, filtroTipo, getProveedorById]);
 
     const countVenta = productos.filter(p => p.tipo !== 'ingrediente').length;
     const countInsumo = productos.filter(p => p.tipo === 'ingrediente').length;
@@ -103,7 +123,7 @@ export default function Productos({
         // Redondear siempre al múltiplo de 100 más cercano (moneda COP)
         if (precioVenta > 0) precioVenta = Math.round(precioVenta / 100) * 100;
         
-        const stockActualNum = formData.stockActual === '' ? undefined : parseInt(formData.stockActual) || 0;
+        const stockActualNum = formData.stockActual === '' ? 0 : parseInt(formData.stockActual) || 0;
         const stockMinimoNum = parseInt(formData.stockMinimo) || 5;
 
         const data: any = { 
@@ -121,18 +141,25 @@ export default function Productos({
             descuentoMayorista: formData.descuentoMayorista === '' ? undefined : parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0
         };
 
+        if (isSaving) return; // Bloquear doble clic
+        setIsSaving(true);
         try {
             if (editingProducto) {
-                onUpdateProducto(editingProducto.id, data);
-                if (formData.proveedorId && formData.precioCosto) onAddOrUpdatePrecio({ productoId: editingProducto.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
-                toast.success('Producto actualizado');
+                await onUpdateProducto(editingProducto.id, data);
+                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: editingProducto.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
+                toast.success('✅ Producto actualizado correctamente');
             } else {
                 const np = await onAddProducto(data);
-                if (formData.proveedorId && formData.precioCosto) onAddOrUpdatePrecio({ productoId: np.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
-                toast.success('Producto creado');
+                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: np.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
+                toast.success('✅ Producto creado correctamente');
             }
             setIsDialogOpen(false); resetForm();
-        } catch { toast.error('Error al procesar'); }
+        } catch (err: any) { 
+            console.error('[Productos] Error al guardar:', err);
+            toast.error('Error al guardar: ' + (err?.message || 'intenta de nuevo')); 
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleHandleAddCategoria = (e: React.FormEvent) => {
@@ -174,7 +201,7 @@ export default function Productos({
                 margenUtilidad: producto.margenUtilidad.toString(),
                 imagen: producto.imagen || '',
                 proveedorId: mp?.proveedorId || '',
-                precioCosto: mp?.precioCosto.toString() || '',
+                precioCosto: mp?.precioCosto?.toString() || producto.costoBase?.toString() || '',
                 notasPrecio: mp?.notas || '',
                 tipo: producto.tipo || 'elaborado',
                 unidadMedida: (producto as any).unidadMedida || '',
@@ -474,7 +501,8 @@ export default function Productos({
 
             <ProductFormModal isOpen={isDialogOpen} onOpenChange={setIsDialogOpen} editingProducto={editingProducto}
                 categorias={categorias} proveedores={proveedores} formData={formData} setFormData={setFormData}
-                onSubmit={handleSubmit} formatCurrency={formatCurrency} onAddCategoria={onAddCategoria} />
+                onSubmit={handleSubmit} formatCurrency={formatCurrency} onAddCategoria={onAddCategoria}
+                isSubmitting={isSaving} />
             <ProductCategoryManager isOpen={isCategoriaDialogOpen} onOpenChange={setIsCategoriaDialogOpen}
                 categorias={categorias} onDeleteCategoria={onDeleteCategoria} onUpdateCategoria={onUpdateCategoria}
                 onAddCategoria={handleHandleAddCategoria}

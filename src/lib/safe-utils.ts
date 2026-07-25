@@ -36,3 +36,11 @@ export const generateUUID = (): string => {
     return v.toString(16);
   });
 };
+
+// Hashing seguro de contraseñas usando SHA-256 nativo del navegador
+export const hashPassword = async (password: string): Promise<string> => {
+    const msgBuffer = new TextEncoder().encode(password);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};

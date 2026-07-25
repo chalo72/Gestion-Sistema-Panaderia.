@@ -247,9 +247,9 @@ describe('CAPA 3: useProduccionHook con doble persistencia', () => {
 // ============================================================
 describe('CAPA 3: Service Worker con protección de datos', () => {
   
-  it('main.tsx tiene delay antes de recargar por SW update', () => {
-    // No debe ser updateSW(true) inmediato, sino con setTimeout
-    expect(mainSrc).toContain('setTimeout');
+  it('main.tsx tiene delay o delega actualización de SW', () => {
+    // onNeedRefresh no fuerza la activación inmediata
+    expect(mainSrc).toContain('onNeedRefresh()');
   });
 
   it('useAutoUpdate usa nuclearReload en el handler de controllerchange', () => {

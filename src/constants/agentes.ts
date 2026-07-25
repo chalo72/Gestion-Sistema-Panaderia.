@@ -1,7 +1,7 @@
 import { 
   BrainCircuit, Utensils, Package, Megaphone, Users, TrendingUp, Wallet, 
   Truck, CheckCircle, Wrench, MessageSquare, Leaf, Rocket, Building, 
-  Clipboard, Lightbulb, Scale, FileText, Target, Instagram
+  Clipboard, Lightbulb, Scale, FileText, Target, Instagram, Shield
 } from 'lucide-react';
 import { db } from '@/lib/database';
 import type { AgenteId } from '@/lib/database';
@@ -33,6 +33,14 @@ export const AGENTES_CONFIG: Record<AgenteId, { nombre: string; cargo: string; e
   'pico-claw':  { nombre: 'PICO-CLAW',      cargo: 'Data Analyst CS', emoji: '🦅', color: 'text-[#FF3366]', bg: 'bg-[#FF3366]/10 border-[#FF3366]/20', icon: TrendingUp, shadow: 'shadow-[#FF3366]/40', misionPanaderia: 'Análisis forense de KPIs y protección de márgenes en tiempo real.', plantillas: ['Auditoría de Fugatividad de Precios', 'Proyección de Ventas con IA', 'Reporte de Salud Financiera Profunda'] },
   'open-claw':  { nombre: 'OPEN-CLAW',      cargo: 'Sys Architect',   emoji: '🛡️', color: 'text-[#00FF99]', bg: 'bg-[#00FF99]/10 border-[#00FF99]/20', icon: Rocket, shadow: 'shadow-[#00FF99]/40', misionPanaderia: 'Optimización de infraestructura y seguridad del ecosistema Dulce Placer.', plantillas: ['Diagnóstico de Estado de Servidores', 'Mapa de Arquitectura de Datos', 'Plan de Seguridad de Backups'] },
   'auto-claw':  { nombre: 'AUTO-CLAW',      cargo: 'Growth Autom.',   emoji: '⚡', color: 'text-[#CCFF00]', bg: 'bg-[#CCFF00]/10 border-[#CCFF00]/20', icon: BrainCircuit, shadow: 'shadow-[#CCFF00]/40', misionPanaderia: 'Automatización de flujos de trabajo y escalamiento agresivo del negocio.', plantillas: ['Plan de Automatización de Pedidos', 'Estrategia de Escalamiento Masivo', 'Flujo de Notificaciones Críticas'] },
+
+  // === HERMES Y ODYSSEUS (Copilotos) ===
+  'hermes':     { nombre: 'HERMES',         cargo: 'Copiloto Voz',    emoji: '🎤', color: 'text-indigo-400', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: MessageSquare, shadow: 'shadow-indigo-500/40', misionPanaderia: 'Interpretación de ventas por voz y análisis conversacional rápido.', plantillas: ['Resumen Rápido de Ventas', 'Auditoría de Audio de Caja'] },
+  'odysseus':   { nombre: 'ODYSSEUS',       cargo: 'Centinela CCTV',  emoji: '👁️', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: Shield, shadow: 'shadow-emerald-500/40', misionPanaderia: 'Vigilancia extrema de cámaras y detección de anomalías.', plantillas: ['Reporte de Anomalías CCTV', 'Perfilamiento de Sospechosos'] },
+
+  // === AGENTES IA ESPECIALIZADOS ===
+  'vigia-app':  { nombre: 'VIGÍA-APP',       cargo: 'Monitor Sistema', emoji: '🔭', color: 'text-[#818cf8]', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: Target, shadow: 'shadow-indigo-500/40', misionPanaderia: 'Monitoreo de movimientos del usuario en todos los módulos de la app en tiempo real.', plantillas: ['Reporte de Módulos Más Usados', 'Análisis de Comportamiento de Navegación'] },
+  'arqui-tech': { nombre: 'ARQUI-TECH',     cargo: 'Inspector SW',    emoji: '🛠️', color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', icon: Wrench, shadow: 'shadow-purple-500/40', misionPanaderia: 'Auditoría de ingeniería: código, UI, cálculos, módulos, formularios, sinergia y recomendaciones de escalado.', plantillas: ['Informe de Salud del Sistema', 'Recomendaciones de Mejora UX', 'Diagnóstico de Cálculos Financieros'] },
 };
 
 export async function consultarAgente(

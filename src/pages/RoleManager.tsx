@@ -64,7 +64,11 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
 
     useEffect(() => {
         const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
-        setPasswords(saved);
+        const masked: Record<string, string> = {};
+        for (const k in saved) {
+            masked[k] = saved[k] ? '••••••••' : '';
+        }
+        setPasswords(masked);
     }, []);
 
     // ── Permisos granulares ──────────────────────────────────────────────────
@@ -89,8 +93,8 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
     // ── WhatsApp ─────────────────────────────────────────────────────────────
     const handleShareWhatsApp = (role: UserRole) => {
         const password = passwords[role];
-        if (!password) {
-            toast.error(`Asigna primero la contraseña de ${ROLE_DESCRIPTIONS[role].nombre} en la tab "Claves".`);
+        if (!password || password === '••••••••') {
+            toast.error(`Ingresa una contraseña nueva en texto para ${ROLE_DESCRIPTIONS[role].nombre} si deseas enviarla por WhatsApp.`);
             return;
         }
         const appUrl = publicAppUrl || window.location.origin;
@@ -100,14 +104,29 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
     };
 
     // ── Guardar contraseñas ──────────────────────────────────────────────────
-    const handleGuardarPasswords = () => {
-        const missing = PASS_ROLES.filter(r => !passwords[r.key]?.trim());
-        if (missing.length) {
-            toast.error(`Faltan contraseñas: ${missing.map(r => r.label).join(', ')}`);
-            return;
+    const handleGuardarPasswords = async () => {
+        const saved = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
+        const hashedPasswords: Record<string, string> = { ...saved };
+        
+        for (const role of PASS_ROLES) {
+            const raw = passwords[role.key];
+            if (!raw) {
+                toast.error(`Falta contraseña: ${role.label}`);
+                return;
+            }
+            if (raw !== '••••••••') {
+                const { hashPassword } = await import('@/lib/safe-utils');
+                hashedPasswords[role.key] = await hashPassword(raw);
+            }
         }
-        localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(passwords));
-        toast.success('Contraseñas guardadas ✅');
+
+        localStorage.setItem('pricecontrol_role_passwords', JSON.stringify(hashedPasswords));
+        const masked: Record<string, string> = {};
+        for (const k in hashedPasswords) {
+            masked[k] = hashedPasswords[k] ? '••••••••' : '';
+        }
+        setPasswords(masked);
+        toast.success('Contraseñas encriptadas y aseguradas ✅');
     };
 
     // ── Módulos masivos ──────────────────────────────────────────────────────

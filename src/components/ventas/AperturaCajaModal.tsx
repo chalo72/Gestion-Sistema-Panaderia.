@@ -33,6 +33,7 @@ function cargarCajasGuardadas(): CajaDefinicion[] {
 
 function guardarCajas(cajas: CajaDefinicion[]) {
     try { localStorage.setItem(LS_KEY, JSON.stringify(cajas)); } catch { /* ignorar */ }
+    db.saveBackup('cajas_config', cajas).catch(() => {});
 }
 
 const TURNOS = [
@@ -68,12 +69,30 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
 
     useEffect(() => {
         if (!isOpen) return;
-        db.getTrabajadores().then(lista => {
+        db.getAllTrabajadores().then(lista => {
             const activas = lista
                 .filter(t => t.estado === 'activo')
                 .map(t => t.nombre)
                 .filter(Boolean);
             setTrabajadoras(activas);
+        }).catch(() => {});
+    }, [isOpen]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        db.getBackup('cajas_config').then(data => {
+            if (data && Array.isArray(data) && data.length > 0) {
+                setCajasLista(data);
+                setConfigs(prev => {
+                    const next = { ...prev };
+                    data.forEach(c => {
+                        if (!next[c.nombre]) {
+                            next[c.nombre] = configDefault();
+                        }
+                    });
+                    return next;
+                });
+            }
         }).catch(() => {});
     }, [isOpen]);
 

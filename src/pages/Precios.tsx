@@ -157,7 +157,12 @@ export function Precios({
   const getMejorPrecioProducto = (productoId: string) => {
     const preciosProducto = precios.filter(p => p.productoId === productoId);
     if (preciosProducto.length === 0) return null;
-    return preciosProducto.reduce((min, p) => p.precioCosto < min.precioCosto ? p : min);
+    // Comparar por costo unitario (precio por kg/L/und), no por precio del bulto
+    return preciosProducto.reduce((min, p) => {
+      const costoUnitP   = p.precioCosto   / ((p as any).cantidadEmbalaje || 1);
+      const costoUnitMin = min.precioCosto / ((min as any).cantidadEmbalaje || 1);
+      return costoUnitP < costoUnitMin ? p : min;
+    });
   };
 
   return (
@@ -173,7 +178,7 @@ export function Precios({
 
       <Tabs defaultValue="lista" className="w-full">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10 px-4">
-          <TabsList className="bg-white/40 dark:bg-gray-900/40 backdrop-blur-md p-1.5 rounded-[2.5rem] h-16 w-full md:w-auto grid grid-cols-3 gap-2">
+          <TabsList className="bg-white/40 dark:bg-gray-900/40 backdrop-blur-md p-1.5 rounded-2xl h-16 w-full flex overflow-x-auto no-scrollbar gap-2">
             <TabsTrigger value="lista" className="rounded-[2rem] font-black uppercase text-[10px] tracking-widest transition-all data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow-xl px-10">Explorador</TabsTrigger>
             <TabsTrigger value="comparacion" className="rounded-[2rem] font-black uppercase text-[10px] tracking-widest transition-all data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow-xl px-10">Análisis</TabsTrigger>
             <TabsTrigger value="historial" className="rounded-[2rem] font-black uppercase text-[10px] tracking-widest transition-all data-[state=active]:bg-slate-900 data-[state=active]:text-white data-[state=active]:shadow-xl px-10 gap-2"><History className="w-3.5 h-3.5" /> Bitácora</TabsTrigger>

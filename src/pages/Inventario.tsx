@@ -61,11 +61,13 @@ function PreciosStockTab({ productos, inventario, categorias, formatCurrency }: 
     const catsUnicas = useMemo(() => Array.from(new Set(productos.map(p => p.categoria).filter(Boolean))), [productos]);
 
     const filas = useMemo(() => {
+        const norm = (s: string | undefined) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const searchNormalized = norm(busqueda);
+
         let lista = productos
             .map(p => ({ ...p, stock: stockMap.get(p.id) ?? 0 }))
             .filter(p => {
-                const q = busqueda.toLowerCase();
-                return (!q || p.nombre.toLowerCase().includes(q)) && (!catFiltro || p.categoria === catFiltro);
+                return (!searchNormalized || norm(p.nombre).includes(searchNormalized)) && (!catFiltro || p.categoria === catFiltro);
             });
         lista.sort((a, b) => {
             let cmp = 0;
@@ -424,6 +426,7 @@ export function Inventario({
         const movsAudit = movimientos.filter(m =>
             m.motivo.toLowerCase().includes('auditoría') ||
             m.motivo.toLowerCase().includes('ronda') ||
+            m.motivo.toLowerCase().includes('ajuste') ||
             m.tipo === 'ajuste'
         );
         let totalPerdida = 0, totalGanancia = 0;
@@ -431,7 +434,10 @@ export function Inventario({
         movsAudit.forEach(m => {
             const prod = getProductoById(m.productoId);
             if (!prod) return;
-            const costo = precios.find(p => p.productoId === m.productoId)?.precioCosto || 0;
+            const precioRec = precios.find(p => p.productoId === m.productoId);
+            const costo = precioRec
+                ? precioRec.precioCosto / (precioRec.cantidadEmbalaje || 1)
+                : (prod.costoBase || 0);
             const valor = m.cantidad * costo;
             if (m.tipo === 'salida') {
                 totalPerdida += valor;
@@ -550,7 +556,8 @@ export function Inventario({
         if (!ajusteModal || !ajusteCantidad || !ajusteMotivo) { toast.error('Completa todos los campos'); return; }
         const cantidad = parseInt(ajusteCantidad);
         if (isNaN(cantidad) || cantidad <= 0) { toast.error('Cantidad inválida'); return; }
-        onAjustarStock(ajusteModal.productoId, cantidad, ajusteModal.tipo, ajusteMotivo);
+        const prefix = ajusteMotivo.toLowerCase().includes('ajuste') ? '' : 'Ajuste: ';
+        onAjustarStock(ajusteModal.productoId, cantidad, ajusteModal.tipo, prefix + ajusteMotivo);
         setAjusteModal(null); setAjusteCantidad(''); setAjusteMotivo('');
         toast.success('Ajuste aplicado');
     };
@@ -561,7 +568,8 @@ export function Inventario({
         Object.entries(ajusteMasivo).forEach(([productoId, val]) => {
             const n = parseInt(val);
             if (!isNaN(n) && n !== 0) {
-                onAjustarStock(productoId, Math.abs(n), n > 0 ? 'entrada' : 'salida', motivoMasivo);
+                const prefix = motivoMasivo.toLowerCase().includes('ajuste') ? '' : 'Ajuste masivo: ';
+                onAjustarStock(productoId, Math.abs(n), n > 0 ? 'entrada' : 'salida', prefix + motivoMasivo);
                 count++;
             }
         });
@@ -580,7 +588,10 @@ export function Inventario({
         const csv = [['Fecha', 'Producto', 'Tipo', 'Cantidad', 'Motivo', 'Valor'].join(','),
             ...movsAudit.map(m => {
                 const prod = getProductoById(m.productoId);
-                const costo = precios.find(p => p.productoId === m.productoId)?.precioCosto || 0;
+                const precioRec = precios.find(p => p.productoId === m.productoId);
+                const costo = precioRec
+                    ? precioRec.precioCosto / (precioRec.cantidadEmbalaje || 1)
+                    : (prod?.costoBase || 0);
                 return [m.fecha, `"${prod?.nombre || 'N/A'}"`, m.tipo, m.cantidad, `"${m.motivo}"`, (m.cantidad * costo).toFixed(2)].join(',');
             })].join('\n');
         const a = document.createElement('a');

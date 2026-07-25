@@ -866,6 +866,64 @@ function Configuracion(props: ConfiguracionProps) {
               </p>
             )}
           </div>
+          {/* Inicializar Inventario */}
+          <div className="pt-4 border-t border-border/40">
+            <Button
+              variant="outline"
+              size="lg"
+              className="w-full border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 font-bold"
+              onClick={async () => {
+                if (!confirm('¿Establecer 100 unidades de stock actual y 10 unidades de stock mínimo para TODOS los productos que estén en 0 o no tengan registro? Esto no afectará el stock actual que sea mayor a 0.')) return;
+                
+                try {
+                  const todosProductos = await db.getAllProductos();
+                  const todosPrecios = await db.getAllPrecios();
+                  let count = 0;
+                  
+                  for (const prod of todosProductos) {
+                    // Buscar si tiene precio registrado
+                    const precioExistente = todosPrecios.find(p => p.productoId === prod.id);
+                    const stockActual = precioExistente?.stockActual ?? 0;
+                    
+                    if (stockActual === 0) {
+                      // Si no tiene precio o está en 0
+                      const nuevoPrecio = {
+                        productoId: prod.id,
+                        costoBase: precioExistente?.costoBase ?? prod.precioVenta * 0.7, // fallback estimado
+                        precioVenta: precioExistente?.precioVenta ?? prod.precioVenta,
+                        stockActual: 100,
+                        stockMinimo: 10,
+                        ultimaModificacion: new Date().toISOString()
+                      };
+                      await db.addPrecio(nuevoPrecio).catch(async () => {
+                        // Si ya existe en BD pero está en 0, actualizarlo
+                        if (precioExistente) {
+                          await db.addPrecio({
+                            ...precioExistente,
+                            stockActual: 100,
+                            stockMinimo: 10,
+                            ultimaModificacion: new Date().toISOString()
+                          });
+                        }
+                      });
+                      count++;
+                    }
+                  }
+                  toast.success(`✨ Se inicializó el inventario de ${count} productos a 100 unidades.`);
+                  setTimeout(() => window.location.reload(), 1500);
+                } catch (err: any) {
+                  toast.error(`Error al inicializar inventario: ${err.message}`);
+                }
+              }}
+            >
+              <Zap className="w-5 h-5 mr-2 text-amber-500 animate-pulse" />
+              Inicializar Inventario (100 und.)
+            </Button>
+            <p className="text-xs text-muted-foreground text-center mt-1">
+              Establece 100 unidades de stock y 10 unidades de stock mínimo para productos sin stock.
+            </p>
+          </div>
+
           {/* Exportación Maestra Excel */}
           <div className="pt-4 border-t border-border/40">
             <Button

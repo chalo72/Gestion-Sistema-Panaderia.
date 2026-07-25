@@ -3,6 +3,12 @@
   "buildCommand": "npm run update-version && vite build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "crons": [
+    {
+      "path": "/api/cron-ia",
+      "schedule": "0 6 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/(version.json|sw.js|manifest.json)",

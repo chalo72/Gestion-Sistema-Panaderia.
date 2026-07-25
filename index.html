@@ -91,6 +91,9 @@
     })();
 
     window.onerror = function(m, s, l) {
+      if (typeof m === 'string' && (m.indexOf('ResizeObserver loop') !== -1)) {
+        return false; // Ignorar error inofensivo
+      }
       console.error("Boot error:", m, s, l);
       document.body.innerHTML =
         '<div style="padding:20px;text-align:center;">' +

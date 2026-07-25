@@ -30,13 +30,24 @@ export function useInventario({ productos }: UseInventarioParams) {
       const stockActual = dbItem ? dbItem.stockActual : 0;
       const nuevoStock = tipo === 'entrada' ? stockActual + cantidad : Math.max(0, stockActual - cantidad);
 
+      // Lógica predictiva: Registrar si se agotó
+      let nuevaFechaAgotado = dbItem?.fechaAgotado;
+      if (nuevoStock === 0 && stockActual > 0) {
+        nuevaFechaAgotado = new Date().toISOString();
+      } else if (nuevoStock > 0) {
+        nuevaFechaAgotado = undefined; // Ya no está agotado
+      }
+
       // 1. Actualizar/Crear ítem de inventario
       const item: InventarioItem = {
         id: dbItem?.id || generateUUID(),
         productoId,
         stockActual: nuevoStock,
         stockMinimo: dbItem?.stockMinimo || 10,
-        ultimoMovimiento: new Date().toISOString()
+        ultimoMovimiento: new Date().toISOString(),
+        fechaAgotado: nuevaFechaAgotado,
+        velocidadVentaDiaria: dbItem?.velocidadVentaDiaria,
+        diasParaAgotarse: dbItem?.diasParaAgotarse
       };
       await db.updateInventarioItem(item as any);
       

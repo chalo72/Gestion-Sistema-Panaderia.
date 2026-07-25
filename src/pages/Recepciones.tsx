@@ -37,12 +37,13 @@ interface RecepcionesProps {
     getProveedorById: (id: string) => Proveedor | undefined;
     getProductoById: (id: string) => Producto | undefined;
     formatCurrency: (value: number) => string;
+    onUpdatePrePedido?: (id: string, updates: Partial<PrePedido>) => Promise<void>;
 }
 
 export default function Recepciones({
     recepciones, proveedores, productos, precios, prepedidos, categorias,
     onAddRecepcion, onConfirmarRecepcion, onAddProducto, onUpdateProducto,
-    getProveedorById, getProductoById, formatCurrency
+    getProveedorById, getProductoById, formatCurrency, onUpdatePrePedido
 }: RecepcionesProps) {
     const { check } = useCan();
     const { usuario } = useAuth();
@@ -733,6 +734,11 @@ export default function Recepciones({
 
             await onAddRecepcion(recepcionCompleta as any);
             await onConfirmarRecepcion(recepcionCompleta);
+
+            // 🛡️ REGLA: NEXUS-SYNC - Actualizar el PrePedido a recibido si existe
+            if (newRecepcion.prePedidoId && onUpdatePrePedido) {
+                await onUpdatePrePedido(newRecepcion.prePedidoId, { estado: 'recibido' });
+            }
 
             // Actualizar costos que cambiaron
             const preciosParaActualizar = preciosSet ?? preciosAActualizar;

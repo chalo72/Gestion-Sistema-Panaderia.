@@ -106,9 +106,9 @@ export function usePriceControl() {
         else if (table === 'prepedidos') setPrepedidos(p => p.filter(x => x.id !== id));
         else if (table === 'recetas') setRecetas(p => p.filter(x => x.id !== id));
       } else {
-        if (table === 'proveedores') db.getAllProveedores().then(setProveedores).catch(() => {});
-        else if (table === 'productos') { db.getAllProductos().then(setProductos).catch(() => {}); db.getAllPrecios().then(setPrecios).catch(() => {}); }
-        else if (table === 'precios') { db.getAllPrecios().then(setPrecios).catch(() => {}); db.getAllProductos().then(setProductos).catch(() => {}); }
+        if (table === 'proveedores') db.getAllProveedores().then(p => setProveedores(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {});
+        else if (table === 'productos') { db.getAllProductos().then(p => setProductos(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {}); db.getAllPrecios().then(setPrecios).catch(() => {}); }
+        else if (table === 'precios') { db.getAllPrecios().then(setPrecios).catch(() => {}); db.getAllProductos().then(p => setProductos(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {}); }
         else if (table === 'prepedidos') db.getAllPrePedidos().then(setPrepedidos).catch(() => {});
         else if (table === 'recetas') db.getAllRecetas().then(setRecetas).catch(() => {});
       }
@@ -167,45 +167,80 @@ export function usePriceControl() {
           destinos: config.destinos || config.metadata?.destinos || (defaultConfig as any).destinos,
         } as Configuracion : defaultConfig;
 
-        // Validar y actualizar categorías si es necesario
+        // ✅ FIX: Normalizar nombres para comparación (evitar duplicados por mayúsculas/espacios)
+        const normalizar = (s: string) => s.toLowerCase().trim();
+
+        // Validar y actualizar categorías si es necesario (comparación normalizada)
         const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
-          cDef => !finalConfig.categorias.map(c => c.nombre).includes(cDef.nombre)
+          cDef => !finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(cDef.nombre))
         );
         if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
           const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
-            const catDefault = CATEGORIAS_DEFAULT.find(cd => cd.nombre === catExistente.nombre);
+            const catDefault = CATEGORIAS_DEFAULT.find(cd => normalizar(cd.nombre) === normalizar(catExistente.nombre));
             return catDefault && !catExistente.icono ? { ...catExistente, icono: catDefault.icono } : catExistente;
           });
           finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
-          await db.saveConfiguracion({ ...finalConfig, id: 'main' });
         }
 
         // Limpieza de datos de ejemplo (fantasmas)
         let prodsFinal = prods;
         let provsFinal = provs;
-        // Se eliminó el filtrado restrictivo de DATOS_EJEMPLO para asegurar que ningún dato ingresado se oculte.
         prodsFinal = prods;
         provsFinal = provs;
 
-        // [Nexus-Volt] Sincronizar categorías huérfanas de los productos (Autocuración)
+        // [Nexus-Volt] Sincronizar categorías huérfanas de los productos (Autocuración normalizada)
+        // IMPORTANTE: detectar tipo de categoría huérfana por si sus productos son insumos
         const catsDeProductos = Array.from(new Set(prodsFinal.map(p => p.categoria).filter(Boolean)));
         const catsFaltantes = catsDeProductos.filter(
-          catName => !finalConfig.categorias.map(c => c.nombre).includes(catName)
+          catName => !finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(catName))
         );
         if (catsFaltantes.length > 0) {
-          const nuevasCats = catsFaltantes.map(catName => ({
-            id: generateUUID(),
-            nombre: catName,
-            color: '#6b7280', // Color neutro por defecto
-            tipo: 'venta' // Por defecto venta
-          }));
+          const nuevasCats = catsFaltantes.map(catName => {
+            // Detectar tipo real: si el nombre empieza con 'INS:' o la mayoría de sus productos son ingredientes
+            const esInsumoPorNombre = catName.toUpperCase().startsWith('INS:');
+            const productosEnCat = prodsFinal.filter(p => normalizar(p.categoria || '') === normalizar(catName));
+            const esInsumoPorProductos = productosEnCat.length > 0 && productosEnCat.every(p => p.tipo === 'ingrediente');
+            const tipoDetectado = (esInsumoPorNombre || esInsumoPorProductos) ? 'insumo' as const : 'venta' as const;
+            return {
+              id: generateUUID(),
+              nombre: catName,
+              color: tipoDetectado === 'insumo' ? '#f59e0b' : '#6b7280',
+              tipo: tipoDetectado,
+            };
+          });
           finalConfig.categorias = [...finalConfig.categorias, ...nuevasCats];
-          await db.saveConfiguracion({ ...finalConfig, id: 'main' });
         }
 
+        // ✅ NEXUS-DEDUP FINAL: Deduplicación de categorías con estrategia inteligente
+        // - Agrupa por nombre normalizado
+        // - Prioriza: (1) categorías con tipo explícito ≠ 'venta', (2) las del sistema (CATEGORIAS_DEFAULT), (3) la primera encontrada
+        // - Elimina duplicados de 'Bicola', 'Pasabocas', etc. que llegan con diferentes IDs desde la nube
+        const catsPorNombre = new Map<string, typeof finalConfig.categorias[0]>();
+        const NOMBRES_DEFAULT_SET = new Set(CATEGORIAS_DEFAULT.map(c => normalizar(c.nombre)));
+        for (const cat of finalConfig.categorias) {
+          const key = normalizar(cat.nombre);
+          const existente = catsPorNombre.get(key);
+          if (!existente) {
+            catsPorNombre.set(key, cat);
+          } else {
+            // Estrategia: ganar la que tiene tipo más específico o es del sistema por defecto
+            const catEsDefault = NOMBRES_DEFAULT_SET.has(key);
+            const existenteEsDefault = NOMBRES_DEFAULT_SET.has(normalizar(existente.nombre));
+            const catTieneInsumo = cat.tipo === 'insumo';
+            const existenteTieneInsumo = existente.tipo === 'insumo';
+            // Ganar la del sistema o la que tiene tipo=insumo (más específico)
+            if ((!existenteEsDefault && catEsDefault) || (!existenteTieneInsumo && catTieneInsumo)) {
+              catsPorNombre.set(key, cat);
+            }
+            // En todos los otros casos conservamos la existente (primera encontrada)
+          }
+        }
+        finalConfig.categorias = Array.from(catsPorNombre.values());
+        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+
         setConfiguracion(finalConfig);
-        setProductos(prodsFinal);
-        setProveedores(provsFinal);
+        setProductos(prodsFinal.sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setProveedores(provsFinal.sort((a, b) => a.nombre.localeCompare(b.nombre)));
         setPrecios(prcs);
       };
 
@@ -290,16 +325,11 @@ export function usePriceControl() {
         db.getTombstones('precios'),
       ]);
 
-      const productosInvalidos = productosEnDB.filter(p => 
-        !CATEGORIAS_DEFAULT.map(c => c.nombre).includes(p.categoria)
-      );
-
-      // Limpiar productos obsoletos en paralelo
-      if (productosInvalidos.length > 0) {
-        await Promise.allSettled(
-          productosInvalidos.map(p => db.deleteProducto(p.id).catch(() => {}))
-        );
-      }
+      // 🛡️ NEXUS-GUARD: NO borrar productos con categorías personalizadas.
+      // El usuario puede crear sus propias categorías (ej: "INS: HELADOS", "Especiales").
+      // Solo se eliminan productos de ejemplo (seed) que el usuario ya no quiere,
+      // identificados por su ID exacto, NO por su categoría.
+      // (bloque de limpieza por categoría eliminado — causaba borrado de datos reales)
 
       // PROTEGIDO: Filtrar seed data excluyendo items eliminados por el usuario (tombstones)
       const productosParaAgregar = DATOS_EJEMPLO.productos.filter(
@@ -567,15 +597,14 @@ export function usePriceControl() {
   }, []);
 
   const updateProducto = useCallback(async (id: string, updates: Partial<Producto>) => {
-    let producto = productos.find(p => p.id === id);
+    // 🛡️ NEXUS-FRESH-READ: Siempre leer desde DB para evitar closure stale.
+    // Si usáramos `productos` del estado React, podríamos obtener un snapshot viejo
+    // y revertir cambios recientes al hacer merge. La DB siempre tiene el dato más fresco.
+    const productosDB = await db.getAllProductos();
+    const producto = productosDB.find(p => p.id === id);
     if (!producto) {
-      // 🛡️ REGLA: NEXUS-SYNC-GUARD - Si no está en el estado, buscar en DB (caso de productos recién creados)
-      const productosDB = await db.getAllProductos();
-      producto = productosDB.find(p => p.id === id);
-      if (!producto) {
-        console.warn(`⚠️ [Nexus] No se pudo actualizar: Producto ${id} no encontrado en estado ni en DB.`);
-        return;
-      }
+      console.warn(`⚠️ [Nexus] No se pudo actualizar: Producto ${id} no encontrado en DB.`);
+      return;
     }
     const updatedProducto = { ...producto, ...updates, updatedAt: new Date().toISOString() };
     await db.updateProducto(updatedProducto);
@@ -604,12 +633,13 @@ export function usePriceControl() {
     }
 
     triggerBackup(`update_producto:${updatedProducto.nombre}`);
-  }, [productos, inventarioHook]);
+  }, [inventarioHook]);
 
   // PROTEGIDO: Capa 2 — Guard defensivo: tombstone se crea SIEMPRE, sin importar errores parciales
   const deleteProducto = useCallback(async (id: string) => {
     try {
       await db.deleteProducto(id);
+      await db.addTombstone('productos', id).catch(() => {});
     } catch (err) {
       // Aunque falle la eliminación en DB, asegurar el tombstone
       console.warn('⚠️ deleteProducto parcial, forzando tombstone:', err);
@@ -622,6 +652,7 @@ export function usePriceControl() {
     for (const precio of preciosProducto) {
       try {
         await db.deletePrecio(precio.id);
+        await db.addTombstone('precios', precio.id).catch(() => {});
       } catch {
         await db.addTombstone('precios', precio.id).catch(() => {});
       }
@@ -654,6 +685,7 @@ export function usePriceControl() {
   const deleteProveedor = useCallback(async (id: string) => {
     try {
       await db.deleteProveedor(id);
+      await db.addTombstone('proveedores', id).catch(() => {});
     } catch (err) {
       console.warn('⚠️ deleteProveedor parcial, forzando tombstone:', err);
       await db.addTombstone('proveedores', id).catch(() => {});
@@ -664,6 +696,7 @@ export function usePriceControl() {
     for (const precio of preciosProveedor) {
       try {
         await db.deletePrecio(precio.id);
+        await db.addTombstone('precios', precio.id).catch(() => {});
       } catch {
         await db.addTombstone('precios', precio.id).catch(() => {});
       }
@@ -673,6 +706,7 @@ export function usePriceControl() {
 
   // Funciones de Precios
   const addOrUpdatePrecio = useCallback(async (data: {
+    id?: string;
     productoId: string;
     proveedorId: string;
     precioCosto: number;
@@ -681,9 +715,21 @@ export function usePriceControl() {
     tipoEmbalaje?: string;
     cantidadEmbalaje?: number;
   }) => {
-    const { productoId, proveedorId, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
+    const { id, productoId, proveedorId, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
     const precioCosto = Math.round(safeNumber(data.precioCosto) / 100) * 100;
-    const existingPrecio = await db.getPrecioByProductoProveedor(productoId, proveedorId);
+    
+    // 🔥 CORRECCIÓN: Evitar sobrescribir otras presentaciones del mismo producto
+    const allPrecios = await db.getAllPrecios();
+    let existingPrecio = id ? allPrecios.find(p => p.id === id) : undefined;
+    
+    if (!existingPrecio) {
+      existingPrecio = allPrecios.find(p => 
+        p.productoId === productoId && 
+        p.proveedorId === proveedorId &&
+        (p.tipoEmbalaje || 'unidad') === (tipoEmbalaje || 'unidad') &&
+        (p.cantidadEmbalaje || 1) === (cantidadEmbalaje || 1)
+      );
+    }
 
     const now = new Date().toISOString();
 
@@ -754,7 +800,7 @@ export function usePriceControl() {
     } else {
       // Crear nuevo precio
       const nuevoPrecio: PrecioProveedor = {
-        id: generateUUID(),
+        id: id || generateUUID(),
         productoId,
         proveedorId,
         precioCosto,
@@ -784,7 +830,12 @@ export function usePriceControl() {
   }, [precios, productos, configuracion, updateProducto]);
 
   const deletePrecio = useCallback(async (id: string) => {
-    await db.deletePrecio(id);
+    try {
+      await db.deletePrecio(id);
+      await db.addTombstone('precios', id).catch(() => {});
+    } catch {
+      await db.addTombstone('precios', id).catch(() => {});
+    }
     setPrecios(prev => prev.filter(p => p.id !== id));
   }, []);
 
@@ -811,7 +862,12 @@ export function usePriceControl() {
   }, [prepedidos]);
 
   const deletePrePedido = useCallback(async (id: string) => {
-    await db.deletePrePedido(id);
+    try {
+      await db.deletePrePedido(id);
+      await db.addTombstone('prepedidos', id).catch(() => {});
+    } catch {
+      await db.addTombstone('prepedidos', id).catch(() => {});
+    }
     setPrepedidos(prev => prev.filter(p => p.id !== id));
   }, []);
 
@@ -1013,7 +1069,12 @@ export function usePriceControl() {
   const getMejorPrecio = useCallback((productoId: string) => {
     const preciosProducto = precios.filter(p => p.productoId === productoId);
     if (preciosProducto.length === 0) return null;
-    return preciosProducto.reduce((min, p) => p.precioCosto < min.precioCosto ? p : min);
+    // Comparar por costo UNITARIO REAL (precio bulto ÷ cantidad en embalaje)
+    return preciosProducto.reduce((min, p) => {
+      const costoUnitP   = p.precioCosto   / (p.cantidadEmbalaje   || 1);
+      const costoUnitMin = min.precioCosto / (min.cantidadEmbalaje || 1);
+      return costoUnitP < costoUnitMin ? p : min;
+    });
   }, [precios]);
 
   const getMejorPrecioByProveedor = useCallback((productoId: string, proveedorId: string) => {
@@ -1202,8 +1263,8 @@ export function usePriceControl() {
         try {
           const mejorPrecioCosto = safeNumber(mejorPrecioCache.get(p.id));
           const precioVenta = safeNumber(p.precioVenta);
-          if (precioVenta === 0) return 0;
-          return ((precioVenta - mejorPrecioCosto) / precioVenta) * 100;
+          if (mejorPrecioCosto <= 0) return 0;
+          return ((precioVenta - mejorPrecioCosto) / mejorPrecioCosto) * 100;
         } catch {
           return 0;
         }
@@ -1258,11 +1319,14 @@ export function usePriceControl() {
       ingresosHoy: ventasHook.ventas
         .filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0]))
         .reduce((sum, v) => sum + safeNumber(v.total), 0),
+      gastosHoy: finanzas.gastos
+        .filter(g => g.fecha && g.fecha.startsWith(new Date().toISOString().split('T')[0]))
+        .reduce((sum, g) => sum + safeNumber(g.monto), 0),
       ticketPromedio: ventasHook.ventas.length > 0
         ? ventasHook.ventas.reduce((sum, v) => sum + safeNumber(v.total), 0) / ventasHook.ventas.length
         : 0,
     };
-  }, [productos, proveedores, alertas, precios, prepedidos, inventarioHook.inventario, inventarioHook.recepciones, historial, inventarioHook.movimientos, recetas, ventasHook.ventas, getMejorPrecio]);
+  }, [productos, proveedores, alertas, precios, prepedidos, inventarioHook.inventario, inventarioHook.recepciones, historial, inventarioHook.movimientos, recetas, ventasHook.ventas, finanzas.gastos, getMejorPrecio]);
 
   // Alias para mantener compatibilidad
   const getEstadisticas = useCallback(() => estadisticas, [estadisticas]);

@@ -38,7 +38,10 @@ export function deleteCompromiso(id: string): void {
 export function getVentasDiarias(): VentaDiaria[] {
   try {
     const raw = localStorage.getItem(KEY_VENTAS_DIARIAS);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const list = JSON.parse(raw) as VentaDiaria[];
+    // Ordenar por fecha descendente (las más recientes primero)
+    return list.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   } catch { return []; }
 }
 
@@ -47,13 +50,44 @@ export function saveVentasDiarias(list: VentaDiaria[]): void {
   localStorage.setItem(KEY_VENTAS_DIARIAS, JSON.stringify(list.slice(0, 365)));
 }
 
-export function addVentaDiaria(data: Omit<VentaDiaria, 'id' | 'total'>): VentaDiaria {
-  const total = data.totalEfectivo + data.totalNequi + data.totalTransferencia + data.totalCredito;
-  const nueva: VentaDiaria = { ...data, id: generateUUID(), total };
+export function addVentaDiaria(data: Omit<VentaDiaria, 'id' | 'total'> & { id?: string }): VentaDiaria {
+  // Asegurar numéricos
+  const tEfe = Number(data.totalEfectivo) || 0;
+  const tNeq = Number(data.totalNequi) || 0;
+  const tTra = Number(data.totalTransferencia) || 0;
+  const tCre = Number(data.totalCredito) || 0;
+
+  // El total puede ser calculado usando cajas o métodos de pago
+  let total = tEfe + tNeq + tTra + tCre;
+  
+  if (data.cajas && typeof data.cajas === 'object') {
+    const totalCajas = Object.entries(data.cajas).reduce((sum, [key, val]) => {
+      const v = Number(val) || 0;
+      if (key === 'Gastos/Salidas') return sum - v;
+      return sum + v;
+    }, 0);
+    // Si hay valores en cajas (incluyendo salidas), recalculamos el total de efectivo/venta
+    if (Object.keys(data.cajas).length > 0) {
+      total = totalCajas + tNeq + tTra + tCre;
+    }
+  }
+
+  const nueva: VentaDiaria = { ...data, id: data.id || generateUUID(), total };
   const existentes = getVentasDiarias();
-  // Si ya hay una para esa fecha, reemplazar
-  const sinEsaDia = existentes.filter(v => v.fecha !== data.fecha);
-  saveVentasDiarias([nueva, ...sinEsaDia]);
+  
+  // Si viene con ID, actualizamos ese registro específico.
+  // Si no viene con ID (nuevo), verificamos si ya existe uno con misma fecha Y turno para reemplazarlo (evitar duplicados del mismo turno).
+  let actualizados;
+  if (data.id) {
+    actualizados = existentes.map(v => v.id === data.id ? nueva : v);
+    // Si por alguna razón no existía, lo agregamos
+    if (!existentes.some(v => v.id === data.id)) actualizados.unshift(nueva);
+  } else {
+    const sinDuplicados = existentes.filter(v => !(v.fecha === data.fecha && v.turno === data.turno));
+    actualizados = [nueva, ...sinDuplicados];
+  }
+  
+  saveVentasDiarias(actualizados);
   return nueva;
 }
 
@@ -63,12 +97,19 @@ export function deleteVentaDiaria(id: string): void {
 
 // ── Proyección de Quincena ────────────────────────────────────
 export function calcularProyeccionQuincena(params: {
-  ventas: { fecha: string; total: number }[];    // ventas del POS
+  ventas: { fecha: string; total: number; metodoPago?: string }[];    // ventas del POS
   ventasDiarias: VentaDiaria[];                   // ventas manuales
   gastos: { fecha: string; monto: number; categoria: GastoCategoria }[];
   compromisos: CompromisoFijo[];
+  margenCostoVariable?: number; // Ej. 0.5 (50% intocable para compras)
+  temporadaBaja?: boolean;      // Si es temporada baja
 }): {
+  ingresosTotales: number;
+  ventasCredito: number;
+  efectivoReal: number;
+  utilidadBruta: number;
   ingresoEsperado: number;
+  utilidadBrutaEsperada: number;
   totalCompromisos: number;
   totalSalarios: number;
   saldoProyectado: number;
@@ -76,9 +117,12 @@ export function calcularProyeccionQuincena(params: {
   promedioVentaDiaria: number;
   alcanza: boolean;
   deficit: number;
+  cuotaDiariaAhorro: number;
 } {
   const hoy = new Date();
   const dia = hoy.getDate();
+  const margen = params.margenCostoVariable ?? 0.5; // Por defecto 50% de costo de reposición
+
   // Determinar quincena actual
   const inicioQuincena = dia <= 15
     ? new Date(hoy.getFullYear(), hoy.getMonth(), 1)
@@ -95,40 +139,65 @@ export function calcularProyeccionQuincena(params: {
   const inicioCadena = inicioQuincena.toISOString().slice(0, 10);
   const finCadena = finQuincena.toISOString().slice(0, 10);
 
-  const ventasPOS = params.ventas
-    .filter(v => v.fecha >= inicioCadena && v.fecha <= finCadena)
-    .reduce((s, v) => s + v.total, 0);
+  // Separar ventas efectivas de créditos
+  const ventasPeriodo = params.ventas.filter(v => v.fecha >= inicioCadena && v.fecha <= finCadena);
+  const ventasPOSCredito = ventasPeriodo.filter(v => v.metodoPago === 'credito').reduce((s, v) => s + (Number(v.total) || 0), 0);
+  const ventasPOSEfectivo = ventasPeriodo.filter(v => v.metodoPago !== 'credito').reduce((s, v) => s + (Number(v.total) || 0), 0);
 
-  const ventasManuales = params.ventasDiarias
-    .filter(v => v.fecha >= inicioCadena && v.fecha <= finCadena)
-    .reduce((s, v) => s + v.total, 0);
+  const ventasManualesPeriodo = params.ventasDiarias.filter(v => v.fecha >= inicioCadena && v.fecha <= finCadena);
+  const ventasManualesCredito = ventasManualesPeriodo.reduce((s, v) => s + (Number(v.totalCredito) || 0), 0);
+  const ventasManualesEfectivo = ventasManualesPeriodo.reduce((s, v) => s + ((Number(v.total) || 0) - (Number(v.totalCredito) || 0)), 0);
 
-  const ingresosActuales = ventasPOS + ventasManuales;
-  const promedioVentaDiaria = diasTranscurridos > 0 ? ingresosActuales / diasTranscurridos : 0;
-  const ingresoEsperado = ingresosActuales + promedioVentaDiaria * diasRestantes;
+  const ingresosTotales = ventasPOSEfectivo + ventasPOSCredito + ventasManualesEfectivo + ventasManualesCredito;
+  const ventasCredito = ventasPOSCredito + ventasManualesCredito;
+  const efectivoReal = ventasPOSEfectivo + ventasManualesEfectivo;
+
+  // Promedio sobre TODO el ingreso para proyectar la meta (ajustado por temporada baja)
+  let promedioVentaDiaria = diasTranscurridos > 0 ? ingresosTotales / diasTranscurridos : 0;
+  if (params.temporadaBaja) promedioVentaDiaria *= 0.8; // Reduce expectativa en 20%
+
+  const ingresoEsperado = ingresosTotales + (promedioVentaDiaria * diasRestantes);
+  
+  // Calcular Utilidad Bruta (dinero libre después de reponer insumos)
+  const utilidadBruta = efectivoReal * (1 - margen);
+  const utilidadBrutaEsperada = ingresoEsperado * (1 - margen);
 
   // Compromisos activos que caen en esta quincena
-  const totalCompromisos = params.compromisos
-    .filter(c => c.activo && !c.esPropietario)
+  const compromisosQuincena = params.compromisos
+    .filter(c => c.activo)
     .filter(c => {
-      const d = c.diaDeCobro;
+      // Nueva lógica con frecuencia
+      if (c.frecuencia === 'quincenal') return true; // Se paga en ambas quincenas
+      if (c.frecuencia === 'solo_q1') return dia <= 15;
+      if (c.frecuencia === 'solo_q2') return dia > 15;
+      if (c.frecuencia === 'mensual') {
+        // Se paga solo en la quincena que cae el día de cobro
+        const d = typeof c.diaDeCobro === 'number' ? c.diaDeCobro : parseInt(c.diaDeCobro as string) || 1;
+        return dia <= 15 ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
+      }
+      
+      // Fallback a lógica antigua si no tiene frecuencia definida
+      const d = typeof c.diaDeCobro === 'number' ? c.diaDeCobro : parseInt(c.diaDeCobro as string) || 1;
       return dia <= 15 ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
-    })
-    .reduce((s, c) => s + c.monto, 0);
+    });
 
-  const totalSalarios = params.compromisos
-    .filter(c => c.activo && c.esPropietario)
-    .filter(c => {
-      const d = c.diaDeCobro;
-      return dia <= 15 ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
-    })
-    .reduce((s, c) => s + c.monto, 0);
-
+  const totalCompromisos = compromisosQuincena.filter(c => !c.esPropietario).reduce((s, c) => s + (Number(c.monto) || 0), 0);
+  const totalSalarios = compromisosQuincena.filter(c => c.esPropietario).reduce((s, c) => s + (Number(c.monto) || 0), 0);
   const totalObligaciones = totalCompromisos + totalSalarios;
-  const saldoProyectado = ingresoEsperado - totalObligaciones;
+
+  // Cuánto hay que ahorrar diariamente para cubrir los compromisos sin sufrir
+  const cuotaDiariaAhorro = diasQuincena > 0 ? (totalObligaciones / diasQuincena) : 0;
+
+  // El saldo proyectado ahora se calcula sobre la UTILIDAD BRUTA ESPERADA
+  const saldoProyectado = utilidadBrutaEsperada - totalObligaciones;
 
   return {
+    ingresosTotales: Math.round(ingresosTotales),
+    ventasCredito: Math.round(ventasCredito),
+    efectivoReal: Math.round(efectivoReal),
+    utilidadBruta: Math.round(utilidadBruta),
     ingresoEsperado: Math.round(ingresoEsperado),
+    utilidadBrutaEsperada: Math.round(utilidadBrutaEsperada),
     totalCompromisos,
     totalSalarios,
     saldoProyectado: Math.round(saldoProyectado),
@@ -136,19 +205,33 @@ export function calcularProyeccionQuincena(params: {
     promedioVentaDiaria: Math.round(promedioVentaDiaria),
     alcanza: saldoProyectado >= 0,
     deficit: saldoProyectado < 0 ? Math.abs(Math.round(saldoProyectado)) : 0,
+    cuotaDiariaAhorro: Math.round(cuotaDiariaAhorro)
   };
 }
 
 // ── Consejero IA Financiero ───────────────────────────────────
 export function generarConsejo(params: {
-  ventas: { fecha: string; total: number }[];
+  ventas: { fecha: string; total: number; metodoPago?: string }[];
   ventasDiarias: VentaDiaria[];
   gastos: { fecha: string; monto: number; categoria: GastoCategoria; descripcion: string }[];
   compromisos: CompromisoFijo[];
+  margenCostoVariable?: number;
+  temporadaBaja?: boolean;
 }): { titulo: string; nivel: 'ok' | 'alerta' | 'critico'; puntos: string[] } {
   const proyeccion = calcularProyeccionQuincena(params);
   const puntos: string[] = [];
   let nivel: 'ok' | 'alerta' | 'critico' = 'ok';
+
+  // ── Temporada Baja
+  if (params.temporadaBaja) {
+    puntos.push(`🧊 Modo Temporada Baja activo: la IA ha reducido las expectativas de venta diaria futura en un 20% para ser conservadores.`);
+  }
+
+  // ── Análisis Cartera
+  if (proyeccion.ventasCredito > 0) {
+    puntos.push(`📝 Tienes $${proyeccion.ventasCredito.toLocaleString('es-CO')} atrapados en ventas a crédito que NO están en caja para pagar los gastos de esta quincena.`);
+    if (proyeccion.ventasCredito > proyeccion.efectivoReal * 0.3) nivel = 'alerta';
+  }
 
   // ── Proyección de quincena
   if (!proyeccion.alcanza) {
@@ -217,4 +300,59 @@ export function generarConsejo(params: {
     : '🟢 Las finanzas están en orden';
 
   return { titulo, nivel, puntos };
+}
+
+// ── Registro de Producción Diaria ────────────────────────────
+export interface HornadaDia {
+  tipoPan: string;       // Ej: "Pan dulce", "Hojaldrado"
+  bandejas: number;      // Nº de bandejas
+  panesPorBandeja: number;
+  totalPanes: number;    // calculado: bandejas * panesPorBandeja
+  masaId?: string;       // ID de la masa origen
+}
+
+export interface MasaPreparadaDia {
+  id: string;
+  nombre: string;
+  cantidadArrobas: number;
+}
+
+export interface RegistroProduccion {
+  id: string;
+  fecha: string;          // YYYY-MM-DD
+  // Masas dinámicas
+  masas?: MasaPreparadaDia[];
+  // Masas preparadas en arrobas (legado, opcionales para no romper)
+  masaDulce?: number;
+  masaHojaldrado?: number;
+  masaBatidoTorta?: number;
+  masaBatidoGalleta?: number;
+  // Hornadas del día
+  hornadas: HornadaDia[];
+  notas?: string;
+}
+
+const KEY_PRODUCCIONES = 'dp_producciones_diarias';
+
+export function getProducciones(): RegistroProduccion[] {
+  try {
+    const raw = localStorage.getItem(KEY_PRODUCCIONES);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function saveProducciones(list: RegistroProduccion[]): void {
+  localStorage.setItem(KEY_PRODUCCIONES, JSON.stringify(list.slice(0, 365)));
+}
+
+export function addProduccion(data: Omit<RegistroProduccion, 'id'>): RegistroProduccion {
+  const nuevo: RegistroProduccion = { ...data, id: generateUUID() };
+  const existentes = getProducciones();
+  // Se remueve el filtro de fecha única para permitir múltiples lotes/auditorías por día
+  saveProducciones([nuevo, ...existentes]);
+  return nuevo;
+}
+
+export function deleteProduccion(id: string): void {
+  saveProducciones(getProducciones().filter(p => p.id !== id));
 }

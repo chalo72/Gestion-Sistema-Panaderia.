@@ -53,6 +53,8 @@ interface ProduccionProps {
     proveedores: Proveedor[];
     formulaciones: FormulacionBase[];
     modelosPan: ModeloPan[];
+    planesDiarios: any[];
+    addPlanDiario: (data: any) => Promise<any>;
     addOrdenProduccion: (data: any) => Promise<OrdenProduccion>;
     updateOrdenProduccion: (id: string, updates: any) => Promise<void>;
     finalizarProduccion: (id: string, cantidad: number) => Promise<void>;
@@ -78,9 +80,12 @@ export function Produccion({
     proveedores,
     formulaciones,
     modelosPan,
+    planesDiarios,
     addOrdenProduccion,
     updateOrdenProduccion,
     finalizarProduccion,
+    addPlanDiario,
+    deletePlanDiario,
     addFormulacion,
     updateFormulacion,
     deleteFormulacion,
@@ -164,6 +169,10 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
 
     // FIFO / Lotes en stock
     const { crearLote, lotesConProblema } = useLotesStock();
+    
+    // Estado para edición de órdenes
+    const [ordenAEditar, setOrdenAEditar] = useState<OrdenProduccion | null>(null);
+    const [editCantidad, setEditCantidad] = useState<number>(0);
 
     const [simulacionActual, setSimulacionActual] = useState<{ formulacionId: string; arrobas: number; } | null>(null);
 
@@ -313,6 +322,19 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
         toast.warning('Orden devuelta a Planeado.');
     };
 
+    const handleGuardarEdicionOrden = async () => {
+        if (!ordenAEditar) return;
+        try {
+            await updateOrdenProduccion(ordenAEditar.id, { 
+                cantidadPlaneada: editCantidad 
+            });
+            toast.success('Orden de producción actualizada.');
+            setOrdenAEditar(null);
+        } catch (error) {
+            toast.error('Error al actualizar la orden.');
+        }
+    };
+
     const guardarComoPlantillaSemanal = (rows: any[]) => {
         const items: PlanSemanaItem[] = rows
             .filter(r => r?.formulacionId && r?.modeloId)
@@ -404,10 +426,10 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
             {/* Flujo diario: 4 pasos */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-y border-slate-200 dark:border-slate-800/50 py-6 bg-slate-50/20 dark:bg-slate-900/10 -mx-2 px-4 rounded-3xl mb-4">
                 {[
-                    { step: '01', title: 'PLANIFICAR', desc: 'Arma el plan del día: masas, arrobas y panes.', icon: CalendarDays, color: 'text-indigo-500', bg: 'bg-indigo-500/10', tab: 'plan-diario' },
-                    { step: '02', title: 'SIMULAR MASA', desc: 'Reparte la masa de 1 arroba entre tus modelos.', icon: PieChart, color: 'text-sky-500', bg: 'bg-sky-500/10', tab: 'simulador' },
-                    { step: '03', title: 'CONFIRMAR TURNO', desc: 'Seleccioná arrobas y lanzá las órdenes de hoy.', icon: SunMedium, color: 'text-amber-500', bg: 'bg-amber-500/10', tab: 'turno' },
-                    { step: '04', title: 'HORNEAR', desc: 'Seguí el kanban y finalizá cada lote.', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10', tab: 'ordenes' },
+                    { step: '01', title: 'PLAN DIARIO', desc: 'Arma el plan de masas y productos.', icon: CalendarDays, color: 'text-indigo-500', bg: 'bg-indigo-500/10', tab: 'plan-diario' },
+                    { step: '02', title: 'TURNO (KANBAN)', desc: 'Lanza las órdenes y asigna responsables.', icon: SunMedium, color: 'text-amber-500', bg: 'bg-amber-500/10', tab: 'turno' },
+                    { step: '03', title: 'HORNEAR', desc: 'Seguí el kanban y finalizá cada lote.', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10', tab: 'ordenes' },
+                    { step: '04', title: 'ROTACIÓN', desc: 'Evalúa la salida de panes en el mostrador.', icon: ArrowDownUp, color: 'text-blue-500', bg: 'bg-blue-500/10', tab: 'rotacion' },
                 ].map((item, idx) => (
                     <button
                         key={idx}
@@ -544,6 +566,19 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                         LOT: {orden.lote.slice(-4)}
                                                     </div>
                                                 )}
+                                                {orden.estado === 'planeado' && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-6 w-6 text-slate-400 hover:text-indigo-600 rounded-full"
+                                                        onClick={() => {
+                                                            setOrdenAEditar(orden);
+                                                            setEditCantidad(orden.cantidadPlaneada);
+                                                        }}
+                                                    >
+                                                        <Edit2 className="w-3.5 h-3.5" />
+                                                    </Button>
+                                                )}
                                             </div>
                                         </CardHeader>
 
@@ -665,78 +700,22 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                     </div>
                 </TabsContent>
 
-                {/* Tab: Plan Diario (Centro de Planificación Inteligente) */}
-                <TabsContent value="plan-diario" className="space-y-6">
-                    <div className="flex flex-col gap-12">
-                        {/* Lado izquierdo: Simulador de Arrobas */}
-                        <div className="space-y-4">
-                            <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2 mb-2">
-                                <PieChart className="w-6 h-6 text-indigo-500" />
-                                1. Simular Arrobas
-                            </h3>
-                            <DistribuidorArroba 
-                                formulaciones={formulaciones}
-                                modelos={modelosPan}
-                                ventas={ventas}
-                                onGuardarAuditoria={handleGuardarAuditoria}
-                                onSimulationChange={(formId, arrobas) => {
-                                    if (formId) {
-                                        setSimulacionActual({ formulacionId: formId, arrobas });
-                                    } else {
-                                        setSimulacionActual(null);
-                                    }
-                                }}
-                                onConfirmarProduccion={async (cortes, formId, arrobas) => {
-                                    try {
-                                        const f = formulaciones.find(x => x.id === formId);
-                                        if (!f) return;
-                                        for (const corte of cortes) {
-                                            const modelo = modelosPan.find(m => m.id === corte.modeloId);
-                                            if (!modelo) continue;
-                                            const prod = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente')
-                                                || productos.find(p => p.tipo !== 'ingrediente');
-                                            if (!prod) continue;
-                                            const fraccionArroba = corte.pesoCrudoTotal / (f.rendimientoBaseKg * 1000 * arrobas);
-                                            const costoTotalAsignado = (f.costoTotalArroba * arrobas) * fraccionArroba;
-                                            await addOrdenProduccion({
-                                                productoId: prod.id, cantidadPlaneada: corte.cantidad, cantidadCompletada: 0,
-                                                usuarioId: 'sistema', costoEstimadoTotal: costoTotalAsignado, formulacionId: f.id,
-                                                modeloPanId: modelo.id, arrobasUsadas: arrobas * fraccionArroba,
-                                                notas: `Simulador: ${arrobas} arroba(s) de ${f.nombre}`
-                                            });
-                                        }
-                                        toast.success('¡Plan lanzado a producción exitosamente!');
-                                        setActiveTab('ordenes');
-                                    } catch (e) {
-                                        toast.error('Error al lanzar simulación a producción.');
-                                    }
-                                }}
-                            />
-                        </div>
-
-                        {/* Lado derecho: Generador de Pedidos de Insumos */}
-                        <div className="space-y-4">
-                            <h3 className="text-xl font-black text-slate-800 dark:text-white flex items-center gap-2 mb-2">
-                                <ShoppingCart className="w-6 h-6 text-emerald-500" />
-                                2. Insumos Necesarios
-                            </h3>
-                            <GeneradorPedidoInsumos
-                                formulaciones={formulaciones}
-                                modelos={modelosPan}
-                                productos={productos}
-                                inventario={inventario}
-                                proveedores={proveedores}
-                                getProductoById={getProductoById}
-                                getMejorPrecio={getMejorPrecio}
-                                formatCurrency={formatCurrency}
-                                externalPlanificacion={simulacionActual}
-                                onGenerarPedido={(items) => {
-                                    toast.success(`Pedido generado con ${items.length} insumos`);
-                                    if (onNavigateTo) onNavigateTo('prepedidos');
-                                }}
-                            />
-                        </div>
-                    </div>
+                <TabsContent value="plan-diario" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <PlanDiarioView
+                        productos={productos}
+                        formulaciones={formulaciones}
+                        modelos={modelosPan}
+                        getProductoById={getProductoById}
+                        inventario={inventario}
+                        configuracion={configuracion}
+                        formatCurrency={formatCurrency}
+                        onLanzarPlan={handleLanzarPlan}
+                        onGuardarComoPlantilla={guardarComoPlantillaSemanal}
+                        ventas={ventas}
+                        planesDiarios={planesDiarios}
+                        addPlanDiario={addPlanDiario}
+                        deletePlanDiario={deletePlanDiario}
+                    />
                 </TabsContent>
 
                 {/* Tab: Semana — Planificador semanal + Vista panadero */}

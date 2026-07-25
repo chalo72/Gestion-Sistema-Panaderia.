@@ -25,10 +25,17 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Error atrapado por ErrorBoundary en', this.props.moduleName, ':', error, errorInfo);
+    
+    // Auto-recargar silenciosamente si es un error de chunk (PWA cache inválido tras update)
+    if (error.name === 'ChunkLoadError' || error.message.includes('Failed to fetch dynamically imported module')) {
+      window.location.reload();
+    }
   }
 
   public render() {
     if (this.state.hasError) {
+      const isChunkError = this.state.error?.name === 'ChunkLoadError' || this.state.error?.message?.includes('Failed to fetch dynamically imported module');
+      
       return (
         <div className="p-6 flex items-center justify-center min-h-[400px]">
           <Card className="max-w-md border-red-200 dark:border-red-900 shadow-xl">
@@ -38,7 +45,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 Error en el módulo {this.props.moduleName || 'Desconocido'}
               </CardTitle>
               <CardDescription className="text-red-800/70 dark:text-red-300/70">
-                El sistema de protección interceptó un error para evitar que toda la aplicación colapse.
+                {isChunkError 
+                  ? 'Hay una nueva versión de la aplicación disponible. Debes recargar la página.'
+                  : 'El sistema de protección interceptó un error para evitar que toda la aplicación colapse.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
@@ -49,11 +58,17 @@ export class ErrorBoundary extends Component<Props, State> {
                 {this.state.error?.message}
               </div>
               <Button 
-                onClick={() => this.setState({ hasError: false, error: null })} 
+                onClick={() => {
+                  if (isChunkError) {
+                    window.location.reload();
+                  } else {
+                    this.setState({ hasError: false, error: null });
+                  }
+                }} 
                 className="w-full gap-2 bg-red-600 hover:bg-red-700"
               >
                 <RefreshCw className="w-4 h-4" />
-                Intentar cargar de nuevo
+                {isChunkError ? 'Recargar Aplicación' : 'Intentar cargar de nuevo'}
               </Button>
             </CardContent>
           </Card>

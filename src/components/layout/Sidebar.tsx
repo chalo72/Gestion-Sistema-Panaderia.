@@ -26,7 +26,9 @@ import {
   Building2,
   MessageCircle,
   CalendarCheck,
-  RefreshCw
+  RefreshCw,
+  TrendingUp,
+  Video
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -137,6 +139,7 @@ export function Sidebar({
         { id: 'dashboard',       label: 'Centro de Mando',     icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones',  label: 'Equipo & Checklist',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia',      label: 'Mando Superior (IA)', icon: Shield,          permission: 'VER_DASHBOARD' },
+        { id: 'videovigilancia', label: 'Videovigilancia',     icon: Video,           permission: 'VER_DASHBOARD' },
       ],
     },
     {
@@ -176,8 +179,10 @@ export function Sidebar({
         { id: 'alertas',   label: 'Alertas de Costos',    icon: Bell,       permission: 'VER_ALERTAS' },
         { id: 'gastos',    label: 'Egresos y Facturas',   icon: DollarSign, permission: 'VER_FINANZAS' },
         { id: 'reportes',  label: 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_FINANZAS' },
-        { id: 'ahorro',      label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
-        { id: 'mayoristas',  label: 'Ventas al Mayor',      icon: Store,      permission: 'VER_FINANZAS' },
+        { id: 'ahorro',    label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
+        { id: 'mayoristas',label: 'Ventas al Mayor',      icon: Store,      permission: 'VER_FINANZAS' },
+        { id: 'boveda',    label: 'Bóveda / Tesorería',   icon: Wallet,     permission: 'VER_FINANZAS' },
+        { id: 'inversiones',label: 'Inversión y Crecimiento', icon: TrendingUp, permission: 'VER_FINANZAS' },
       ],
     },
     {
@@ -244,9 +249,11 @@ export function Sidebar({
           </div>
           {(!isCollapsed || isMobile) && (
             <div className="flex-1 min-w-0 animate-ag-fade-in">
-              <h1 className="text-sm font-bold text-white tracking-tight leading-tight">Gestion Panaderia</h1>
-              <h1 className="text-sm font-extrabold text-[#ff007f] tracking-tight leading-tight">Dulce Placer</h1>
-              <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">v5.1-NEXUS • {role}</p>
+              <div className="transition-opacity duration-300 w-full overflow-hidden">
+                <h1 className="text-sm font-bold text-white tracking-tight leading-tight">Gestion Panaderia</h1>
+                <h1 className="text-sm font-extrabold text-[#ff007f] tracking-tight leading-tight">Dulce Placer</h1>
+                <p className="text-[10px] text-slate-400 font-medium uppercase mt-1">v{import.meta.env.VITE_APP_VERSION || '5.3.0'}-NEXUS • {role}</p>
+              </div>
             </div>
           )}
         </div>
@@ -263,7 +270,7 @@ export function Sidebar({
       )}
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto py-4 px-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent overflow-x-hidden">
+      <div className="flex-1 overflow-y-auto pt-4 pb-24 px-4 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent overflow-x-hidden">
         {(!isCollapsed || isMobile) && (
           <div className="animate-ag-fade-in">
             <BusquedaRapida
@@ -385,7 +392,7 @@ export function Sidebar({
             className="w-full text-xs text-slate-600 hover:text-slate-400 text-center space-y-0.5 transition-colors"
           >
             <p className="font-semibold text-[#ff007f]/60">Panaderia Dulce Placer</p>
-            <p>v5.1-NEXUS • {role}</p>
+            <p>v{import.meta.env.VITE_APP_VERSION || '5.3.0'}-NEXUS • {role}</p>
           </button>
         ) : (
           <button onClick={recargar} title="Forzar actualización" className="flex justify-center w-full text-[8px] font-bold text-[#ff007f]/60 hover:text-[#ff007f]">DP</button>

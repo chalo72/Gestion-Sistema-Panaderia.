@@ -52,20 +52,29 @@ export function ProductCatalog({
     }, [productos]);
 
     const categoriasConProductos = useMemo(() => {
-        // Busca categorías conocidas con comparación insensible a mayúsculas/espacios
-        const conocidas = categorias.filter(c =>
-            (productosPorCategoria[c.nombre.toLowerCase().trim()] || 0) > 0
-        );
-        // Mostrar también categorías "huérfanas" (productos cuya categoría no está registrada en el sistema)
-        const nombresConocidosNorm = new Set(categorias.map(c => c.nombre.toLowerCase().trim()));
+        const vistas = new Set<string>();
+        
+        // Busca categorías conocidas, evitando duplicados por mayúsculas/espacios
+        const conocidas = categorias.filter(c => {
+            const key = c.nombre.toLowerCase().trim();
+            if (vistas.has(key)) return false; // Ya agregamos una categoría con este nombre normalizado
+            if ((productosPorCategoria[key] || 0) > 0) {
+                vistas.add(key);
+                return true;
+            }
+            return false;
+        });
+
+        // Mostrar también categorías "huérfanas" que no estaban en la lista de vistas
         const huerfanas = Object.keys(productosPorCategoria)
-            .filter(key => !nombresConocidosNorm.has(key) && (productosPorCategoria[key] || 0) > 0)
+            .filter(key => !vistas.has(key) && (productosPorCategoria[key] || 0) > 0)
             .map(key => ({ id: `huerfana-${key}`, nombre: key, color: '#6b7280', icono: '📦' } as Categoria));
+            
         return [...conocidas, ...huerfanas];
     }, [categorias, productosPorCategoria]);
 
-    const getCategoryIcon = (catNombre: string) => categorias.find(c => c.nombre === catNombre)?.icono || '📦';
-    const getCategoryColor = (catNombre: string) => categorias.find(c => c.nombre === catNombre)?.color || '#3b82f6';
+    const getCategoryIcon = (catNombre: string) => categorias.find(c => c.nombre.toLowerCase().trim() === catNombre.toLowerCase().trim())?.icono || '📦';
+    const getCategoryColor = (catNombre: string) => categorias.find(c => c.nombre.toLowerCase().trim() === catNombre.toLowerCase().trim())?.color || '#3b82f6';
 
     const isSearching = searchTerm.trim().length > 0;
 
@@ -313,10 +322,10 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
 
     return (
         <div className={cn(
-            "group bg-white dark:bg-slate-800 rounded-xl border transition-all cursor-pointer active:scale-[0.97] overflow-hidden flex flex-col",
+            "group bg-white dark:bg-slate-800 rounded-3xl border transition-all duration-300 cursor-pointer active:scale-[0.95] overflow-hidden flex flex-col",
             enCarrito
-                ? "border-emerald-400 dark:border-emerald-600 ring-2 ring-emerald-400/40 shadow-md shadow-emerald-500/10"
-                : "border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-900/5"
+                ? "border-emerald-400 dark:border-emerald-600 ring-2 ring-emerald-400/40 shadow-lg shadow-emerald-500/20"
+                : "border-slate-100 dark:border-slate-800 hover:border-emerald-500/30 hover:shadow-xl hover:shadow-emerald-900/10 hover:-translate-y-1"
         )}
             onClick={() => onAddToCart(producto)}>
             {/* Imagen compacta */}

@@ -14,6 +14,9 @@ export default defineConfig(({ mode }) => {
   return {
     base: "/",
     build: {
+      target: 'esnext',
+      outDir: 'dist',
+      sourcemap: true,
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
@@ -177,18 +180,6 @@ export default defineConfig(({ mode }) => {
                   statuses: [0, 200]
                 }
               }
-            },
-            {
-              // Navegación principal: Red primero, fallback a cache
-              urlPattern: ({ request }) => request.mode === 'navigate',
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'app-shell-v5',
-                networkTimeoutSeconds: 2,
-                cacheableResponse: {
-                  statuses: [0, 200]
-                }
-              }
             }
           ]
         },
@@ -207,6 +198,12 @@ export default defineConfig(({ mode }) => {
         reporter: ['text', 'html'],
         include: ['src/lib/**', 'src/hooks/**'],
         exclude: ['src/**/*.test.*', 'src/lib/seed-data.ts'],
+        thresholds: {
+          lines: 0,
+          functions: 0,
+          branches: 0,
+          statements: 0
+        },
       },
     },
     resolve: {

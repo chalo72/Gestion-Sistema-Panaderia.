@@ -45,11 +45,13 @@ interface ProductFormModalProps {
     onSubmit: (e: React.FormEvent) => void;
     formatCurrency: (val: number) => string;
     onAddCategoria?: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
+    isSubmitting?: boolean;
 }
 
 export function ProductFormModal({
     isOpen, onOpenChange, editingProducto, categorias, proveedores,
-    formData, setFormData, onSubmit, formatCurrency, onAddCategoria
+    formData, setFormData, onSubmit, formatCurrency, onAddCategoria,
+    isSubmitting = false
 }: ProductFormModalProps) {
     const tipoActual = formData.tipo || 'elaborado';
 
@@ -797,14 +799,18 @@ export function ProductFormModal({
                         </Button>
                         <Button
                             type="submit"
+                            disabled={isSubmitting}
                             className={cn(
-                                "h-12 flex-[2] text-white rounded-xl text-sm font-black shadow-lg",
+                                "h-12 flex-[2] text-white rounded-xl text-sm font-black shadow-lg transition-all",
                                 tipoActual === 'elaborado'
-                                    ? "bg-orange-500 hover:bg-orange-600 shadow-orange-200"
-                                    : "bg-blue-500 hover:bg-blue-600 shadow-blue-200"
+                                    ? "bg-orange-500 hover:bg-orange-600 shadow-orange-200 disabled:bg-orange-300"
+                                    : "bg-blue-500 hover:bg-blue-600 shadow-blue-200 disabled:bg-blue-300"
                             )}
                         >
-                            {editingProducto ? '✓ Guardar Cambios' : '+ Crear Producto'}
+                            {isSubmitting
+                                ? (editingProducto ? '⏳ Guardando...' : '⏳ Creando...')
+                                : (editingProducto ? '✓ Guardar Cambios' : '+ Crear Producto')
+                            }
                         </Button>
                     </div>
                 </form>

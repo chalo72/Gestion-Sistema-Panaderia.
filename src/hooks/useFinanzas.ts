@@ -187,7 +187,7 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
         } else {
           db.getAllGastos().then(setGastos as any).catch(() => {});
         }
-      } else if (table === 'creditos') {
+      } else if (table === 'creditos_clientes') {
         if (eventType === 'DELETE') {
           setCreditosClientes(prev => prev.filter(c => c.id !== id));
         } else {

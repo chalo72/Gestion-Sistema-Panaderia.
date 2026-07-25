@@ -19,6 +19,7 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { OfflineMonitor } from '@/components/common/OfflineMonitor';
 import type { ViewType } from '@/types';
 
 // Carga inmediata — pantallas críticas del flujo de entrada
@@ -41,6 +42,7 @@ const ControlCaja        = lazy(() => import('@/pages/ControlCaja').then(m => ({
 const Ahorros            = lazy(() => import('@/pages/Ahorros'));
 const CreditosClientes   = lazy(() => import('@/pages/CreditosClientes'));
 const AgentesIA          = lazy(() => import('@/pages/AgentesIA'));
+const Videovigilancia    = lazy(() => import('@/pages/Videovigilancia').then(m => ({ default: m.Videovigilancia })));
 const HistorialVentas    = lazy(() => import('@/pages/HistorialVentas'));
 const Oficina            = lazy(() => import('@/pages/Oficina'));
 const Trabajadores       = lazy(() => import('@/pages/Trabajadores'));
@@ -56,6 +58,8 @@ const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial
 const Clientes           = lazy(() => import('@/pages/Clientes'));
 const Seguridad          = lazy(() => import('@/pages/Seguridad'));
 const Comunicaciones     = lazy(() => import('@/pages/Comunicaciones'));
+const Boveda             = lazy(() => import('@/pages/Boveda'));
+const Inversiones        = lazy(() => import('@/pages/Inversiones'));
 
 // Fallback de carga entre páginas
 const PageLoader = () => (
@@ -111,6 +115,8 @@ const App = () => {
     addOrdenProduccion,
     updateOrdenProduccion,
     finalizarProduccion,
+    addPlanDiario,
+    planesDiarios,
     addFormulacion,
     updateFormulacion,
     deleteFormulacion,
@@ -249,6 +255,7 @@ const App = () => {
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
             nombre={user?.nombre}
+            ventas={ventas}
           />
         );
       case 'proveedores':
@@ -405,6 +412,8 @@ const App = () => {
         return (
           <Produccion 
             produccion={produccion}
+            planesDiarios={planesDiarios}
+            ventas={ventas}
             productos={productos}
             recetas={recetas}
             inventario={inventario}
@@ -414,6 +423,7 @@ const App = () => {
             addOrdenProduccion={addOrdenProduccion}
             updateOrdenProduccion={updateOrdenProduccion}
             finalizarProduccion={finalizarProduccion}
+            addPlanDiario={addPlanDiario}
             addFormulacion={addFormulacion}
             updateFormulacion={updateFormulacion}
             deleteFormulacion={deleteFormulacion}
@@ -431,11 +441,14 @@ const App = () => {
         return (
           <Recetas 
             productos={productos}
+            categorias={configuracion.categorias}
             recetas={recetas}
             formulaciones={formulaciones}
             modelosPan={modelosPan}
             getMejorPrecio={getMejorPrecio}
             getProductoById={getProductoById}
+            addProducto={addProducto}
+            updateProducto={updateProducto}
             addReceta={addReceta}
             updateReceta={updateReceta}
             deleteReceta={deleteReceta}
@@ -551,10 +564,17 @@ const App = () => {
             ventas={ventas}
             gastos={gastos}
             productos={productos}
+            proveedores={proveedores}
             generarReporte={generarReporte}
             formatCurrency={formatCurrency}
+            formulaciones={formulaciones}
+            modelosPan={modelosPan}
           />
         );
+      case 'boveda':
+        return <Boveda />;
+      case 'inversiones':
+        return <Inversiones />;
       case 'precios':
         return (
           <Precios 
@@ -621,6 +641,7 @@ const App = () => {
             formatCurrency={formatCurrency}
             onAjustarStock={onAjustarStock}
             onGenerarSugerencias={() => Promise.resolve(0)}
+            onNavigateToRecepciones={() => setCurrentView('recepciones')}
           />
         );
       case 'recepciones':
@@ -636,12 +657,28 @@ const App = () => {
             onConfirmarRecepcion={async (recepcion) => {
               const pedidoVinculado = prepedidos.find(p => p.id === recepcion.prePedidoId);
               await onConfirmarRecepcion(recepcion, pedidoVinculado);
+              
+              // Sincronización Automática con Gastos (Fase 3 Auditoría Financiera)
+              if (recepcion.totalFactura > 0) {
+                 await addGasto({
+                     descripcion: `Compra Mercancía: Factura #${recepcion.numeroFactura || 'S/N'}`,
+                     monto: recepcion.totalFactura,
+                     categoria: 'Materia Prima',
+                     fecha: recepcion.fechaFactura || new Date().toISOString(),
+                     estado: 'pagado',
+                     proveedorId: recepcion.proveedorId,
+                     metodoPago: 'efectivo',
+                     usuarioId: user?.id || 'sistema',
+                     comprobanteUrl: recepcion.imagenFactura,
+                 });
+              }
             }}
             onAddProducto={addProducto}
             onUpdateProducto={updateProducto}
             getProductoById={getProductoById}
             getProveedorById={getProveedorById}
             formatCurrency={formatCurrency}
+            onUpdatePrePedido={updatePrePedido as any}
           />
         );
       case 'configuracion':
@@ -662,6 +699,8 @@ const App = () => {
         return <Usuarios />;
       case 'agentes-ia':
         return <AgentesIA />;
+      case 'videovigilancia':
+        return <Videovigilancia />;
       case 'clientes':
         return <Clientes
           clientesExternos={clientes}
@@ -693,6 +732,7 @@ const App = () => {
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
             nombre={user?.nombre}
+            ventas={ventas}
           />
         );
     }
@@ -700,6 +740,7 @@ const App = () => {
 
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-slate-950' : 'bg-slate-50'}`}>
+      <OfflineMonitor />
       {user && (
         <Sidebar 
           currentView={currentView}

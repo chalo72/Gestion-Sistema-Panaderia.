@@ -11,7 +11,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
-import { originalDbMethods } from '@/lib/supabase-sync-bridge';
+import { originalDbMethods, supabaseDB } from '@/lib/supabase-sync-bridge';
 import { db, localAdapter } from '@/lib/database';
 
 const _sdb = new SupabaseDatabase();
@@ -55,7 +55,7 @@ const HANDLERS: Record<string, Handler> = {
     writeToLocal:    (d) => orig('addVenta', db.addVenta.bind(db))(d),
     deleteFromLocal: async () => {},
   },
-  caja: {
+  sesiones_caja: {
     localTableName:  'sesiones_caja',
     getFromSupabase: () => _sdb.getAllSesionesCaja(),
     writeToLocal:    (d) => orig('updateSesionCaja', db.updateSesionCaja.bind(db))(d),
@@ -79,7 +79,7 @@ const HANDLERS: Record<string, Handler> = {
     writeToLocal:    (d) => orig('updateGasto', db.updateGasto.bind(db))(d),
     deleteFromLocal: (id) => orig('deleteGasto', db.deleteGasto.bind(db))(id),
   },
-  creditos: {
+  creditos_clientes: {
     localTableName:  'creditos_clientes',
     getFromSupabase: () => _sdb.getAllCreditosClientes(),
     writeToLocal:    (d) => orig('updateCreditoCliente', db.updateCreditoCliente.bind(db))(d),
@@ -133,6 +133,23 @@ const HANDLERS: Record<string, Handler> = {
     writeToLocal:    (d) => orig('updateCliente', db.updateCliente.bind(db))(d),
     deleteFromLocal: (id) => orig('deleteCliente', db.deleteCliente.bind(db))(id),
   },
+  configuracion: {
+    localTableName:  'configuracion',
+    getFromSupabase: () => _sdb.getAllConfiguraciones(),
+    writeToLocal:    async (d) => {
+      if (d.id === 'formulaciones_data' || d.id === 'modelosPan_data' || d.id === 'cajas_config') {
+        const val = d.categorias;
+        const toSave = Array.isArray(val) ? { id: d.id, data: val } : { id: d.id, ...val };
+        await localAdapter.setDocument('backups', d.id, toSave).catch(() => {});
+        window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+          detail: { table: d.id, eventType: 'UPDATE', id: d.id },
+        }));
+      } else {
+        await orig('saveConfiguracion', db.saveConfiguracion.bind(db))(d);
+      }
+    },
+    deleteFromLocal: async () => {},
+  },
 };
 
 export const TABLE_LABELS: Record<string, string> = {
@@ -140,11 +157,11 @@ export const TABLE_LABELS: Record<string, string> = {
   proveedores:       'Proveedores',
   precios:           'Precios',
   ventas:            'Ventas',
-  caja:              'Caja',
+  sesiones_caja:     'Caja',
   inventario:        'Inventario',
   recepciones:       'Recepciones',
   gastos:            'Gastos',
-  creditos:               'Créditos',
+  creditos_clientes: 'Créditos',
   prepedidos:             'Pre-pedidos',
   creditos_trabajadores:  'Créd. Trabajadores',
   trabajadores:           'Trabajadores',
@@ -153,6 +170,7 @@ export const TABLE_LABELS: Record<string, string> = {
   mesas:                  'Mesas',
   pedidos_activos:        'Pedidos Activos',
   clientes:               'Clientes',
+  configuracion:          'Configuración',
 };
 
 export interface RemoteSyncEvent {
@@ -235,7 +253,6 @@ export function useRealtimeSync() {
   // Sincronización manual — solo cuando el usuario lo pide
   const syncNow = useCallback(async () => {
     syncNowIds.current.clear();
-    const { supabaseDB } = await import('@/lib/supabase-sync-bridge');
 
     // Push: sube datos locales clave a Supabase
     // Para productos y proveedores: push inteligente con comparación de timestamps.
@@ -285,8 +302,8 @@ export function useRealtimeSync() {
         return items.filter((i: any) => i.productoId && UUID.test(i.productoId) && validIds.has(i.productoId));
       }, (d) => supabaseDB.updateInventarioItem(d)],
       ['prepedidos',  () => db.getAllPrePedidos(),       (d) => supabaseDB.addPrePedido(d)],
-      ['creditos',    () => db.getAllCreditosClientes(), (d) => supabaseDB.addCreditoCliente(d)],
-      ['caja',        () => db.getAllSesionesCaja(),     (d) => supabaseDB.updateSesionCaja(d)],
+      ['creditos_clientes',    () => db.getAllCreditosClientes(), (d) => supabaseDB.addCreditoCliente(d)],
+      ['sesiones_caja',        () => db.getAllSesionesCaja(),     (d) => supabaseDB.updateSesionCaja(d)],
       ['mesas',       () => db.getAllMesas(),             (d) => supabaseDB.updateMesa(d)],
       ['pedidos_activos', () => db.getAllPedidosActivos(), (d) => supabaseDB.addPedidoActivo(d)],
       ['trabajadores',    () => db.getAllTrabajadores(),   (d) => supabaseDB.addTrabajador(d)],
@@ -295,6 +312,38 @@ export function useRealtimeSync() {
       ['produccion',      () => db.getAllOrdenesProduccion(), (d) => supabaseDB.addOrdenProduccion(d)],
       ['clientes',        () => db.getAllClientes(),       (d) => supabaseDB.addCliente(d)],
       ['nominas',         () => db.getAllNominas(),        (d) => supabaseDB.addNomina(d)],
+      ['configuracion',   () => db.getConfiguracion().then(c => c ? [c] : []), (d) => supabaseDB.saveConfiguracion(d)],
+      ['formulaciones_data', async () => {
+        const val = await db.getBackup('formulaciones_data');
+        return val ? [{ id: 'formulaciones_data', categorias: val }] : [];
+      }, (d) => supabaseDB.saveBackup(d.id, d.categorias)],
+      ['modelosPan_data', async () => {
+        const val = await db.getBackup('modelosPan_data');
+        return val ? [{ id: 'modelosPan_data', categorias: val }] : [];
+      }, (d) => supabaseDB.saveBackup(d.id, d.categorias)],
+      ['cajas_config', async () => {
+        const val = await db.getBackup('cajas_config');
+        return val ? [{ id: 'cajas_config', categorias: val }] : [];
+      }, (d) => supabaseDB.saveBackup(d.id, d.categorias)],
+      ['tombstones', async () => {
+        const all = await localAdapter.getCollection('tombstones').catch(() => []);
+        return all;
+      }, async (t: any) => {
+        await supabaseDB.addTombstone(t.table, t.item_id).catch(() => {});
+        if (t.table === 'productos') await supabaseDB.deleteProducto(t.item_id).catch(() => {});
+        else if (t.table === 'proveedores') await supabaseDB.deleteProveedor(t.item_id).catch(() => {});
+        else if (t.table === 'precios') await supabaseDB.deletePrecio(t.item_id).catch(() => {});
+        else if (t.table === 'recepciones') await supabaseDB.deleteRecepcion(t.item_id).catch(() => {});
+        else if (t.table === 'gastos') await supabaseDB.deleteGasto(t.item_id).catch(() => {});
+        else if (t.table === 'creditos_clientes') await supabaseDB.deleteCreditoCliente(t.item_id).catch(() => {});
+        else if (t.table === 'pre_pedidos') await supabaseDB.deletePrePedido(t.item_id).catch(() => {});
+        else if (t.table === 'creditos_trabajadores') await supabaseDB.deleteCreditoTrabajador(t.item_id).catch(() => {});
+        else if (t.table === 'trabajadores') await supabaseDB.deleteTrabajador(t.item_id).catch(() => {});
+        else if (t.table === 'recetas') await supabaseDB.deleteReceta(t.item_id).catch(() => {});
+        else if (t.table === 'mesas') await supabaseDB.deleteMesa(t.item_id).catch(() => {});
+        else if (t.table === 'pedidos_activos') await supabaseDB.deletePedidoActivo(t.item_id).catch(() => {});
+        else if (t.table === 'clientes') await supabaseDB.deleteCliente(t.item_id).catch(() => {});
+      }],
     ];
     // Push todas las tablas en paralelo (antes era secuencial y tardaba mucho)
     await Promise.all(pushTasks.map(async ([tableName, getLocal, writeSupabase]) => {
@@ -327,11 +376,11 @@ export function useRealtimeSync() {
             case 'proveedores':       return db.getAllProveedores();
             case 'precios':           return db.getAllPrecios();
             case 'ventas':            return db.getAllVentas();
-            case 'caja':              return db.getAllSesionesCaja();
+            case 'sesiones_caja':          return db.getAllSesionesCaja();
             case 'inventario':        return db.getAllInventario();
             case 'recepciones':       return db.getAllRecepciones();
             case 'gastos':            return db.getAllGastos();
-            case 'creditos':               return db.getAllCreditosClientes();
+            case 'creditos_clientes':      return db.getAllCreditosClientes();
             case 'prepedidos':             return db.getAllPrePedidos();
             case 'creditos_trabajadores':  return db.getAllCreditosTrabajadores();
             case 'trabajadores':           return db.getAllTrabajadores();
@@ -340,6 +389,15 @@ export function useRealtimeSync() {
             case 'mesas':                  return db.getAllMesas();
             case 'pedidos_activos':        return db.getAllPedidosActivos();
             case 'clientes':               return db.getAllClientes();
+            case 'configuracion':          return db.getConfiguracion().then(c => c ? [c] : []).then(async (list) => {
+              const fData = await db.getBackup('formulaciones_data');
+              const mData = await db.getBackup('modelosPan_data');
+              const cData = await db.getBackup('cajas_config');
+              if (fData) list.push({ id: 'formulaciones_data', categorias: fData });
+              if (mData) list.push({ id: 'modelosPan_data', categorias: mData });
+              if (cData) list.push({ id: 'cajas_config', categorias: cData });
+              return list;
+            });
             default:                       return [];
           }
         })(),
@@ -387,21 +445,25 @@ export function useRealtimeSync() {
             // Sin timestamps confiables → actualizar (push ya subió local a Supabase)
             return true;
           });
-      // Items tombstoneados localmente pero que Supabase tiene vivos → restaurar
-      // SOLO proveedores: el caso "la 36 eliminada por error" justifica la restauración.
-      // Productos y precios NO se restauran: si el usuario los eliminó, la intención debe respetarse.
-      const restaurar = (table === 'proveedores')
-        ? supabaseItems.filter((i: any) => i.id && tombstoneSet.has(i.id))
-        : [];
-
       for (const item of nuevos)        await handler.writeToLocal(item).catch(() => {});
       for (const item of actualizados)  await handler.writeToLocal(item).catch(() => {});
+      
+      const restaurar = supabaseItems.filter((remote: any) => {
+        if (!remote.id || !tombstoneSet.has(remote.id)) return false;
+        const remoteTs = new Date(
+          remote.updatedAt ?? remote.fechaActualizacion ?? remote.ultimoCambio ??
+          remote.updated_at ?? remote.createdAt ?? remote.created_at ?? 0
+        ).getTime();
+        const localTs = new Date(localTsMap.get(remote.id) as string || 0).getTime();
+        return remoteTs > localTs && remoteTs > 0;
+      });
+      
       for (const item of restaurar) {
-        await db.removeTombstone(handler.localTableName, item.id).catch(() => {});
         await handler.writeToLocal(item).catch(() => {});
+        await db.removeTombstone(handler.localTableName, item.id).catch(() => {});
       }
 
-      const hayNuevos = nuevos.length > 0 || actualizados.length > 0;
+      const hayNuevos = nuevos.length > 0 || actualizados.length > 0 || restaurar.length > 0;
       if (hayNuevos) {
         setPendingChanges(prev => {
           const sin = prev.filter(e => e.table !== table);
@@ -462,6 +524,104 @@ export function useRealtimeSync() {
       }
     } catch (e) {
       console.warn('⚠️ [syncNow] nominas: error en sync', e);
+    }
+
+    // DEDUPLICACIÓN DE CLIENTES DUPLICADOS (ej: Lucho Alita)
+    try {
+      const allClients = await db.getAllClientes();
+      const clientMap = new Map<string, any[]>();
+      for (const c of allClients) {
+        if (!c.nombre) continue;
+        const norm = c.nombre.toLowerCase().trim();
+        if (!clientMap.has(norm)) clientMap.set(norm, []);
+        clientMap.get(norm)!.push(c);
+      }
+
+      for (const [norm, list] of clientMap.entries()) {
+        if (list.length > 1) {
+          const allCredits = await db.getAllCreditosClientes();
+          const canonical = list.reduce((best, cur) => {
+            const bestCredits = allCredits.filter((c: any) => c.clienteId === best.id).length;
+            const curCredits = allCredits.filter((c: any) => c.clienteId === cur.id).length;
+            if (curCredits > bestCredits) return cur;
+            return best;
+          }, list[0]);
+
+          console.log(`[Deduplicate Clients] Múltiples clientes para "${canonical.nombre}". Canónico: ${canonical.id}`);
+          
+          for (const duplicate of list) {
+            if (duplicate.id === canonical.id) continue;
+            // 1. Reasignar créditos que apuntan al duplicado
+            const dupCredits = allCredits.filter((c: any) => c.clienteId === duplicate.id);
+            for (const cred of dupCredits) {
+              cred.clienteId = canonical.id;
+              await db.updateCreditoCliente(cred);
+              await _sdb.addCreditoCliente(cred).catch(() => {});
+            }
+
+            // 2. Reasignar ventas que apuntan al duplicado
+            const allVentas = await db.getAllVentas();
+            const dupVentas = allVentas.filter((v: any) => v.clienteId === duplicate.id);
+            for (const v of dupVentas) {
+              v.clienteId = canonical.id;
+              await db.addVenta(v);
+              await _sdb.addVenta(v).catch(() => {});
+            }
+
+            // 3. Eliminar el cliente duplicado
+            await localAdapter.deleteDocument('clientes', duplicate.id).catch(() => {});
+            await _sdb.deleteCliente(duplicate.id).catch(() => {});
+          }
+          window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+            detail: { table: 'clientes', eventType: 'MANUAL', id: 'dedup' },
+          }));
+          window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+            detail: { table: 'creditos_clientes', eventType: 'MANUAL', id: 'dedup' },
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [Deduplicate Clients] Error:', err);
+    }
+
+    // PURGAR PRODUCTOS BASURA DE SUPABASE Y LOCAL
+    try {
+      const { data: supaProds } = await supabase.from('productos').select('*');
+      if (supaProds && supaProds.length > 0) {
+        const garbage = supaProds.filter((p: any) => {
+          const name = (p.nombre || '').toLowerCase();
+          const unit = (p.unidad || '').toLowerCase();
+          const cat = (p.categoria || '').toLowerCase();
+          
+          return cat === 'electrónica' || cat === 'electronica' ||
+                 name.includes('timiden') ||
+                 unit.includes('4 x e x z x x') ||
+                 name.includes('e n d r n t e l l') ||
+                 (name === 'general' && cat === 'general');
+        });
+
+        if (garbage.length > 0) {
+          console.log(`[Clean Garbage Products] Eliminando ${garbage.length} productos basura de la nube...`);
+          const garbageIds = garbage.map((g: any) => g.id);
+          // 1. Eliminar precios
+          await supabase.from('precios').delete().in('producto_id', garbageIds).catch(() => {});
+          // 2. Eliminar inventario
+          await supabase.from('inventario').delete().in('producto_id', garbageIds).catch(() => {});
+          // 3. Eliminar productos de Supabase
+          await supabase.from('productos').delete().in('id', garbageIds).catch(() => {});
+          
+          // 4. Eliminar localmente y registrar en tombstone
+          for (const id of garbageIds) {
+            await localAdapter.deleteDocument('productos', id).catch(() => {});
+            await db.addTombstone('productos', id).catch(() => {});
+          }
+          window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
+            detail: { table: 'productos', eventType: 'MANUAL', id: 'garbage' },
+          }));
+        }
+      }
+    } catch (err) {
+      console.warn('⚠️ [Clean Garbage Products] Error:', err);
     }
 
     // Limpiar IDs de syncNow después de 30s — suficiente para que lleguen todos los ecos

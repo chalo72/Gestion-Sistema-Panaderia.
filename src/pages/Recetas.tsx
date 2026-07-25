@@ -141,6 +141,47 @@ const Recetas: React.FC<RecetasProps> = ({
         }).catch(() => {});
     }, []);
 
+    // AUTO-HEAL: Corregir automáticamente costoUnitario con valores exorbitantes (ej. 50300)
+    useEffect(() => {
+        if (modelosPan.length === 0 || formulaciones.length === 0) return;
+        modelosPan.forEach(m => {
+            if ((m.costoUnitario > 10000 && m.pesoUnitarioGr < 1000) || m.margenPorcentaje < -100) {
+                const form = formulaciones.find(f => f.id === m.formulacionId);
+                if (form && form.rendimientoBaseKg > 0) {
+                    const costoPorGramo = form.costoTotalArroba / (form.rendimientoBaseKg * 1000);
+                    const costoMasaUnidad = (m.pesoUnitarioGr / (1 - ((m.mermaEstimada || 0) / 100))) * costoPorGramo;
+                    const costoInsumosAdicionales = (m.ingredientesAdicionales || []).reduce((sum, ing) => sum + (ing.costo || 0), 0);
+                    
+                    let costoVitinaUnidad = 0;
+                    if (m.piqueEmpaste && m.piqueEmpaste.insumoId !== 'none') {
+                        const pe = m.piqueEmpaste;
+                        const masaEmpasteGr = pe.pesoMasaGr || 0;
+                        
+                        const prod = productos.find(p => p.id === pe.insumoId);
+                        let cu = 0;
+                        if (prod && prod.costoBase && prod.cantidadEmbalaje) {
+                            cu = (prod.costoBase / prod.cantidadEmbalaje) / factorUnidad(prod.unidadCosto || 'kg');
+                        }
+                        const costoTotalEmpaste = cu * pe.cantidadInsumo * factorUnidad(pe.unidadInsumo || 'lb');
+
+                        const panesPorPique = (masaEmpasteGr * (1 - ((m.mermaEstimada || 0) / 100))) / m.pesoUnitarioGr;
+                        costoVitinaUnidad = panesPorPique > 0 ? costoTotalEmpaste / panesPorPique : 0;
+                    }
+                    const costoUnitReal = costoMasaUnidad + costoInsumosAdicionales + costoVitinaUnidad;
+                    if (Math.abs(m.costoUnitario - costoUnitReal) > 10 || m.margenPorcentaje < -1000) {
+                        const margenReal = m.precioVentaUnitario > 0 && costoUnitReal > 0 
+                            ? Math.round(((m.precioVentaUnitario - costoUnitReal) / m.precioVentaUnitario) * 100) 
+                            : 0;
+                        updateModeloPan(m.id, { 
+                            costoUnitario: costoUnitReal,
+                            margenPorcentaje: margenReal
+                        }).catch(() => {});
+                    }
+                }
+            }
+        });
+    }, [modelosPan, formulaciones, productos, updateModeloPan]);
+
     // ── Reparación de insumos + jalón desde Supabase ──────────────────────
     // productosReparados: null = usar prop, array = usar reparados (post-sync)
     const [productosReparados, setProductosReparados] = useState<any[] | null>(null);
@@ -236,6 +277,14 @@ const Recetas: React.FC<RecetasProps> = ({
     const [mPiezasLata, setMPiezasLata] = useState<number | undefined>();
     const [mSimLatas, setMSimLatas] = useState<number>(1);
     const [mIngredientes, setMIngredientes] = useState<{productoId: string, cantidad: number, unidad: string, costo: number}[]>([]);
+    
+    // Estados para Empaste / Vitina
+    const [mEmpasteInsumoId, setMEmpasteInsumoId] = useState<string>('');
+    const [mEmpasteCant, setMEmpasteCant] = useState<number | undefined>();
+    const [mEmpasteUnidad, setMEmpasteUnidad] = useState<string>('lb');
+    const [mEmpasteCortes, setMEmpasteCortes] = useState<number | undefined>();
+    const [mEmpastePesoMasaGr, setMEmpastePesoMasaGr] = useState<number | undefined>();
+    const [mEmpasteMasaUnidad, setMEmpasteMasaUnidad] = useState<string>('lb'); // Unidad de la masa del empaste
 
     // ── Calculadora de producción ─────────────────────────────────────────
     const [calcFormulacionId, setCalcFormulacionId] = useState('');
@@ -638,6 +687,8 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
         setMFormulacionId(formulacionId || (formulaciones[0]?.id || ''));
         setMPeso(80); setMPrecioVenta(0); setMMerma(5); setMPiezasLata(undefined);
         setMSimLatas(1); setMIngredientes([]);
+        setMEmpasteInsumoId(''); setMEmpasteCant(undefined); setMEmpasteUnidad('lb');
+        setMEmpasteCortes(undefined); setMEmpastePesoMasaGr(undefined); setMEmpasteMasaUnidad('lb');
         setIsModeloOpen(true);
     };
 
@@ -646,6 +697,19 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
         setMPeso(m.pesoUnitarioGr); setMPrecioVenta(m.precioVentaUnitario);
         setMMerma(m.mermaEstimada); setMPiezasLata(m.piezasPorLata);
         setMSimLatas(1); setMIngredientes(m.ingredientesAdicionales || []);
+        
+        if (m.piqueEmpaste) {
+            setMEmpasteInsumoId(m.piqueEmpaste.insumoId);
+            setMEmpasteCant(m.piqueEmpaste.cantidadInsumo);
+            setMEmpasteUnidad(m.piqueEmpaste.unidadInsumo);
+            setMEmpasteCortes(m.piqueEmpaste.cortes);
+            setMEmpastePesoMasaGr(m.piqueEmpaste.pesoMasaGr);
+            setMEmpasteMasaUnidad((m.piqueEmpaste as any).unidadMasa || 'lb');
+        } else {
+            setMEmpasteInsumoId(''); setMEmpasteCant(undefined); setMEmpasteUnidad('lb');
+            setMEmpasteCortes(undefined); setMEmpastePesoMasaGr(undefined); setMEmpasteMasaUnidad('lb');
+        }
+        
         setIsModeloOpen(true);
     };
 
@@ -662,7 +726,16 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
             const costoMasaUnidad = (mPeso / (1 - (mMerma / 100))) * costoPorGramo;
             
             const costoInsumosAdicionales = mIngredientes.reduce((sum, ing) => sum + (ing.costo || 0), 0);
-            costoUnit = costoMasaUnidad + costoInsumosAdicionales;
+            
+            let costoVitinaUnidad = 0;
+            if (mEmpasteInsumoId && mEmpasteInsumoId !== 'none' && mEmpasteCant && mEmpasteCortes && mEmpastePesoMasaGr) {
+                const masaEmpasteGr = mEmpastePesoMasaGr * factorUnidad(mEmpasteMasaUnidad) * 1000;
+                const costoTotalEmpaste = calcularCostoIng(mEmpasteInsumoId, mEmpasteCant, mEmpasteUnidad);
+                const panesPorPique = (masaEmpasteGr * (1 - (mMerma / 100))) / mPeso;
+                costoVitinaUnidad = panesPorPique > 0 ? costoTotalEmpaste / panesPorPique : 0;
+            }
+
+            costoUnit = costoMasaUnidad + costoInsumosAdicionales + costoVitinaUnidad;
         }
 
         const margen = mPrecioVenta > 0 && costoUnit > 0
@@ -675,7 +748,14 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
             precioVentaUnitario: mPrecioVenta, costoUnitario: costoUnit,
             margenPorcentaje: margen, mermaEstimada: mMerma,
             piezasPorLata: mPiezasLata, activo: true, createdAt: new Date().toISOString(),
-            ingredientesAdicionales: mIngredientes
+            ingredientesAdicionales: mIngredientes,
+            piqueEmpaste: (mEmpasteInsumoId && mEmpasteInsumoId !== 'none' && mEmpasteCant) ? {
+                insumoId: mEmpasteInsumoId,
+                cantidadInsumo: mEmpasteCant,
+                unidadInsumo: mEmpasteUnidad as any,
+                cortes: mEmpasteCortes || 1,
+                pesoMasaGr: mEmpastePesoMasaGr ? (mEmpastePesoMasaGr * factorUnidad(mEmpasteMasaUnidad) * 1000) : (mPeso * 10)
+            } : undefined
         };
         try {
             if (editingModelo) {
@@ -1759,7 +1839,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 MODAL MODELO DE PAN
             ════════════════════════════════════════════════════════════ */}
             <Dialog open={isModeloOpen} onOpenChange={setIsModeloOpen}>
-                <DialogContent className="max-w-lg rounded-3xl p-0 border-0 bg-white dark:bg-slate-900 overflow-hidden flex flex-col max-h-[90vh]">
+                <DialogContent className="max-w-2xl rounded-3xl p-0 border-0 bg-white dark:bg-slate-900 overflow-hidden flex flex-col max-h-[90vh]">
                     <div className="h-2 w-full shrink-0 bg-gradient-to-r from-amber-400 to-orange-500" />
                     
                     <div className="p-4 sm:p-6 overflow-y-auto flex-1 scrollbar-thin">
@@ -1851,6 +1931,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                 </div>
                             </div>
 
+
                             {/* NUEVA SECCIÓN: INSUMOS ADICIONALES (RELLENOS/DECORACIÓN) */}
                             <div className="space-y-4 bg-slate-50 dark:bg-slate-800/30 p-4 rounded-2xl border border-slate-100 dark:border-slate-800">
                                 <div className="flex items-center justify-between">
@@ -1900,6 +1981,65 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                 )}
                             </div>
 
+                            {/* NUEVA SECCIÓN: EMPASTE / VITINA */}
+                            <div className="space-y-4 bg-orange-50 dark:bg-orange-950/20 p-4 rounded-2xl border border-orange-100 dark:border-orange-900/30">
+                                <div className="flex items-center justify-between mb-2">
+                                    <Label className="text-xs font-black uppercase tracking-widest text-orange-600 flex items-center gap-2">
+                                        <Layers className="w-4 h-4" /> Configuración de Empaste (Opcional)
+                                    </Label>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                    {/* Masa del Empaste - input grande y claro */}
+                                    <div className="space-y-1 col-span-2 md:col-span-1">
+                                        <Label className="text-[10px] font-bold text-slate-500 uppercase">Masa</Label>
+                                        <Input
+                                            type="number" min={0}
+                                            placeholder={mEmpasteMasaUnidad === 'lb' ? '18' : mEmpasteMasaUnidad === 'kg' ? '8' : '8165'}
+                                            value={mEmpastePesoMasaGr || ''}
+                                            onChange={e => setMEmpastePesoMasaGr(Number(e.target.value))}
+                                            className="h-10 rounded-xl text-base font-black text-center bg-white"
+                                        />
+                                        <Select value={mEmpasteMasaUnidad} onValueChange={setMEmpasteMasaUnidad}>
+                                            <SelectTrigger className="h-8 rounded-xl text-xs bg-white font-bold"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="lb">Libras (lb)</SelectItem>
+                                                <SelectItem value="kg">Kilos (kg)</SelectItem>
+                                                <SelectItem value="gr">Gramos (gr)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-1 col-span-2 md:col-span-1">
+                                        <Label className="text-[10px] font-bold text-slate-500 uppercase">Cortes</Label>
+                                        <Input type="number" min={0} placeholder="1" value={mEmpasteCortes || ''} onChange={e => setMEmpasteCortes(Number(e.target.value))} className="h-10 rounded-xl text-base font-black text-center bg-white" />
+                                        <p className="text-[9px] text-slate-400 text-center leading-tight mt-1">Nº de cortes<br/>(opcional)</p>
+                                    </div>
+                                    <div className="space-y-1 col-span-2 md:col-span-3">
+                                        <Label className="text-[10px] font-bold text-slate-500 uppercase">Insumo (Vitina, Margarina)</Label>
+                                        <div className="grid grid-cols-[2fr_1fr_1fr] gap-2">
+                                            <Select value={mEmpasteInsumoId} onValueChange={setMEmpasteInsumoId}>
+                                                <SelectTrigger className="h-10 rounded-xl text-xs bg-white"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                                                <SelectContent>
+                                                    {ingredientesDisponibles.map((p: any) => (
+                                                        <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                            {mEmpasteInsumoId && (
+                                                <>
+                                                    <Input type="number" min={0} placeholder="Cant" value={mEmpasteCant || ''} onChange={e => setMEmpasteCant(Number(e.target.value))} className="h-10 rounded-xl text-sm text-center bg-white px-2" />
+                                                    <Select value={mEmpasteUnidad} onValueChange={setMEmpasteUnidad}>
+                                                        <SelectTrigger className="h-10 rounded-xl text-xs bg-white px-2"><SelectValue /></SelectTrigger>
+                                                        <SelectContent>
+                                                            {['gr', 'kg', 'lb', 'oz'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Análisis Detallado de Costos */}
                             {mPeso > 0 && mFormulacionId && mPiezasLata && mPiezasLata > 0 && (() => {
                                 const f = formulaciones.find(x => x.id === mFormulacionId);
@@ -1915,7 +2055,26 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                 const panesTotales = mPiezasLata * mSimLatas;
                                 
                                 const costoInsumosAdicionales = mIngredientes.reduce((sum, ing) => sum + (ing.costo || 0), 0);
-                                const costoUnitarioReal = (costoMasaBruta / panesTotales) + costoInsumosAdicionales;
+                                
+                                let costoEmpaste = 0;
+                                let costoEmpasteTotal = 0;
+                                let panesDelEmpaste = 0;
+                                // Convertir masa del empaste a gramos según la unidad seleccionada
+                                const masaEmpasteGr = mEmpastePesoMasaGr
+                                    ? mEmpastePesoMasaGr * factorUnidad(mEmpasteMasaUnidad) * 1000
+                                    : 0;
+                                if (masaEmpasteGr > 0 && mEmpasteInsumoId && mEmpasteCant && mEmpasteCant > 0) {
+                                    // Usar la misma función que calcula el costo de TODOS los ingredientes
+                                    costoEmpasteTotal = calcularCostoIng(mEmpasteInsumoId, mEmpasteCant, mEmpasteUnidad);
+                                    // Panes que salen de esa masa empasteada (descontando merma de horneo)
+                                    panesDelEmpaste = (masaEmpasteGr * (1 - mMerma / 100)) / mPeso;
+                                    if (panesDelEmpaste > 0) costoEmpaste = costoEmpasteTotal / panesDelEmpaste;
+                                }
+
+                                const costoUnitarioReal = (costoMasaBruta / panesTotales) + costoInsumosAdicionales + costoEmpaste;
+
+                                // Función local para no redondear al múltiplo de 100 y ver la suma real
+                                const formatExact = (val: number) => `$ ${val.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 
                                 return (
                                     <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-2xl border border-slate-100 mt-4">
@@ -1924,18 +2083,44 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                             <p className="font-black text-slate-700 dark:text-slate-200 text-xs uppercase tracking-wider">Costo Real por Pan</p>
                                         </div>
                                         
-                                        <div className="mb-4">
-                                            <p className="text-xs text-slate-600 dark:text-slate-400 italic leading-relaxed">
-                                                "El pique de {masaTotalSimulada}g cuesta <strong>{formatCurrency(masaTotalSimulada * costoPorGramo)}</strong>. 
-                                                Se suma un {mMerma}% de merma (masa real {Math.round(masaBrutaRequerida)}g a <strong>{formatCurrency(costoMasaBruta)}</strong>). 
-                                                La masa por pan cuesta <strong>{formatCurrency(costoMasaBruta / panesTotales)}</strong>.
-                                                {costoInsumosAdicionales > 0 && <span> Se suman <strong>{formatCurrency(costoInsumosAdicionales)}</strong> en insumos (relleno/decoración) por pan.</span>}
-                                            </p>
+                                        <div className="space-y-2">
+                                            {/* Fila: Masa */}
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500">🌾 Masa ({Math.round(masaBrutaRequerida)}g, merma {mMerma}%)</span>
+                                                <span className="font-bold text-slate-700">{formatExact(costoMasaBruta / panesTotales)} / pan</span>
+                                            </div>
+                                            {/* Fila: Insumos relleno */}
+                                            {costoInsumosAdicionales > 0 && (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-500">🥚 Relleno / Decoración</span>
+                                                    <span className="font-bold text-slate-700">{formatExact(costoInsumosAdicionales)} / pan</span>
+                                                </div>
+                                            )}
+                                            {/* Fila: Empaste vitina */}
+                                            {mEmpasteInsumoId && mEmpasteCant && mEmpasteCant > 0 && (
+                                                <div className={`flex justify-between text-xs rounded-lg px-2 py-1 ${costoEmpasteTotal > 0 ? 'bg-orange-50' : 'bg-red-50 border border-red-200'}`}>
+                                                    <span className={`${costoEmpasteTotal > 0 ? 'text-orange-700' : 'text-red-700'} font-medium`}>
+                                                        🧈 Empaste: {mEmpasteCant} {mEmpasteUnidad} vitina ÷ ~{Math.round(panesDelEmpaste)} panes
+                                                        <br/>
+                                                        {costoEmpasteTotal > 0 ? (
+                                                            <span className="text-[10px] text-orange-500">({formatCurrency(costoEmpasteTotal)} total empaste)</span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-bold text-red-500">⚠️ Insumo sin costo configurado</span>
+                                                        )}
+                                                    </span>
+                                                    <span className={`font-black ${costoEmpasteTotal > 0 ? 'text-orange-700' : 'text-red-700'}`}>
+                                                        {formatExact(costoEmpaste)} / pan
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {mEmpasteInsumoId && mEmpasteCant && mEmpasteCant > 0 && costoEmpasteTotal > 0 && costoEmpaste === 0 && (
+                                                <div className="text-[10px] text-red-500">⚠ Configura la masa del empaste para calcular el costo de vitina</div>
+                                            )}
                                         </div>
-                                        
-                                        <div className="flex justify-between items-end border-t border-slate-200 dark:border-slate-700 pt-3">
+                                        <div className="flex justify-between items-end border-t border-slate-200 dark:border-slate-700 pt-3 mt-2">
                                             <span className="font-black text-slate-500 dark:text-slate-400 text-[10px] uppercase">Costo Unitario Final</span>
                                             <span className="font-black text-3xl text-indigo-700 dark:text-indigo-400">{formatCurrency(costoUnitarioReal)}</span>
+                                            <span className="text-xs text-slate-400 font-medium ml-2">({formatExact(costoUnitarioReal)} exacto)</span>
                                         </div>
                                     </div>
                                 );

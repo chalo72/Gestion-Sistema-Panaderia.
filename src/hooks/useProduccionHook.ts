@@ -10,7 +10,8 @@ import type {
   OrdenProduccion,
   Receta,
   FormulacionBase,
-  ModeloPan
+  ModeloPan,
+  PlanProduccionDiario
 } from '@/types';
 import { toast } from 'sonner';
 
@@ -23,39 +24,80 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
   const [produccion, setProduccion] = useState<OrdenProduccion[]>([]);
   const [formulaciones, setFormulaciones] = useState<FormulacionBase[]>([]);
   const [modelosPan, setModelosPan] = useState<ModeloPan[]>([]);
+  const [planesDiarios, setPlanesDiarios] = useState<PlanProduccionDiario[]>([]);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Cargar formulaciones y modelos desde IndexedDB (principal) + localStorage (fallback)
   useEffect(() => {
     const cargarDatos = async () => {
       try {
-        // Intentar cargar desde IndexedDB primero (fuente más confiable)
-        const [formulacionesIDB, modelosIDB] = await Promise.all([
-          db.getBackup('formulaciones_data'),
-          db.getBackup('modelosPan_data'),
+        // 1. Cargar desde las 3 posibles fuentes (IDB, LocalStorage, Backups)
+        const [formulacionesIDB, modelosIDB, planesDiariosIDB] = await Promise.all([
+          db.getAllFormulaciones(),
+          db.getAllModelosPan(),
+          db.getAllPlanesDiarios()
         ]);
+        
+        const oldBackupForm = await db.getBackup('formulaciones_data');
+        const oldBackupMod = await db.getBackup('modelosPan_data');
+        
+        const localForm = JSON.parse(localStorage.getItem('formulaciones') || '[]');
+        const localMod = JSON.parse(localStorage.getItem('modelosPan') || '[]');
 
-        if (formulacionesIDB && formulacionesIDB.length > 0) {
-          setFormulaciones(formulacionesIDB);
-        } else {
-          // Fallback a localStorage
-          const savedFormulaciones = localStorage.getItem('formulaciones');
-          if (savedFormulaciones && JSON.parse(savedFormulaciones).length > 0) {
-            setFormulaciones(JSON.parse(savedFormulaciones));
-          } else if (DATOS_EJEMPLO.formulaciones) {
-            setFormulaciones(DATOS_EJEMPLO.formulaciones as FormulacionBase[]);
-          }
+        // 1.5 Cargar forzosamente desde Supabase por si la caché está rota
+        let cloudForm = [];
+        let cloudMod = [];
+        try {
+          const { supabaseDB } = await import('@/lib/supabase');
+          const serverConf = await supabaseDB.getAllConfiguraciones();
+          const sf = serverConf.find((c: any) => c.id === 'formulaciones_data');
+          const sm = serverConf.find((c: any) => c.id === 'modelosPan_data');
+          if (sf && sf.categorias) cloudForm = Array.isArray(sf.categorias) ? sf.categorias : Object.values(sf.categorias);
+          if (sm && sm.categorias) cloudMod = Array.isArray(sm.categorias) ? sm.categorias : Object.values(sm.categorias);
+        } catch (e) {
+          console.warn('No se pudo contactar a Supabase para fusión en caliente', e);
         }
 
-        if (modelosIDB && modelosIDB.length > 0) {
-          setModelosPan(modelosIDB);
-        } else {
-          const savedModelos = localStorage.getItem('modelosPan');
-          if (savedModelos && JSON.parse(savedModelos).length > 0) {
-            setModelosPan(JSON.parse(savedModelos));
-          } else if (DATOS_EJEMPLO.modelosPan) {
-            setModelosPan(DATOS_EJEMPLO.modelosPan as ModeloPan[]);
-          }
+        // 2. Fusión inteligente
+        const mergeData = (idb: any[], backup: any, local: any[], cloud: any[], defaults: any[]) => {
+           const map = new Map<string, any>();
+           // Agregar de menor a mayor prioridad para que los últimos sobreescriban
+           if (defaults && defaults.length) defaults.forEach(d => map.set(d.id, d));
+           if (backup && backup.length) backup.forEach((d: any) => map.set(d.id, d));
+           if (local && local.length) local.forEach(d => map.set(d.id, d));
+           if (idb && idb.length) idb.forEach(d => map.set(d.id, d));
+           if (cloud && cloud.length) cloud.forEach(d => { if (typeof d === 'object') map.set(d.id, d); });
+           
+           // Limpieza profunda
+           return Array.from(map.values()).filter(d => d && typeof d === 'object' && d.id && d.nombre);
+        };
+
+        const finalFormulaciones = mergeData(
+          formulacionesIDB || [], 
+          oldBackupForm, 
+          localForm, 
+          cloudForm,
+          DATOS_EJEMPLO.formulaciones || []
+        );
+
+        const finalModelos = mergeData(
+          modelosIDB || [], 
+          oldBackupMod, 
+          localMod, 
+          cloudMod,
+          DATOS_EJEMPLO.modelosPan || []
+        );
+
+        setFormulaciones(finalFormulaciones);
+        setModelosPan(finalModelos);
+        if (planesDiariosIDB && planesDiariosIDB.length > 0) {
+          setPlanesDiarios(planesDiariosIDB);
         }
+        
+        // Disparar sincronización para asegurar que la base unificada se propague a la nube
+        if (finalFormulaciones.length > 0) db.saveBackup('formulaciones_data', finalFormulaciones).catch(() => {});
+        if (finalModelos.length > 0) db.saveBackup('modelosPan_data', finalModelos).catch(() => {});
+
       } catch {
         // Si IndexedDB falla, usar localStorage
         const savedFormulaciones = localStorage.getItem('formulaciones');
@@ -70,26 +112,44 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
         } else if (DATOS_EJEMPLO.modelosPan) {
           setModelosPan(DATOS_EJEMPLO.modelosPan as ModeloPan[]);
         }
+      } finally {
+        setIsLoaded(true);
       }
     };
     cargarDatos();
   }, []);
 
+  // Sincronizar hacia la nube a través de saveBackup cuando cambien localmente
+  useEffect(() => {
+    if (isLoaded && formulaciones.length > 0) {
+      db.saveBackup('formulaciones_data', formulaciones).catch(console.error);
+    }
+  }, [formulaciones, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && modelosPan.length > 0) {
+      db.saveBackup('modelosPan_data', modelosPan).catch(console.error);
+    }
+  }, [modelosPan, isLoaded]);
+
+
   // Persistir formulaciones en localStorage + IndexedDB (doble capa)
   useEffect(() => {
+    if (!isLoaded) return;
     if (formulaciones.length > 0 || localStorage.getItem('formulaciones')) {
       localStorage.setItem('formulaciones', JSON.stringify(formulaciones));
       db.saveBackup('formulaciones_data', formulaciones).catch(() => {});
     }
-  }, [formulaciones]);
+  }, [formulaciones, isLoaded]);
 
   // Persistir modelos en localStorage + IndexedDB (doble capa)
   useEffect(() => {
+    if (!isLoaded) return;
     if (modelosPan.length > 0 || localStorage.getItem('modelosPan')) {
       localStorage.setItem('modelosPan', JSON.stringify(modelosPan));
       db.saveBackup('modelosPan_data', modelosPan).catch(() => {});
     }
-  }, [modelosPan]);
+  }, [modelosPan, isLoaded]);
 
   // --- Ordenes de Producción ---
   const addOrdenProduccion = useCallback(async (data: Omit<OrdenProduccion, 'id' | 'fechaInicio' | 'estado'>) => {
@@ -111,6 +171,25 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     await db.updateOrdenProduccion(updatedOrden as any);
     setProduccion(prev => prev.map(o => o.id === id ? updatedOrden : o));
   }, [produccion]);
+
+  const addPlanDiario = useCallback(async (data: Omit<PlanProduccionDiario, 'id' | 'creadoEn' | 'estado'>) => {
+    const plan: PlanProduccionDiario = {
+      ...data,
+      id: generateUUID(),
+      creadoEn: new Date().toISOString(),
+      estado: 'planeado'
+    };
+    await db.addPlanDiario(plan as any);
+    setPlanesDiarios(prev => [...prev, plan]);
+    toast.success('Plan diario guardado exitosamente');
+    return plan;
+  }, []);
+
+  const deletePlanDiario = useCallback(async (id: string) => {
+    await db.deletePlanDiario(id);
+    setPlanesDiarios(prev => prev.filter(p => p.id !== id));
+    toast.success('Plan eliminado');
+  }, []);
 
   const finalizarProduccion = useCallback(async (id: string, cantidadCompletada: number) => {
     const orden = produccion.find(o => o.id === id);
@@ -205,18 +284,34 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
       ...data,
       id: generateUUID(),
     };
-    setFormulaciones(prev => [...prev, formulacion]);
+    setFormulaciones(prev => {
+      const newList = [...prev, formulacion];
+      db.saveBackup('formulaciones_data', newList).catch(() => {});
+      return newList;
+    });
+    db.addFormulacion(formulacion).catch(console.error);
     toast.success('Formulación creada');
     return formulacion;
   }, []);
 
   const updateFormulacion = useCallback(async (id: string, updates: Partial<import('@/types').FormulacionBase>) => {
-    setFormulaciones(prev => prev.map(f => f.id === id ? { ...f, ...updates, fechaActualizacion: new Date().toISOString() } : f));
+    setFormulaciones(prev => {
+      const updatedList = prev.map(f => f.id === id ? { ...f, ...updates, fechaActualizacion: new Date().toISOString() } : f);
+      const updatedModel = updatedList.find(f => f.id === id);
+      if (updatedModel) db.updateFormulacion(updatedModel).catch(console.error);
+      db.saveBackup('formulaciones_data', updatedList).catch(() => {});
+      return updatedList;
+    });
     toast.success('Formulación actualizada');
   }, []);
 
   const deleteFormulacion = useCallback(async (id: string) => {
-    setFormulaciones(prev => prev.filter(f => f.id !== id));
+    setFormulaciones(prev => {
+      const newList = prev.filter(f => f.id !== id);
+      db.saveBackup('formulaciones_data', newList).catch(() => {});
+      return newList;
+    });
+    db.deleteFormulacion(id).catch(console.error);
     toast.success('Formulación eliminada');
   }, []);
 
@@ -226,18 +321,34 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
       ...data,
       id: generateUUID(),
     };
-    setModelosPan(prev => [...prev, modelo]);
+    setModelosPan(prev => {
+      const newList = [...prev, modelo];
+      db.saveBackup('modelosPan_data', newList).catch(() => {});
+      return newList;
+    });
+    db.addModeloPan(modelo).catch(console.error);
     toast.success('Modelo de pan creado');
     return modelo;
   }, []);
 
   const updateModeloPan = useCallback(async (id: string, updates: Partial<import('@/types').ModeloPan>) => {
-    setModelosPan(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
+    setModelosPan(prev => {
+      const updatedList = prev.map(m => m.id === id ? { ...m, ...updates } : m);
+      const updatedModel = updatedList.find(m => m.id === id);
+      if (updatedModel) db.updateModeloPan(updatedModel).catch(console.error);
+      db.saveBackup('modelosPan_data', updatedList).catch(() => {});
+      return updatedList;
+    });
     toast.success('Modelo actualizado');
   }, []);
 
   const deleteModeloPan = useCallback(async (id: string) => {
-    setModelosPan(prev => prev.filter(m => m.id !== id));
+    setModelosPan(prev => {
+      const newList = prev.filter(m => m.id !== id);
+      db.saveBackup('modelosPan_data', newList).catch(() => {});
+      return newList;
+    });
+    db.deleteModeloPan(id).catch(console.error);
     toast.success('Modelo eliminado');
   }, []);
 
@@ -246,10 +357,12 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     produccion, setProduccion,
     formulaciones,
     modelosPan,
+    planesDiarios,
     // Actions
     addOrdenProduccion, updateOrdenProduccion, finalizarProduccion,
     addFormulacion, updateFormulacion, deleteFormulacion,
     addModeloPan, updateModeloPan, deleteModeloPan,
+    addPlanDiario, deletePlanDiario,
     // Acción de merma
     addRegistroMerma: async (productoId: string, cantidad: number, motivo: string) => {
       await onAjustarStock(productoId, cantidad, 'salida', `Merma: ${motivo}`);

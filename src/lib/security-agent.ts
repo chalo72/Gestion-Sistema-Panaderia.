@@ -4,11 +4,14 @@
  */
 
 import { generateUUID } from '@/lib/safe-utils';
-import type { AlertaSeguridad, CuadreTurno, ConfigSeguridad, NivelAlerta, TipoAlerta } from '@/types';
+import type { AlertaSeguridad, CuadreTurno, ConfigSeguridad, NivelAlerta, TipoAlerta, ExpedienteDeudor, IncidenteVendedor, LogActividad } from '@/types';
 
 const STORAGE_KEY_ALERTAS = 'dp_security_alertas';
 const STORAGE_KEY_CUADRES = 'dp_security_cuadres';
 const STORAGE_KEY_CONFIG = 'dp_security_config';
+const STORAGE_KEY_DEUDORES = 'dp_security_deudores';
+const STORAGE_KEY_INCIDENTES = 'dp_security_incidentes';
+const STORAGE_KEY_LOGS_ACTIVIDAD = 'dp_security_logs';
 
 // ── Config por defecto ────────────────────────────────────────────
 export const CONFIG_SEGURIDAD_DEFAULT: ConfigSeguridad = {
@@ -20,6 +23,14 @@ export const CONFIG_SEGURIDAD_DEFAULT: ConfigSeguridad = {
   whatsappAdmin: '',
   pinGerente: '1234',
   activado: true,
+  geolocalizacionHabilitada: false,
+  horariosRestringidos: false,
+  horaInicioPermitida: '06:00',
+  horaFinPermitida: '22:00',
+  apiType: 'local',
+  apiKeyCloud: '',
+  ollamaUrl: 'http://localhost:11434',
+  modeloOllamaTexto: 'llama3.2',
 };
 
 // ── Persistencia local ────────────────────────────────────────────
@@ -253,3 +264,188 @@ export function generarMensajeAgente(alertas: AlertaSeguridad[], cuadres: Cuadre
   }
   return '✅ Todo en orden. Sin anomalías detectadas en las últimas 24 horas.';
 }
+
+// ── Gestión de Deudores Fugitivos ──────────────────────────────────
+export function getDeudores(): ExpedienteDeudor[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_DEUDORES);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function saveDeudores(deudores: ExpedienteDeudor[]): void {
+  localStorage.setItem(STORAGE_KEY_DEUDORES, JSON.stringify(deudores));
+}
+
+export function registrarDeudorFugitivo(deudor: Omit<ExpedienteDeudor, 'id' | 'fechaRegistro' | 'estado'>): ExpedienteDeudor {
+  const nuevo: ExpedienteDeudor = {
+    ...deudor,
+    id: generateUUID(),
+    fechaRegistro: new Date().toISOString(),
+    estado: 'pendiente'
+  };
+  const todos = getDeudores();
+  saveDeudores([nuevo, ...todos]);
+
+  // Alerta en el canal
+  crearAlerta(
+    'deudor_retornado',
+    'alta',
+    `🚨 Nuevo expediente de fuga deudor: ${deudor.clienteNombre}`,
+    `Se retiró sin pagar un monto de $${deudor.montoDeuda.toLocaleString('es-CO')}. Descripción: ${deudor.descripcionFisica}`,
+    undefined,
+    { idExpediente: nuevo.id, monto: deudor.montoDeuda }
+  );
+
+  return nuevo;
+}
+
+export function marcarDeudorRecuperado(id: string): void {
+  const deudores = getDeudores().map(d => {
+    if (d.id === id) {
+      return { ...d, estado: 'recuperado' as const, fechaRecuperacion: new Date().toISOString() };
+    }
+    return d;
+  });
+  saveDeudores(deudores);
+}
+
+// ── Gestión de Incidentes de Personal (Fraude) ──────────────────────
+export function getIncidentes(): IncidenteVendedor[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_INCIDENTES);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function saveIncidentes(incidentes: IncidenteVendedor[]): void {
+  localStorage.setItem(STORAGE_KEY_INCIDENTES, JSON.stringify(incidentes));
+}
+
+export function registrarIncidente(incidente: Omit<IncidenteVendedor, 'id' | 'fecha' | 'revisado'>): IncidenteVendedor {
+  const nuevo: IncidenteVendedor = {
+    ...incidente,
+    id: generateUUID(),
+    fecha: new Date().toISOString(),
+    revisado: false
+  };
+  const todos = getIncidentes();
+  saveIncidentes([nuevo, ...todos]);
+
+  // Generar alerta crítica para el dueño
+  crearAlerta(
+    'fraude_empleado',
+    'critica',
+    `⚠️ Incidente de personal sospechoso — ${incidente.vendedorNombre}`,
+    `${incidente.vendedorNombre} asociado a posible: ${incidente.tipoIncidente}. Detalle: ${incidente.descripcion}`,
+    incidente.vendedorNombre,
+    { idIncidente: nuevo.id, tipoIncidente: incidente.tipoIncidente }
+  );
+
+  return nuevo;
+}
+
+// ── Gestión de Logs de Actividad ───────────────────────────────────
+export function getLogsActividad(): LogActividad[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_LOGS_ACTIVIDAD);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function saveLogsActividad(logs: LogActividad[]): void {
+  // Mantener solo los últimos 500 logs para evitar saturar el almacenamiento
+  const trimmed = logs.slice(0, 500);
+  localStorage.setItem(STORAGE_KEY_LOGS_ACTIVIDAD, JSON.stringify(trimmed));
+}
+
+export function registrarLogActividad(
+  usuarioId: string,
+  usuarioNombre: string,
+  pantalla: string,
+  accion: string,
+  detalles?: string
+): void {
+  const nuevo: LogActividad = {
+    id: generateUUID(),
+    usuarioId,
+    usuarioNombre,
+    fecha: new Date().toISOString(),
+    pantalla,
+    accion,
+    detalles
+  };
+  const todos = getLogsActividad();
+  saveLogsActividad([nuevo, ...todos]);
+
+  // Si es una acción crítica, evaluar posibles fraudes
+  if (accion.includes('cancelar_orden') || accion.includes('eliminar_item')) {
+    evaluarActividadSospechosa(usuarioId, usuarioNombre, accion, detalles);
+  }
+}
+
+// ── Reglas Avanzadas de Auditoría y Control ─────────────────────────
+export function verificarHorarioAcceso(): boolean {
+  const config = getConfigSeguridad();
+  if (!config.activado || !config.horariosRestringidos) return true;
+
+  const ahora = new Date();
+  const hora = ahora.getHours();
+  const min = ahora.getMinutes();
+  
+  const parsearHora = (hStr: string) => {
+    const parts = hStr.split(':');
+    return { h: Number(parts[0] || 0), m: Number(parts[1] || 0) };
+  };
+
+  const inicio = parsearHora(config.horaInicioPermitida);
+  const fin = parsearHora(config.horaFinPermitida);
+
+  const minutosAhora = hora * 60 + min;
+  const minutosInicio = inicio.h * 60 + inicio.m;
+  const minutosFin = fin.h * 60 + fin.m;
+
+  return minutosAhora >= minutosInicio && minutosAhora <= minutosFin;
+}
+
+export function evaluarActividadSospechosa(
+  vendedorId: string,
+  vendedorNombre: string,
+  accion: string,
+  detalles?: string
+): void {
+  const config = getConfigSeguridad();
+  if (!config.activado) return;
+
+  const logs = getLogsActividad();
+  
+  // Buscar cancelaciones sospechosas: 3 cancelaciones seguidas en menos de 10 minutos
+  if (accion.includes('cancelar_orden')) {
+    const diezMinutos = 10 * 60 * 1000;
+    const ahora = Date.now();
+    const cancelacionesRecientes = logs.filter(l => 
+      l.usuarioId === vendedorId &&
+      l.accion.includes('cancelar_orden') &&
+      (ahora - new Date(l.fecha).getTime()) < diezMinutos
+    );
+
+    if (cancelacionesRecientes.length >= 3) {
+      // Registrar incidente de forma automática
+      const yaRegistrado = getIncidentes().some(i => 
+        i.vendedorId === vendedorId &&
+        i.tipoIncidente === 'cancelacion_sospechosa' &&
+        (ahora - new Date(i.fecha).getTime()) < (60 * 60 * 1000) // una alerta por hora max
+      );
+
+      if (!yaRegistrado) {
+        registrarIncidente({
+          vendedorId,
+          vendedorNombre,
+          tipoIncidente: 'cancelacion_sospechosa',
+          descripcion: `Se detectaron ${cancelacionesRecientes.length} órdenes canceladas consecutivamente en menos de 10 minutos. Posible despacho de productos sin facturar. Detalles: ${detalles || 'Sin detalles'}`
+        });
+      }
+    }
+  }
+}
+

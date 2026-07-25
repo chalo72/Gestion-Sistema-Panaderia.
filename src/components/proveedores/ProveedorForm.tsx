@@ -1,4 +1,4 @@
-﻿import { generateUUID } from '@/lib/safe-utils';
+import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Truck, Plus, Edit2, Trash2, Phone, Mail, MapPin,
@@ -107,6 +107,32 @@ type TipoEmbalaje =
   | 'bandeja'| 'bulto'  | 'bloque' | 'tarro'  | 'costal' | 'garrafa'
   | 'caneca' | 'arroba' | 'docena' | 'rollo'  | 'atado'  | 'otro';
 type DestinoUso   = 'venta' | 'insumo';
+type UnidadMedida = 'kg' | 'lb' | 'gr' | 'ml' | 'L' | 'und';
+
+// Factor de conversión a la unidad base (kg para sólidos, L para líquidos, und para contables)
+const FACTOR_UNIDAD: Record<UnidadMedida, number> = {
+  kg:  1,
+  lb:  0.4536,   // 1 libra = 0.4536 kg
+  gr:  0.001,    // 1 gramo = 0.001 kg
+  ml:  0.001,    // 1 ml = 0.001 L
+  L:   1,
+  und: 1,
+};
+
+const UNIDADES_MEDIDA: { value: UnidadMedida; label: string; emoji: string }[] = [
+  { value: 'kg',  label: 'kg',   emoji: '⚖️' },
+  { value: 'lb',  label: 'lb',   emoji: '🏋️' },
+  { value: 'gr',  label: 'gr',   emoji: '🔬' },
+  { value: 'L',   label: 'L',    emoji: '🧴' },
+  { value: 'ml',  label: 'ml',   emoji: '💧' },
+  { value: 'und', label: 'und',  emoji: '🔹' },
+];
+
+const getBaseUnit = (u?: string) => {
+  if (['gr', 'lb', 'kg', 'arroba'].includes(u || 'kg')) return 'kg';
+  if (['ml', 'L'].includes(u || 'kg')) return 'L';
+  return 'und';
+};
 
 export interface ProductoCatalogo {
   uid: string;
@@ -117,6 +143,8 @@ export interface ProductoCatalogo {
   margenVenta: number;
   cantidadEmbalaje: number;
   tipoEmbalaje: TipoEmbalaje;
+  /** Unidad de medida del contenido del empaque (kg, lb, gr, ml, L, und) */
+  unidadMedida?: UnidadMedida;
   destino: DestinoUso;
   notas: string;
   costoUnitario: number;
@@ -171,7 +199,7 @@ const CATEGORIAS_VENTA = [
 const PROD_INIT: Omit<ProductoCatalogo, 'uid' | 'costoUnitario' | 'precioVenta' | 'precioVentaPack'> = {
   productoId: '', nombre: '', categoria: CATEGORIAS_INSUMO[0],
   precioCosto: 0, margenVenta: 30, cantidadEmbalaje: 1,
-  tipoEmbalaje: 'unidad', destino: 'insumo', notas: '',
+  tipoEmbalaje: 'unidad', unidadMedida: 'kg', destino: 'insumo', notas: '',
   stockRecibido: 0,
 };
 
@@ -357,10 +385,13 @@ export function ProveedorForm({
   // una nueva referencia de [] resetearía el catálogo mientras el usuario edita.
 
   const costUnit = useMemo(() => {
-    const cost = Number(prodActual.precioCosto || 0);
+    const cost    = Number(prodActual.precioCosto    || 0);
     const packQty = Number(prodActual.cantidadEmbalaje || 1) || 1;
-    return cost / packQty;
-  }, [prodActual.precioCosto, prodActual.cantidadEmbalaje]);
+    const factor  = FACTOR_UNIDAD[prodActual.unidadMedida || 'kg'] ?? 1;
+    // Costo por unidad base: ej. caja 15 kg a $180.000 → $180.000 / (15 × 1) = $12.000/kg
+    // Para libras: caja 15 lb → $180.000 / (15 × 0.4536) = $26.455/kg
+    return cost / (packQty * factor);
+  }, [prodActual.precioCosto, prodActual.cantidadEmbalaje, prodActual.unidadMedida]);
 
   const sellPrice = useMemo(() => {
     // Si no hay margen definido, el precio de venta es igual al costo unitario
@@ -405,7 +436,7 @@ export function ProveedorForm({
         precioCosto: Math.round((prodActual.precioCosto || 0) / 100) * 100,
         costoUnitario: Math.round(costUnit),
         precioVenta: Math.round(sellPrice),
-        precioVentaPack: Math.round(sellPrice * (prodActual.cantidadEmbalaje || 1)),
+        precioVentaPack: Math.round((prodActual.precioCosto || 0) * (1 + Number(prodActual.margenVenta || 0) / 100)),
         stockRecibido: prodActual.stockRecibido,
       };
       if (editingUid) {
@@ -757,7 +788,7 @@ export function ProveedorForm({
                 notas: p.notasExtra || `Factura (${resultado.tipoFactura}) · Confianza: ${p.confianza}%`,
                 costoUnitario: costoUnit,
                 precioVenta: precioVentaUnit,
-                precioVentaPack: Math.round(precioVentaUnit * cantEmb / 100) * 100,
+                precioVentaPack: Math.round(p.precioCosto * (1 + margenOCR / 100)),
                 stockRecibido: p.cantidadRecibida || 0,
               };
             });
@@ -1262,10 +1293,11 @@ export function ProveedorForm({
                       {/* FILA 2: ESPECIFICACIONES FINANCIERAS */}
                       <div className="grid grid-cols-2 md:grid-cols-12 gap-3 items-end">
                         
-                        {/* Presentación (2 Cols) */}
-                        <div className="md:col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Unidad / Pack</Label>
+                        {/* Presentación (3 Cols) */}
+                        <div className="md:col-span-3 space-y-2">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Presentación del empaque</Label>
                           <div className="flex bg-white dark:bg-slate-950 rounded-xl border border-indigo-100 dark:border-indigo-900/40 p-1 h-12 items-center gap-1">
+                            {/* Tipo empaque: Caja, Bulto, Saco... */}
                             <select
                               value={prodActual.tipoEmbalaje}
                               onChange={e => setProdActual(prev => ({ ...prev, tipoEmbalaje: e.target.value as TipoEmbalaje }))}
@@ -1277,19 +1309,34 @@ export function ProveedorForm({
                                 </option>
                               ))}
                             </select>
-                            {/* [Nexus-Volt] Habilitar selector siempre para ajustar unidades o packs */}
+                            {/* Cantidad dentro del empaque */}
                             <input
                               type="number"
                               min="1"
                               value={prodActual.cantidadEmbalaje === 0 ? '' : prodActual.cantidadEmbalaje}
                               onChange={e => {
-                                const val = e.target.value === '' ? 0 : parseInt(e.target.value);
+                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
                                 setProdActual(prev => ({ ...prev, cantidadEmbalaje: val }));
                               }}
                               className="w-10 h-8 rounded-lg text-center font-black bg-indigo-50 dark:bg-indigo-900/30 border-none text-indigo-600 outline-none text-[11px] hover:bg-indigo-100 transition-all focus:ring-2 focus:ring-indigo-400 shrink-0"
-                              placeholder="0"
+                              placeholder="1"
                             />
+                            {/* Unidad de medida del contenido */}
+                            <select
+                              value={prodActual.unidadMedida || 'kg'}
+                              onChange={e => setProdActual(prev => ({ ...prev, unidadMedida: e.target.value as UnidadMedida }))}
+                              className="w-10 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 border-none text-emerald-600 outline-none text-[9px] font-black uppercase cursor-pointer text-center shrink-0"
+                              title="Unidad de medida del contenido (kg, lb, gr, L, ml, und)"
+                            >
+                              {UNIDADES_MEDIDA.map(u => (
+                                <option key={u.value} value={u.value}>{u.label}</option>
+                              ))}
+                            </select>
                           </div>
+                          {/* Hint dinámico */}
+                          <p className="text-[9px] text-slate-400 font-bold ml-1">
+                            Ej: {prodActual.tipoEmbalaje} de {prodActual.cantidadEmbalaje || 1} {prodActual.unidadMedida || 'kg'} → C.U: {formatCurrency(Math.round(costUnit))}/{getBaseUnit(prodActual.unidadMedida)}
+                          </p>
                         </div>
 
                         {/* Uso (2 Cols) */}
@@ -1336,7 +1383,9 @@ export function ProveedorForm({
 
                         {/* Valor Paca (2 Cols) */}
                         <div className="md:col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">Valor Paca *</Label>
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-indigo-500 ml-1">
+                            Valor {EMBALAJES.find(e => e.value === prodActual.tipoEmbalaje)?.label || 'Paca'} *
+                          </Label>
                           <div className="relative group/cost flex">
                               <CurrencyInput
                                   value={prodActual.precioCosto || 0}
@@ -1356,17 +1405,21 @@ export function ProveedorForm({
                           </div>
                         </div>
 
-                        {/* Costo Unitario (2 Cols) - AHORA EDITABLE */}
+                        {/* Costo por Unidad base (2 Cols) - AHORA EDITABLE */}
                         <div className="md:col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-blue-500 ml-1">Costo Unitario</Label>
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-blue-500 ml-1">
+                            Costo / {getBaseUnit(prodActual.unidadMedida)}
+                          </Label>
                           <div className="relative group flex">
                               <CurrencyInput
                                 value={costUnit > 0 ? Math.round(costUnit) : 0}
                                 onChange={(val) => {
-                                  // [Nexus-Volt] Si cambia el unitario, recalculamos el total de la paca (precioCosto)
+                                  // Cuando el usuario edita el costo unitario, recalculamos el precio del empaque
+                                  const factor = FACTOR_UNIDAD[prodActual.unidadMedida || 'kg'] ?? 1;
+                                  const qty    = Number(prodActual.cantidadEmbalaje || 1) || 1;
                                   setProdActual(prev => ({ 
                                     ...prev, 
-                                    precioCosto: val * (prev.cantidadEmbalaje || 1) 
+                                    precioCosto: val * qty * factor
                                   }));
                                 }}
                                 className="h-12 bg-blue-50/50 dark:bg-blue-900/20 border-2 border-blue-400 dark:border-blue-500/40 rounded-xl text-blue-700 dark:text-blue-400 font-black text-xs tabular-nums focus:ring-4 focus:ring-blue-500/10 transition-all w-full"
@@ -1376,7 +1429,7 @@ export function ProveedorForm({
                         </div>
 
                         {/* Margen (2 Cols) */}
-                        <div className="md:col-span-2 space-y-2">
+                        <div className="md:col-span-1 space-y-2">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-500 ml-1">Ganancia %</Label>
                           <div className="relative group">
                             <Zap className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
@@ -1398,20 +1451,24 @@ export function ProveedorForm({
 
                         {/* Venta (2 Cols) */}
                         <div className="md:col-span-2 space-y-2">
-                          <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Venta Final</Label>
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-emerald-600 ml-1">Venta / {getBaseUnit(prodActual.unidadMedida)}</Label>
                           <div className="relative group flex gap-1">
                             <CurrencyInput
                                 value={sellPrice > 0 ? Math.round(sellPrice) : 0}
                                 onChange={(newPrice) => {
                                   if (costUnit > 0) {
                                     const newMargen = ((newPrice / costUnit) - 1) * 100;
-                                    setProdActual(prev => ({ ...prev, margenVenta: Math.round(newMargen * 10) / 10 }));
+                                    setProdActual(prev => ({ ...prev, margenVenta: newMargen }));
                                   }
                                 }}
                                 icon={ShoppingCart}
                                 className="h-12 rounded-xl bg-white dark:bg-slate-950 border-emerald-100 dark:border-emerald-900/40 font-black text-xs text-emerald-700 focus:ring-4 focus:ring-emerald-500/10 w-full"
                                 placeholder="0"
                             />
+                            {/* Hint dinámico de Venta del Empaque */}
+                            <div className="absolute -bottom-5 left-1 text-[9px] text-slate-400 font-bold whitespace-nowrap">
+                              Venta {prodActual.tipoEmbalaje || 'Empaque'}: <span className="text-emerald-500 font-black">{formatCurrency(Math.round((prodActual.precioCosto || 0) * (1 + Number(prodActual.margenVenta || 0) / 100)))}</span>
+                            </div>
                             {editingUid && (
                                 <Button
                                   type="button"
@@ -1614,12 +1671,12 @@ const TableRow = React.memo(({
     </td>
     <td className="px-4 py-4 text-center">
       <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-[10px] font-black uppercase tracking-widest px-2.5 py-1">
-        {embalajes.find(e => e.value === item.tipoEmbalaje)?.emoji} {item.cantidadEmbalaje}
+        {embalajes.find(e => e.value === item.tipoEmbalaje)?.emoji} {item.cantidadEmbalaje}{(item as any).unidadMedida && (item as any).unidadMedida !== 'und' ? ` ${(item as any).unidadMedida}` : ''}
       </Badge>
     </td>
     <td className="px-4 py-4 text-right">
       <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{formatCurrency(item.precioCosto)}</p>
-      {item.cantidadEmbalaje > 1 && <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">P.U: {formatCurrency(item.costoUnitario)}</p>}
+      {item.cantidadEmbalaje > 1 && <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">P.U/{(item as any).unidadMedida || 'kg'}: {formatCurrency(item.costoUnitario)}</p>}
     </td>
     <td className="px-4 py-4 text-center font-black text-[10px] text-emerald-600">
       {item.margenVenta}%

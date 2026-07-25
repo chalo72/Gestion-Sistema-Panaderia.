@@ -46,6 +46,7 @@ interface ExpenseFormModalProps {
     isSaving?: boolean;
     isEditMode?: boolean;
     proveedores?: Proveedor[];
+    bovedas?: { id: string; nombre: string; saldo: number }[];
 }
 
 export function ExpenseFormModal({
@@ -58,6 +59,7 @@ export function ExpenseFormModal({
     isSaving,
     isEditMode = false,
     proveedores = [],
+    bovedas = [],
 }: ExpenseFormModalProps) {
     const esIngreso = !!formData.esIngreso;
     const cats = esIngreso ? CATS_INGRESO : CATS_GASTO;
@@ -229,6 +231,29 @@ export function ExpenseFormModal({
                                     <SelectItem value="__ninguno__">Sin proveedor</SelectItem>
                                     {proveedores.map(p => (
                                         <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Bóveda de origen/destino */}
+                    {bovedas.length > 0 && (
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
+                                {esIngreso ? '¿A qué bóveda entra el dinero? (Opcional)' : '¿De qué bóveda sale el dinero? (Opcional)'}
+                            </Label>
+                            <Select
+                                value={formData.bovedaId ?? '__ninguno__'}
+                                onValueChange={val => setFormData({ ...formData, bovedaId: val === '__ninguno__' ? undefined : val })}
+                            >
+                                <SelectTrigger className="h-11 rounded-xl border border-slate-200 dark:border-slate-700 font-bold">
+                                    <SelectValue placeholder="No vincular con bóveda" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="__ninguno__">No vincular con bóveda</SelectItem>
+                                    {bovedas.map(b => (
+                                        <SelectItem key={b.id} value={b.id}>{b.nombre} ({new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(b.saldo)})</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>

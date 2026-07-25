@@ -73,6 +73,10 @@ export interface IDatabase {
   updateOrdenProduccion(o: any): Promise<void>;
   batchAjustarStock(ajustes: any[]): Promise<void>;
 
+  getAllPlanesDiarios(): Promise<any[]>;
+  addPlanDiario(p: any): Promise<void>;
+  deletePlanDiario(id: string): Promise<void>;
+
   getAllInventario(): Promise<any[]>;
   getInventarioItemByProducto(id: string): Promise<any>;
   updateInventarioItem(item: any): Promise<void>;
@@ -108,9 +112,19 @@ export interface IDatabase {
   updateAlerta(a: any): Promise<void>;
   clearAllAlertas(): Promise<void>;
 
-  getAgenteMisiones(agenteId: string): Promise<any[]>;
-  getAgenteHallazgos(agenteId: string): Promise<any[]>;
+  getAgenteMisiones(agenteId?: string): Promise<any[]>;
+  saveAgenteMision(m: any): Promise<void>;
+  deleteAgenteMision(id: string): Promise<void>;
+  getAgenteHallazgos(agenteId?: string): Promise<any[]>;
   addAgenteHallazgo(agenteId: string, h: any): Promise<void>;
+  saveAgenteHallazgo(h: any): Promise<void>;
+  getAgenteConfig(agenteId: string): Promise<any>;
+  saveAgenteConfig(config: any): Promise<void>;
+  
+  // Workflows N8N
+  getAllWorkflows(): Promise<any[]>;
+  saveWorkflow(w: any): Promise<void>;
+  deleteWorkflow(id: string): Promise<void>;
   
   // Clientes (CRM)
   getAllClientes(): Promise<any[]>;
@@ -130,6 +144,14 @@ export interface IDatabase {
   getAllNominas(): Promise<any[]>;
   addNomina(n: any): Promise<void>;
   updateNomina(n: any): Promise<void>;
+
+  getBitacoraIA(): Promise<any[]>;
+  addBitacoraIA(log: any): Promise<void>;
+
+  // CCTV
+  getAllCamaras(): Promise<any[]>;
+  saveCamara(c: any): Promise<void>;
+  deleteCamara(id: string): Promise<void>;
 }
 
 /**
@@ -234,6 +256,9 @@ const COLECCIONES_PRINCIPALES = [
   'backups',
   'agente_misiones',
   'agente_hallazgos',
+  'agente_config',
+  'bitacora_ia',
+  'workflows',
 ];
 
 /**
@@ -466,9 +491,34 @@ class NexusDatabase implements IDatabase {
   }
   async addSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
   async updateSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
-  async getBackup(key: string) { return this.adapter.getDocument('backups', key); }
+  async getBackup(key: string) { 
+    const doc = await this.adapter.getDocument<any>('backups', key);
+    if (doc && doc.data && Array.isArray(doc.data)) return doc.data;
+    // Soporte para legacy arrays que se guardaron accidentalmente como objetos con keys numéricas
+    if (doc && !doc.data && Object.keys(doc).some(k => !isNaN(Number(k)))) {
+      const arr: any[] = [];
+      Object.keys(doc).forEach(k => {
+        if (!isNaN(Number(k))) arr[Number(k)] = doc[k];
+      });
+      return arr.length > 0 ? arr : doc;
+    }
+    return doc;
+  }
   async saveBackup(key: string, val: any) {
+    if (Array.isArray(val)) {
+      return this.adapter.setDocument('backups', key, { id: key, data: val });
+    }
     return this.adapter.setDocument('backups', key, { id: key, ...val });
+  }
+
+  // CCTV
+  async getAllCamaras() { return this.adapter.getCollection('camaras_cctv'); }
+  async saveCamara(c: any) {
+    if (!c.id) c.id = generateUUID();
+    return this.adapter.setDocument('camaras_cctv', c.id, c);
+  }
+  async deleteCamara(id: string) {
+    return this.adapter.deleteDocument('camaras_cctv', id);
   }
 
   // Asistencia
@@ -502,20 +552,53 @@ class NexusDatabase implements IDatabase {
   async deleteModeloPan(id: string) { return this._delete('modelosPan', id); }
 
   async getAllOrdenesProduccion() { return this.adapter.getCollection('produccion'); }
-  async addOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
-  async updateOrdenProduccion(o: any) { return this.adapter.setDocument('produccion', o.id, o); }
+  async addOrdenProduccion(o: any) { await this.syncSet('produccion', o.id, o); }
+  async updateOrdenProduccion(o: any) { await this.syncSet('produccion', o.id, o); }
+
+  async getAllPlanesDiarios() { return this.tryGet('planes_diarios'); }
+  async addPlanDiario(p: any) { await this.syncSet('planes_diarios', p.id, p); }
+  async deletePlanDiario(id: string) { await this.syncDelete('planes_diarios', id); }
 
   // Agentes
-  async getAgenteMisiones(agenteId: string) {
-    const misiones = await this.adapter.getCollection<any>('agente_misiones');
-    return misiones.filter(m => m.agenteId === agenteId);
+  async getAgenteConfig(agenteId: string) {
+    const configs = await this.adapter.getCollection<any>('agente_config');
+    return configs.find(c => c.agenteId === agenteId || c.id === agenteId);
   }
-  async getAgenteHallazgos(agenteId: string) {
+  async saveAgenteConfig(config: any) {
+    return this.adapter.setDocument('agente_config', config.id || config.agenteId, config);
+  }
+  async getAgenteMisiones(agenteId?: string) {
+    const misiones = await this.adapter.getCollection<any>('agente_misiones');
+    return agenteId ? misiones.filter(m => m.agenteId === agenteId) : misiones;
+  }
+  async saveAgenteMision(m: any) {
+    return this.adapter.setDocument('agente_misiones', m.id, m);
+  }
+  async deleteAgenteMision(id: string) {
+    return this.adapter.deleteDocument('agente_misiones', id);
+  }
+  async getAgenteHallazgos(agenteId?: string) {
     const hallazgos = await this.adapter.getCollection<any>('agente_hallazgos');
-    return hallazgos.filter(h => h.agenteId === agenteId);
+    return agenteId ? hallazgos.filter(h => h.agenteId === agenteId) : hallazgos;
   }
   async addAgenteHallazgo(agenteId: string, h: any) {
     return this.adapter.setDocument('agente_hallazgos', h.id, { ...h, agenteId });
+  }
+  async saveAgenteHallazgo(h: any) {
+    return this.adapter.setDocument('agente_hallazgos', h.id, h);
+  }
+
+  // Workflows N8N
+  async getAllWorkflows() {
+    return this.adapter.getCollection('workflows');
+  }
+  async saveWorkflow(w: any) {
+    await this.adapter.setDocument('workflows', w.id, w);
+    try { new SupabaseDatabase().saveWorkflow(w).catch(() => {}); } catch (_) {}
+  }
+  async deleteWorkflow(id: string) {
+    await this._delete('workflows', id);
+    try { new SupabaseDatabase().deleteWorkflow(id).catch(() => {}); } catch (_) {}
   }
 
   // Clientes (CRM)
@@ -595,6 +678,17 @@ class NexusDatabase implements IDatabase {
     }
   }
 
+  async getBitacoraIA(): Promise<any[]> {
+    const list = await this.adapter.getCollection<any>('bitacora_ia');
+    return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  }
+
+  async addBitacoraIA(log: any): Promise<void> {
+    if (!log.id) log.id = generateUUID();
+    if (!log.createdAt) log.createdAt = new Date().toISOString();
+    return this.adapter.setDocument('bitacora_ia', log.id, log);
+  }
+
   // Sincronización Bidireccional
   async syncCloudToLocal() {
     let cloudExito = false;
@@ -609,8 +703,8 @@ class NexusDatabase implements IDatabase {
       }
     }
 
-    // 2️⃣ Intentar Supabase si Firebase no está disponible
-    if (!cloudExito) {
+    // 2️⃣ Intentar Supabase siempre (fuente principal de datos actualizados)
+    if (true) {
       try {
         const supaDB = new SupabaseDatabase();
         const remoteProductos = await supaDB.getAllProductos();
@@ -633,34 +727,19 @@ class NexusDatabase implements IDatabase {
             { col: 'pedidos_activos',    fn: () => supaDB.getAllPedidosActivos() },
           ];
 
-          // Precargar tombstones una sola vez para todo el bloque
-          const tombstonesData = await localAdapter.getCollection<any>('tombstones') || [];
-          const deadKeys = new Set(tombstonesData.map((t: any) => `${t.table}:${t.item_id}`));
-
           for (const task of tasks) {
             try {
               const items = await task.fn();
               if (items && items.length > 0) {
-                // 🔀 MERGE BIDIRECCIONAL: Solo agregar lo que NO existe localmente.
-                // Los datos locales nunca se sobreescriben — así los productos recién creados
-                // en cualquier módulo (Productos, Mayoristas, etc.) no se pierden al sincronizar.
-                const localItems = await localAdapter.getCollection<any>(task.col);
-                const localIds = new Set(localItems.map((i: any) => i.id));
-                let nuevos = 0;
-                for (const item of items) {
-                  const key = `${task.col}:${item.id}`;
-                  if (!localIds.has(item.id) && !deadKeys.has(key)) {
-                    await localAdapter.setDocument(task.col, item.id, item);
-                    nuevos++;
-                  }
-                }
-                if (nuevos > 0) {
-                  console.log(`🔄 [NEXUS-Supabase] Merge '${task.col}': ${nuevos} items nuevos desde la nube.`);
-                } else {
-                  console.log(`✅ [NEXUS-Supabase] '${task.col}' sincronizado — sin cambios nuevos.`);
-                }
+                // 🔀 MERGE BIDIRECCIONAL EFICIENTE: Usar hydrateFromCloud (Upsert)
+                // hydrateFromCloud utiliza una sola transacción IndexedDB para insertar/actualizar
+                // todos los items. Al usar store.put(), los items existentes se actualizan y los nuevos se agregan,
+                // sin bloquear el hilo principal con múltiples awaits.
+                await (localAdapter as any).hydrateFromCloud(task.col, items);
+                console.log(`✅ [NEXUS]: '${task.col}' sincronizado y actualizado desde Supabase (${items.length} items).`);
               }
-            } catch (_) { /* colección opcional, continuar */ }
+            } catch (_) { // colección opcional, continuar 
+            }
           }
           cloudExito = true;
           console.log('✅ [NEXUS] Sincronización MERGE desde Supabase completada. Datos locales preservados.');
@@ -673,7 +752,7 @@ class NexusDatabase implements IDatabase {
     // 3️⃣ Fallback: inyectar RESCUE_DATA si aún no hay datos
     const checkProductos = await localAdapter.getCollection('productos');
 
-    if (!cloudExito || !checkProductos || checkProductos.length === 0) {
+    if (!cloudExito && (!checkProductos || checkProductos.length === 0)) {
       console.warn('⚠️ [NEXUS] Base de datos vacía o falla de nube. Inyectando RESCUE_DATA hardcodeado al IndexedDB...');
       for (const [colName, items] of Object.entries(RESCUE_DATA)) {
         if (Array.isArray(items)) {
@@ -847,9 +926,4 @@ const activeAdapter: DatabaseAdapter = firebaseAdapter
 
 export const db = new NexusDatabase(activeAdapter);
 
-db.init().then(() => {
-  console.log('[IndexedDB]: Base de datos local lista.');
-  if (firebaseAdapter) {
-    hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES);
-  }
-}).catch(console.error);
+// db.init() será llamado desde main.tsx o App.tsx para asegurar un ciclo de vida predecible.

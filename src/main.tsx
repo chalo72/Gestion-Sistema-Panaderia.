@@ -44,6 +44,8 @@ if (typeof window !== 'undefined') {
       }
     });
     originalError.apply(console, sanitizedArgs);
+    // Enviar error a Nexus Core en segundo plano
+    NexusDiagnostics.sendTelemetry('error', sanitizedArgs.join(' '));
   };
 })();
 
@@ -62,6 +64,15 @@ window.addEventListener('vite:preloadError', (event) => {
     });
   } else {
     window.location.reload();
+  }
+});
+
+// [Nexus-Shield] Ignorar errores inofensivos de ResizeObserver de ReactFlow
+window.addEventListener('error', (event) => {
+  if (event.message && (event.message.includes('ResizeObserver loop limit exceeded') || event.message.includes('ResizeObserver loop completed'))) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    console.warn('⚡ [Nexus-Shield] Ignorando error inofensivo de ResizeObserver');
   }
 });
 
@@ -102,13 +113,27 @@ const updateSW = registerSW({
 // Exponer para diagnóstico (ej: window.__updateSW(true) desde consola)
 (window as any).__updateSW = updateSW;
 
-console.log("⚙️ main.tsx: Iniciando montaje de React...");
+console.log("⚙️ main.tsx: Inicializando app...");
+import { db } from '@/lib/database'; // Nueva importación
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  console.error("❌ CRITICAL: No se encontró el elemento #root");
-} else {
+async function bootstrap() {
+  const rootElement = document.getElementById('root');
+  if (!rootElement) {
+    console.error("❌ CRITICAL: No se encontró el elemento #root");
+    return;
+  }
+
   try {
+    console.log("⚙️ main.tsx: Solicitando persistencia de almacenamiento...");
+    if (navigator.storage && navigator.storage.persist) {
+      const isPersisted = await navigator.storage.persist();
+      console.log(`💾 Persistencia de almacenamiento: ${isPersisted ? 'CONCEDIDA' : 'DENEGADA'}`);
+    }
+
+    console.log("⚙️ main.tsx: Inicializando Base de Datos local...");
+    await db.init();
+    
+    console.log("⚙️ main.tsx: Iniciando montaje de React...");
     createRoot(rootElement).render(
       <StrictMode>
         <ErrorBoundary>
@@ -122,6 +147,9 @@ if (!rootElement) {
     );
     console.log("✅ main.tsx: Renderizado inicial ejecutado exitosamente");
   } catch (err) {
-    console.error("❌ CRITICAL: Falló el renderizado inicial de React:", err);
+    console.error("❌ CRITICAL: Falló el inicio de la app:", err);
+    document.body.innerHTML = '<div style="color:red;padding:2rem;text-align:center;"><h2>⚠️ Error Crítico de Inicio</h2><p>La base de datos local no pudo iniciar. Por favor, recarga la página.</p></div>';
   }
 }
+
+bootstrap();

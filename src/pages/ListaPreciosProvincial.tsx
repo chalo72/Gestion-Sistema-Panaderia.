@@ -68,7 +68,23 @@ export default function ListaPreciosProvincial({
     // ── Productos con stock ───────────────────────────────────────────────
     const productosConStock = useMemo(() => {
         const mapa = new Map((inventario ?? []).map((i: any) => [i.producto_id, i.stock_actual ?? 0]));
-        return (productos ?? []).map(p => ({ ...p, stock: mapa.get(p.id) ?? 0 }));
+        return (productos ?? [])
+            // 🛡️ NEXUS-GUARD: Filtrar productos zombies/corruptos antes de mostrar
+            // Un producto válido para Lista de Precios debe:
+            //  1. Tener nombre real (no vacío, no empieza por "0 A edi", no solo números)
+            //  2. Tener precio de venta > 0
+            //  3. Ser de tipo 'elaborado' (para venta), no insumo/ingrediente
+            .filter(p => {
+                if (!p.nombre || p.nombre.trim() === '') return false;
+                if (p.precioVenta <= 0) return false;
+                if (p.tipo === 'ingrediente') return false;
+                // Detectar nombres corruptos: empiezan con dígito o tienen patrón "X edi" (OCR corrupto)
+                const nombreLimpio = p.nombre.trim();
+                if (/^\d/.test(nombreLimpio)) return false;           // empieza con número
+                if (/\bedi\b/i.test(nombreLimpio)) return false;      // contiene " edi " (OCR artifact)
+                return true;
+            })
+            .map(p => ({ ...p, stock: mapa.get(p.id) ?? 0 }));
     }, [productos, inventario]);
 
     // ── Categorías únicas desde productos reales ─────────────────────────
@@ -79,8 +95,10 @@ export default function ListaPreciosProvincial({
     // ── Filtrado + ordenamiento ───────────────────────────────────────────
     const filtrados = useMemo(() => {
         let lista = productosConStock.filter(p => {
-            const q = busqueda.toLowerCase();
-            const ok = !q || p.nombre.toLowerCase().includes(q) || p.descripcion?.toLowerCase().includes(q);
+            const q = busqueda.toLowerCase().trim();
+            // 🔍 Búsqueda por PREFIJO: "S" muestra solo productos que empiecen por S
+            const nombreLower = p.nombre.toLowerCase();
+            const ok = !q || nombreLower.startsWith(q) || p.categoria.toLowerCase().startsWith(q);
             const okCat = !catFiltro || p.categoria === catFiltro;
             return ok && okCat;
         });

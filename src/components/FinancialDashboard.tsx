@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { TrendingUp, TrendingDown, DollarSign, Users, ShoppingCart, AlertCircle, Calendar } from 'lucide-react';
 // Card component
 import { Button } from '@/components/ui/button';
@@ -15,10 +15,13 @@ interface DashboardMetric {
 interface FinancialDashboardProps {
   totalSales?: number;
   totalRevenue?: number;
+  totalExpenses?: number;
   activeOrders?: number;
   totalCustomers?: number;
   creditPending?: number;
   averageOrderValue?: number;
+  ventas?: any[]; // Reales
+  getProductoById?: (id: string) => any;
 }
 
 /**
@@ -28,52 +31,138 @@ interface FinancialDashboardProps {
 export function FinancialDashboard({
   totalSales = 0,
   totalRevenue = 0,
+  totalExpenses = 0,
   activeOrders = 0,
   totalCustomers = 0,
   creditPending = 0,
   averageOrderValue = 0,
+  ventas = [],
+  getProductoById,
 }: FinancialDashboardProps) {
   const [timeRange, setTimeRange] = useState<'day' | 'week' | 'month' | 'year'>('month');
+
+  // Filtrar ventas según el rango (simplificado, para escalar después)
+  const ventasFiltradas = useMemo(() => {
+    // Si tuviéramos fechas, filtraríamos aquí. Por ahora, usamos el array que llega.
+    return Array.isArray(ventas) ? ventas : [];
+  }, [ventas, timeRange]);
+
+  // Órdenes recientes: Las últimas 5
+  const ordenesRecientes = useMemo(() => {
+    const sorted = [...ventasFiltradas].sort((a, b) => {
+      const timeA = a?.fecha ? new Date(a.fecha).getTime() : 0;
+      const timeB = b?.fecha ? new Date(b.fecha).getTime() : 0;
+      return timeB - timeA;
+    });
+    return sorted.slice(0, 5).map(v => ({
+      id: v?.id?.substring(0, 6)?.toUpperCase() || 'N/A',
+      customer: v?.cliente || v?.vendedoraNombre || 'Cliente Local',
+      amount: v?.total || 0,
+      status: 'completed'
+    }));
+  }, [ventasFiltradas]);
+
+  // Productos Top: Agrupar por productoId y sumar subtotal
+  const topProductos = useMemo(() => {
+    const mapa: Record<string, { name: string; sales: number; revenue: number }> = {};
+    
+    ventasFiltradas.forEach(v => {
+      if (!v || !Array.isArray(v.items)) return;
+      v.items.forEach((item: any) => {
+        if (!item || !item.productoId) return;
+        if (!mapa[item.productoId]) {
+          const prodInfo = getProductoById ? getProductoById(item.productoId) : null;
+          mapa[item.productoId] = {
+            name: prodInfo?.nombre || 'Desconocido',
+            sales: 0,
+            revenue: 0
+          };
+        }
+        mapa[item.productoId].sales += (Number(item.cantidad) || 0);
+        mapa[item.productoId].revenue += (Number(item.subtotal) || 0);
+      });
+    });
+
+    return Object.values(mapa)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 5); // top 5
+  }, [ventasFiltradas, getProductoById]);
+
+  // Tendencia de Ventas (Real)
+  const chartData = useMemo(() => {
+    if (ventasFiltradas.length === 0) return [0, 0, 0, 0, 0, 0, 0];
+    // Agrupar ventas por fecha (ignorando hora)
+    const ventasPorDia: Record<string, number> = {};
+    ventasFiltradas.forEach(v => {
+        if (!v?.fecha) return;
+        const dia = new Date(v.fecha).toLocaleDateString();
+        ventasPorDia[dia] = (ventasPorDia[dia] || 0) + (Number(v.total) || 0);
+    });
+    // Extraer los valores
+    const valores = Object.values(ventasPorDia);
+    // Limitar a los ultimos 12 puntos
+    const ultimos = valores.slice(-12);
+    // Calcular maximo para porcentajes
+    const max = Math.max(...ultimos, 1); // evitar div by 0
+    // Mapear a porcentajes (altura 0 a 100)
+    let heights = ultimos.map(val => Math.floor((val / max) * 100));
+    // Rellenar si hay muy pocos datos para que se vea bien el grafico
+    while (heights.length < 5) {
+        heights.unshift(0);
+    }
+    return heights;
+  }, [ventasFiltradas]);
+
+  const safeTotalRevenue = Number(totalRevenue) || 0;
+  const safeTotalExpenses = Number(totalExpenses) || 0;
+  const netProfit = safeTotalRevenue - safeTotalExpenses;
 
   const metrics: DashboardMetric[] = [
     {
       title: 'Ventas Totales',
-      value: totalSales,
+      value: Number(totalSales) || 0,
       change: 12.5,
       icon: <ShoppingCart className="w-6 h-6" />,
       color: 'blue',
     },
     {
       title: 'Ingresos',
-      value: `$${totalRevenue.toFixed(2)}`,
+      value: `$${safeTotalRevenue.toFixed(2)}`,
       change: 8.2,
       icon: <DollarSign className="w-6 h-6" />,
       color: 'green',
     },
     {
-      title: 'Órdenes Activas',
-      value: activeOrders,
-      change: -3.4,
+      title: 'Gastos',
+      value: `$${safeTotalExpenses.toFixed(2)}`,
+      change: -2.4,
+      icon: <TrendingDown className="w-6 h-6" />,
+      color: 'red',
+    },
+    {
+      title: 'Utilidad Neta',
+      value: `$${netProfit.toFixed(2)}`,
+      change: 15.3,
       icon: <TrendingUp className="w-6 h-6" />,
       color: 'purple',
     },
     {
-      title: 'Clientes',
-      value: totalCustomers,
+      title: 'Clientes Atendidos',
+      value: Number(totalSales) || 0, // Como proxy si no hay clientes únicos
       change: 5.7,
       icon: <Users className="w-6 h-6" />,
       color: 'orange',
     },
     {
-      title: 'Crédito Pendiente',
-      value: `$${creditPending.toFixed(2)}`,
+      title: 'Proveedores',
+      value: Number(totalCustomers) || 0,
       change: 2.1,
       icon: <AlertCircle className="w-6 h-6" />,
       color: 'red',
     },
     {
       title: 'Ticket Promedio',
-      value: `$${averageOrderValue.toFixed(2)}`,
+      value: `$${(Number(averageOrderValue) || 0).toFixed(2)}`,
       change: 4.3,
       icon: <TrendingUp className="w-6 h-6" />,
       color: 'blue',
@@ -172,9 +261,9 @@ export function FinancialDashboard({
           Tendencia de Ventas
         </h2>
 
-        {/* Simple Chart Mock */}
+        {/* Chart */}
         <div className="h-64 bg-gradient-to-b from-blue-500/10 to-purple-500/10 dark:from-blue-500/5 dark:to-purple-500/5 rounded-xl p-6 flex flex-col justify-end gap-2">
-          {[45, 52, 48, 75, 82, 68, 90, 78, 85, 92, 88, 95].map((height, idx) => (
+          {chartData.map((height, idx) => (
             <div
               key={idx}
               className="flex-1 bg-gradient-to-t from-blue-600 to-cyan-400 rounded-sm hover:from-blue-500 hover:to-cyan-300 transition-all opacity-70 hover:opacity-100 cursor-pointer"
@@ -185,9 +274,9 @@ export function FinancialDashboard({
         </div>
 
         <div className="mt-4 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-          <span>Enero</span>
-          <span>Febrero</span>
-          <span>Marzo</span>
+          <span>Antiguo</span>
+          <span className="text-blue-500 font-semibold">Tendencia Reciente</span>
+          <span>Actual</span>
         </div>
       </div>
 
@@ -199,29 +288,29 @@ export function FinancialDashboard({
             Órdenes Recientes
           </h3>
           <div className="space-y-3">
-            {[
-              { id: '#001', customer: 'Juan Pérez', amount: 125.50, status: 'completed' },
-              { id: '#002', customer: 'María García', amount: 89.99, status: 'pending' },
-              { id: '#003', customer: 'Carlos López', amount: 250.00, status: 'processing' },
-            ].map((order, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-white/30 dark:bg-gray-800/30 rounded-lg">
-                <div>
-                  <p className="font-semibold text-gray-900 dark:text-white">{order.id}</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{order.customer}</p>
+            {ordenesRecientes.length > 0 ? (
+              ordenesRecientes.map((order, idx) => (
+                <div key={idx} className="flex items-center justify-between p-3 bg-white/30 dark:bg-gray-800/30 rounded-lg">
+                  <div>
+                    <p className="font-semibold text-gray-900 dark:text-white">#{order.id}</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">{order.customer}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-gray-900 dark:text-white">${order.amount.toFixed(2)}</p>
+                    <span className={cn(
+                      'text-xs font-semibold px-2 py-1 rounded-full',
+                      order.status === 'completed' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                      order.status === 'pending' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                      order.status === 'processing' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                    )}>
+                      {order.status === 'completed' ? '✓ Completada' : order.status === 'pending' ? '⏳ Pendiente' : '🔄 Procesando'}
+                    </span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold text-gray-900 dark:text-white">${order.amount}</p>
-                  <span className={cn(
-                    'text-xs font-semibold px-2 py-1 rounded-full',
-                    order.status === 'completed' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-                    order.status === 'pending' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-                    order.status === 'processing' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-                  )}>
-                    {order.status === 'completed' ? '✓ Completada' : order.status === 'pending' ? '⏳ Pendiente' : '🔄 Procesando'}
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400 p-4 text-center">No hay órdenes en este periodo.</p>
+            )}
           </div>
         </div>
 
@@ -231,27 +320,30 @@ export function FinancialDashboard({
             Productos Top
           </h3>
           <div className="space-y-3">
-            {[
-              { name: 'Camiseta Premium', sales: 245, revenue: 4900 },
-              { name: 'Pantalón Casual', sales: 189, revenue: 5670 },
-              { name: 'Chaqueta Sport', sales: 124, revenue: 6200 },
-            ].map((product, idx) => (
-              <div key={idx} className="p-3 bg-white/30 dark:bg-gray-800/30 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="font-semibold text-gray-900 dark:text-white">{product.name}</p>
-                  <span className="text-sm font-bold text-blue-600 dark:text-blue-400">${product.revenue}</span>
-                </div>
-                <div className="w-full bg-white/30 dark:bg-gray-700/30 rounded-full h-2">
-                  <div
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full"
-                    style={{ width: `${(product.sales / 245) * 100}%` }}
-                  />
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  {product.sales} ventas
-                </p>
-              </div>
-            ))}
+            {topProductos.length > 0 ? (
+              topProductos.map((product, idx) => {
+                const maxRevenue = Math.max(...topProductos.map(p => p.revenue), 1); // para el % de la barra
+                return (
+                  <div key={idx} className="p-3 bg-white/30 dark:bg-gray-800/30 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="font-semibold text-gray-900 dark:text-white">{product.name}</p>
+                      <span className="text-sm font-bold text-blue-600 dark:text-blue-400">${product.revenue.toFixed(2)}</span>
+                    </div>
+                    <div className="w-full bg-white/30 dark:bg-gray-700/30 rounded-full h-2">
+                      <div
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full"
+                        style={{ width: `${(product.revenue / maxRevenue) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                      {product.sales} ventas
+                    </p>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400 p-4 text-center">No hay datos suficientes.</p>
+            )}
           </div>
         </div>
       </div>

@@ -37,6 +37,26 @@ export class SupabaseDatabase implements IDatabase {
         return Promise.resolve();
     }
 
+    // --- Workflows ---
+    async saveWorkflow(w: any): Promise<void> {
+        const { error } = await supabase.from('workflows').upsert({
+            id: w.id,
+            name: w.name || 'Sin Título',
+            nodes: w.nodes || [],
+            edges: w.edges || [],
+            description: w.description || '',
+            category: w.category || '',
+            active: w.active ?? true,
+            updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+    }
+
+    async deleteWorkflow(id: string): Promise<void> {
+        const { error } = await supabase.from('workflows').delete().eq('id', id);
+        if (error) throw error;
+    }
+
     // --- Productos ---
     async getAllProductos(): Promise<DBProducto[]> {
         const { data, error } = await supabase.from('productos').select('*');
@@ -63,37 +83,72 @@ export class SupabaseDatabase implements IDatabase {
     async getAllRecetas(): Promise<any[]> {
         const { data, error } = await supabase.from('recetas').select('*');
         if (error) throw error;
-        return data.map(r => ({
-            id: r.id,
-            productoId: r.producto_id,
-            ingredientes: r.ingredientes || [],
-            porcionesResultantes: r.porciones_resultantes,
-            instrucciones: r.instrucciones,
-            fechaActualizacion: r.fecha_actualizacion
-        }));
+        return data.map(r => {
+            let instrucciones = r.instrucciones || '';
+            let extraFields = {};
+            try {
+                const parsed = JSON.parse(r.instrucciones);
+                if (parsed && typeof parsed === 'object' && parsed.hasOwnProperty('rawInstrucciones') && parsed.metadata) {
+                    instrucciones = parsed.rawInstrucciones;
+                    extraFields = parsed.metadata;
+                }
+            } catch {}
+            return {
+                id: r.id,
+                productoId: r.producto_id,
+                ingredientes: r.ingredientes || [],
+                porcionesResultantes: r.porciones_resultantes,
+                instrucciones,
+                fechaActualizacion: r.fecha_actualizacion,
+                ...extraFields
+            };
+        });
     }
 
     async getRecetaByProducto(productoId: string): Promise<any | undefined> {
         const { data, error } = await supabase.from('recetas').select('*').eq('producto_id', productoId).maybeSingle();
         if (error) throw error;
         if (!data) return undefined;
+        let instrucciones = data.instrucciones || '';
+        let extraFields = {};
+        try {
+            const parsed = JSON.parse(data.instrucciones);
+            if (parsed && typeof parsed === 'object' && parsed.hasOwnProperty('rawInstrucciones') && parsed.metadata) {
+                instrucciones = parsed.rawInstrucciones;
+                extraFields = parsed.metadata;
+            }
+        } catch {}
         return {
             id: data.id,
             productoId: data.producto_id,
             ingredientes: data.ingredientes || [],
             porcionesResultantes: data.porciones_resultantes,
-            instrucciones: data.instrucciones,
-            fechaActualizacion: data.fecha_actualizacion
+            instrucciones,
+            fechaActualizacion: data.fecha_actualizacion,
+            ...extraFields
         };
     }
 
     async addReceta(receta: any): Promise<void> {
+        const metadata = {
+            temperaturaHorno: receta.temperaturaHorno,
+            tiempoHorneado: receta.tiempoHorneado,
+            tiempoFermentacion: receta.tiempoFermentacion,
+            dificultad: receta.dificultad,
+            costoTotal: receta.costoTotal,
+            costoPorPorcion: receta.costoPorPorcion
+        };
+        const wrappedInstrucciones = JSON.stringify({
+            rawInstrucciones: receta.instrucciones || '',
+            metadata
+        });
+
         const { error } = await supabase.from('recetas').upsert({
             id: receta.id,
             producto_id: receta.productoId,
             ingredientes: receta.ingredientes,
             porciones_resultantes: receta.porcionesResultantes,
-            instrucciones: receta.instrucciones,
+            instrucciones: wrappedInstrucciones,
             fecha_actualizacion: receta.fechaActualizacion
         });
         if (error) throw error;
@@ -389,6 +444,12 @@ export class SupabaseDatabase implements IDatabase {
             latasPorHorno: data.metadata?.latasPorHorno,
             pesoArrobaKg: data.metadata?.pesoArrobaKg
         };
+    }
+
+    async getAllConfiguraciones(): Promise<any[]> {
+        const { data, error } = await supabase.from('configuracion').select('*');
+        if (error) throw error;
+        return data || [];
     }
 
     async saveConfiguracion(config: DBConfiguracion): Promise<void> {
@@ -856,12 +917,25 @@ export class SupabaseDatabase implements IDatabase {
     async addPrestamoCaja(): Promise<void> { }
     async updatePrestamoCaja(): Promise<void> { }
 
-    // --- Sentinel Backups (Solo local por diseño de privacidad) ---
+    // --- Sentinel Backups ---
     async saveBackup(id: string, data: any): Promise<void> { 
-        // Los backups pesados de Sentinel se mantienen locales para ahorrar ancho de banda
-        // Pero podríamos implementar un log de auditoría aquí en el futuro.
+        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config') {
+            const payload = Array.isArray(data) ? data : [data];
+            const { error } = await supabase.from('configuracion').upsert({
+                id: id,
+                categorias: payload
+            });
+            if (error) throw error;
+        }
     }
-    async getBackup(id: string): Promise<any> { return null; }
+    async getBackup(id: string): Promise<any> {
+        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config') {
+            const { data, error } = await supabase.from('configuracion').select('categorias').eq('id', id).maybeSingle();
+            if (error) throw error;
+            return data ? data.categorias : null;
+        }
+        return null;
+    }
 
     // --- Agente Sovereignty ---
     async getAgenteConfig(id: string): Promise<any | undefined> {

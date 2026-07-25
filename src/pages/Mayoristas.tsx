@@ -24,85 +24,11 @@ import type { Producto, PrecioProveedor, Cliente } from '@/types';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
 
-// ─── Tipos locales ───────────────────────────────────────────────────────────
-interface ClienteMayorista {
-    id: string;
-    nombre: string;
-    tipo: 'mayorista' | 'detal' | 'trabajador';
-    telefono?: string;
-    margenPersonalizado?: number; // override del margen revendedor global
-    notas?: string;
-    creadoEn: string;
-}
-
-type MetodoPago = 'efectivo' | 'nequi' | 'transferencia' | 'credito';
-
-interface Abono {
-    id: string;
-    monto: number;
-    fecha: number;
-    metodoPago: MetodoPago;
-}
-
-interface TicketPendiente {
-    id: string;
-    clienteId: string;
-    clienteNombre: string;
-    items: { productoId: string; nombre: string; precio: number; cantidad: number }[];
-    guardadoEn: number;
-}
-
-interface HistorialMayorista {
-    id: string;
-    clienteId: string;
-    clienteNombre: string;
-    items: { productoId: string; nombre: string; precio: number; cantidad: number }[];
-    total: number;
-    fecha: number;
-    fotoFactura?: string;
-    metodoPago?: MetodoPago;
-    abonos?: Abono[];
-}
-
-interface MayoristasProps {
-    productos: Producto[];
-    precios: PrecioProveedor[];
-    clientes: Cliente[];
-    addCliente: (c: any) => Promise<any>;
-    updateCliente: (id: string, updates: any) => Promise<void>;
-    deleteCliente: (id: string) => Promise<void>;
-    getMejorPrecio: (productoId: string) => PrecioProveedor | null;
-    formatCurrency: (value: number) => string;
-    onNavigateTo?: (view: string) => void;
-    cajaActiva?: any;
-    registrarVenta?: (v: any) => Promise<any>;
-    creditosClientes?: any[];
-    addCreditoCliente?: (c: any) => Promise<void>;
-    updateCreditoCliente?: (id: string, updates: any) => Promise<void>;
-    deleteCreditoCliente?: (id: string) => Promise<void>;
-    registrarPagoCredito?: (id: string, pago: any) => Promise<void>;
-}
+import type { ClienteMayorista, MetodoPago, Abono, TicketPendiente, HistorialMayorista, MayoristasProps } from '@/types/mayoristas';
 
 // Clientes se manejan por props ahora
 
-function cargarConfig(): { margenNegocio: number; margenRevendedor: number } {
-    try { return JSON.parse(localStorage.getItem('ag_mayoristas_config') || '{"margenNegocio":20,"margenRevendedor":25}'); }
-    catch { return { margenNegocio: 20, margenRevendedor: 25 }; }
-}
-
-function guardarConfig(c: { margenNegocio: number; margenRevendedor: number }) {
-    try { localStorage.setItem('ag_mayoristas_config', JSON.stringify(c)); } catch {}
-}
-
-/** Calcula el costo real de un producto */
-function calcularCosto(producto: Producto, mejorPrecio: PrecioProveedor | null): number {
-    if (mejorPrecio?.precioCosto && mejorPrecio.precioCosto > 0) return mejorPrecio.precioCosto;
-    if (producto.costoBase && producto.costoBase > 0) return producto.costoBase;
-    if (producto.margenUtilidad > 0 && producto.precioVenta > 0) {
-        return producto.precioVenta / (1 + producto.margenUtilidad / 100);
-    }
-    return 0;
-}
+import { cargarConfig, guardarConfig, calcularCosto } from '@/lib/mayoristas-utils';
 
 const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
     mayorista:  { label: 'Al por Mayor',  color: 'text-indigo-600',  bg: 'bg-indigo-50  dark:bg-indigo-950/20' },
@@ -112,6 +38,7 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
     tienda:       { label: 'Tienda',          color: 'text-indigo-600',  bg: 'bg-indigo-50  dark:bg-indigo-950/20' },
     vendedor:     { label: 'Vendedor Indep.', color: 'text-amber-600',   bg: 'bg-amber-50   dark:bg-amber-950/20'  },
     distribuidor: { label: 'Distribuidor',    color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950/20' },
+    particular:   { label: 'Particular',      color: 'text-slate-600',   bg: 'bg-slate-50 dark:bg-slate-900/20' },
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
@@ -176,9 +103,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     // Estado de Pestañas
     const [activeTab, setActiveTab] = useState('precios');
 
-    // Clientes mayoristas — Filtrados de la DB Maestra
+    // Clientes — Filtrados de la DB Maestra
+    // 🛡️ NEXUS-GUARD: Mostramos TODOS los clientes (excepto trabajadores)
+    // Esto evita que clientes válidos queden ocultos si se guardaron sin tipo o con tipo 'particular'
     const clientes = useMemo(() => {
-        return allClientes.filter(c => c.tipo === 'mayorista');
+        return allClientes.filter(c => c.tipo !== 'trabajador');
     }, [allClientes]);
 
     const [showModalCliente, setShowModalCliente] = useState(false);
@@ -1130,6 +1059,18 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             });
     }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride]);
 
+    const productosEditTicketFiltrados = useMemo(() => {
+        if (!busquedaEditTicket) return tablaDatosTodos;
+        const q = busquedaEditTicket.toLowerCase();
+        return tablaDatosTodos.filter(d => d.producto.nombre.toLowerCase().includes(q));
+    }, [tablaDatosTodos, busquedaEditTicket]);
+
+    const productosPerfilFiltrados = useMemo(() => {
+        return tablaDatosTodos
+            .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()))
+            .filter(d => !categoriaPerfil || normCat(d.producto.categoria) === normCat(categoriaPerfil));
+    }, [tablaDatosTodos, busquedaPerfil, categoriaPerfil]);
+
     // Stats del resumen
     const stats = useMemo(() => {
         const total = tablaDatos.length;
@@ -1411,9 +1352,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             if (!catMapPerfil.has(key)) catMapPerfil.set(key, cat);
         });
         const categoriasPerfil = Array.from(catMapPerfil.values()).sort();
-        const productosPerfil = tablaDatosTodos
-            .filter(d => !busquedaPerfil || d.producto.nombre.toLowerCase().includes(busquedaPerfil.toLowerCase()))
-            .filter(d => !categoriaPerfil || normCat(d.producto.categoria) === normCat(categoriaPerfil));
+        const productosPerfil = productosPerfilFiltrados;
 
         // Créditos pendientes del cliente (para botón WA del header)
         const creditosPendientesHeader = historialUnificado.filter(h => {
@@ -1629,7 +1568,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 )}
                                             </div>
                                         ) : (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
                                                 {creditosFiltrados.map(h => {
                                                     const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                                                     const saldo = h.total - abonado;
@@ -1637,28 +1576,28 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     const clienteObj = allClientes.find(c => c.id === h.clienteId);
                                                     const metodoBadgeCls: Record<string,string> = { efectivo:'bg-emerald-100 text-emerald-700', nequi:'bg-violet-100 text-violet-700', transferencia:'bg-blue-100 text-blue-700', credito:'bg-rose-100 text-rose-700' };
                                                     return (
-                                                        <div key={h.id} className="rounded-2xl overflow-hidden shadow-sm border border-indigo-200 dark:border-indigo-800 transition-all duration-200">
-                                                            <button className="w-full text-left px-3 py-2.5 flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-white dark:from-indigo-900/20 dark:to-slate-900 hover:from-indigo-100/70 transition-colors" onClick={() => toggleCreditoExpand(h.id)}>
-                                                                <div className="flex-1 min-w-0">
-                                                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                                                        <span className="text-[11px] font-black text-slate-800 dark:text-white">
+                                                        <div key={h.id} className="rounded-3xl overflow-hidden shadow-sm border border-indigo-200/60 dark:border-indigo-800/60 hover:shadow-lg transition-all duration-300">
+                                                            <button className="w-full text-left px-5 py-4 flex items-center gap-3 bg-gradient-to-r from-indigo-50/50 to-white dark:from-indigo-900/10 dark:to-slate-900 hover:from-indigo-50 transition-colors" onClick={() => toggleCreditoExpand(h.id)}>
+                                                                <div className="flex-1 min-w-0 space-y-1.5">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                                        <span className="text-sm font-black text-slate-800 dark:text-white">
                                                                             {(() => { const d = new Date(h.fecha); return isNaN(d.getTime()) ? 'Sin Fecha' : d.toLocaleDateString('es-CO',{day:'numeric',month:'short',year:'numeric'}); })()}
                                                                         </span>
-                                                                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-100 text-rose-700">Debe {formatCurrency(saldo)}</span>
+                                                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">Debe {formatCurrency(saldo)}</span>
                                                                     </div>
-                                                                    <div className="flex gap-2 mt-0.5">
-                                                                        <span className="text-[8px] text-slate-500">Compra: <b className="text-slate-700 dark:text-slate-300">{formatCurrency(h.total)}</b></span>
-                                                                        {abonado > 0 && <span className="text-[8px] text-emerald-600">Abonado: <b>{formatCurrency(abonado)}</b></span>}
+                                                                    <div className="flex gap-3">
+                                                                        <span className="text-[10px] text-slate-500">Compra: <b className="text-slate-700 dark:text-slate-300">{formatCurrency(h.total)}</b></span>
+                                                                        {abonado > 0 && <span className="text-[10px] text-emerald-600">Abonado: <b>{formatCurrency(abonado)}</b></span>}
                                                                     </div>
-                                                                    <p className="text-[9px] text-slate-500 truncate mt-0.5">
+                                                                    <p className="text-xs text-slate-500 truncate">
                                                                         {h.items.slice(0,3).map(i=>`${i.nombre}×${i.cantidad}`).join(' · ')}{h.items.length>3?` +${h.items.length-3} más`:''}
                                                                     </p>
                                                                 </div>
-                                                                <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
+                                                                <ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-300 ${expanded?'rotate-180 text-indigo-500':'text-slate-400'}`}/>
                                                             </button>
                                                             {/* Botones de acción — siempre visibles */}
-                                                            <div className="px-3 py-1.5 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 flex gap-1.5">
-                                                                <button onClick={(e)=>{e.stopPropagation();editarTicketEnPOS(h);}} className="h-7 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-[9px] font-black uppercase flex items-center justify-center gap-1 transition-colors shrink-0">
+                                                            <div className="px-5 py-3 bg-white dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+                                                                <button onClick={(e)=>{e.stopPropagation();editarTicketEnPOS(h);}} className="flex-1 h-9 px-3 rounded-xl bg-indigo-100 hover:bg-indigo-200 hover:-translate-y-0.5 text-indigo-700 text-[10px] font-black uppercase flex items-center justify-center gap-1.5 transition-all shrink-0">
                                                                     <Pencil className="w-3 h-3"/>Editar
                                                                 </button>
                                                                 {clienteObj && (
@@ -1722,13 +1661,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                         <input type="text" placeholder="Buscar producto..." value={busquedaEditTicket} onChange={e=>setBusquedaEditTicket(e.target.value)} className="w-full h-7 rounded-lg border border-indigo-200 bg-white dark:bg-slate-800 px-2 text-[10px] outline-none focus:border-indigo-400"/>
                                                                                         {busquedaEditTicket.length>=2 && (
                                                                                             <div className="max-h-32 overflow-y-auto space-y-1">
-                                                                                                {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).slice(0,8).map(d=>(
+                                                                                                {productosEditTicketFiltrados.slice(0,8).map(d=>(
                                                                                                     <button key={d.producto.id} onClick={()=>{agregarProductoAHistorial(h.id,d.producto.id,d.producto.nombre,d.precioMayorista);setBusquedaEditTicket('');}} className="w-full flex items-center justify-between px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left">
                                                                                                         <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200 truncate">{d.producto.nombre}</span>
                                                                                                         <span className="text-[9px] font-black text-indigo-600 shrink-0 ml-2">{formatCurrency(d.precioMayorista)}</span>
                                                                                                     </button>
                                                                                                 ))}
-                                                                                                {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).length===0 && <p className="text-[10px] text-slate-400 text-center py-1">Sin resultados</p>}
+                                                                                                {productosEditTicketFiltrados.length===0 && <p className="text-[10px] text-slate-400 text-center py-1">Sin resultados</p>}
                                                                                             </div>
                                                                                         )}
                                                                                     </div>
@@ -2115,13 +2054,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                                                 <input type="text" placeholder="Buscar producto..." value={busquedaEditTicket} onChange={e=>setBusquedaEditTicket(e.target.value)} className="w-full h-7 rounded-lg border border-indigo-200 bg-white dark:bg-slate-800 px-2 text-[10px] outline-none focus:border-indigo-400"/>
                                                                                                 {busquedaEditTicket.length>=2 && (
                                                                                                     <div className="max-h-32 overflow-y-auto space-y-1">
-                                                                                                        {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).slice(0,8).map(d=>(
+                                                                                                        {productosEditTicketFiltrados.slice(0,8).map(d=>(
                                                                                                             <button key={d.producto.id} onClick={()=>{agregarProductoAHistorial(h.id,d.producto.id,d.producto.nombre,d.precioMayorista);setBusquedaEditTicket('');}} className="w-full flex items-center justify-between px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-left">
                                                                                                                 <span className="text-[10px] font-bold text-slate-700 dark:text-slate-200 truncate">{d.producto.nombre}</span>
                                                                                                                 <span className="text-[9px] font-black text-indigo-600 shrink-0 ml-2">{formatCurrency(d.precioMayorista)}</span>
                                                                                                             </button>
                                                                                                         ))}
-                                                                                                        {tablaDatosTodos.filter(d=>d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).length===0 && <p className="text-[10px] text-slate-400 text-center py-1">Sin resultados</p>}
+                                                                                                        {productosEditTicketFiltrados.length===0 && <p className="text-[10px] text-slate-400 text-center py-1">Sin resultados</p>}
                                                                                                     </div>
                                                                                                 )}
                                                                                             </div>
@@ -3362,7 +3301,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                     </button>
                                                                 ))
                                                             }
-                                                            {tablaDatosTodos.filter(d => d.producto.nombre.toLowerCase().includes(busquedaEditTicket.toLowerCase())).length === 0 && (
+                                                            {productosEditTicketFiltrados.length === 0 && (
                                                                 <p className="text-[10px] text-slate-400 text-center py-2">Sin resultados</p>
                                                             )}
                                                         </div>
@@ -3597,7 +3536,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             </Card>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-12 p-1 mb-5 flex items-center gap-1">
+                <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-14 p-1 mb-5 flex items-center gap-1 overflow-x-auto no-scrollbar w-full">
                     <TabsTrigger value="precios" className="rounded-xl h-9 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <BarChart3 className="w-4 h-4 mr-2" /> Lista de Precios
                     </TabsTrigger>

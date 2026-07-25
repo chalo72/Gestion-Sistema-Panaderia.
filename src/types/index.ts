@@ -108,6 +108,10 @@ export interface FormulacionBase {
   activo: boolean;
   fechaActualizacion: string;
   mixProduccion?: MixItemProduccion[];  // Distribución % de modelos de pan por arroba
+  empasteConfig?: {                     // NUEVO: Configuración de empaste global para esta masa
+    porcentajeVitina: number;           // Ej: 9 para 9%
+    cortesPorArroba: number;            // Ej: 4 para 1/4 de arroba por pastón
+  };
 }
 
 // ============================================
@@ -124,8 +128,30 @@ export interface ModeloPan {
   costoUnitario: number;       // Calculado desde formulación
   margenPorcentaje: number;    // Margen de ganancia
   mermaEstimada: number;       // % de pérdida estimado en formado/horneado
-  piezasPorLata?: number;      // NUEVO: Cuántos panes caben en una lata
+  piezasPorLata?: number;      // Cuántos panes caben en una lata
+  ingredientesAdicionales?: {  // Rellenos específicos para este pan (Queso, Arequipe) - Siempre por pan
+    productoId: string;
+    cantidad: number;
+    unidad: string;
+    costo: number;
+  }[];
+  piqueEmpaste?: {             // NUEVO: Información del bloque de masa y su empaste (Vitina/Hojaldre)
+    pesoMasaGr: number;
+    cortes: number;
+    latas?: number;            // Cuántas latas rinde este pique
+    insumoId?: string;
+    cantidadInsumo?: number;
+    unidadInsumo?: string;
+    costoInsumoCalculado?: number;
+  };
   imagen?: string;
+  productoCatalogoId?: string; // ID del producto asociado en el POS (Catálogo General)
+  aiAnalisis?: {               // NUEVO: Análisis de rentabilidad IA individual
+    margen: number;
+    tipo: 'perdida' | 'bajo' | 'estrella' | 'normal';
+    consejo: string;
+    fechaAnalisis: string;
+  };
   activo: boolean;
   createdAt: string;
 }
@@ -261,6 +287,36 @@ export interface PlanSemana {
   updatedAt: string;
 }
 
+export interface PlanDiarioMasa {
+  formulacionId: string;
+  nombre: string;
+  arrobas: number;
+  vitinaManual?: {
+    totalGr: number;
+    porCorteGr: number;
+    masaFinalCorteKg: number;
+    numCortes: number;
+  };
+}
+
+export interface PlanDiarioItem {
+  id: string;
+  formulacionId: string;
+  modeloId: string;
+  arrobas: number;
+  piezas: number;
+  piqueGr?: number;
+}
+
+export interface PlanProduccionDiario {
+  id: string;
+  fecha: string;        // YYYY-MM-DD
+  masasObjetivo: PlanDiarioMasa[];
+  items: PlanDiarioItem[];
+  creadoEn: string;
+  estado: 'planeado' | 'en_proceso' | 'completado';
+}
+
 export type EstadoDiaPerdido = 'ignorar' | 'postergar' | 'pendiente';
 
 export interface DiaPerdido {
@@ -308,6 +364,29 @@ export interface LoteProduccion {
     cantidadUsada: number;
     loteInsumo?: string;       // Para trazabilidad hacia atrás
   }[];
+}
+
+// ============================================
+// AUDITORÍAS DE PRODUCCIÓN
+// ============================================
+export interface AuditoriaItem {
+  modeloId: string;
+  masaReqKg: number;
+  panesReales: number;
+  porcentajeArroba: number;
+}
+
+export interface AuditoriaProduccion {
+  id: string;
+  fecha: string; // YYYY-MM-DD
+  formulacionId: string;
+  cantidadArrobas: number;
+  masaTotalKg: number;
+  masaConsumidaKg: number;
+  masaLibreKg: number;
+  detalles: AuditoriaItem[];
+  analisisIA?: string;
+  createdAt: string;
 }
 
 export interface Categoria {
@@ -455,7 +534,7 @@ export interface DistribucionArrobasDia {
   arrobas: number;
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina' | 'boveda' | 'inversiones';
 
 export interface RegistroAsistencia {
   id: string;
@@ -481,6 +560,10 @@ export type TipoAlerta =
   | 'inventario_faltante'
   | 'turno_sin_cerrar'
   | 'cliente_frecuente_descuento'
+  | 'deudor_retornado'
+  | 'fraude_empleado'
+  | 'billete_falso'
+  | 'actividad_sospechosa'
   | 'agente_ia';
 
 export interface AlertaSeguridad {
@@ -522,6 +605,48 @@ export interface ConfigSeguridad {
   whatsappAdmin: string;
   pinGerente: string;
   activado: boolean;
+  geolocalizacionHabilitada: boolean;
+  horariosRestringidos: boolean;
+  horaInicioPermitida: string;
+  horaFinPermitida: string;
+  apiType: 'local' | 'anthropic' | 'openai';
+  apiKeyCloud: string;
+  ollamaUrl: string;
+  modeloOllamaTexto: string;
+}
+
+export interface ExpedienteDeudor {
+  id: string;
+  clienteNombre: string;
+  descripcionFisica: string;
+  fechaRegistro: string;
+  montoDeuda: number;
+  fotoCctv?: string;
+  observaciones?: string;
+  estado: 'pendiente' | 'recuperado';
+  fechaRecuperacion?: string;
+}
+
+export interface IncidenteVendedor {
+  id: string;
+  vendedorId: string;
+  vendedorNombre: string;
+  tipoIncidente: 'cancelacion_sospechosa' | 'despacho_sin_cobro' | 'descuento_excesivo';
+  fecha: string;
+  descripcion: string;
+  montoEstimado?: number;
+  evidenciaUrl?: string;
+  revisado: boolean;
+}
+
+export interface LogActividad {
+  id: string;
+  usuarioId: string;
+  usuarioNombre: string;
+  fecha: string;
+  pantalla: string;
+  accion: string;
+  detalles?: string;
 }
 
 // ============================================
@@ -684,6 +809,9 @@ export interface InventarioItem {
   stockMinimo: number;
   ubicacion?: string;
   ultimoMovimiento?: string;
+  fechaAgotado?: string;          // Para saber hace cuántos días está en cero
+  velocidadVentaDiaria?: number;  // Cálculo en caché del promedio de ventas/día
+  diasParaAgotarse?: number;      // Proyección basada en la velocidad
 }
 
 export interface MovimientoInventario {
@@ -866,6 +994,7 @@ export interface Gasto {
   fecha: string;
   estado: 'pendiente' | 'pagado' | 'anulado';
   proveedorId?: string;
+  presupuestoId?: string; // Link to Presupuesto Mínimo (Control Semanal)
   comprobanteUrl?: string; // URL de la imagen de la factura escaneada
   metodoPago: MetodoPago;
   usuarioId: string;
@@ -890,12 +1019,14 @@ export interface ReporteFinanciero {
 export interface VentaDiaria {
   id: string;
   fecha: string; // YYYY-MM-DD
+  turno?: 'Mañana' | 'Tarde-Noche' | 'Día Completo';
   totalEfectivo: number;
   totalNequi: number;
   totalTransferencia: number;
   totalCredito: number;
   total: number;
   notas?: string;
+  cajas?: Record<string, number>; // Caja Principal, Caja Helado, etc.
 }
 
 // ── Compromisos fijos del negocio ─────────────────────────────
@@ -904,10 +1035,23 @@ export interface CompromisoFijo {
   nombre: string;
   monto: number;
   categoria: GastoCategoria;
-  diaDeCobro: number; // día del mes (1–30)
+  diaDeCobro: number; // Para ordenamiento o si es 'mensual'/'quincenal_1'/'quincenal_2'
+  frecuencia?: 'quincenal' | 'mensual' | 'solo_q1' | 'solo_q2'; // Nuevo campo de frecuencia
   activo: boolean;
   esPropietario?: boolean; // true = pago de salario al dueño
   persona?: string; // "Yo" | "Esposa" | nombre
+}
+
+export interface PresupuestoMinimo {
+  id: string;
+  proveedor: string; // Nombre manual o nombre del proveedor
+  proveedorId?: string; // ID del proveedor real si está enlazado
+  productoId?: string; // ID del insumo real si está enlazado
+  monto: number;
+  montoBaja: number;
+  frecuencia: string; // 'Semanal', 'Quincenal', 'Mensual'
+  nota?: string;
+  estado: 'pendiente' | 'completado';
 }
 
 // ============================================================
@@ -1059,3 +1203,17 @@ export interface NominaQuincenal {
   observaciones?: string;
   createdAt: string;
 }
+
+export interface BitacoraIA {
+  id: string;
+  agenteId: string;
+  accion: string;
+  detalle: string;
+  nivel: 'info' | 'warning' | 'critical';
+  createdAt: string;
+  leido?: boolean;
+  imagenBase64?: string;
+  videoBase64?: string;
+  audioBase64?: string;
+}
+

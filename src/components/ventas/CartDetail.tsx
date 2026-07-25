@@ -244,12 +244,12 @@ export function CartDetail({
                     </div>
 
                     {/* Botones de Acción */}
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-[1fr_2fr] gap-3">
                         <Button
                             variant="outline"
                             disabled={cart.length === 0}
                             onClick={() => onProcessPayment('efectivo', 'credito')}
-                            className="h-12 rounded-xl border-2 border-slate-100 dark:border-slate-800 text-slate-500 font-bold uppercase text-[9px] tracking-widest"
+                            className="h-16 rounded-3xl border-2 border-slate-200 dark:border-slate-700 text-slate-500 font-bold uppercase text-[10px] tracking-widest hover:bg-slate-50"
                         >
                             {cart.length === 0 ? 'Vacío' : 'Fiado / Nota'}
                         </Button>
@@ -257,7 +257,7 @@ export function CartDetail({
                             // Botón dedicado para liberar mesa sin consumo
                             <Button
                                 onClick={onLiberarMesa}
-                                className="h-12 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all active:scale-95 bg-amber-500 hover:bg-amber-600 text-white"
+                                className="h-16 rounded-3xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20"
                             >
                                 Liberar Mesa
                             </Button>
@@ -265,9 +265,9 @@ export function CartDetail({
                             <Button
                                 disabled={cart.length === 0}
                                 onClick={() => onProcessPayment('efectivo', 'efectivo')}
-                                className="h-12 rounded-xl font-bold uppercase text-[10px] tracking-widest transition-all active:scale-95 bg-indigo-600 hover:bg-indigo-700 text-white shadow-indigo-500/20"
+                                className="h-16 rounded-3xl font-black uppercase text-sm tracking-widest transition-all active:scale-95 bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl shadow-emerald-500/30 border-2 border-emerald-400"
                             >
-                                Finalizar Venta
+                                💰 COBRAR
                             </Button>
                         )}
                     </div>

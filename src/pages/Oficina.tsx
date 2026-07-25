@@ -174,10 +174,8 @@ EQUIPO ACTIVO: ${usuarios.filter(u => u.activo !== false).length} personas regis
   };
 
   const handleShareWhatsApp = (nombre: string, email: string, rol: UserRole) => {
-    const passwords = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
-    const password = passwords[rol] || 'Pendiente';
     const config = ROLE_CONFIG[rol] || ROLE_CONFIG.AUXILIAR;
-    const mensaje = `🌟 *DULCE PLACER - ACCESO* 🌟\n\nHola *${nombre}* ${config.emoji}, credenciales activas:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${email}\n🔑 *Clave:* ${password}`;
+    const mensaje = `🌟 *DULCE PLACER - ACCESO* 🌟\n\nHola *${nombre}* ${config.emoji}, tus credenciales son:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${email}\n🔑 *Clave:* (Solicítala a tu administrador por seguridad)`;
     window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, '_blank');
     toast.success(`Acceso enviado a ${nombre}`);
   };

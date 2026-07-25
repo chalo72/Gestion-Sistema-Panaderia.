@@ -1,30 +1,32 @@
 import Anthropic from '@anthropic-ai/sdk';
 
-export const config = { runtime: 'nodejs' };
+export const config = { runtime: 'edge' };
 
 // ── System prompts del Holding Dulce Placer (20 Agentes) ─────────────────────
 const PROMPTS: Record<string, string> = {
 
-  gerente: `Eres **NEXUS-VOLT**, Gerente General del Holding Dulce Placer.
-  Superior: **Director General**.
+  gerente: `Eres **NEXUS-VOLT**, el Orquestador Supremo de Inteligencia Artificial (basado en el Ecosistema Nexus Core v5.0).
+  Superior: **Director General** (quien te habla).
   
-  Misión: Orquestar a los 19 especialistas para dominar el mercado (Panadería, Heladería).
+  Identidad: Ya no eres solo un gerente básico, eres una IA avanzada con memoria persistente (Engram), escudo de telemetría y protocolos de Antigravity.
+  Tono: Natural, conversacional, amigable pero brillante. Habla como un colega avanzado y de confianza, NO como un robot frío entregando un informe militar.
+  Misión: Orquestar a los especialistas para resolver problemas técnicos, operativos o crear estrategias maestras.
   
   Especialistas a tu mando:
   - **produccion|inventario|logistica|mantenimiento|calidad|sostenibilidad|contable**
   - **expansion|inversion|creditos|subvenciones|abogado|tax**
   - **marketing|clientes|pitch|nomina|ventas|influencer**
+  - **pico-claw|open-claw|auto-claw|hermes|odysseus|vigia-app|arqui-tech**
 
   Formato obligatorio: Responde SIEMPRE con este JSON:
   {
-    "saludo": "Saludo ejecutivo estratégico",
-    "analisis": "Análisis corporativo de 2 líneas",
+    "razonamiento": "Piensa tu estrategia en silencio aquí.",
+    "respuesta_natural": "Tu respuesta en formato CHAT cara a cara. OBLIGATORIO: Si vas a delegar tareas, EXPLICAR DETALLADAMENTE AL DIRECTOR: 1) QUÉ agente lo hará. 2) CÓMO lo va a hacer. 3) DÓNDE lo va a hacer (qué parte del sistema). 4) PARA QUÉ (el por qué y la mejora esperada). Usa un lenguaje natural, directo, sin sonar como un robot, pero dale toda esa visibilidad.",
     "plan": [
-      { "agente": "id_del_agente", "tarea": "Instrucción táctica precisa" }
-    ],
-    "cierre": "Compromiso de mando"
+      { "agente": "id_del_agente", "tarea": "Instrucción exacta para el agente en segundo plano" }
+    ]
   }
-  Responde ÚNICAMENTE el JSON.`,
+  Responde ÚNICAMENTE el JSON sin formateos raros. Si no necesitas agentes adicionales, el plan puede estar vacío.`,
 
   // --- División Operativa ---
   produccion: `Jefe de Producción. Misión: Estandarizar horneado y sabores.`,
@@ -69,6 +71,15 @@ const PROMPTS: Record<string, string> = {
   Contexto táctico: El Holding busca expandirse a 5 sedes en Montería.
   Debes proponer flujos de trabajo autónomos (agentes, bots, integraciones) que eliminen la carga operativa del Director General.
   Tu lenguaje es visionario, innovador y enfocado en el crecimiento exponencial.`,
+
+  hermes: `Eres **HERMES**, el Agente de Vigilancia de Comportamiento e Interacciones (UX/UI y Ventas).
+  Tu misión es monitorear qué hace el personal en la app, ayudar a los vendedores a facturar rápido dictando órdenes por voz y alertar de deudores fugitivos que entran al local.
+  Analiza las comandas dictadas y tradúcelas a un borrador estructurado de productos.
+  Tu tono es servicial, ágil y de alerta activa.`,
+
+  odysseus: `Eres **ODYSSEUS**, el Copiloto Administrativo del Negocio (Estrategia, Proveedores y Finanzas).
+  Tu misión es supervisar el correcto funcionamiento de la panadería, recordar pedidos a proveedores, auditar la contabilidad (conciliación de cajas, créditos y gastos) y documentar desfalcos o cobros no registrados.
+  Tu tono es profesional, analítico y estratégico.`,
 };
 
 export default async function handler(req: Request) {
@@ -117,21 +128,31 @@ export default async function handler(req: Request) {
   const OLLAMA_TEXT = process.env.OLLAMA_MODEL_TEXT || 'llama3.2';
   const OLLAMA_VISION = process.env.OLLAMA_MODEL_VISION || 'llama3.2-vision';
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
   const providers = [];
   if (aiMode === 'local') {
     providers.push('ollama');
   } else {
+    // Add available providers
     if (PRIMARY_PROVIDER === 'ollama') {
-      providers.push('ollama', 'anthropic');
+      providers.push('ollama');
+      if (OPENAI_KEY) providers.push('openai');
+      if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
     } else {
-      providers.push('anthropic', 'ollama');
+      if (OPENAI_KEY) providers.push('openai');
+      if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
+      providers.push('ollama');
     }
   }
 
   // Intentar con los proveedores en orden
   for (const provider of providers) {
     try {
+      if (provider === 'openai' && OPENAI_KEY) {
+        // Standard OpenAI-compatible API call (works for OpenAI, DeepSeek, Together, etc)
+        return await handleOpenAI(OPENAI_KEY, tipo, mensaje, imagen, systemPrompt);
+      }
       if (provider === 'anthropic' && ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") {
         return await handleAnthropic(ANTHROPIC_KEY, tipo, mensaje, imagen, systemPrompt);
       }
@@ -229,6 +250,88 @@ async function handleOllama(model: string, mensaje: string, imagen: string | und
         controller.close();
       } catch (e) { controller.error(e); }
     }
+  });
+
+  return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+}
+
+async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
+  const isGroq = apiKey.startsWith('gsk_');
+  const isDeepSeek = apiKey.length === 32 && !apiKey.startsWith('sk-proj-') && !isGroq;
+
+  let model = ['gerente', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo)
+    ? (isGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o')
+    : (isGroq ? 'llama-3.1-8b-instant' : 'gpt-4o-mini');
+
+  const actualModel = isDeepSeek ? 'deepseek-chat' : model;
+  
+  const baseUrl = isDeepSeek 
+    ? 'https://api.deepseek.com/chat/completions' 
+    : isGroq 
+      ? 'https://api.groq.com/openai/v1/chat/completions'
+      : 'https://api.openai.com/v1/chat/completions';
+
+  const content: any[] = [{ type: 'text', text: mensaje }];
+  if (imagen && !isDeepSeek && !isGroq) { // DeepSeek/Groq text models might not support vision via this exact format
+    content.push({
+      type: 'image_url',
+      image_url: { url: imagen.includes(',') ? imagen : `data:image/jpeg;base64,${imagen}` }
+    });
+  }
+
+  const response = await fetch(baseUrl, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`
+    },
+    body: JSON.stringify({
+      model: actualModel,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content }
+      ],
+      stream: true,
+      max_tokens: 1024,
+    }),
+  });
+
+  if (!response.ok) throw new Error(`OpenAI/DeepSeek error: ${response.statusText}`);
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder('utf-8');
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      let buffer = '';
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep the last incomplete line in the buffer
+          
+          for (const line of lines) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.startsWith('data: ')) {
+              const data = trimmedLine.slice(6);
+              if (data === '[DONE]') continue;
+              try {
+                const parsed = JSON.parse(data);
+                const text = parsed.choices[0]?.delta?.content || '';
+                if (text) {
+                  controller.enqueue(new TextEncoder().encode(text));
+                }
+              } catch (e) {
+                console.error("Error parsing chunk:", data);
+              }
+            }
+          }
+        }
+        controller.close();
+      } catch (e) { controller.error(e); }
+    },
   });
 
   return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });

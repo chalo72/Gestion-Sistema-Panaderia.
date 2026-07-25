@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+
+import { useMemo, useState, useEffect } from 'react';
 import {
     BarChart,
     Bar,
@@ -41,24 +42,46 @@ import {
     LifeBuoy,
     BadgeAlert,
     Gauge,
+    Snowflake,
+    CalendarDays,
+    CalendarRange,
+    List,
+    Wallet,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from '@/components/ui/dialog';
 import type { Venta, Gasto, ReporteFinanciero, Producto, Categoria, CompromisoFijo, GastoCategoria } from '@/types';
 import { cn } from '@/lib/utils';
 import { HistorialVentasCategoria } from '@/components/ventas/HistorialVentasCategoria';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { usePredictiveStock } from '@/hooks/usePredictiveStock';
+import { ArqueoCajas } from '@/components/reportes/ArqueoCajas';
+import { useAuth } from '@/contexts/AuthContext';
 import {
     getCompromisos, saveCompromisos, addCompromiso, deleteCompromiso, updateCompromiso,
     getVentasDiarias, addVentaDiaria, deleteVentaDiaria,
-    calcularProyeccionQuincena, generarConsejo
+    calcularProyeccionQuincena, generarConsejo,
+    getProducciones, addProduccion, deleteProduccion
 } from '@/lib/finanzas-personales';
+import { getBovedas, addBoveda, addMovimientoBoveda } from '@/lib/boveda-store';
+import type { HornadaDia, RegistroProduccion, MasaPreparadaDia } from '@/lib/finanzas-personales';
 import { getConfigSeguridad } from '@/lib/security-agent';
 import type { VentaDiaria } from '@/types';
+import { consultarAgente } from '@/constants/agentes';
+import type { AgenteId } from '@/constants/agentes';
+import { Bot, Sparkles, Loader2 } from 'lucide-react';
 
 interface ReportesProps {
     ventas: Venta[];
@@ -67,413 +90,25 @@ interface ReportesProps {
     generarReporte: (periodo: string) => ReporteFinanciero;
     productos?: Producto[];
     categorias?: Categoria[];
+    proveedores?: any[];
+    formulaciones?: any[];
+    modelosPan?: any[];
 }
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
 
-export default function Reportes({
-    ventas,
-    gastos,
-    formatCurrency,
-    generarReporte,
-    productos = [],
-    categorias = []
-}: ReportesProps) {
-    const currentMonth = new Date().toISOString().slice(0, 7);
 
-    const reporteActual = useMemo(() => generarReporte(currentMonth), [ventas, gastos, currentMonth, generarReporte]);
+import { useReportesData } from '@/hooks/useReportesData';
+import { GraficosEstadisticos } from '@/components/reportes/GraficosEstadisticos';
+import { DiagnosticoFinanciero } from '@/components/reportes/DiagnosticoFinanciero';
+import { TablaFlujoCaja } from '@/components/reportes/TablaFlujoCaja';
 
-    // Datos comparativos últimos 6 meses
-    const comparativoData = useMemo(() => {
-        const data = [];
-        for (let i = 5; i >= 0; i--) {
-            const date = new Date();
-            date.setMonth(date.getMonth() - i);
-            const periodo = date.toISOString().slice(0, 7);
-            const r = generarReporte(periodo);
-            data.push({
-                name: date.toLocaleString('es-ES', { month: 'short' }).toUpperCase(),
-                ventas: r.totalVentas,
-                gastos: r.totalGastos,
-                utilidad: r.utilidadBruta
-            });
-        }
-        return data;
-    }, [ventas, gastos, generarReporte]);
+export default function Reportes(props: ReportesProps) {
+    const reportesData = useReportesData(props);
+    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData } = reportesData;
+    const { formatCurrency, ventas, gastos, productos, categorias, proveedores } = props;
+    
 
-    // Proyección del mes actual basada en días transcurridos
-    const proyeccion = useMemo(() => {
-        const hoy = new Date();
-        const diaActual = hoy.getDate();
-        const diasDelMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0).getDate();
-        if (diaActual === 0) return null;
-        const ventasMesActual = reporteActual.totalVentas;
-        const tasaDiaria = ventasMesActual / diaActual;
-        return Math.round(tasaDiaria * diasDelMes);
-    }, [reporteActual]);
-
-    // Análisis de rentabilidad por producto
-    const rentabilidadProductos = useMemo(() => {
-        const mapaVentas: Record<string, { ingresos: number; unidades: number; nombre: string }> = {};
-        ventas.forEach(v => {
-            v.items?.forEach(item => {
-                if (!mapaVentas[item.productoId]) {
-                    const prod = productos.find(p => p.id === item.productoId);
-                    mapaVentas[item.productoId] = { ingresos: 0, unidades: 0, nombre: prod?.nombre || item.productoId };
-                }
-                mapaVentas[item.productoId].ingresos += item.subtotal;
-                mapaVentas[item.productoId].unidades += item.cantidad;
-            });
-        });
-        return Object.values(mapaVentas)
-            .sort((a, b) => b.ingresos - a.ingresos)
-            .slice(0, 10);
-    }, [ventas, productos]);
-
-    const totalVentasProductos = rentabilidadProductos.reduce((s, p) => s + p.ingresos, 0);
-
-    // Gastos por categoría (pie)
-    const gastosData = useMemo(() => {
-        return Object.entries(reporteActual.gastosPorCategoria)
-            .filter(([, v]) => v > 0)
-            .map(([name, value]) => ({ name, value }));
-    }, [reporteActual]);
-
-    // Ventas por método de pago (pie)
-    const ventasMetodoData = useMemo(() => {
-        return Object.entries(reporteActual.ventasPorMetodoPago)
-            .filter(([, v]) => v > 0)
-            .map(([name, value]) => ({ name: name.toUpperCase(), value }));
-    }, [reporteActual]);
-
-    // Reporte mes anterior
-    const prevPeriodo = useMemo(() => {
-        const d = new Date();
-        d.setMonth(d.getMonth() - 1);
-        return d.toISOString().slice(0, 7);
-    }, []);
-
-    const reporteMesAnterior = useMemo(() => generarReporte(prevPeriodo), [ventas, gastos, prevPeriodo, generarReporte]);
-
-    const calcTrend = (actual: number, anterior: number): string => {
-        if (anterior === 0) return actual > 0 ? 'Nuevo' : '—';
-        const pct = ((actual - anterior) / anterior) * 100;
-        return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
-    };
-
-    const margenActual = reporteActual.totalVentas > 0 ? (reporteActual.utilidadBruta / reporteActual.totalVentas) * 100 : 0;
-    const margenAnterior = reporteMesAnterior.totalVentas > 0 ? (reporteMesAnterior.utilidadBruta / reporteMesAnterior.totalVentas) * 100 : 0;
-
-    // Ticket promedio
-    const ventasMes = ventas.filter(v => v.fecha.startsWith(currentMonth));
-    const ticketPromedio = ventasMes.length > 0 ? reporteActual.totalVentas / ventasMes.length : 0;
-    const ventasMesAnt = ventas.filter(v => v.fecha.startsWith(prevPeriodo));
-    const ticketAnterior = ventasMesAnt.length > 0 ? reporteMesAnterior.totalVentas / ventasMesAnt.length : 0;
-
-    // Ratio gasto/venta
-    const ratioGasto = reporteActual.totalVentas > 0
-        ? (reporteActual.totalGastos / reporteActual.totalVentas) * 100
-        : 0;
-    const ratioGastoAnt = reporteMesAnterior.totalVentas > 0
-        ? (reporteMesAnterior.totalGastos / reporteMesAnterior.totalVentas) * 100
-        : 0;
-
-    // ── Estado: Compromisos y Ventas Diarias ──────────────────────
-    const [compromisos, setCompromisos] = useState<CompromisoFijo[]>(() => getCompromisos());
-    const [ventasDiarias, setVentasDiarias] = useState<VentaDiaria[]>(() => getVentasDiarias());
-    const [pinModal, setPinModal] = useState<{ ventaId: string; pin: string; error: string } | null>(null);
-    const [activeTab, setActiveTab] = useState('resumen');
-
-    // ── Métricas de compromisos ──────────────────────────────────
-    const totalCompromisosActivos = useMemo(
-        () => compromisos.filter(c => c.activo).reduce((s, c) => s + c.monto, 0),
-        [compromisos]
-    );
-    const ratioCompromisosVsVentas = reporteActual.totalVentas > 0
-        ? (totalCompromisosActivos / reporteActual.totalVentas) * 100 : 0;
-    const saludFinanciera = (() => {
-        if (reporteActual.totalVentas === 0) return { label: 'Sin datos', color: 'text-slate-400', bg: 'bg-slate-400/10', barra: 'bg-slate-400', pct: 0 };
-        const margen = (reporteActual.utilidadBruta / reporteActual.totalVentas) * 100;
-        const cobertura = totalCompromisosActivos > 0 ? (reporteActual.totalVentas / totalCompromisosActivos) : 99;
-        const score = Math.min(100, (margen * 0.5) + (Math.min(cobertura, 3) / 3 * 50));
-        if (score >= 60) return { label: 'Saludable', color: 'text-emerald-500', bg: 'bg-emerald-500/10', barra: 'bg-emerald-500', pct: score };
-        if (score >= 35) return { label: 'Moderado', color: 'text-amber-500', bg: 'bg-amber-500/10', barra: 'bg-amber-500', pct: score };
-        return { label: 'Crítico', color: 'text-rose-500', bg: 'bg-rose-500/10', barra: 'bg-rose-500', pct: score };
-    })();
-
-    const [formCompromiso, setFormCompromiso] = useState({
-        nombre: '', monto: '', categoria: 'Otros' as GastoCategoria,
-        diaDeCobro: '', esPropietario: false, persona: ''
-    });
-    const [formVenta, setFormVenta] = useState({
-        fecha: new Date().toISOString().slice(0, 10),
-        totalEfectivo: '', totalNequi: '', totalTransferencia: '', totalCredito: '', notas: ''
-    });
-
-    const proyeccionQuincena = useMemo(() => calcularProyeccionQuincena({
-        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total })),
-        ventasDiarias,
-        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria })),
-        compromisos,
-    }), [ventas, ventasDiarias, gastos, compromisos]);
-
-    const consejo = useMemo(() => generarConsejo({
-        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total })),
-        ventasDiarias,
-        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria, descripcion: g.descripcion })),
-        compromisos,
-    }), [ventas, ventasDiarias, gastos, compromisos]);
-
-    // ── DATOS REALES DE LA QUINCENA ACTUAL ──────────────────────
-    const quincenaReal = useMemo(() => {
-        const hoy = new Date();
-        const dia = hoy.getDate();
-        const inicio = dia <= 15
-            ? new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-            : new Date(hoy.getFullYear(), hoy.getMonth(), 16);
-        const fin = dia <= 15
-            ? new Date(hoy.getFullYear(), hoy.getMonth(), 15)
-            : new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
-        const inicioStr = inicio.toISOString().slice(0, 10);
-        const finStr = fin.toISOString().slice(0, 10);
-        const hoyStr = hoy.toISOString().slice(0, 10);
-
-        const ventasPOS = ventas
-            .filter(v => v.fecha.slice(0, 10) >= inicioStr && v.fecha.slice(0, 10) <= finStr)
-            .reduce((s, v) => s + v.total, 0);
-
-        const ventasManuales = ventasDiarias
-            .filter(v => v.fecha >= inicioStr && v.fecha <= finStr)
-            .reduce((s, v) => s + v.total, 0);
-
-        const ventasTotalDia = ventasDiarias
-            .filter(v => v.fecha === hoyStr)
-            .reduce((s, v) => s + v.total, 0);
-
-        const totalVentasManualesHistorico = ventasDiarias.reduce((s, v) => s + v.total, 0);
-
-        return {
-            inicioStr, finStr, hoyStr,
-            ventasPOS,
-            ventasManuales,
-            ventasTotal: ventasPOS + ventasManuales,
-            ventasTotalDia,
-            totalVentasManualesHistorico,
-            label: dia <= 15 ? '1ª quincena' : '2ª quincena',
-        };
-    }, [ventas, ventasDiarias]);
-
-    // ── TABLERO DE OBLIGACIONES TOTALES ──────────────────────────
-    const promedioGastosMensuales = useMemo(() => {
-        const meses: Record<string, Record<string, number>> = {};
-        gastos.forEach(g => {
-            const mes = g.fecha.slice(0, 7);
-            if (!meses[mes]) meses[mes] = {};
-            meses[mes][g.categoria] = (meses[mes][g.categoria] || 0) + g.monto;
-        });
-        const numMeses = Math.max(1, Object.keys(meses).length);
-        const totalesPorCat: Record<string, number> = {};
-        Object.values(meses).forEach(mes => {
-            Object.entries(mes).forEach(([cat, monto]) => {
-                totalesPorCat[cat] = (totalesPorCat[cat] || 0) + monto;
-            });
-        });
-        return Object.fromEntries(
-            Object.entries(totalesPorCat).map(([cat, total]) => [cat, total / numMeses])
-        );
-    }, [gastos]);
-
-    const promedioInsumos = useMemo(() =>
-        Object.entries(promedioGastosMensuales)
-            .filter(([cat]) => ['Materia Prima', 'Insumos'].includes(cat))
-            .reduce((s, [, v]) => s + v, 0),
-        [promedioGastosMensuales]
-    );
-
-    const promedioOtrosGastos = useMemo(() =>
-        Object.entries(promedioGastosMensuales)
-            .filter(([cat]) => !['Materia Prima', 'Insumos'].includes(cat))
-            .reduce((s, [, v]) => s + v, 0),
-        [promedioGastosMensuales]
-    );
-
-    const totalObligaciones = totalCompromisosActivos + promedioInsumos + promedioOtrosGastos;
-
-    const coberturaActual = totalObligaciones > 0
-        ? (reporteActual.totalVentas / totalObligaciones) * 100 : 100;
-
-    const ventasNecesariasDiarias = (() => {
-        const diasMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-        return totalObligaciones > 0 ? totalObligaciones / diasMes : 0;
-    })();
-
-    const obligacionesBreakdown = useMemo(() => {
-        const items: { name: string; value: number; color: string }[] = [];
-        if (totalCompromisosActivos > 0)
-            items.push({ name: 'Compromisos fijos', value: totalCompromisosActivos, color: '#8b5cf6' });
-        if (promedioInsumos > 0)
-            items.push({ name: 'Insumos / MP', value: promedioInsumos, color: '#f59e0b' });
-        if (promedioOtrosGastos > 0)
-            items.push({ name: 'Otros gastos', value: promedioOtrosGastos, color: '#f43f5e' });
-        return items;
-    }, [totalCompromisosActivos, promedioInsumos, promedioOtrosGastos]);
-
-    const alertasAutomaticas = useMemo(() => {
-        const alerts: { nivel: 'critico' | 'advertencia' | 'ok'; icon: string; titulo: string; msg: string; accion: string }[] = [];
-        if (totalObligaciones > 0 && coberturaActual < 80)
-            alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Cobertura insuficiente', msg: `Tus ventas cubren solo el ${coberturaActual.toFixed(0)}% de tus obligaciones totales.`, accion: 'Necesitas vender más o reducir gastos urgentemente.' });
-        else if (coberturaActual < 120)
-            alerts.push({ nivel: 'advertencia', icon: '🟡', titulo: 'Margen de seguridad bajo', msg: `Cubres el ${coberturaActual.toFixed(0)}% — quedas ajustado sin colchón.`, accion: 'Intenta aumentar ventas un 20% o recortar un gasto fijo.' });
-        else
-            alerts.push({ nivel: 'ok', icon: '🟢', titulo: 'Cobertura saludable', msg: `Tus ventas cubren el ${coberturaActual.toFixed(0)}% de todas tus obligaciones.`, accion: 'Sigue así. Considera guardar el excedente.' });
-
-        if (margenActual < 15 && reporteActual.totalVentas > 0)
-            alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Margen peligrosamente bajo', msg: `Margen actual: ${margenActual.toFixed(1)}%. Menos del 15% pone en riesgo el negocio.`, accion: 'Revisa precios de venta o negocia insumos más baratos.' });
-        else if (margenActual < 25 && reporteActual.totalVentas > 0)
-            alerts.push({ nivel: 'advertencia', icon: '🟡', titulo: 'Margen por debajo del ideal', msg: `Margen: ${margenActual.toFixed(1)}%. El ideal para panadería es 25-40%.`, accion: 'Considera subir precios entre 5-10% para mejorar la rentabilidad.' });
-
-        if (promedioInsumos > 0 && reporteActual.totalVentas > 0) {
-            const pctInsumos = (promedioInsumos / reporteActual.totalVentas) * 100;
-            if (pctInsumos > 50)
-                alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Insumos consumen más del 50% de ventas', msg: `Gastas ${pctInsumos.toFixed(0)}% de tus ingresos en materia prima.`, accion: 'Busca proveedores alternativos o ajusta los precios de venta.' });
-            else if (pctInsumos > 35)
-                alerts.push({ nivel: 'advertencia', icon: '🟡', titulo: 'Costo de insumos elevado', msg: `Los insumos representan ${pctInsumos.toFixed(0)}% de tus ventas.`, accion: 'Revisa qué productos tienen menor margen y considera ajustar precios.' });
-        }
-
-        if (ratioCompromisosVsVentas > 60)
-            alerts.push({ nivel: 'critico', icon: '🔴', titulo: 'Compromisos fijos muy altos', msg: `Tus compromisos fijos son el ${ratioCompromisosVsVentas.toFixed(0)}% de las ventas.`, accion: 'Evalúa renegociar arriendos o eliminar compromisos no esenciales.' });
-
-        return alerts;
-    }, [coberturaActual, margenActual, promedioInsumos, ratioCompromisosVsVentas, reporteActual.totalVentas, totalObligaciones]);
-
-    const handleAddCompromiso = () => {
-        const monto = parseFloat(formCompromiso.monto);
-        const dia = parseInt(formCompromiso.diaDeCobro);
-        if (!formCompromiso.nombre || isNaN(monto) || monto <= 0) {
-            toast.error('Nombre y monto son obligatorios'); return;
-        }
-        const nuevo = addCompromiso({
-            nombre: formCompromiso.nombre, monto,
-            categoria: formCompromiso.categoria,
-            diaDeCobro: isNaN(dia) ? 1 : Math.min(31, Math.max(1, dia)),
-            activo: true,
-            esPropietario: formCompromiso.esPropietario,
-            persona: formCompromiso.persona || undefined,
-        });
-        setCompromisos(prev => [...prev, nuevo]);
-        setFormCompromiso({ nombre: '', monto: '', categoria: 'Otros', diaDeCobro: '', esPropietario: false, persona: '' });
-        toast.success('Compromiso guardado');
-    };
-
-    const handleToggleCompromiso = (id: string) => {
-        updateCompromiso(id, { activo: !compromisos.find(c => c.id === id)?.activo });
-        setCompromisos(getCompromisos());
-    };
-
-    const handleDeleteCompromiso = (id: string) => {
-        deleteCompromiso(id);
-        setCompromisos(getCompromisos());
-    };
-
-    const handleAddVentaDiaria = () => {
-        const ef = parseFloat(formVenta.totalEfectivo) || 0;
-        const nq = parseFloat(formVenta.totalNequi) || 0;
-        const tr = parseFloat(formVenta.totalTransferencia) || 0;
-        const cr = parseFloat(formVenta.totalCredito) || 0;
-        if (ef + nq + tr + cr <= 0) { toast.error('Ingresa al menos un monto'); return; }
-        const nueva = addVentaDiaria({
-            fecha: formVenta.fecha, totalEfectivo: ef, totalNequi: nq,
-            totalTransferencia: tr, totalCredito: cr, notas: formVenta.notas || undefined
-        });
-        setVentasDiarias(getVentasDiarias());
-        setFormVenta({ fecha: new Date().toISOString().slice(0, 10), totalEfectivo: '', totalNequi: '', totalTransferencia: '', totalCredito: '', notas: '' });
-        toast.success(`Venta del día registrada: ${formatCurrency(nueva.total)}`);
-    };
-
-    const handleDeleteVentaDiaria = (id: string) => {
-        setPinModal({ ventaId: id, pin: '', error: '' });
-    };
-
-    const confirmarDeleteConPin = () => {
-        if (!pinModal) return;
-        const cfg = getConfigSeguridad();
-        if (pinModal.pin !== cfg.pinGerente) {
-            setPinModal(prev => prev ? { ...prev, error: 'PIN incorrecto' } : null);
-            return;
-        }
-        deleteVentaDiaria(pinModal.ventaId);
-        setVentasDiarias(getVentasDiarias());
-        setPinModal(null);
-        toast.success('Venta eliminada');
-    };
-
-    const cardsData = [
-        {
-            title: 'Ventas del Mes',
-            value: reporteActual.totalVentas,
-            icon: TrendingUp,
-            color: 'text-emerald-500',
-            bg: 'bg-emerald-500/10',
-            trend: calcTrend(reporteActual.totalVentas, reporteMesAnterior.totalVentas),
-            sub: `${ventasMes.length} transacciones`
-        },
-        {
-            title: 'Gastos del Mes',
-            value: reporteActual.totalGastos,
-            icon: TrendingDown,
-            color: 'text-rose-500',
-            bg: 'bg-rose-500/10',
-            trend: calcTrend(reporteActual.totalGastos, reporteMesAnterior.totalGastos),
-            sub: `${gastosData.length} categorías`
-        },
-        {
-            title: 'Utilidad Bruta',
-            value: reporteActual.utilidadBruta,
-            icon: DollarSign,
-            color: 'text-indigo-500',
-            bg: 'bg-indigo-500/10',
-            trend: calcTrend(reporteActual.utilidadBruta, reporteMesAnterior.utilidadBruta),
-            sub: `Margen ${margenActual.toFixed(1)}%`
-        },
-        {
-            title: 'Margen Neto',
-            value: `${margenActual.toFixed(1)}%`,
-            icon: Percent,
-            color: 'text-amber-500',
-            bg: 'bg-amber-500/10',
-            trend: margenAnterior === 0 ? '—' : `${margenActual >= margenAnterior ? '+' : ''}${(margenActual - margenAnterior).toFixed(1)}pp`,
-            sub: margenActual >= 30 ? 'Saludable ✓' : margenActual >= 15 ? 'Aceptable' : 'Revisar ⚠'
-        },
-        {
-            title: 'Ticket Promedio',
-            value: ticketPromedio,
-            icon: ShoppingBag,
-            color: 'text-cyan-500',
-            bg: 'bg-cyan-500/10',
-            trend: calcTrend(ticketPromedio, ticketAnterior),
-            sub: `${ventasMes.length} ventas este mes`
-        },
-        {
-            title: 'Ratio Gasto/Venta',
-            value: `${ratioGasto.toFixed(1)}%`,
-            icon: Target,
-            color: ratioGasto > 70 ? 'text-rose-500' : ratioGasto > 50 ? 'text-amber-500' : 'text-emerald-500',
-            bg: ratioGasto > 70 ? 'bg-rose-500/10' : ratioGasto > 50 ? 'bg-amber-500/10' : 'bg-emerald-500/10',
-            trend: ratioGastoAnt === 0 ? '—' : `${ratioGasto <= ratioGastoAnt ? '' : '+'}${(ratioGasto - ratioGastoAnt).toFixed(1)}pp`,
-            sub: ratioGasto > 70 ? 'Alto — revisar' : ratioGasto > 50 ? 'Moderado' : 'Eficiente ✓',
-            onClick: undefined,
-        },
-        {
-            title: 'Compromisos Fijos',
-            value: totalCompromisosActivos,
-            icon: CalendarCheck,
-            color: ratioCompromisosVsVentas > 80 ? 'text-rose-500' : ratioCompromisosVsVentas > 50 ? 'text-amber-500' : 'text-violet-500',
-            bg: ratioCompromisosVsVentas > 80 ? 'bg-rose-500/10' : ratioCompromisosVsVentas > 50 ? 'bg-amber-500/10' : 'bg-violet-500/10',
-            trend: `${ratioCompromisosVsVentas.toFixed(0)}% de ventas`,
-            sub: `${compromisos.filter(c => c.activo).length} activos — clic para ver`,
-            onClick: () => setActiveTab('quincena'),
-        },
-    ];
 
     return (
         <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
@@ -603,7 +238,7 @@ export default function Reportes({
             </div>
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-14 p-1 mb-6 flex items-center justify-start flex-wrap gap-1">
+                <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-14 p-1 mb-6 flex items-center justify-start gap-1 overflow-x-auto no-scrollbar w-full">
                     <TabsTrigger value="resumen" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <Activity className="w-4 h-4 mr-2" />
                         Resumen
@@ -624,6 +259,14 @@ export default function Reportes({
                                 {compromisos.filter(c => c.activo).length}
                             </span>
                         )}
+                    </TabsTrigger>
+                    <TabsTrigger value="compras-minimas" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-white gap-2">
+                        <ShoppingBag className="w-4 h-4" />
+                        Presupuestos
+                    </TabsTrigger>
+                    <TabsTrigger value="arqueo-cajas" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-cyan-600 data-[state=active]:text-white gap-2">
+                        <Wallet className="w-4 h-4" />
+                        Arqueo Cajas
                     </TabsTrigger>
                     <TabsTrigger value="consejero-ia" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-violet-600 data-[state=active]:text-white">
                         <Brain className="w-4 h-4 mr-2" />
@@ -804,141 +447,7 @@ export default function Reportes({
                 {/* ══════════════════════════════════════════════════
                     TAB 2: RENTABILIDAD POR PRODUCTO
                 ══════════════════════════════════════════════════ */}
-                <TabsContent value="rentabilidad" className="space-y-6 mt-0">
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* Gráfico de barras horizontal */}
-                        <Card className="lg:col-span-2 rounded-[3rem] border-white/5 bg-card/40 backdrop-blur-xl overflow-hidden shadow-2xl">
-                            <CardHeader className="p-6 border-b border-white/5">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle className="text-lg font-black uppercase tracking-tighter italic">Top Productos por Ingresos</CardTitle>
-                                        <CardDescription className="text-[10px] font-bold uppercase tracking-widest opacity-60">
-                                            Acumulado total · {rentabilidadProductos.length} productos analizados
-                                        </CardDescription>
-                                    </div>
-                                    <Package className="w-6 h-6 text-indigo-500/50" />
-                                </div>
-                            </CardHeader>
-                            <CardContent className="p-6" style={{ height: Math.max(300, rentabilidadProductos.length * 44 + 40) }}>
-                                {rentabilidadProductos.length > 0 ? (
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={rentabilidadProductos} layout="vertical" margin={{ left: 8, right: 40 }}>
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#ffffff05" />
-                                            <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 9, fontWeight: 900, fill: '#64748b' }} tickFormatter={(v) => `$${v >= 1000000 ? (v/1000000).toFixed(1)+'M' : (v/1000).toFixed(0)+'k'}`} />
-                                            <YAxis type="category" dataKey="nombre" axisLine={false} tickLine={false} tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} width={110} />
-                                            <Tooltip
-                                                contentStyle={{ backgroundColor: '#0f172a', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.1)' }}
-                                                itemStyle={{ fontSize: '11px', fontWeight: 900 }}
-                                                formatter={(value: number, name: string) => [
-                                                    name === 'ingresos' ? formatCurrency(value) : value,
-                                                    name === 'ingresos' ? 'Ingresos' : 'Unidades'
-                                                ]}
-                                            />
-                                            <Bar dataKey="ingresos" radius={[0, 8, 8, 0]} maxBarSize={32}>
-                                                {rentabilidadProductos.map((_, index) => (
-                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} fillOpacity={0.9} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center h-full text-center">
-                                        <Package className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                                        <p className="text-sm font-bold text-muted-foreground">Sin datos de ventas aún</p>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-
-                        {/* Tabla de ranking con participación */}
-                        <Card className="rounded-[3rem] border-white/5 bg-card/40 backdrop-blur-xl overflow-hidden shadow-xl">
-                            <CardHeader className="p-5 border-b border-white/5">
-                                <CardTitle className="text-xs font-black uppercase tracking-tighter">Participación en Ingresos</CardTitle>
-                            </CardHeader>
-                            <CardContent className="p-4 overflow-y-auto max-h-[500px]">
-                                <div className="space-y-3">
-                                    {rentabilidadProductos.length === 0 ? (
-                                        <p className="text-xs text-muted-foreground text-center py-8">Sin ventas registradas</p>
-                                    ) : rentabilidadProductos.map((p, i) => {
-                                        const participacion = totalVentasProductos > 0 ? (p.ingresos / totalVentasProductos) * 100 : 0;
-                                        return (
-                                            <div key={i} className="space-y-1.5">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2 min-w-0">
-                                                        <span className="text-[9px] font-black text-muted-foreground w-4 shrink-0">#{i + 1}</span>
-                                                        <span className="text-xs font-bold text-foreground truncate">{p.nombre}</span>
-                                                    </div>
-                                                    <div className="text-right shrink-0 ml-2">
-                                                        <p className="text-xs font-black text-foreground">{formatCurrency(p.ingresos)}</p>
-                                                        <p className="text-[9px] text-muted-foreground">{p.unidades} uds</p>
-                                                    </div>
-                                                </div>
-                                                <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className="h-full rounded-full transition-all duration-700"
-                                                        style={{ width: `${participacion}%`, backgroundColor: COLORS[i % COLORS.length] }}
-                                                    />
-                                                </div>
-                                                <p className="text-[8px] font-black text-muted-foreground text-right">{participacion.toFixed(1)}% del total</p>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Métricas clave de rentabilidad */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                        {[
-                            {
-                                label: 'Productos vendidos',
-                                value: rentabilidadProductos.length,
-                                icon: Package,
-                                color: 'text-indigo-500',
-                                bg: 'bg-indigo-500/10'
-                            },
-                            {
-                                label: 'Unidades totales',
-                                value: rentabilidadProductos.reduce((s, p) => s + p.unidades, 0),
-                                icon: Layers,
-                                color: 'text-emerald-500',
-                                bg: 'bg-emerald-500/10'
-                            },
-                            {
-                                label: 'Ingreso top producto',
-                                value: rentabilidadProductos[0] ? formatCurrency(rentabilidadProductos[0].ingresos) : '—',
-                                icon: TrendingUp,
-                                color: 'text-amber-500',
-                                bg: 'bg-amber-500/10',
-                                sub: rentabilidadProductos[0]?.nombre
-                            },
-                            {
-                                label: 'Concentración top 3',
-                                value: totalVentasProductos > 0
-                                    ? `${((rentabilidadProductos.slice(0, 3).reduce((s, p) => s + p.ingresos, 0) / totalVentasProductos) * 100).toFixed(0)}%`
-                                    : '—',
-                                icon: Target,
-                                color: 'text-cyan-500',
-                                bg: 'bg-cyan-500/10',
-                                sub: 'Del ingreso total'
-                            },
-                        ].map((m, i) => (
-                            <Card key={i} className="rounded-3xl border-white/5 bg-card/30 backdrop-blur-md overflow-hidden">
-                                <CardContent className="p-5">
-                                    <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center mb-3", m.bg, m.color)}>
-                                        <m.icon className="w-4 h-4" />
-                                    </div>
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{m.label}</p>
-                                    <h3 className="text-xl font-black tracking-tighter text-foreground">
-                                        {typeof m.value === 'number' ? m.value.toLocaleString('es-CO') : m.value}
-                                    </h3>
-                                    {m.sub && <p className="text-[9px] text-muted-foreground mt-1 truncate">{m.sub}</p>}
-                                </CardContent>
-                            </Card>
-                        ))}
-                    </div>
-                </TabsContent>
+                <GraficosEstadisticos data={{...reportesData, formatCurrency, ventas, gastos}} />
 
                 {/* ══════════════════════════════════════════════════
                     TAB 3: VENTAS POR CATEGORÍA
@@ -955,708 +464,460 @@ export default function Reportes({
                 {/* ══════════════════════════════════════════════════
                     TAB 4: MI QUINCENA
                 ══════════════════════════════════════════════════ */}
-                <TabsContent value="quincena" className="space-y-6 mt-0">
+                <DiagnosticoFinanciero data={{...reportesData, formatCurrency, ventas, gastos, formulaciones: props.formulaciones, modelosPan: props.modelosPan}} />
 
-                    {/* ── RESUMEN REAL — 4 cajas prominentes ── */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {[
-                            {
-                                label: `Ventas POS ${quincenaReal.label}`,
-                                val: quincenaReal.ventasPOS,
-                                color: 'text-emerald-500',
-                                border: 'border-emerald-200 dark:border-emerald-800',
-                                sub: `${ventas.filter(v => v.fecha.slice(0, 10) >= quincenaReal.inicioStr && v.fecha.slice(0, 10) <= quincenaReal.finStr).length} transacciones`,
-                            },
-                            {
-                                label: 'Ventas manuales',
-                                val: quincenaReal.ventasManuales,
-                                color: 'text-indigo-500',
-                                border: 'border-indigo-200 dark:border-indigo-800',
-                                sub: `${ventasDiarias.filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr).length} cierres de caja`,
-                            },
-                            {
-                                label: 'Total ingresos reales',
-                                val: quincenaReal.ventasTotal,
-                                color: 'text-cyan-500',
-                                border: 'border-cyan-200 dark:border-cyan-800',
-                                sub: 'POS + cierre manual',
-                                highlight: true,
-                            },
-                            {
-                                label: 'Total compromisos activos',
-                                val: totalCompromisosActivos,
-                                color: totalCompromisosActivos > quincenaReal.ventasTotal ? 'text-rose-500' : 'text-violet-500',
-                                border: totalCompromisosActivos > quincenaReal.ventasTotal ? 'border-rose-200 dark:border-rose-800' : 'border-violet-200 dark:border-violet-800',
-                                sub: `${compromisos.filter(c => c.activo).length} compromisos activos`,
-                            },
-                        ].map(item => (
-                            <div key={item.label} className={cn(
-                                "bg-white dark:bg-slate-900 rounded-2xl border px-4 py-3 flex flex-col gap-1",
-                                item.border,
-                                item.highlight && "ring-2 ring-cyan-400/30"
-                            )}>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
-                                <span className={cn("text-xl font-black tabular-nums", item.color)}>
-                                    {formatCurrency(item.val)}
-                                </span>
-                                <span className="text-[9px] text-slate-400 font-bold">{item.sub}</span>
+                {/* ══════════════════════════════════════════════════
+                    TAB: PRESUPUESTOS (COMPRAS)
+                ══════════════════════════════════════════════════ */}
+                <TabsContent value="compras-minimas" className="space-y-6 mt-0">
+                    {/* Header de Temporada */}
+                    <Card className={cn("rounded-3xl border border-white/5 shadow-none", temporadaBaja ? "bg-cyan-950/40 border-cyan-500/20" : "bg-orange-950/40 border-orange-500/20")}>
+                        <CardContent className="p-6 flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-lg font-black flex items-center gap-2">
+                                    {temporadaBaja ? <Snowflake className="w-5 h-5 text-cyan-400" /> : <Flame className="w-5 h-5 text-orange-500" />}
+                                    Temporada Actual: {temporadaBaja ? "Baja (Límites Estrictos)" : "Alta (Flujo Normal)"}
+                                </h3>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Activar la temporada baja aplicará el presupuesto reducido en tus compras para cuidar la liquidez.
+                                </p>
                             </div>
-                        ))}
-                    </div>
+                            <Button 
+                                onClick={() => setTemporadaBaja(!temporadaBaja)}
+                                variant={temporadaBaja ? "default" : "outline"}
+                                className={cn("rounded-2xl font-black h-12 px-6", temporadaBaja ? "bg-cyan-600 hover:bg-cyan-700 text-white" : "border-orange-500/50 text-orange-500 hover:bg-orange-500/10")}
+                            >
+                                Cambiar a Temporada {temporadaBaja ? "Alta" : "Baja"}
+                            </Button>
+                        </CardContent>
+                    </Card>
 
-                    {/* Saldo neto real */}
-                    {(() => {
-                        const saldo = quincenaReal.ventasTotal - totalCompromisosActivos;
+                    {/* ── PANEL RESUMEN DE INVERSIÓN ── */}
+                    {presupuestosMinimos.length > 0 && (() => {
+                        const getLimite = (item: any) => temporadaBaja && item.montoBaja !== undefined ? item.montoBaja : item.monto;
+                        const getComprado = (item: any) => {
+                            if (!item.proveedorId && !item.productoId) return item.estado === 'completado' ? getLimite(item) : 0;
+                            const gastosRel = gastos.filter(g => 
+                                (item.proveedorId && g.proveedorId === item.proveedorId) ||
+                                (item.id && (g as any).presupuestoId === item.id)
+                            );
+                            const sumaGastos = gastosRel.reduce((sum, g) => sum + g.monto, 0);
+                            return sumaGastos > 0 ? sumaGastos : (item.estado === 'completado' ? getLimite(item) : 0);
+                        };
+
+                        const semanales   = presupuestosMinimos.filter((i: any) => i.frecuencia === 'Semanal');
+                        const quincenales = presupuestosMinimos.filter((i: any) => i.frecuencia === 'Quincenal');
+                        const mensuales   = presupuestosMinimos.filter((i: any) => i.frecuencia !== 'Semanal' && i.frecuencia !== 'Quincenal');
+                        const totalSem    = semanales.reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const totalQuin   = quincenales.reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const totalMen    = mensuales.reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const totalGeneral = totalSem + totalQuin + totalMen;
+                        const compradoTotal = presupuestosMinimos.reduce((s: number, i: any) => s + getComprado(i), 0);
+                        const pendienteTotal = Math.max(0, totalGeneral - compradoTotal);
+                        const pctComprado = totalGeneral > 0 ? Math.min(100, (compradoTotal / totalGeneral) * 100) : 0;
                         return (
-                            <div className={cn(
-                                "rounded-2xl border-2 px-5 py-3 flex items-center justify-between gap-4 flex-wrap",
-                                saldo >= 0 ? "border-emerald-400/40 bg-emerald-500/5" : "border-rose-400/40 bg-rose-500/5"
-                            )}>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo real de la quincena hasta hoy</p>
-                                    <p className={cn("text-2xl font-black", saldo >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                                        {saldo >= 0 ? `+${formatCurrency(saldo)}` : formatCurrency(saldo)}
-                                    </p>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                                        Ingresos reales {formatCurrency(quincenaReal.ventasTotal)} — Compromisos {formatCurrency(totalCompromisosActivos)}
-                                    </p>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                <div className="col-span-2 rounded-2xl p-4 bg-gradient-to-br from-amber-500/15 to-orange-500/10 border border-amber-500/20">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-amber-400 mb-1">💼 Total Inversión en el Ciclo</p>
+                                    <p className="text-2xl font-black text-foreground">{formatCurrency(totalGeneral)}</p>
+                                    <div className="mt-2 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                                        <div className="h-full rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${pctComprado}%` }} />
+                                    </div>
+                                    <div className="flex justify-between mt-1 text-[9px] font-bold">
+                                        <span className="text-emerald-400">✓ Ya comprado: {formatCurrency(compradoTotal)}</span>
+                                        <span className="text-rose-400">⏳ Pendiente: {formatCurrency(pendienteTotal)}</span>
+                                    </div>
                                 </div>
-                                {quincenaReal.ventasTotalDia > 0 && (
-                                    <div className="text-right bg-card/60 rounded-xl px-4 py-2 border border-white/5">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ventas registradas hoy</p>
-                                        <p className="text-xl font-black text-amber-400">{formatCurrency(quincenaReal.ventasTotalDia)}</p>
+                                {totalSem > 0 && (
+                                    <div className="rounded-2xl p-4 bg-card/30 border border-white/5">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-500 mb-1">📅 Semanal</p>
+                                        <p className="text-lg font-black text-foreground">{formatCurrency(totalSem)}</p>
+                                        <p className="text-[9px] text-muted-foreground mt-1">{semanales.length} proveedor{semanales.length !== 1 ? 'es' : ''}</p>
+                                    </div>
+                                )}
+                                {totalQuin > 0 && (
+                                    <div className="rounded-2xl p-4 bg-card/30 border border-white/5">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-violet-400 mb-1">📆 Quincenal</p>
+                                        <p className="text-lg font-black text-foreground">{formatCurrency(totalQuin)}</p>
+                                        <p className="text-[9px] text-muted-foreground mt-1">{quincenales.length} proveedor{quincenales.length !== 1 ? 'es' : ''}</p>
+                                    </div>
+                                )}
+                                {totalMen > 0 && (
+                                    <div className="rounded-2xl p-4 bg-card/30 border border-white/5">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1">🗓️ Mensual</p>
+                                        <p className="text-lg font-black text-foreground">{formatCurrency(totalMen)}</p>
+                                        <p className="text-[9px] text-muted-foreground mt-1">{mensuales.length} proveedor{mensuales.length !== 1 ? 'es' : ''}</p>
                                     </div>
                                 )}
                             </div>
                         );
                     })()}
 
-                    {/* Banner proyección */}
-                    <Card className={cn(
-                        "rounded-3xl border-2",
-                        proyeccionQuincena.alcanza
-                            ? "border-emerald-500/40 bg-emerald-500/5"
-                            : "border-rose-500/40 bg-rose-500/5"
-                    )}>
-                        <CardContent className="p-6">
-                            <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                                <div className={cn(
-                                    "w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 text-2xl",
-                                    proyeccionQuincena.alcanza ? "bg-emerald-500/20" : "bg-rose-500/20"
-                                )}>
-                                    {proyeccionQuincena.alcanza ? '✅' : '⚠️'}
-                                </div>
-                                <div className="flex-1">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">Proyección de quincena</p>
-                                    <h3 className={cn("text-2xl font-black", proyeccionQuincena.alcanza ? "text-emerald-500" : "text-rose-500")}>
-                                        {proyeccionQuincena.alcanza
-                                            ? `Te alcanza — sobran ${formatCurrency(proyeccionQuincena.saldoProyectado)}`
-                                            : `Déficit proyectado: ${formatCurrency(proyeccionQuincena.deficit)}`}
-                                    </h3>
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                        Promedio diario: {formatCurrency(proyeccionQuincena.promedioVentaDiaria)} ·
-                                        Ingreso esperado: {formatCurrency(proyeccionQuincena.ingresoEsperado)} ·
-                                        {proyeccionQuincena.diasRestantes} días restantes
-                                    </p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3 shrink-0">
-                                    <div className="text-center bg-card/60 rounded-2xl p-3 border border-white/5">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Compromisos</p>
-                                        <p className="text-lg font-black text-rose-400">{formatCurrency(proyeccionQuincena.totalCompromisos)}</p>
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* Formulario */}
+                        <Card className="rounded-3xl border-white/5 bg-card/30">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="text-base font-black">Nuevo Presupuesto</CardTitle>
+                                <CardDescription className="text-xs">Establece límites para no sobrecomprar</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="space-y-3">
+                                    <div>
+                                        <Label className="text-[10px] font-black uppercase text-muted-foreground">Proveedor o Insumo</Label>
+                                        <Input id="compra_proveedor" list="proveedores-insumos-list" placeholder="Ej: Postobón, Huevos..." className="h-9 text-sm rounded-xl mt-1" />
+                                        <datalist id="proveedores-insumos-list">
+                                            {proveedores?.map(p => <option key={`prov_${p.id}`} value={p.nombre}>Proveedor</option>)}
+                                            {productos?.filter(p => p.tipo === 'ingrediente').map(p => <option key={`prod_${p.id}`} value={p.nombre}>Insumo</option>)}
+                                        </datalist>
                                     </div>
-                                    <div className="text-center bg-card/60 rounded-2xl p-3 border border-white/5">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Salarios</p>
-                                        <p className="text-lg font-black text-amber-400">{formatCurrency(proyeccionQuincena.totalSalarios)}</p>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Presup. Base ($)</Label>
+                                            <Input id="compra_monto" type="number" placeholder="Ej: 500000" className="h-9 text-sm rounded-xl mt-1" />
+                                        </div>
+                                        <div>
+                                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Presup. Baja ($)</Label>
+                                            <Input id="compra_baja" type="number" placeholder="Opcional" className="h-9 text-sm rounded-xl mt-1" />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                                        <div>
+                                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Frecuencia</Label>
+                                            <select id="compra_frecuencia" className="h-9 text-sm rounded-xl border border-input bg-background px-2 w-full mt-1">
+                                                <option value="Semanal">Semanal</option>
+                                                <option value="Quincenal">Quincenal</option>
+                                                <option value="Mensual">Mensual</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Día Preventa</Label>
+                                            <select id="compra_dia_pedido" className="h-9 text-sm rounded-xl border border-input bg-background px-2 w-full mt-1">
+                                                <option value="">No definido</option>
+                                                {['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Llega Pedido / Pago</Label>
+                                            <select id="compra_dia_pago" className="h-9 text-sm rounded-xl border border-input bg-background px-2 w-full mt-1">
+                                                <option value="">No definido</option>
+                                                {['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].map(d => <option key={d} value={d}>{d}</option>)}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <Label className="text-[10px] font-black uppercase text-muted-foreground">Nota</Label>
+                                            <Input id="compra_nota" placeholder="Opcional" className="h-9 text-sm rounded-xl mt-1" />
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-2 mt-1">
+                                        <Button 
+                                            onClick={() => {
+                                                const prov = (document.getElementById('compra_proveedor') as HTMLInputElement)?.value.trim();
+                                                const montoRaw = parseFloat((document.getElementById('compra_monto') as HTMLInputElement)?.value) || 0;
+                                                const bajaVal = (document.getElementById('compra_baja') as HTMLInputElement)?.value;
+                                                const bajaNum = bajaVal ? parseFloat(bajaVal) : 0;
+                                                const monto = montoRaw > 0 ? montoRaw : bajaNum;
+                                                const baja = bajaNum > 0 ? bajaNum : monto;
+                                                const frec = (document.getElementById('compra_frecuencia') as HTMLSelectElement)?.value;
+                                                const diaPed = (document.getElementById('compra_dia_pedido') as HTMLSelectElement)?.value;
+                                                const diaPag = (document.getElementById('compra_dia_pago') as HTMLSelectElement)?.value;
+                                                const nota = (document.getElementById('compra_nota') as HTMLInputElement)?.value.trim();
+
+                                                if (!prov) {
+                                                    toast.error('El nombre del proveedor o insumo es requerido');
+                                                    return;
+                                                }
+                                                if (monto <= 0) {
+                                                    toast.error('Ingresa al menos un valor de presupuesto (Base o Baja)');
+                                                    return;
+                                                }
+
+                                                // Match IDs for advanced syncing
+                                                const provLower = prov.toLowerCase();
+                                                const proveedorId = proveedores?.find(p => p.nombre.toLowerCase() === provLower)?.id;
+                                                const productoId = productos?.find(p => p.tipo === 'ingrediente' && p.nombre.toLowerCase() === provLower)?.id;
+
+                                                if (editCompraId) {
+                                                    const updated = presupuestosMinimos.map((l: any) => l.id === editCompraId ? {
+                                                        ...l, proveedor: prov, proveedorId, productoId, monto, montoBaja: baja, frecuencia: frec, diaPedido: diaPed, diaPago: diaPag, nota
+                                                    } : l);
+                                                    setPresupuestosMinimos(updated);
+                                                    localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
+                                                    setEditCompraId(null);
+                                                    toast.success('Presupuesto actualizado');
+                                                } else {
+                                                    const nueva = {
+                                                        id: Math.random().toString(36).substring(2, 9),
+                                                        proveedor: prov,
+                                                        proveedorId,
+                                                        productoId,
+                                                        monto,
+                                                        montoBaja: baja,
+                                                        frecuencia: frec,
+                                                        diaPedido: diaPed,
+                                                        diaPago: diaPag,
+                                                        nota,
+                                                        estado: 'pendiente'
+                                                    };
+                                                    const updated = [...presupuestosMinimos, nueva];
+                                                    setPresupuestosMinimos(updated);
+                                                    localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
+                                                    toast.success('Presupuesto registrado');
+                                                }
+                                                
+                                                // Reset inputs
+                                                (document.getElementById('compra_proveedor') as HTMLInputElement).value = '';
+                                                (document.getElementById('compra_monto') as HTMLInputElement).value = '';
+                                                (document.getElementById('compra_baja') as HTMLInputElement).value = '';
+                                                (document.getElementById('compra_frecuencia') as HTMLSelectElement).value = 'Semanal';
+                                                (document.getElementById('compra_dia_pedido') as HTMLSelectElement).value = '';
+                                                (document.getElementById('compra_dia_pago') as HTMLSelectElement).value = '';
+                                                (document.getElementById('compra_nota') as HTMLInputElement).value = '';
+                                            }}
+                                            size="sm" 
+                                            className="w-full rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black text-xs h-9"
+                                        >
+                                            <Plus className="w-4 h-4 mr-1" /> {editCompraId ? 'Actualizar' : 'Añadir'}
+                                        </Button>
+                                        {editCompraId && (
+                                            <Button
+                                                onClick={() => {
+                                                    setEditCompraId(null);
+                                                    (document.getElementById('compra_proveedor') as HTMLInputElement).value = '';
+                                                    (document.getElementById('compra_monto') as HTMLInputElement).value = '';
+                                                    (document.getElementById('compra_baja') as HTMLInputElement).value = '';
+                                                    (document.getElementById('compra_frecuencia') as HTMLSelectElement).value = 'Semanal';
+                                                    (document.getElementById('compra_dia_pedido') as HTMLSelectElement).value = '';
+                                                    (document.getElementById('compra_dia_pago') as HTMLSelectElement).value = '';
+                                                    (document.getElementById('compra_nota') as HTMLInputElement).value = '';
+                                                }}
+                                                variant="ghost"
+                                                size="sm"
+                                                className="rounded-xl text-rose-500 font-black text-xs h-9"
+                                            >
+                                                Cancelar
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Listas de control */}
+                        <div className="lg:col-span-2 space-y-6">
+                            {(() => {
+                                const renderList = (title: string, icon: any, filterFn: (i: any) => boolean) => {
+                                    const filtered = presupuestosMinimos.filter(filterFn);
+                                    if (filtered.length === 0) return null;
+                                    return (
+                                        <Card className="rounded-3xl border-white/5 bg-card/30">
+                                            <CardHeader className="pb-3 bg-white/5 rounded-t-3xl border-b border-white/5">
+                                                <CardTitle className="text-sm font-black flex items-center gap-2">
+                                                    {icon} {title}
+                                                </CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-3 space-y-2">
+                                                {filtered.map((item: any) => {
+                                                    const limiteActual = temporadaBaja && item.montoBaja !== undefined ? item.montoBaja : item.monto;
+                                                    return (
+                                                        <div key={item.id} className={cn("flex items-center gap-3 rounded-2xl p-3 border transition-colors", item.estado === 'completado' ? "border-emerald-500/30 bg-emerald-950/10" : temporadaBaja ? "border-cyan-500/20 bg-cyan-950/10" : "border-white/5 bg-card/20")}>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className="text-sm font-black text-foreground truncate">{item.proveedor}</span>
+                                                                    <span className={cn("text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full", item.frecuencia === 'Semanal' ? "bg-amber-500/20 text-amber-400" : item.frecuencia === 'Quincenal' ? "bg-violet-500/20 text-violet-400" : "bg-blue-500/20 text-blue-400")}>{item.frecuencia}</span>
+                                                                </div>
+                                                                {(item.diaPedido || item.diaPago) && (
+                                                                    <p className="text-[9px] text-muted-foreground mt-0.5 font-bold">
+                                                                        {item.diaPedido && `📝 Preventa: ${item.diaPedido}`} {item.diaPedido && item.diaPago && ' | '} {item.diaPago && `🚚 Llega y Pago: ${item.diaPago}`}
+                                                                    </p>
+                                                                )}
+                                                                {item.nota && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">"{item.nota}"</p>}
+                                                            </div>
+                                                            <div className="text-right flex flex-col items-end gap-1 shrink-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    {temporadaBaja && item.montoBaja !== undefined && item.montoBaja < item.monto && (
+                                                                        <span className="text-[10px] line-through text-muted-foreground">{formatCurrency(item.monto)}</span>
+                                                                    )}
+                                                                    <p className={cn("text-sm font-black", temporadaBaja ? "text-cyan-500" : "text-foreground")}>
+                                                                        {formatCurrency(limiteActual)}
+                                                                    </p>
+                                                                </div>
+                                                                <div className="flex gap-2 items-center mt-1">
+                                                                    <button
+                                                                        onClick={() => {
+                                                                            const updated = presupuestosMinimos.map((l: any) => l.id === item.id ? { ...l, estado: l.estado === 'completado' ? 'pendiente' : 'completado' } : l);
+                                                                            setPresupuestosMinimos(updated);
+                                                                            localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
+                                                                        }}
+                                                                        className={cn("text-[9px] font-bold px-2 py-1 rounded-lg uppercase transition-all", 
+                                                                            item.estado === 'completado' ? "bg-emerald-500/20 text-emerald-400 hover:bg-rose-500/20 hover:text-rose-400" : "bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400")}
+                                                                    >
+                                                                        {item.estado === 'completado' ? '✓ Comprado' : '⏳ Pendiente'}
+                                                                    </button>
+                                                                    <button 
+                                                                        className="text-indigo-400 hover:text-indigo-300 p-1 font-bold text-[9px] uppercase tracking-wider"
+                                                                        onClick={() => {
+                                                                            setEditCompraId(item.id);
+                                                                            (document.getElementById('compra_proveedor') as HTMLInputElement).value = item.proveedor;
+                                                                            (document.getElementById('compra_monto') as HTMLInputElement).value = item.monto.toString();
+                                                                            (document.getElementById('compra_baja') as HTMLInputElement).value = item.montoBaja ? item.montoBaja.toString() : '';
+                                                                            (document.getElementById('compra_frecuencia') as HTMLSelectElement).value = item.frecuencia;
+                                                                            (document.getElementById('compra_dia_pedido') as HTMLSelectElement).value = item.diaPedido || '';
+                                                                            (document.getElementById('compra_dia_pago') as HTMLSelectElement).value = item.diaPago || '';
+                                                                            (document.getElementById('compra_nota') as HTMLInputElement).value = item.nota || '';
+                                                                            // Scroll to top of tab
+                                                                            document.getElementById('compra_proveedor')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                                            toast.info('Modificando presupuesto...');
+                                                                        }}
+                                                                    >
+                                                                        Editar
+                                                                    </button>
+                                                                    <button 
+                                                                        className="text-rose-500 hover:text-rose-400 p-1"
+                                                                        onClick={() => {
+                                                                            const updated = presupuestosMinimos.filter((l: any) => l.id !== item.id);
+                                                                            setPresupuestosMinimos(updated);
+                                                                            localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
+                                                                        }}
+                                                                    >
+                                                                        <Trash2 className="w-3.5 h-3.5" />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </CardContent>
+                                        </Card>
+                                    );
+                                };
+
+                                return (
+                                    <>
+                                        {renderList("Control Semanal", <CalendarDays className="w-4 h-4 text-amber-500" />, (i: any) => i.frecuencia === 'Semanal')}
+                                        {renderList("Control Quincenal", <CalendarRange className="w-4 h-4 text-violet-500" />, (i: any) => i.frecuencia === 'Quincenal')}
+                                        {renderList("Control Mensual / Otros", <List className="w-4 h-4 text-blue-500" />, (i: any) => i.frecuencia !== 'Semanal' && i.frecuencia !== 'Quincenal')}
+                                        {presupuestosMinimos.length === 0 && (
+                                            <div className="text-center py-12 border border-dashed rounded-3xl border-white/10 flex flex-col items-center gap-3">
+                                                <ShoppingBag className="w-8 h-8 text-muted-foreground/30" />
+                                                <p className="text-sm font-medium text-muted-foreground">No hay presupuestos registrados.</p>
+                                            </div>
+                                        )}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+
+                    {/* Motor Predictivo de Inventario */}
+                    <Card className="rounded-3xl border border-white/5 bg-card/30 mt-6">
+                        <CardHeader className="pb-3 border-b border-white/5 bg-gradient-to-r from-blue-950/20 to-purple-950/20 rounded-t-3xl">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-base font-black flex items-center gap-2">
+                                        <Brain className="w-5 h-5 text-blue-400" />
+                                        Asistente Predictivo de Pedidos
+                                    </CardTitle>
+                                    <CardDescription className="text-xs mt-1">
+                                        Analiza la velocidad de ventas y sugiere cuánto pedir para no quedarte sin stock
+                                    </CardDescription>
+                                </div>
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="rounded-xl h-9 text-xs border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                                    onClick={() => generarSugerencias()}
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Analizando...' : 'Recalcular'}
+                                </Button>
                             </div>
+                        </CardHeader>
+                        <CardContent className="p-4">
+                            {loading ? (
+                                <div className="text-center py-8">
+                                    <div className="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-3"></div>
+                                    <p className="text-sm text-muted-foreground">Calculando algoritmos de rotación...</p>
+                                </div>
+                            ) : sugerencias.length === 0 ? (
+                                <div className="text-center py-8">
+                                    <CheckCircle2 className="w-10 h-10 text-emerald-500/50 mx-auto mb-3" />
+                                    <p className="text-sm text-muted-foreground">No hay sugerencias de pedido. ¡Tu inventario está perfecto!</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                    {sugerencias.map(sug => {
+                                        let cantidadFinal = sug.cantidadSugeridaTotal;
+                                        if (temporadaBaja) {
+                                            // Reducimos 20% en temporada baja
+                                            cantidadFinal = Math.max(0, Math.floor(cantidadFinal * 0.8));
+                                        }
+
+                                        let pacas = 0;
+                                        let sueltas = cantidadFinal;
+                                        if (sug.cantidadEmbalaje && sug.cantidadEmbalaje > 1) {
+                                            pacas = Math.floor(cantidadFinal / sug.cantidadEmbalaje);
+                                            sueltas = cantidadFinal % sug.cantidadEmbalaje;
+                                        }
+
+                                        return (
+                                            <div key={sug.productoId} className={cn("p-4 rounded-2xl border transition-colors relative overflow-hidden", 
+                                                sug.diasAgotado > 0 ? "border-rose-500/30 bg-rose-950/10" : "border-white/5 bg-card/40"
+                                            )}>
+                                                {sug.diasAgotado > 0 && (
+                                                    <div className="absolute top-0 right-0 bg-rose-600 text-white text-[9px] font-black uppercase px-2 py-1 rounded-bl-lg">
+                                                        Agotado hace {sug.diasAgotado} días
+                                                    </div>
+                                                )}
+                                                
+                                                <h4 className="text-sm font-black text-foreground mb-1 pr-16 truncate" title={sug.productoNombre}>
+                                                    {sug.productoNombre}
+                                                </h4>
+                                                
+                                                <div className="flex items-center justify-between mt-3 text-xs">
+                                                    <div className="text-muted-foreground">
+                                                        Stock: <span className="font-bold text-foreground">{sug.stockActual}</span>
+                                                    </div>
+                                                    <div className="text-muted-foreground text-right">
+                                                        Venta D.: <span className="font-bold text-foreground">{sug.velocidadDiaria}/día</span>
+                                                    </div>
+                                                </div>
+
+                                                <div className="mt-3 pt-3 border-t border-white/5">
+                                                    <p className="text-[10px] uppercase font-black text-blue-400 mb-1">
+                                                        {temporadaBaja ? 'Sugerencia (Modo Baja)' : 'Sugerencia Ideal'}
+                                                    </p>
+                                                    <div className="flex items-baseline gap-1">
+                                                        <span className="text-2xl font-black text-foreground">{cantidadFinal}</span>
+                                                        <span className="text-xs text-muted-foreground">unidades totales</span>
+                                                    </div>
+                                                    
+                                                    {sug.cantidadEmbalaje && pacas > 0 && (
+                                                        <div className="mt-1 flex items-center gap-1.5 text-xs text-amber-500 font-medium bg-amber-500/10 px-2 py-1 rounded-md w-fit">
+                                                            <Package className="w-3.5 h-3.5" />
+                                                            Pedir: {pacas} {sug.tipoEmbalaje || 'Paca'}{pacas !== 1 ? 's' : ''} {sueltas > 0 ? `+ ${sueltas} und` : ''}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Columna izq — Compromisos fijos */}
-                        <Card className="rounded-3xl border-white/5 bg-card/30">
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-base font-black">Compromisos Fijos</CardTitle>
-                                <CardDescription className="text-xs">Arriendo, préstamos, servicios, salarios</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                {/* Formulario nuevo compromiso */}
-                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-2 border border-white/5">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input placeholder="Nombre (Ej: Arriendo)" value={formCompromiso.nombre}
-                                            onChange={e => setFormCompromiso(p => ({ ...p, nombre: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                        <Input placeholder="Monto ($)" type="number" value={formCompromiso.monto}
-                                            onChange={e => setFormCompromiso(p => ({ ...p, monto: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                    </div>
-                                    <div className="grid grid-cols-3 gap-2">
-                                        <Input placeholder="Día cobro (1-31)" type="number" value={formCompromiso.diaDeCobro}
-                                            onChange={e => setFormCompromiso(p => ({ ...p, diaDeCobro: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                        <select value={formCompromiso.categoria}
-                                            onChange={e => setFormCompromiso(p => ({ ...p, categoria: e.target.value as GastoCategoria }))}
-                                            className="h-9 text-sm rounded-xl border border-input bg-background px-2">
-                                            {(['Arriendo','Servicios','Nómina','Materia Prima','Mantenimiento','Otros'] as GastoCategoria[]).map(c => (
-                                                <option key={c} value={c}>{c}</option>
-                                            ))}
-                                        </select>
-                                        <label className="flex items-center gap-1.5 text-xs font-bold cursor-pointer">
-                                            <input type="checkbox" checked={formCompromiso.esPropietario}
-                                                onChange={e => setFormCompromiso(p => ({ ...p, esPropietario: e.target.checked }))}
-                                                className="rounded" />
-                                            <User className="w-3.5 h-3.5 text-amber-500" /> Mi salario
-                                        </label>
-                                    </div>
-                                    {formCompromiso.esPropietario && (
-                                        <Input placeholder="Persona (Yo / Esposa / ...)" value={formCompromiso.persona}
-                                            onChange={e => setFormCompromiso(p => ({ ...p, persona: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                    )}
-                                    <Button onClick={handleAddCompromiso} size="sm" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs h-9">
-                                        <Plus className="w-4 h-4 mr-1" /> Agregar compromiso
-                                    </Button>
-                                </div>
-
-                                {/* Lista de compromisos */}
-                                {compromisos.length === 0 && (
-                                    <p className="text-center text-xs text-muted-foreground py-4">Sin compromisos registrados aún</p>
-                                )}
-                                {compromisos.map(c => (
-                                    <div key={c.id} className={cn(
-                                        "flex items-center gap-3 rounded-2xl p-3 border transition-all",
-                                        c.activo ? "bg-card/40 border-white/5" : "bg-slate-500/5 border-white/3 opacity-50"
-                                    )}>
-                                        <button onClick={() => handleToggleCompromiso(c.id)} className="shrink-0">
-                                            {c.activo
-                                                ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                                                : <XCircle className="w-4 h-4 text-slate-400" />}
-                                        </button>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-1.5">
-                                                {c.esPropietario && <User className="w-3 h-3 text-amber-500 shrink-0" />}
-                                                <p className="text-sm font-bold truncate">{c.nombre}</p>
-                                                {c.persona && <span className="text-[10px] text-amber-500 font-black">({c.persona})</span>}
-                                            </div>
-                                            <p className="text-[10px] text-muted-foreground">Día {c.diaDeCobro} · {c.categoria}</p>
-                                        </div>
-                                        <p className="text-sm font-black text-rose-400 shrink-0">{formatCurrency(c.monto)}</p>
-                                        <button onClick={() => handleDeleteCompromiso(c.id)} className="shrink-0 text-muted-foreground hover:text-rose-400 transition-colors">
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
-                                    </div>
-                                ))}
-                            </CardContent>
-                        </Card>
-
-                        {/* Columna der — Registro de ventas del día */}
-                        <Card className="rounded-3xl border-white/5 bg-card/30">
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-base font-black">Ventas del Día</CardTitle>
-                                <CardDescription className="text-xs">Registro manual mientras el POS arranca</CardDescription>
-                            </CardHeader>
-                            <CardContent className="space-y-3">
-                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-2 border border-white/5">
-                                    <Input type="date" value={formVenta.fecha}
-                                        onChange={e => setFormVenta(p => ({ ...p, fecha: e.target.value }))}
-                                        className="h-9 text-sm rounded-xl" />
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <Input placeholder="Efectivo ($)" type="number" value={formVenta.totalEfectivo}
-                                            onChange={e => setFormVenta(p => ({ ...p, totalEfectivo: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                        <Input placeholder="Nequi ($)" type="number" value={formVenta.totalNequi}
-                                            onChange={e => setFormVenta(p => ({ ...p, totalNequi: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                        <Input placeholder="Transferencia ($)" type="number" value={formVenta.totalTransferencia}
-                                            onChange={e => setFormVenta(p => ({ ...p, totalTransferencia: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                        <Input placeholder="Crédito ($)" type="number" value={formVenta.totalCredito}
-                                            onChange={e => setFormVenta(p => ({ ...p, totalCredito: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
-                                    </div>
-                                    <Input placeholder="Notas (opcional)" value={formVenta.notas}
-                                        onChange={e => setFormVenta(p => ({ ...p, notas: e.target.value }))}
-                                        className="h-9 text-sm rounded-xl" />
-                                    <Button onClick={handleAddVentaDiaria} size="sm" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs h-9">
-                                        <Plus className="w-4 h-4 mr-1" /> Registrar cierre del día
-                                    </Button>
-                                </div>
-
-                                {ventasDiarias.length === 0 && (
-                                    <p className="text-center text-xs text-muted-foreground py-4">Sin ventas registradas manualmente aún</p>
-                                )}
-                                <div className="max-h-64 overflow-y-auto space-y-2">
-                                    {ventasDiarias.slice(0, 30).map(v => (
-                                        <div key={v.id} className="flex items-center gap-3 rounded-2xl p-3 bg-card/40 border border-white/5">
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-bold">{new Date(v.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
-                                                <p className="text-[10px] text-muted-foreground">
-                                                    Ef: {formatCurrency(v.totalEfectivo)} · Nequi: {formatCurrency(v.totalNequi)}
-                                                    {v.totalTransferencia > 0 && ` · Transf: ${formatCurrency(v.totalTransferencia)}`}
-                                                    {v.totalCredito > 0 && ` · Cred: ${formatCurrency(v.totalCredito)}`}
-                                                </p>
-                                            </div>
-                                            <p className="text-sm font-black text-emerald-400 shrink-0">{formatCurrency(v.total)}</p>
-                                            <button onClick={() => handleDeleteVentaDiaria(v.id)} className="shrink-0 text-muted-foreground hover:text-rose-400 transition-colors">
-                                                <Trash2 className="w-3.5 h-3.5" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
                 </TabsContent>
 
                 {/* ══════════════════════════════════════════════════
-                    TAB 5: CONSEJERO IA
+                    TAB 5.5: ARQUEO DE CAJAS
                 ══════════════════════════════════════════════════ */}
-                <TabsContent value="consejero-ia" className="space-y-4 mt-0">
-
-                    {/* ── Diagnóstico principal ── */}
-                    <Card className={cn(
-                        "rounded-3xl border-2",
-                        consejo.nivel === 'critico' ? "border-rose-500/50 bg-rose-500/5"
-                        : consejo.nivel === 'alerta' ? "border-amber-500/50 bg-amber-500/5"
-                        : "border-emerald-500/50 bg-emerald-500/5"
-                    )}>
-                        <CardContent className="p-6">
-                            <div className="flex items-start gap-4">
-                                <div className={cn(
-                                    "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
-                                    consejo.nivel === 'critico' ? "bg-rose-500/20"
-                                    : consejo.nivel === 'alerta' ? "bg-amber-500/20"
-                                    : "bg-emerald-500/20"
-                                )}>
-                                    {consejo.nivel === 'critico'
-                                        ? <XCircle className="w-6 h-6 text-rose-500" />
-                                        : consejo.nivel === 'alerta'
-                                        ? <AlertTriangle className="w-6 h-6 text-amber-500" />
-                                        : <CheckCircle2 className="w-6 h-6 text-emerald-500" />}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <Brain className="w-4 h-4 text-violet-400" />
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-violet-400">Consejero IA · Quincena actual</p>
-                                    </div>
-                                    <h3 className={cn(
-                                        "text-xl font-black mb-4",
-                                        consejo.nivel === 'critico' ? "text-rose-400"
-                                        : consejo.nivel === 'alerta' ? "text-amber-400"
-                                        : "text-emerald-400"
-                                    )}>{consejo.titulo}</h3>
-                                    <div className="space-y-3">
-                                        {consejo.puntos.map((p, i) => (
-                                            <div key={i} className="flex gap-3 items-start">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 shrink-0" />
-                                                <p className="text-sm text-foreground leading-relaxed">{p}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* ── Panorama completo del negocio ── */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                        {[
-                            { label: 'Ventas reales quincena', val: quincenaReal.ventasTotal, color: 'text-emerald-400', icon: TrendingUp },
-                            { label: 'Compromisos totales activos', val: totalCompromisosActivos, color: 'text-violet-400', icon: CalendarCheck },
-                            { label: 'Prom. insumos/mes', val: promedioInsumos, color: 'text-amber-400', icon: Package },
-                            { label: 'Total obligaciones mes', val: totalObligaciones, color: 'text-rose-400', icon: Shield },
-                            { label: 'Saldo proyectado quincena', val: proyeccionQuincena.saldoProyectado, color: proyeccionQuincena.alcanza ? 'text-emerald-400' : 'text-rose-400', icon: DollarSign },
-                            { label: 'Margen neto mes', val: null, strVal: `${margenActual.toFixed(1)}%`, color: margenActual >= 25 ? 'text-emerald-400' : margenActual >= 15 ? 'text-amber-400' : 'text-rose-400', icon: Percent },
-                        ].map((item, i) => (
-                            <div key={i} className="bg-card/40 rounded-2xl p-3 border border-white/5">
-                                <item.icon className="w-3.5 h-3.5 text-muted-foreground mb-2" />
-                                <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground mb-1 leading-tight">{item.label}</p>
-                                <p className={cn("text-base font-black tabular-nums", item.color)}>
-                                    {item.val !== null ? formatCurrency(item.val) : item.strVal}
-                                </p>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* ── Alertas activas del Tablero Total ── */}
-                    {alertasAutomaticas.length > 0 && (
-                        <Card className="rounded-3xl border-white/5 bg-card/30">
-                            <CardHeader className="pb-2 px-5 pt-5">
-                                <CardTitle className="text-xs font-black uppercase tracking-tight flex items-center gap-2">
-                                    <BadgeAlert className="w-4 h-4 text-rose-400" />
-                                    Alertas activas del negocio
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="px-5 pb-5 space-y-2">
-                                {alertasAutomaticas.map((a, i) => (
-                                    <div key={i} className={cn(
-                                        "rounded-xl p-3 flex gap-3 items-start border",
-                                        a.nivel === 'critico' ? 'border-rose-500/20 bg-rose-500/5'
-                                        : a.nivel === 'advertencia' ? 'border-amber-500/20 bg-amber-500/5'
-                                        : 'border-emerald-500/20 bg-emerald-500/5'
-                                    )}>
-                                        <span className="text-base shrink-0">{a.icon}</span>
-                                        <div className="flex-1 min-w-0">
-                                            <p className={cn(
-                                                "text-xs font-black",
-                                                a.nivel === 'critico' ? 'text-rose-400' : a.nivel === 'advertencia' ? 'text-amber-400' : 'text-emerald-400'
-                                            )}>{a.titulo}</p>
-                                            <p className="text-[11px] text-muted-foreground mt-0.5">{a.msg}</p>
-                                            <p className="text-[11px] font-bold text-foreground mt-1">→ {a.accion}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* ── ¿Qué hacer esta semana? ── */}
-                    <Card className="rounded-3xl border-white/5 bg-gradient-to-br from-violet-950/50 to-slate-900 overflow-hidden">
-                        <CardHeader className="pb-2 px-5 pt-5">
-                            <CardTitle className="text-xs font-black uppercase tracking-tight flex items-center gap-2">
-                                <Flame className="w-4 h-4 text-orange-400" />
-                                Acciones recomendadas esta semana
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="px-5 pb-5">
-                            <div className="space-y-2">
-                                {(() => {
-                                    const acciones: { prioridad: 'alta' | 'media' | 'info'; texto: string }[] = [];
-
-                                    if (!proyeccionQuincena.alcanza)
-                                        acciones.push({ prioridad: 'alta', texto: `Necesitas ${formatCurrency(proyeccionQuincena.deficit)} más para cubrir la quincena — enfócate en ventas y no en gastos esta semana.` });
-
-                                    if (coberturaActual < 100 && totalObligaciones > 0)
-                                        acciones.push({ prioridad: 'alta', texto: `Tus ventas del mes solo cubren el ${coberturaActual.toFixed(0)}% de tus obligaciones totales. Meta diaria necesaria: ${formatCurrency(ventasNecesariasDiarias)}.` });
-
-                                    if (margenActual < 20 && reporteActual.totalVentas > 0)
-                                        acciones.push({ prioridad: 'alta', texto: `Margen del ${margenActual.toFixed(1)}% — revisa qué productos vendes a pérdida o con margen muy bajo y sube su precio entre 5-10%.` });
-
-                                    if (compromisos.filter(c => c.activo).length === 0)
-                                        acciones.push({ prioridad: 'alta', texto: 'Registra tus compromisos fijos en "Mi Quincena" — sin eso el sistema no puede calcular si el negocio te alcanza.' });
-
-                                    if (compromisos.filter(c => c.activo && c.esPropietario).length === 0)
-                                        acciones.push({ prioridad: 'media', texto: 'No tienes registrado tu salario ni el de tu esposa. Agrégalos como compromiso marcando "Mi salario" para que la proyección sea real.' });
-
-                                    if (promedioInsumos === 0 && gastos.length === 0)
-                                        acciones.push({ prioridad: 'media', texto: 'Registra tus gastos de materia prima en el módulo Finanzas — necesitas al menos 1 mes de historial para que el Tablero Total sea preciso.' });
-
-                                    if (proyeccionQuincena.promedioVentaDiaria > 0 && coberturaActual >= 120)
-                                        acciones.push({ prioridad: 'info', texto: `Buen ritmo — vendiendo ${formatCurrency(proyeccionQuincena.promedioVentaDiaria)}/día. Considera guardar el excedente de ${formatCurrency(reporteActual.totalVentas - totalObligaciones)} como fondo de emergencia.` });
-
-                                    if (acciones.length === 0)
-                                        acciones.push({ prioridad: 'info', texto: 'Ingresa más datos del negocio para que el consejero pueda darte recomendaciones personalizadas.' });
-
-                                    return acciones.map((a, i) => (
-                                        <div key={i} className="flex gap-3 items-start">
-                                            <div className={cn(
-                                                "w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-black",
-                                                a.prioridad === 'alta' ? 'bg-rose-500/20 text-rose-400' :
-                                                a.prioridad === 'media' ? 'bg-amber-500/20 text-amber-400' :
-                                                'bg-violet-500/20 text-violet-400'
-                                            )}>
-                                                {i + 1}
-                                            </div>
-                                            <p className="text-[12px] text-foreground leading-relaxed">{a.texto}</p>
-                                        </div>
-                                    ));
-                                })()}
-                            </div>
-                        </CardContent>
-                    </Card>
+                <TabsContent value="arqueo-cajas" className="space-y-6 mt-0">
+                    <ArqueoCajas ventasDiarias={ventasDiarias} />
                 </TabsContent>
 
                 {/* ══════════════════════════════════════════════════
                     TAB 6: TABLERO DE OBLIGACIONES TOTALES
                 ══════════════════════════════════════════════════ */}
-                <TabsContent value="tablero-total" className="space-y-6 mt-0">
-
-                    {/* ── Fuente de datos — transparencia ── */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                        {[
-                            {
-                                label: 'Ventas del mes (POS)',
-                                val: reporteActual.totalVentas,
-                                sub: 'Fuente: transacciones reales del sistema',
-                                color: 'text-emerald-500',
-                                border: 'border-emerald-200 dark:border-emerald-800',
-                                empty: reporteActual.totalVentas === 0,
-                            },
-                            {
-                                label: 'Compromisos fijos activos',
-                                val: totalCompromisosActivos,
-                                sub: `${compromisos.filter(c=>c.activo).length} registrados · Fuente: tab Mi Quincena`,
-                                color: 'text-violet-500',
-                                border: 'border-violet-200 dark:border-violet-800',
-                                empty: totalCompromisosActivos === 0,
-                            },
-                            {
-                                label: 'Prom. insumos/mes',
-                                val: promedioInsumos,
-                                sub: `Basado en ${Object.keys(promedioGastosMensuales).length > 0 ? 'gastos históricos reales' : 'sin gastos registrados'}`,
-                                color: 'text-amber-500',
-                                border: 'border-amber-200 dark:border-amber-800',
-                                empty: promedioInsumos === 0,
-                            },
-                            {
-                                label: 'Total obligaciones',
-                                val: totalObligaciones,
-                                sub: 'Compromisos + Insumos + Otros gastos',
-                                color: totalObligaciones > reporteActual.totalVentas ? 'text-rose-500' : 'text-cyan-500',
-                                border: totalObligaciones > reporteActual.totalVentas ? 'border-rose-200 dark:border-rose-800' : 'border-cyan-200 dark:border-cyan-800',
-                                empty: totalObligaciones === 0,
-                            },
-                        ].map(item => (
-                            <div key={item.label} className={cn(
-                                "bg-white dark:bg-slate-900 rounded-2xl border px-4 py-3 flex flex-col gap-1",
-                                item.border
-                            )}>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{item.label}</span>
-                                {item.empty
-                                    ? <span className="text-sm font-black text-slate-400">Sin datos aún</span>
-                                    : <span className={cn("text-xl font-black tabular-nums", item.color)}>{formatCurrency(item.val)}</span>
-                                }
-                                <span className="text-[9px] text-slate-400 font-bold leading-tight">{item.sub}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* Aviso si faltan datos clave */}
-                    {(totalCompromisosActivos === 0 || totalObligaciones === 0) && (
-                        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4 flex items-start gap-3">
-                            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                            <div>
-                                <p className="text-sm font-black text-amber-400">Completa tus datos para ver el tablero real</p>
-                                <ul className="text-[11px] text-muted-foreground mt-1 space-y-0.5 list-disc ml-4">
-                                    {totalCompromisosActivos === 0 && <li>Ve a <strong>Mi Quincena</strong> y registra tus compromisos fijos (arriendo, servicios, préstamos, salarios)</li>}
-                                    {promedioInsumos === 0 && <li>Registra gastos de <strong>Materia Prima</strong> en el módulo Finanzas para que el promedio de insumos sea real</li>}
-                                    {reporteActual.totalVentas === 0 && <li>Las ventas del mes aún no se han registrado en el POS</li>}
-                                </ul>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ── Cobertura gauge principal ── */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <Card className="lg:col-span-2 rounded-3xl border-white/5 bg-card/30 overflow-hidden">
-                            <CardHeader className="pb-3 px-6 pt-5">
-                                <div className="flex items-center gap-2">
-                                    <Gauge className="w-5 h-5 text-rose-400" />
-                                    <CardTitle className="text-base font-black uppercase tracking-tight">Cobertura de Obligaciones</CardTitle>
-                                </div>
-                                <CardDescription className="text-[11px]">¿Cuánto de tus obligaciones totales cubren las ventas de este mes?</CardDescription>
-                            </CardHeader>
-                            <CardContent className="px-6 pb-6 space-y-5">
-                                {/* Barra de cobertura */}
-                                <div>
-                                    <div className="flex justify-between mb-2">
-                                        <span className="text-[10px] font-black uppercase text-muted-foreground">
-                                            Ventas: {formatCurrency(reporteActual.totalVentas)}
-                                        </span>
-                                        <span className={cn(
-                                            "text-[10px] font-black uppercase",
-                                            coberturaActual >= 120 ? 'text-emerald-400' : coberturaActual >= 80 ? 'text-amber-400' : 'text-rose-400'
-                                        )}>
-                                            {coberturaActual.toFixed(0)}% cubierto
-                                        </span>
-                                    </div>
-                                    <div className="w-full h-5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                        <div
-                                            className={cn(
-                                                "h-full rounded-full transition-all duration-1000 flex items-center justify-end pr-2",
-                                                coberturaActual >= 120 ? 'bg-emerald-500' : coberturaActual >= 80 ? 'bg-amber-500' : 'bg-rose-500'
-                                            )}
-                                            style={{ width: `${Math.min(100, coberturaActual)}%` }}
-                                        >
-                                            {coberturaActual >= 30 && (
-                                                <span className="text-[9px] font-black text-white">{coberturaActual.toFixed(0)}%</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex justify-between mt-1">
-                                        <span className="text-[9px] text-slate-400 font-bold">Crítico</span>
-                                        <span className="text-[9px] text-slate-400 font-bold">Obligaciones: {formatCurrency(totalObligaciones)}</span>
-                                        <span className="text-[9px] text-slate-400 font-bold">Saludable &gt;120%</span>
-                                    </div>
-                                </div>
-
-                                {/* KPIs de obligaciones */}
-                                <div className="grid grid-cols-3 gap-3">
-                                    {[
-                                        { label: 'Compromisos fijos', val: totalCompromisosActivos, color: 'text-violet-500', bg: 'bg-violet-500/10' },
-                                        { label: 'Prom. insumos/mes', val: promedioInsumos, color: 'text-amber-500', bg: 'bg-amber-500/10' },
-                                        { label: 'Prom. otros gastos', val: promedioOtrosGastos, color: 'text-rose-500', bg: 'bg-rose-500/10' },
-                                    ].map(item => (
-                                        <div key={item.label} className={cn("rounded-2xl p-3 border border-white/5", item.bg)}>
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
-                                            <p className={cn("text-lg font-black", item.color)}>{formatCurrency(item.val)}</p>
-                                        </div>
-                                    ))}
-                                </div>
-
-                                {/* Ventas mínimas para sobrevivir */}
-                                <div className="rounded-2xl bg-slate-900/60 border border-white/5 p-4 flex items-center justify-between gap-4 flex-wrap">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-9 h-9 rounded-xl bg-rose-500/20 flex items-center justify-center shrink-0">
-                                            <LifeBuoy className="w-5 h-5 text-rose-400" />
-                                        </div>
-                                        <div>
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ventas mínimas para sobrevivir</p>
-                                            <p className="text-2xl font-black text-white">{formatCurrency(totalObligaciones)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Necesitas vender al día</p>
-                                        <p className="text-xl font-black text-amber-400">{formatCurrency(ventasNecesariasDiarias)}</p>
-                                    </div>
-                                </div>
-                            </CardContent>
-                        </Card>
-
-                        {/* Donut de breakdown */}
-                        <Card className="rounded-3xl border-white/5 bg-card/30 overflow-hidden">
-                            <CardHeader className="pb-2 px-5 pt-5">
-                                <CardTitle className="text-xs font-black uppercase tracking-tight flex items-center gap-2">
-                                    <PieChartIcon className="w-4 h-4 text-violet-400" /> Distribución de obligaciones
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="px-5 pb-5">
-                                {obligacionesBreakdown.length > 0 ? (
-                                    <>
-                                        <div className="h-[160px]">
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie data={obligacionesBreakdown} innerRadius={45} outerRadius={65} paddingAngle={5} dataKey="value">
-                                                        {obligacionesBreakdown.map((item, index) => (
-                                                            <Cell key={index} fill={item.color} stroke="rgba(255,255,255,0.05)" />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip
-                                                        contentStyle={{ backgroundColor: '#0f172a', borderRadius: '12px', border: 'none' }}
-                                                        itemStyle={{ fontSize: '10px', fontWeight: 900 }}
-                                                        formatter={(value: number) => formatCurrency(value)}
-                                                    />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                        <div className="space-y-2 mt-2">
-                                            {obligacionesBreakdown.map((item, i) => (
-                                                <div key={i} className="flex items-center justify-between gap-2">
-                                                    <div className="flex items-center gap-2">
-                                                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                                                        <span className="text-[10px] font-bold text-muted-foreground truncate">{item.name}</span>
-                                                    </div>
-                                                    <span className="text-[10px] font-black text-foreground shrink-0">{formatCurrency(item.value)}</span>
-                                                </div>
-                                            ))}
-                                            <div className="border-t border-white/5 pt-2 flex items-center justify-between">
-                                                <span className="text-[10px] font-black uppercase text-muted-foreground">Total obligaciones</span>
-                                                <span className="text-sm font-black text-foreground">{formatCurrency(totalObligaciones)}</span>
-                                            </div>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="h-[200px] flex items-center justify-center">
-                                        <p className="text-xs text-muted-foreground text-center">Sin datos de obligaciones registrados aún.<br />Agrega compromisos o registra gastos.</p>
-                                    </div>
-                                )}
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* ── Alertas automáticas ── */}
-                    <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                            <BadgeAlert className="w-4 h-4 text-rose-400" />
-                            <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Alertas del sistema</h3>
-                            <div className={cn(
-                                "text-[9px] font-black px-2 py-0.5 rounded-full",
-                                alertasAutomaticas.some(a => a.nivel === 'critico') ? 'bg-rose-500/20 text-rose-400' :
-                                alertasAutomaticas.some(a => a.nivel === 'advertencia') ? 'bg-amber-500/20 text-amber-400' :
-                                'bg-emerald-500/20 text-emerald-400'
-                            )}>
-                                {alertasAutomaticas.filter(a => a.nivel === 'critico').length} críticas · {alertasAutomaticas.filter(a => a.nivel === 'advertencia').length} advertencias
-                            </div>
-                        </div>
-                        <div className="space-y-2">
-                            {alertasAutomaticas.map((alerta, i) => (
-                                <div key={i} className={cn(
-                                    "rounded-2xl border p-4 flex gap-3",
-                                    alerta.nivel === 'critico' ? 'border-rose-500/30 bg-rose-500/5' :
-                                    alerta.nivel === 'advertencia' ? 'border-amber-500/30 bg-amber-500/5' :
-                                    'border-emerald-500/30 bg-emerald-500/5'
-                                )}>
-                                    <span className="text-lg shrink-0 leading-none mt-0.5">{alerta.icon}</span>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 flex-wrap">
-                                            <p className={cn(
-                                                "text-xs font-black",
-                                                alerta.nivel === 'critico' ? 'text-rose-400' :
-                                                alerta.nivel === 'advertencia' ? 'text-amber-400' :
-                                                'text-emerald-400'
-                                            )}>{alerta.titulo}</p>
-                                        </div>
-                                        <p className="text-[11px] text-muted-foreground mt-0.5">{alerta.msg}</p>
-                                        <div className="flex items-center gap-1.5 mt-1.5">
-                                            <Flame className="w-3 h-3 text-orange-400 shrink-0" />
-                                            <p className="text-[11px] font-bold text-foreground">{alerta.accion}</p>
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* ── Resumen estratégico ── */}
-                    <Card className="rounded-3xl border-white/5 bg-gradient-to-br from-violet-950/40 to-slate-900 overflow-hidden">
-                        <CardContent className="p-6">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-9 h-9 rounded-xl bg-violet-500/20 flex items-center justify-center">
-                                    <Brain className="w-5 h-5 text-violet-400" />
-                                </div>
-                                <div>
-                                    <p className="text-xs font-black uppercase tracking-widest text-violet-400">Diagnóstico rápido</p>
-                                    <p className="text-[10px] text-muted-foreground">Basado en datos reales de tu negocio</p>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                {[
-                                    {
-                                        label: 'Situación actual',
-                                        valor: coberturaActual >= 120 ? 'Solvente' : coberturaActual >= 80 ? 'Ajustado' : 'En riesgo',
-                                        desc: coberturaActual >= 120
-                                            ? 'Tus ventas superan tus obligaciones. Tienes excedente.'
-                                            : coberturaActual >= 80
-                                            ? 'Cubres lo básico pero sin margen de seguridad.'
-                                            : 'Las ventas actuales no alcanzan a cubrir todas las obligaciones.',
-                                        color: coberturaActual >= 120 ? 'text-emerald-400' : coberturaActual >= 80 ? 'text-amber-400' : 'text-rose-400',
-                                    },
-                                    {
-                                        label: 'Meta mensual recomendada',
-                                        valor: formatCurrency(totalObligaciones * 1.3),
-                                        desc: 'Obligaciones × 1.3 — el 30% extra es tu colchón de ahorro y emergencias.',
-                                        color: 'text-indigo-400',
-                                    },
-                                    {
-                                        label: 'Excedente / Déficit mes',
-                                        valor: formatCurrency(reporteActual.totalVentas - totalObligaciones),
-                                        desc: reporteActual.totalVentas >= totalObligaciones
-                                            ? 'Tienes excedente este mes. Considera guardarlo como fondo de emergencia.'
-                                            : 'Hay déficit. Cada peso que puedas ahorrar en gastos ayuda a cerrar esta brecha.',
-                                        color: reporteActual.totalVentas >= totalObligaciones ? 'text-emerald-400' : 'text-rose-400',
-                                    },
-                                ].map((item, i) => (
-                                    <div key={i} className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{item.label}</p>
-                                        <p className={cn("text-lg font-black mb-1", item.color)}>{item.valor}</p>
-                                        <p className="text-[10px] text-muted-foreground leading-relaxed">{item.desc}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+                <TablaFlujoCaja data={{...reportesData, formatCurrency, ventas, gastos}} />
             </Tabs>
 
             {/* Modal PIN — Eliminar venta diaria */}
@@ -1695,6 +956,285 @@ export default function Reportes({
                     </div>
                 </div>
             )}
+
+            {/* Modal Detalles Tarjetas */}
+            <Dialog open={!!detallesModal} onOpenChange={(open) => !open && setDetallesModal(null)}>
+                <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-white/10 rounded-[2rem] p-6 shadow-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black text-slate-900 dark:text-white">
+                            {detallesModal === 'ingresos' && 'Desglose de Ingresos'}
+                            {detallesModal === 'proveedores' && 'Tope de Proveedores'}
+                            {detallesModal === 'fijos' && 'Gastos Fijos y Nómina'}
+                            {detallesModal === 'diarios' && 'Gastos Operativos (Diarios)'}
+                            {detallesModal === 'neta' && 'Ganancia Neta'}
+                            {detallesModal === 'ventas_hoy' && 'Detalle Ventas de Hoy'}
+                            {detallesModal === 'proyeccion_ventas' && 'Proyección de Ventas'}
+                            {detallesModal === 'proyeccion_costos' && 'Proyección de Costos'}
+                            {detallesModal === 'proyeccion_compromisos' && 'Proyección de Compromisos'}
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+                            {detallesModal === 'ingresos' && 'Suma total del efectivo de cajas y métodos digitales de las ventas de la quincena.'}
+                            {detallesModal === 'proveedores' && 'Lista de todos los presupuestos activos proyectados como tope para esta quincena.'}
+                            {detallesModal === 'fijos' && 'Compromisos fijos que tocan pago en esta quincena.'}
+                            {detallesModal === 'diarios' && 'Salidas de caja diarias durante el turno.'}
+                            {detallesModal === 'neta' && 'Cálculo final: Ingresos - (Proveedores + Fijos + Diarios).'}
+                            {detallesModal === 'ventas_hoy' && 'Desglose exacto de las ventas registradas el día de hoy.'}
+                            {detallesModal === 'proyeccion_ventas' && 'Cálculo estimado basado en tu promedio de ventas diarias y los días que faltan para terminar la quincena.'}
+                            {detallesModal === 'proyeccion_costos' && 'Se asume que la mitad de lo vendido se reinvierte en materia prima para seguir produciendo.'}
+                            {detallesModal === 'proyeccion_compromisos' && 'La suma de tus deudas, servicios y salarios programados para estos 15 días.'}
+                        </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="mt-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                        {detallesModal === 'ingresos' && (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                                    <span className="text-sm font-bold text-emerald-400">Ingreso por Ventas POS</span>
+                                    <span className="text-sm font-black text-emerald-500">{formatCurrency(quincenaReal.ventasTotal)}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
+                                    <span className="text-sm font-bold text-rose-400">Reintegro de Gastos Diarios</span>
+                                    <span className="text-sm font-black text-rose-500">+{formatCurrency(diagnosticoFinanciero.operativos)}</span>
+                                </div>
+                                <div className="flex justify-between items-center p-3 border-t border-slate-200 dark:border-white/10 mt-2">
+                                    <span className="text-sm font-black text-slate-900 dark:text-white">TOTAL INGRESOS BRUTOS</span>
+                                    <span className="text-lg font-black text-emerald-400">{formatCurrency(diagnosticoFinanciero.ingresos)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {detallesModal === 'proveedores' && (
+                            <div className="space-y-2">
+                                {presupuestosMinimos.length === 0 && <p className="text-center text-xs text-muted-foreground py-4">No hay presupuestos activos</p>}
+                                {presupuestosMinimos.map((p: any, i: number) => {
+                                    const limite = temporadaBaja && p.montoBaja !== undefined ? p.montoBaja : p.monto;
+                                    let multiplicador = 1;
+                                    if (periodoFiltro.quincena === 'mes') {
+                                        if (p.frecuencia === 'Semanal') multiplicador = 4;
+                                        else if (p.frecuencia === 'Quincenal') multiplicador = 2;
+                                    } else {
+                                        if (p.frecuencia === 'Semanal') multiplicador = 2;
+                                        else if (p.frecuencia === 'Mensual') multiplicador = 0.5;
+                                    }
+                                    const proyectado = limite * multiplicador;
+                                    return (
+                                        <div key={i} className="flex flex-col bg-slate-50 dark:bg-card/50 p-3 rounded-xl border border-slate-200 dark:border-white/5">
+                                            <div className="flex justify-between items-center">
+                                                <p className="text-sm font-black text-slate-900 dark:text-white">{p.proveedor} <span className="text-[9px] font-normal uppercase tracking-widest text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded ml-1">{p.frecuencia}</span></p>
+                                                <span className="text-sm font-black text-amber-500">{formatCurrency(limite)}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center mt-1">
+                                                <p className="text-[10px] text-muted-foreground italic">Se paga al recibir pedido</p>
+                                                <p className="text-[10px] text-slate-400">Total {periodoFiltro.quincena === 'mes' ? 'mes' : 'quincena'}: <strong className="text-slate-500 dark:text-slate-300">{formatCurrency(proyectado)}</strong></p>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                <div className="flex justify-between items-center p-3 border-t border-slate-200 dark:border-white/10 mt-2">
+                                    <span className="text-sm font-black text-slate-900 dark:text-white">TOTAL TOPE PROVEEDORES</span>
+                                    <span className="text-lg font-black text-amber-500">{formatCurrency(diagnosticoFinanciero.compras)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {detallesModal === 'fijos' && (
+                            <div className="space-y-2">
+                                {compromisos.length === 0 && <p className="text-center text-xs text-muted-foreground py-4">No hay compromisos fijos activos</p>}
+                                {compromisos.filter(c => c.activo).map((c, i) => (
+                                    <div key={i} className="flex justify-between items-center bg-slate-50 dark:bg-card/50 p-3 rounded-xl border border-slate-200 dark:border-white/5">
+                                        <div>
+                                            <p className="text-xs font-bold text-slate-900 dark:text-white">{c.nombre}</p>
+                                            <p className="text-[10px] text-muted-foreground">{c.categoria} - Día {c.diaDeCobro}</p>
+                                        </div>
+                                        <span className="text-sm font-black text-violet-500">{formatCurrency(c.monto)}</span>
+                                    </div>
+                                ))}
+                                <div className="flex justify-between items-center p-3 border-t border-slate-200 dark:border-white/10 mt-2">
+                                    <span className="text-sm font-black text-slate-900 dark:text-white">TOTAL GASTOS FIJOS</span>
+                                    <span className="text-lg font-black text-violet-500">{formatCurrency(diagnosticoFinanciero.fijos)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {detallesModal === 'diarios' && (
+                            <div className="space-y-2">
+                                {ventasDiarias.filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr && v.cajas && v.cajas['Gastos/Salidas']).length === 0 && <p className="text-center text-xs text-muted-foreground py-4">No hay gastos diarios en este periodo</p>}
+                                {ventasDiarias
+                                    .filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr && v.cajas && v.cajas['Gastos/Salidas'])
+                                    .map((v, i) => (
+                                        <div key={i} className="flex justify-between items-center bg-slate-50 dark:bg-card/50 p-3 rounded-xl border border-slate-200 dark:border-white/5">
+                                            <div>
+                                                <p className="text-xs font-bold text-slate-900 dark:text-white">{v.fecha}</p>
+                                                <p className="text-[10px] text-muted-foreground">Turno: {v.turno}</p>
+                                            </div>
+                                            <span className="text-sm font-black text-rose-500">{formatCurrency(v.cajas!['Gastos/Salidas'])}</span>
+                                        </div>
+                                    ))}
+                                <div className="flex justify-between items-center p-3 border-t border-slate-200 dark:border-white/10 mt-2">
+                                    <span className="text-sm font-black text-slate-900 dark:text-white">TOTAL GASTOS DIARIOS</span>
+                                    <span className="text-lg font-black text-rose-500">{formatCurrency(diagnosticoFinanciero.operativos)}</span>
+                                </div>
+                            </div>
+                        )}
+
+                        {detallesModal === 'neta' && (
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-center bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
+                                    <span className="text-sm font-bold text-emerald-400">Total Ingresos</span>
+                                    <span className="text-sm font-black text-emerald-500">{formatCurrency(diagnosticoFinanciero.ingresos)}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
+                                    <span className="text-sm font-bold text-amber-400">- Proveedores (Tope)</span>
+                                    <span className="text-sm font-black text-amber-500">- {formatCurrency(diagnosticoFinanciero.compras)}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-violet-500/10 p-3 rounded-xl border border-violet-500/20">
+                                    <span className="text-sm font-bold text-violet-400">- Gastos Fijos</span>
+                                    <span className="text-sm font-black text-violet-500">- {formatCurrency(diagnosticoFinanciero.fijos)}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
+                                    <span className="text-sm font-bold text-rose-400">- Gastos Diarios</span>
+                                    <span className="text-sm font-black text-rose-500">- {formatCurrency(diagnosticoFinanciero.operativos)}</span>
+                                </div>
+                                <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-card/60 rounded-2xl border border-slate-200 dark:border-white/10 mt-4 shadow-lg">
+                                    <span className="text-sm font-black uppercase text-slate-900 dark:text-white">Ganancia Neta Real</span>
+                                    <span className={cn("text-2xl font-black", diagnosticoFinanciero.gananciaNeta >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                        {formatCurrency(diagnosticoFinanciero.gananciaNeta)}
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {detallesModal === 'ventas_hoy' && (
+                            <div className="space-y-4 pt-2">
+                                {(() => {
+                                    const ventasPOSHoy = ventas.filter(v => v.fecha.slice(0, 10) === quincenaReal.hoyStr);
+                                    const totalPOSHoy = ventasPOSHoy.reduce((sum, v) => sum + v.total, 0);
+                                    const ventasManualesHoy = ventasDiarias.filter(v => v.fecha === quincenaReal.hoyStr);
+                                    const totalManualHoy = ventasManualesHoy.reduce((sum, v) => sum + v.total, 0);
+                                    
+                                    return (
+                                        <>
+                                            <div className="bg-card/40 rounded-xl p-4 border border-white/5">
+                                                <h4 className="text-xs font-black uppercase text-amber-500 mb-3 flex justify-between">
+                                                    <span>Cierres de Turno (Manual)</span>
+                                                    <span>{formatCurrency(totalManualHoy)}</span>
+                                                </h4>
+                                                {ventasManualesHoy.length === 0 ? (
+                                                    <p className="text-xs text-muted-foreground text-center italic">No hay cierres de caja hoy</p>
+                                                ) : (
+                                                    <div className="space-y-2">
+                                                        {ventasManualesHoy.map(v => (
+                                                            <div key={v.id} className="flex justify-between items-center text-sm border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                                                                <div>
+                                                                    <span className="font-bold">{v.turno || 'Turno'}</span>
+                                                                    {v.hora && <span className="text-[10px] text-muted-foreground ml-2">({v.hora})</span>}
+                                                                </div>
+                                                                <span className="font-black text-amber-400">+{formatCurrency(v.total)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="bg-card/40 rounded-xl p-4 border border-white/5">
+                                                <h4 className="text-xs font-black uppercase text-emerald-500 mb-3 flex justify-between">
+                                                    <span>Ventas Directas POS</span>
+                                                    <span>{formatCurrency(totalPOSHoy)}</span>
+                                                </h4>
+                                                {ventasPOSHoy.length === 0 ? (
+                                                    <p className="text-xs text-muted-foreground text-center italic">No hay ventas directas hoy</p>
+                                                ) : (
+                                                    <div className="space-y-2 max-h-32 overflow-y-auto pr-1">
+                                                        {ventasPOSHoy.map(v => (
+                                                            <div key={v.id} className="flex justify-between items-center text-[11px] border-b border-white/5 pb-1.5 last:border-0 last:pb-0">
+                                                                <span className="truncate text-muted-foreground">{v.items?.map(i => i.cantidad + 'x ' + (productos?.find(p => p.id === i.productoId)?.nombre || 'Item')).join(', ')}</span>
+                                                                <span className="font-black text-emerald-400 shrink-0 ml-2">+{formatCurrency(v.total)}</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            <div className="flex justify-between items-center pt-2 px-2 border-t border-white/10">
+                                                <span className="text-sm font-black uppercase text-slate-900 dark:text-white">Total Día</span>
+                                                <span className="text-xl font-black text-slate-900 dark:text-white">{formatCurrency(totalManualHoy + totalPOSHoy)}</span>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
+                        {detallesModal === 'proyeccion_ventas' && (
+                            <div className="space-y-4 pt-2">
+                                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                                    Calculamos cuánto venderás en total esta quincena tomando tu promedio diario de ventas y multiplicándolo por los días que faltan.
+                                </p>
+                                <div className="bg-slate-50 dark:bg-card/40 rounded-xl p-4 border border-slate-200 dark:border-white/5 space-y-3">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-600 dark:text-slate-400">Ventas reales hasta hoy:</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(quincenaReal.ventasTotal)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-600 dark:text-slate-400">Promedio de venta diaria:</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(quincenaReal.ventasTotal / quincenaReal.diasTranscurridos)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-600 dark:text-slate-400">Días restantes del periodo:</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">{Math.max(0, quincenaReal.totalDiasPeriodo - quincenaReal.diasTranscurridos)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm pt-3 border-t border-slate-200 dark:border-white/10 text-emerald-600 dark:text-emerald-400 font-black">
+                                        <span>Total Proyectado:</span> 
+                                        <span>{formatCurrency(proyeccionQuincena.ingresoEsperado)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {detallesModal === 'proyeccion_costos' && (
+                            <div className="space-y-4 pt-2">
+                                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                                    Todo negocio de panadería tiene costos fijos de insumos (harina, huevos, etc). Por seguridad financiera, el sistema aparta automáticamente el 50% de las ventas como costo de reposición.
+                                </p>
+                                <div className="bg-slate-50 dark:bg-card/40 rounded-xl p-4 border border-slate-200 dark:border-white/5 space-y-3">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-600 dark:text-slate-400">Ventas Proyectadas:</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(proyeccionQuincena.ingresoEsperado)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm pt-3 border-t border-slate-200 dark:border-white/10 text-amber-600 dark:text-amber-400 font-black">
+                                        <span>Costo a reponer (50%):</span> 
+                                        <span>-{formatCurrency(proyeccionQuincena.ingresoEsperado - proyeccionQuincena.utilidadBrutaEsperada)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {detallesModal === 'proyeccion_compromisos' && (
+                            <div className="space-y-4 pt-2">
+                                <p className="text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                                    Esta es la suma del dinero que debe salir obligatoriamente en esta quincena para cumplir tus obligaciones operativas y legales.
+                                </p>
+                                <div className="bg-slate-50 dark:bg-card/40 rounded-xl p-4 border border-slate-200 dark:border-white/5 space-y-3">
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-600 dark:text-slate-400">Compromisos Fijos (arriendos, servicios, etc):</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">-{formatCurrency(proyeccionQuincena.totalCompromisos)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm">
+                                        <span className="text-slate-600 dark:text-slate-400">Nómina y Salarios:</span> 
+                                        <span className="font-bold text-slate-900 dark:text-white">-{formatCurrency(proyeccionQuincena.totalSalarios)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm pt-3 border-t border-slate-200 dark:border-white/10 text-rose-600 dark:text-rose-400 font-black">
+                                        <span>Total Obligaciones:</span> 
+                                        <span>-{formatCurrency(proyeccionQuincena.totalCompromisos + proyeccionQuincena.totalSalarios)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
+

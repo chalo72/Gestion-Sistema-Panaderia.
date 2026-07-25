@@ -13,7 +13,10 @@ import {
     ShoppingCart,
     MessageCircle,
     Package,
-    Save
+    Save,
+    Mic,
+    Volume2,
+    ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VendedoraQuickPicker, VendedoraMesaModal, type VendedoraOption } from '@/components/ventas/VendedoraQuickPicker';
@@ -23,6 +26,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { registrarLogActividad, getDeudores, marcarDeudorRecuperado, registrarIncidente } from '@/lib/security-agent';
 
 import { safeNumber, safeString } from '@/lib/safe-utils';
 import { format } from 'date-fns';
@@ -48,7 +52,8 @@ import type {
     Mesa,
     PedidoActivo,
     VentaItem,
-    Cliente
+    Cliente,
+    OrdenProduccion
 } from '@/types';
 
 // Estado del carrito por pestaña
@@ -143,6 +148,22 @@ export function Ventas(props: VentasProps) {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [lastVenta, setLastVenta] = useState<Venta | null>(null);
     const [descuento, setDescuento] = useState(0);
+
+    const handleSetDescuento = (newDesc: number) => {
+        setDescuento(newDesc);
+        if (newDesc > 0 && totalCart > 0 && (newDesc / totalCart) > 0.15) {
+             import('@/lib/ojo-bionico').then(m => {
+                 m.OjoBionico.capturarAnomalia(
+                     'odysseus', 
+                     `Se aplicó un descuento de $${newDesc} sobre un total de $${totalCart}`,
+                     'Monitor de facturación en segundo plano',
+                     'Posible manipulación de precios detectada.',
+                     'No aplica, captura estática.',
+                     'warning'
+                 );
+             });
+        }
+    };
     const [showAdHocModal, setShowAdHocModal] = useState(false);
     const [adHocNombre, setAdHocNombre] = useState('');
     const [adHocPrecio, setAdHocPrecio] = useState('');
@@ -163,18 +184,50 @@ export function Ventas(props: VentasProps) {
     // Mesa esperando selección de vendedora (multi-vendedora)
     const [mesaPendienteVendedora, setMesaPendienteVendedora] = useState<Mesa | null>(null);
 
+    // ── Ecosistema de Inteligencia Hermes & Odysseus ──
+    const [showHermesMic, setShowHermesMic] = useState(false);
+    const [hermesAudioText, setHermesAudioText] = useState('');
+    const [hermesSuggestions, setHermesSuggestions] = useState<{ producto: Producto; cantidad: number }[]>([]);
+    const [isHermesProcessing, setIsHermesProcessing] = useState(false);
+    const [activeDeudorAlert, setActiveDeudorAlert] = useState<any | null>(null);
+
+    // Registrar log de actividad al ingresar al POS
+    useEffect(() => {
+        if (usuario?.id) {
+            registrarLogActividad(usuario.id, usuario.nombre || 'Vendedor', 'Ventas', 'abrir_pos', 'Ingreso a terminal POS');
+        }
+    }, [usuario]);
+
+    // (El useEffect de deudor se movió más abajo para evitar TDZ error 'G')
+
     // ==========================================
-    // SISTEMA DE PESTAÑAS MÚLTIPLES
+    // SISTEMA DE PESTAÑAS MÚLTIPLES (PERSISTENTE)
     // ==========================================
-    const [tabs, setTabs] = useState<TabPOS[]>([
-        { id: VENTA_RAPIDA_ID, label: 'Venta Rápida', tipo: 'venta-rapida' }
-    ]);
-    const [activeTabId, setActiveTabId] = useState<string>(VENTA_RAPIDA_ID);
+    const [tabs, setTabs] = useState<TabPOS[]>(() => {
+        try {
+            const saved = localStorage.getItem('dp_pos_tabs');
+            if (saved) return JSON.parse(saved);
+        } catch(e) {}
+        return [{ id: VENTA_RAPIDA_ID, label: 'Venta Rápida', tipo: 'venta-rapida' }];
+    });
+    
+    const [activeTabId, setActiveTabId] = useState<string>(() => {
+        return localStorage.getItem('dp_pos_active_tab') || VENTA_RAPIDA_ID;
+    });
 
     // Estado del carrito por pestaña (Map: tabId -> { cart, cliente })
-    const [tabCarts, setTabCarts] = useState<Record<string, TabCartState>>({
-        [VENTA_RAPIDA_ID]: { cart: [], cliente: '' }
+    const [tabCarts, setTabCarts] = useState<Record<string, TabCartState>>(() => {
+        try {
+            const saved = localStorage.getItem('dp_pos_carts');
+            if (saved) return JSON.parse(saved);
+        } catch(e) {}
+        return { [VENTA_RAPIDA_ID]: { cart: [], cliente: '' } };
     });
+
+    // Persistir estado en localStorage para evitar pérdida de contexto
+    useEffect(() => { localStorage.setItem('dp_pos_tabs', JSON.stringify(tabs)); }, [tabs]);
+    useEffect(() => { localStorage.setItem('dp_pos_active_tab', activeTabId); }, [activeTabId]);
+    useEffect(() => { localStorage.setItem('dp_pos_carts', JSON.stringify(tabCarts)); }, [tabCarts]);
 
     // Vendedora de la pestaña activa — null cuando no hay selección explícita
     const vendedoraActiva = useMemo<VendedoraOption | null>(() => {
@@ -200,6 +253,24 @@ export function Ventas(props: VentasProps) {
     const cart = currentTabState.cart;
     const cliente = currentTabState.cliente;
 
+    // Verificar deudor cuando cambia el nombre de cliente
+    useEffect(() => {
+        if (!cliente || cliente.trim().toLowerCase() === 'cliente anónimo' || cliente.trim().toLowerCase() === 'general') {
+            setActiveDeudorAlert(null);
+            return;
+        }
+        const deudores = getDeudores();
+        const encontrado = deudores.find(d => 
+            d.clienteNombre.toLowerCase().trim() === cliente.toLowerCase().trim() && 
+            d.estado === 'pendiente'
+        );
+        if (encontrado) {
+            setActiveDeudorAlert(encontrado);
+        } else {
+            setActiveDeudorAlert(null);
+        }
+    }, [cliente]);
+
     // Función auxiliar para actualizar el carrito de la pestaña activa
     const updateActiveCart = useCallback((updater: (prev: { producto: Producto; cantidad: number }[]) => { producto: Producto; cantidad: number }[]) => {
         setTabCarts(prev => {
@@ -224,12 +295,74 @@ export function Ventas(props: VentasProps) {
         });
     }, [activeTabId]);
 
+    const handleHermesVoiceParse = async (textoDictado: string) => {
+        if (!textoDictado.trim()) return;
+        setIsHermesProcessing(true);
+        try {
+            const res = await fetch('/api/agente', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipo: 'hermes',
+                    mensaje: `Analiza esta comanda por voz y extrae los productos y cantidades. Devuelve ÚNICAMENTE un array JSON plano de objetos con campos "nombre" (string) y "cantidad" (número). Ejemplo: [{"nombre": "pan de queso", "cantidad": 2}]. Comanda: "${textoDictado}"`,
+                    aiMode: 'hybrid'
+                })
+            });
+
+            if (!res.ok) throw new Error('Error al procesar audio por Hermes');
+            
+            const rawText = await res.text();
+            
+            let parsedItems: { nombre: string; cantidad: number }[] = [];
+            try {
+                const jsonMatch = rawText.match(/\[\s*\{.*\}\s*\]/s);
+                const jsonStr = jsonMatch ? jsonMatch[0] : rawText;
+                parsedItems = JSON.parse(jsonStr);
+            } catch (jsonErr) {
+                console.warn('Hermes no retornó JSON perfecto, intentando parse manual básico:', rawText);
+                productos.forEach(p => {
+                    const regex = new RegExp(`(\\d+)\\s*(?:unidades de\\s*)?(${p.nombre.toLowerCase()})`, 'i');
+                    const match = rawText.toLowerCase().match(regex);
+                    if (match) {
+                        parsedItems.push({ nombre: p.nombre, cantidad: parseInt(match[1] || '1') });
+                    }
+                });
+            }
+
+            const sugerencias: { producto: Producto; cantidad: number }[] = [];
+            for (const item of parsedItems) {
+                const prod = productos.find(p => p.nombre.toLowerCase().trim() === item.nombre.toLowerCase().trim() ||
+                    p.nombre.toLowerCase().includes(item.nombre.toLowerCase().trim()) ||
+                    item.nombre.toLowerCase().includes(p.nombre.toLowerCase().trim())
+                );
+                if (prod) {
+                    sugerencias.push({ producto: prod, cantidad: Math.max(1, item.cantidad) });
+                }
+            }
+
+            if (sugerencias.length > 0) {
+                setHermesSuggestions(sugerencias);
+                toast.success(`Hermes interpretó ${sugerencias.length} sugerencias de productos.`);
+            } else {
+                toast.error('Hermes no pudo asociar los productos dictados a productos del catálogo.');
+            }
+        } catch (err) {
+            toast.error('Error de enlace con el Copiloto Hermes.');
+        } finally {
+            setIsHermesProcessing(false);
+            setShowHermesMic(false);
+        }
+    };
+
     // ==========================================
     // FILTRO DE PRODUCTOS
     // ==========================================
     const productosVenta = useMemo(() => {
+        const normBusqueda = (s: string | undefined) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const searchNormalized = normBusqueda(searchTerm);
+
         const filtered = productos.filter(p => {
-            const matchesSearch = safeString(p.nombre).toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesSearch = normBusqueda(p.nombre).includes(searchNormalized);
 
             // 🔥 Filtro de Seguridad: Ocultar si pertenece a categoría de Insumos
             const categoriaLower = safeString(p.categoria).toLowerCase().trim();
@@ -241,9 +374,9 @@ export function Ventas(props: VentasProps) {
                 categoriaLower === selectedCategory.toLowerCase().trim();
 
             const precio = safeNumber(p.precioVenta);
-            // Mostrar cualquier producto que no sea insumo/ingrediente — no filtrar por tipo
-            // (tipo puede ser undefined en productos importados y eso no debe excluirlos del POS)
-            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo;
+            // Mostrar cualquier producto que no sea insumo/ingrediente. Excluir explícitamente tipo='ingrediente'
+            const isVentaType = p.tipo !== 'ingrediente';
+            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo && isVentaType;
         });
 
         // Cuando varios proveedores venden el mismo producto, mostrar solo el de mayor rentabilidad
@@ -259,7 +392,7 @@ export function Ventas(props: VentasProps) {
             const margenPrev = costoPrev > 0 ? (prev.precioVenta - costoPrev) / costoPrev : -1;
             if (margen > margenPrev) mejores.set(key, p);
         });
-        return Array.from(mejores.values());
+        return Array.from(mejores.values()).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
     }, [productos, searchTerm, selectedCategory]);
 
     const totalCart = useMemo(() => {
@@ -543,9 +676,24 @@ export function Ventas(props: VentasProps) {
             return;
         }
         // Validar nombre de cliente para crédito
-        if (tipoTransaccion === 'credito' && !cliente.trim()) {
-            toast.error('Ingresa el nombre del cliente para el fiado');
-            return;
+        if (tipoTransaccion === 'credito') {
+            if (!cliente.trim()) {
+                toast.error('Ingresa el nombre del cliente para el fiado');
+                return;
+            }
+            // Validación de Cliente Moroso
+            const clientNameLower = cliente.trim().toLowerCase();
+            const clienteMoroso = props.creditosClientes?.find(c => 
+                c.clienteNombre.toLowerCase() === clientNameLower && 
+                c.saldo > 0 && 
+                c.estado === 'vencido'
+            );
+            if (clienteMoroso) {
+                toast.error(`❌ Venta Bloqueada: Cliente Moroso`, {
+                    description: `El cliente ${cliente.trim()} tiene deudas vencidas. No se permiten más fiados hasta que ponga su cuenta al día.`
+                });
+                return;
+            }
         }
         try {
             setIsProcessing(true);
@@ -725,9 +873,110 @@ export function Ventas(props: VentasProps) {
 
                 {/* Panel derecho: Carrito — pantalla completa en móvil cuando showMobileCart */}
                 <div className={cn(
-                    "w-full lg:w-[440px] xl:w-[480px] shrink-0 flex-col min-h-0 bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden",
+                    "w-full lg:w-[440px] xl:w-[480px] shrink-0 flex-col min-h-0 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-black/50 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden transition-all duration-300",
                     showMobileCart ? "flex" : "hidden lg:flex"
                 )} style={{ minHeight: '0' }}>
+                    {/* Hermes Copiloto Panel de Dictado y Sugerencias */}
+                    <div className="bg-indigo-50 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900/30 p-3 flex flex-col gap-2 shrink-0">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Mic className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-pulse" />
+                                <span className="text-xs font-black uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Hermes Copiloto</span>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setHermesAudioText('');
+                                    setShowHermesMic(true);
+                                }}
+                                className="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
+                            >
+                                Dictar Orden
+                            </button>
+                        </div>
+
+                        {/* Sugerencias pendientes de agregar */}
+                        {hermesSuggestions.length > 0 && (
+                            <div className="bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 shadow-sm space-y-2">
+                                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                                    <span className="text-[10px] font-black uppercase text-indigo-600">Borrador de Hermes:</span>
+                                    <button onClick={() => setHermesSuggestions([])} className="text-[9px] font-bold text-slate-400 hover:text-red-500 uppercase">Limpiar</button>
+                                </div>
+                                <div className="space-y-1 max-h-[100px] overflow-y-auto pr-1">
+                                    {hermesSuggestions.map((item, idx) => (
+                                        <div key={idx} className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                                            <span>{item.producto.nombre}</span>
+                                            <span>x{item.cantidad}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        hermesSuggestions.forEach(item => {
+                                            addToCart(item.producto);
+                                            updateQuantity(item.producto.id, item.cantidad);
+                                        });
+                                        setHermesSuggestions([]);
+                                        toast.success('Productos sugeridos agregados al carrito');
+                                    }}
+                                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all"
+                                >
+                                    Agregar todo al carrito
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Alerta de Deudor Pendiente */}
+                    {activeDeudorAlert && (
+                        <div className="bg-red-50 dark:bg-red-955/20 border-b border-red-200 dark:border-red-900/30 p-3 flex flex-col gap-2 shrink-0 animate-pulse">
+                            <div className="flex items-center gap-2">
+                                <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400" />
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-red-900 dark:text-red-200">DEUDOR EN LISTA NEGRA</p>
+                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">El cliente {activeDeudorAlert.clienteNombre} tiene una deuda registrada.</p>
+                                </div>
+                            </div>
+                            <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-xl p-3 shadow-sm text-xs font-bold text-slate-700 dark:text-slate-300 space-y-1.5">
+                                <p><span className="text-slate-400 uppercase text-[9px] block font-black">Descripción física:</span> {activeDeudorAlert.descripcionFisica}</p>
+                                <p><span className="text-slate-400 uppercase text-[9px] block font-black">Monto de la deuda:</span> {formatCurrency(activeDeudorAlert.montoDeuda)}</p>
+                                {activeDeudorAlert.fotoCctv && (
+                                    <div className="mt-1.5 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 aspect-video relative bg-black">
+                                        <img src={activeDeudorAlert.fotoCctv} className="w-full h-full object-cover" alt="Evidencia de fuga" />
+                                        <span className="absolute bottom-1 right-1 bg-black/70 px-1.5 py-0.5 rounded text-[8px] text-white">EVIDENCIA CCTV</span>
+                                    </div>
+                                )}
+                                <div className="flex gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 mt-1.5">
+                                    <button
+                                        onClick={() => {
+                                            const adHocItem: Producto = {
+                                                id: `deuda-${activeDeudorAlert.id}`,
+                                                nombre: `Saldo Pendiente (${activeDeudorAlert.clienteNombre})`,
+                                                precioVenta: activeDeudorAlert.montoDeuda,
+                                                categoria: 'Otros',
+                                                tipo: 'elaborado',
+                                                activo: true,
+                                                margenUtilidad: 0
+                                            };
+                                            addToCart(adHocItem);
+                                            marcarDeudorRecuperado(activeDeudorAlert.id);
+                                            setActiveDeudorAlert(null);
+                                            toast.success('Saldo adeudado agregado al carrito de cobro');
+                                        }}
+                                        className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all"
+                                    >
+                                        Cobrar saldo adeudado
+                                    </button>
+                                    <button
+                                        onClick={() => setActiveDeudorAlert(null)}
+                                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500 rounded-lg text-[10px] font-black uppercase"
+                                    >
+                                        Ignorar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     <CartDetail
                         cart={cart}
                         onUpdateQuantity={updateQuantity}
@@ -747,14 +996,14 @@ export function Ventas(props: VentasProps) {
                         activeTabTipo={activeTab?.tipo}
                         onLiberarMesa={handleLiberarMesa}
                         descuento={descuento}
-                        setDescuento={setDescuento}
+                        setDescuento={handleSetDescuento}
                         rolUsuario={usuario?.rol}
                     />
                 </div>
             </div>
 
-            {/* ── Navegación móvil: fixed al fondo real del viewport ── */}
-            <div className="lg:hidden fixed bottom-0 left-0 right-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}>
+            {/* ── Navegación móvil: floating pill ── */}
+            <div className="lg:hidden fixed bottom-4 left-4 right-4 rounded-3xl overflow-hidden flex border border-slate-200/60 dark:border-slate-700/60 shadow-2xl shadow-indigo-900/10 dark:shadow-black/50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}>
                 {/* Catálogo */}
                 <button
                     onClick={() => setShowMobileCart(false)}
@@ -1116,11 +1365,11 @@ export function Ventas(props: VentasProps) {
 
             {/* Modal de Movimientos de Caja (Entrada/Salida) */}
             <CajaMovimientosModal
-                isOpen={!!movimientoCaja}
-                onOpenChange={(open) => { if (!open) setMovimientoCaja(null); }}
+                open={!!movimientoCaja}
+                onOpenChange={(open) => !open && setMovimientoCaja(null)}
                 tipo={movimientoCaja?.tipo || 'entrada'}
-                onSubmit={async (monto, motivo) => {
-                    await onRegistrarMovimientoCaja(monto, movimientoCaja!.tipo, motivo, usuario?.id || 'anon');
+                onSave={async (monto, motivo) => {
+                    await onRegistrarMovimientoCaja(monto, movimientoCaja!.tipo, motivo, usuario?.id || '');
                     setMovimientoCaja(null);
                 }}
             />
@@ -1198,6 +1447,54 @@ export function Ventas(props: VentasProps) {
                     }}
                 />
             )}
+
+            {/* Modal de Dictado de Voz Hermes */}
+            <Dialog open={showHermesMic} onOpenChange={setShowHermesMic}>
+                <DialogContent className="bg-slate-900 border border-indigo-500/30 text-white rounded-[2rem] p-6 max-w-md">
+                    <div className="flex flex-col items-center gap-4 text-center">
+                        <div className="w-16 h-16 rounded-full bg-indigo-600 flex items-center justify-center animate-pulse shadow-lg shadow-indigo-500/50">
+                            <Mic className="w-8 h-8 text-white" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black uppercase tracking-widest text-indigo-400">Hermes Copiloto</h3>
+                            <p className="text-xs text-slate-400">Dicta los pedidos de mesas o caja rápida. Hermes los agregará al borrador.</p>
+                        </div>
+                        <textarea
+                            value={hermesAudioText}
+                            onChange={e => setHermesAudioText(e.target.value)}
+                            placeholder='Ej: "Mesa 3 lleva dos panes de queso y una Coca-Cola. Mesa 5 pide un helado doble."'
+                            className="w-full min-h-[100px] p-4 bg-black/40 border border-white/10 rounded-2xl text-sm outline-none focus:ring-1 ring-indigo-500/50 text-white placeholder-slate-600 resize-none"
+                        />
+                        <div className="w-full text-left space-y-1">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block mb-1">Simular Dictados Rápidos:</span>
+                            {[
+                                'Mesa 3 lleva dos panes de queso y una Coca-Cola',
+                                'Mesa 5 pide un helado',
+                                'Una torta en caja rápida'
+                            ].map(phrase => (
+                                <button
+                                    key={phrase}
+                                    type="button"
+                                    onClick={() => setHermesAudioText(phrase)}
+                                    className="w-full text-left p-2 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs text-slate-300 font-bold truncate transition-colors"
+                                >
+                                    "{phrase}"
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex gap-2 w-full pt-2">
+                            <Button variant="ghost" onClick={() => setShowHermesMic(false)} className="flex-1 h-11 rounded-xl text-xs text-slate-400">Cancelar</Button>
+                            <Button
+                                onClick={() => handleHermesVoiceParse(hermesAudioText)}
+                                disabled={isHermesProcessing || !hermesAudioText.trim()}
+                                className="flex-1 h-11 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-xs uppercase tracking-widest rounded-xl"
+                            >
+                                {isHermesProcessing ? 'Interpretando...' : 'Procesar Comanda'}
+                            </Button>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

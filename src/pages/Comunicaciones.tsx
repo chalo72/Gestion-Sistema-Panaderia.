@@ -364,15 +364,15 @@ export default function Comunicaciones() {
           <>
             {/* Formulario solo para admin/gerente */}
             {esAdmin && (
-              <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 space-y-3 shadow-sm">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                  <Send className="w-3.5 h-3.5" /> Nuevo anuncio al equipo
+              <div className="bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl border border-slate-100/50 dark:border-slate-800/50 p-5 sm:p-6 space-y-4 shadow-xl shadow-slate-200/40 dark:shadow-black/40 hover:shadow-2xl transition-all duration-300">
+                <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Send className="w-4 h-4" /> Nuevo anuncio al equipo
                 </p>
                 <Textarea
                   placeholder="Escribe la instrucción o aviso para el equipo..."
                   value={textoAnuncio}
                   onChange={e => setTextoAnuncio(e.target.value)}
-                  className="min-h-[80px] text-sm resize-none rounded-xl border-slate-200 dark:border-slate-700"
+                  className="min-h-[100px] text-[15px] resize-none rounded-2xl border-slate-200 dark:border-slate-700 focus:ring-indigo-500/20"
                 />
                 <div className="flex flex-wrap gap-2">
                   {/* Urgencia */}
@@ -430,17 +430,17 @@ export default function Comunicaciones() {
                   <div
                     key={anuncio.id}
                     className={cn(
-                      "bg-white dark:bg-slate-900 rounded-2xl border-l-4 p-4 shadow-sm",
+                      "bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl border-l-[6px] p-5 sm:p-6 shadow-lg shadow-slate-200/30 dark:shadow-black/30 hover:-translate-y-1 transition-all duration-300",
                       anuncio.urgencia === 'urgente' ? 'border-rose-500' :
-                      anuncio.urgencia === 'importante' ? 'border-amber-500' : 'border-slate-300 dark:border-slate-700'
+                      anuncio.urgencia === 'importante' ? 'border-amber-500' : 'border-indigo-400 dark:border-indigo-600'
                     )}
                   >
-                    <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-slate-800 dark:text-white leading-relaxed">
+                        <p className="text-[15px] font-bold text-slate-800 dark:text-white leading-relaxed">
                           {anuncio.texto}
                         </p>
-                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        <div className="flex items-center gap-3 mt-3 flex-wrap">
                           <span className={cn("text-[9px] font-black uppercase px-2 py-0.5 rounded-full border", cfg.color)}>
                             <span className={cn("inline-block w-1.5 h-1.5 rounded-full mr-1", cfg.dot)} />
                             {cfg.label}

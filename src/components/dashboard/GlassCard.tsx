@@ -15,8 +15,8 @@ export function GlassCard({ children, className, onClick, gradient, delay = 0 }:
     <div
       onClick={onClick}
       className={cn(
-        "bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm transition-all duration-300 animate-ag-slide-up",
-        onClick && "cursor-pointer hover:shadow-md hover:border-primary/30",
+        "bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl p-6 sm:p-8 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-xl shadow-slate-200/40 dark:shadow-black/40 transition-all duration-500 animate-ag-slide-up",
+        onClick && "cursor-pointer hover:-translate-y-1.5 hover:shadow-2xl hover:shadow-indigo-500/20 hover:border-indigo-200/50 dark:hover:border-indigo-500/30",
         className
       )}
       style={{ animationDelay: `${delay}ms` }}

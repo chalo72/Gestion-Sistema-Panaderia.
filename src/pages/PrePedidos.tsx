@@ -82,6 +82,7 @@ interface PrePedidosProps {
   formatCurrency: (amount: number) => string;
   onAjustarStock: (productoId: string, cantidad: number, motivo: string) => void;
   onGenerarSugerencias: () => Promise<number>;
+  onNavigateToRecepciones?: () => void;
 }
 
 export default function PrePedidos({
@@ -104,7 +105,8 @@ export default function PrePedidos({
   getPreciosByProveedor,
   formatCurrency,
   onAjustarStock,
-  onGenerarSugerencias
+  onGenerarSugerencias,
+  onNavigateToRecepciones
 }: PrePedidosProps) {
   const [activeTab, setActiveTab] = useState<'creacion' | 'gestion' | 'comparador'>('creacion');
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
@@ -198,15 +200,22 @@ export default function PrePedidos({
   };
 
   const handleMarcarRecibido = (pedido: PrePedido) => {
-    if (confirm(`¿El proveedor envió las cantidades exactas pedidas? Si es así, se ajustará automáticamente el inventario.`)) {
-      // Ajustar inventario para cada item
-      pedido.items.forEach(item => {
-        onAjustarStock(item.productoId, item.cantidad, `Recepcion OC: ${pedido.nombre}`);
-      });
-      onUpdatePrePedido(pedido.id, { estado: 'recibido' });
-      toast.success('Pedido marcado como recibido e inventario actualizado');
+    // 🛡️ REGLA: NEXUS-SYNC - Invitamos al usuario a Recepciones para una validación detallada
+    if (confirm(`¿Quieres redirigirte al módulo de "Recepciones" para detallar la entrada de ${pedido.nombre} (facturas, precios, empaques)?\n\nSi seleccionas Cancelar, se hará una entrada rápida sin detalles de factura.`)) {
+      if (onNavigateToRecepciones) {
+        onNavigateToRecepciones();
+      } else {
+        toast.info('Navegación no disponible en este momento.');
+      }
     } else {
-      toast.info('Ve al módulo de "Recepciones" para detallar diferencias de inventario.');
+      if (confirm(`¿Seguro que deseas hacer una entrada rápida (ajuste de stock automático sin registro de factura)?`)) {
+        // Ajustar inventario para cada item
+        pedido.items.forEach(item => {
+          onAjustarStock(item.productoId, item.cantidad, `Recepcion OC: ${pedido.nombre}`);
+        });
+        onUpdatePrePedido(pedido.id, { estado: 'recibido' });
+        toast.success('Entrada rápida completada e inventario actualizado');
+      }
     }
   };
 
@@ -549,8 +558,13 @@ export default function PrePedidos({
                           </Button>
                         )}
                         <Button size="sm" variant="ghost"
-                          className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50"
-                          onClick={() => onDeletePrePedido(p.id)}>
+                          className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 z-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm(`¿Seguro que deseas eliminar la orden "${p.nombre}"?`)) {
+                              onDeletePrePedido(p.id);
+                            }
+                          }}>
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>

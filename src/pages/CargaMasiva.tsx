@@ -386,12 +386,14 @@ export default function CargaMasiva({
   
   const itemsFiltrados = activeTab === 'factura' 
     ? productosDetectados.filter(p => {
-        const matchSearch = p.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+        const norm = (s: string | undefined) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const matchSearch = norm(p.nombre).includes(norm(searchTerm));
         const matchCat = categoriaFiltro === 'todos' || p.categoria === categoriaFiltro;
         return matchSearch && matchCat;
       })
     : filasImportadas.filter(f => {
-        const matchSearch = f.nombre.toLowerCase().includes(searchTerm.toLowerCase());
+        const norm = (s: string | undefined) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const matchSearch = norm(f.nombre).includes(norm(searchTerm));
         const matchCat = categoriaFiltro === 'todos' || f.categoria === categoriaFiltro;
         return matchSearch && matchCat;
       });

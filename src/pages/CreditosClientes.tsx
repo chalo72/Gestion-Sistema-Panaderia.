@@ -120,10 +120,71 @@ export default function CreditosClientes({
 }: CreditosClientesProps) {
 
     const [tab, setTab] = useState<Tab>('clientes');
+    const [isScanning, setIsScanning] = useState(false);
+
+    const runDeepScan = async () => {
+        setIsScanning(true);
+        try {
+            const collections = ['productos', 'proveedores', 'precios', 'clientes', 'ventas', 'inventario', 'movimientos', 'recepciones', 'historial', 'sesiones_caja', 'backups', 'pre_pedidos', 'alertas', 'gastos', 'mesas', 'ahorros', 'creditos_clientes', 'creditos_trabajadores', 'trabajadores', 'pedidos_activos', 'recetas', 'formulaciones', 'modelosPan', 'produccion', 'nominas'];
+            let foundCredits = 0;
+            
+            const request = indexedDB.open('dulce-placer-db');
+            request.onsuccess = async (event: any) => {
+                const idb = event.target.result;
+                const tx = idb.transaction(collections, 'readonly');
+                
+                for (const col of collections) {
+                    try {
+                        const store = tx.objectStore(col);
+                        const allReq = store.getAll();
+                        allReq.onsuccess = () => {
+                            const data = allReq.result;
+                            if (data && data.length > 0) {
+                                const sospechosos = data.filter((item: any) => 
+                                    item.saldo !== undefined || 
+                                    item.monto !== undefined || 
+                                    (item.clienteNombre && typeof item.clienteNombre === 'string') ||
+                                    (item.cliente_nombre && typeof item.cliente_nombre === 'string')
+                                );
+                                
+                                if (sospechosos.length > 0 && col !== 'clientes' && col !== 'ventas') {
+                                    sospechosos.forEach((s: any) => {
+                                        if (!creditosClientes.find(c => c.id === s.id)) {
+                                            const cRestaurado = {
+                                                ...s,
+                                                id: s.id || crypto.randomUUID(),
+                                                clienteNombre: s.clienteNombre || s.cliente_nombre || s.nombre || 'Recuperado',
+                                                monto: s.monto || s.saldo || 0,
+                                                saldo: s.saldo || s.monto || 0,
+                                                fecha: s.fecha || new Date().toISOString(),
+                                                estado: s.estado || 'activo'
+                                            };
+                                            onAddCreditoCliente(cRestaurado);
+                                            foundCredits++;
+                                        }
+                                    });
+                                }
+                            }
+                        };
+                    } catch(e) {}
+                }
+                
+                setTimeout(() => {
+                    setIsScanning(false);
+                    if (foundCredits > 0) {
+                        toast.success(`¡ESCANEO COMPLETADO! Se recuperaron ${foundCredits} créditos ocultos.`);
+                    } else {
+                        toast.error('Escaneo profundo completado: No se encontraron créditos ocultos.');
+                    }
+                }, 2000);
+            };
+        } catch (error) {
+            setIsScanning(false);
+            toast.error('Error durante el escaneo profundo.');
+        }
+    };
 
     // ── Detección de carga inicial desde IndexedDB ────────────────────────
-    // creditosClientes llega como [] mientras IndexedDB responde; evitamos
-    // mostrar "sin datos" hasta confirmar que realmente está vacío.
     const [dataReady, setDataReady] = useState(
         () => creditosClientes.length > 0 || clientes.length > 0
     );
@@ -699,6 +760,16 @@ export default function CreditosClientes({
                         <Button variant="outline" onClick={() => setShowCarpetasModal(true)} className="rounded-xl border-slate-200 dark:border-slate-800 flex items-center gap-2">
                             <FolderOpen className="w-4 h-4 text-blue-500" />
                             <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">Carpetas</span>
+                        </Button>
+                        <Button 
+                            variant="outline"
+                            onClick={runDeepScan} 
+                            disabled={isScanning}
+                            className={`rounded-xl border-orange-200 dark:border-orange-900 flex items-center gap-2 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title="Recuperar datos perdidos de la memoria local"
+                        >
+                            <Search className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">{isScanning ? 'Buscando...' : 'Rescate'}</span>
                         </Button>
                         <Select value={filtroEstadoCliente} onValueChange={setFiltroEstadoCliente}>
                             <SelectTrigger className="w-36 rounded-xl"><SelectValue /></SelectTrigger>
@@ -1520,6 +1591,14 @@ export default function CreditosClientes({
                                     onChange={e => setFormCliente(p => ({ ...p, fechaVencimiento: e.target.value }))}
                                     className="h-12 bg-slate-50 dark:bg-slate-800 border-slate-100 rounded-2xl font-bold" />
                             </div>
+                            <Button 
+                                onClick={runDeepScan} 
+                                disabled={isScanning}
+                                className={`bg-orange-500 hover:bg-orange-600 text-white ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            >
+                                <Search className={`w-4 h-4 mr-2 ${isScanning ? 'animate-spin' : ''}`} />
+                                {isScanning ? 'Buscando...' : 'Escaneo Profundo'}
+                            </Button>
                         </div>
 
                         {/* Foto evidencia */}

@@ -328,10 +328,10 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
         });
     };
 
-    // Auto-rellenar todos con el balance del sistema
+    // Auto-rellenar todos con cero
     const autoRellenar = () => {
         const filled: Record<string, string> = {};
-        cajas.forEach(c => { filled[c.id] = String(getEsperado(c)); });
+        // cajas.forEach(c => { filled[c.id] = String(getEsperado(c)); }); // Eliminado para Cierre Ciego
         cajasExtra.forEach(c => { filled[c.id] = '0'; });
         setMontos(filled);
     };
@@ -357,13 +357,15 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
     const turnoEmoji     = cajas[0]?.turno === 'Mañana' ? '☀️' : cajas[0]?.turno === 'Tarde' ? '🌆' : '🌙';
     const hayAlerta      = diferenciaNeta < -5000;
     const totalCajas     = cajas.length + cajasExtra.length;
+    const totalVentasJornada = ventas?.reduce((acc, v) => acc + v.total, 0) || 0;
+    const retencionGlobal = Math.max(0, totalVentasJornada * 0.10);
 
     const handleConfirmar = async () => {
         setLoading(true);
         setProgreso(0);
         const cierres = cajas.map(c => ({
             cajaId: c.id,
-            montoCierre: parseFloat(montos[c.id] || '0') || getEsperado(c),
+            montoCierre: parseFloat(montos[c.id] || '0'),
         }));
         await onConfirmar(cierres);
         setMontos({});
@@ -429,7 +431,7 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">$</span>
                             <input
                                 type="number" min="0"
-                                placeholder={formatCurrency(esperado)}
+                                placeholder="$0"
                                 value={montos[cajaId] ?? ''}
                                 onChange={e => setMontos(prev => ({ ...prev, [cajaId]: e.target.value }))}
                                 className="w-full h-11 pl-7 pr-3 text-lg font-black rounded-xl border-2 border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:border-indigo-400 tabular-nums transition-all"
@@ -437,20 +439,9 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                         </div>
                     </div>
                     {hayDato && (
-                        <div className={cn(
-                            "shrink-0 px-3 py-2 rounded-xl text-center min-w-[96px]",
-                            !esFaltante ? "bg-emerald-50 dark:bg-emerald-900/20" : esAlerta ? "bg-red-50 dark:bg-red-900/20" : "bg-amber-50 dark:bg-amber-900/20"
-                        )}>
-                            <p className={cn("text-[9px] font-black uppercase tracking-widest",
-                                !esFaltante ? "text-emerald-500" : esAlerta ? "text-red-500" : "text-amber-500"
-                            )}>
-                                {diff === 0 ? '✓ Cuadra' : esFaltante ? (esAlerta ? '⚠️ Faltante' : 'Faltante') : 'Sobrante'}
-                            </p>
-                            <p className={cn("text-base font-black tabular-nums",
-                                !esFaltante ? "text-emerald-700" : esAlerta ? "text-red-700" : "text-amber-700"
-                            )}>
-                                {diff > 0 ? '+' : ''}{formatCurrency(diff)}
-                            </p>
+                        <div className="shrink-0 px-3 py-2 rounded-xl text-center min-w-[96px] bg-indigo-50 dark:bg-indigo-900/20">
+                            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-500">Monto</p>
+                            <p className="text-base font-black tabular-nums text-indigo-700">✓ Listo</p>
                         </div>
                     )}
                 </div>
@@ -789,6 +780,16 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                         </div>
                     </div>
 
+                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl mt-2">
+                        <div className="flex items-center gap-2 mb-1">
+                            <AlertTriangle className="w-4 h-4 text-emerald-600" />
+                            <p className="text-[10px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest">Peaje de Inversión (10% de Ventas)</p>
+                        </div>
+                        <p className="text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                            Para poder crecer, debes retener y transferir al Fondo de Crecimiento la cantidad de <span className="font-black text-sm">{formatCurrency(retencionGlobal)}</span>. ¡Hazlo en el módulo Inversiones antes de finalizar tu día!
+                        </p>
+                    </div>
+
                     {loading && (
                         <div className="space-y-1">
                             <div className="flex justify-between text-[10px] font-black uppercase text-slate-400">
@@ -1079,10 +1080,24 @@ export function ControlCaja({
         const updated = { ...caja, estado: 'cerrada' as const, montoCierre, fechaCierre: new Date().toISOString() };
         try {
             await db.updateSesionCaja(updated);
+            
+            // ── NUEVO: Enviar dinero a la Bóveda Principal ──
+            if (montoCierre > 0) {
+                const { addMovimientoBoveda } = await import('@/lib/boveda-store');
+                addMovimientoBoveda({
+                    bovedaDestinoId: 'boveda-principal',
+                    monto: montoCierre,
+                    motivo: `Entrega de Turno: ${caja.cajaNombre || 'Caja'} (${caja.vendedoraNombre || 'Vendedora'})`,
+                    tipo: 'Ingreso',
+                    usuarioResponsable: caja.vendedoraNombre || 'Sistema',
+                    metodoPago: 'Efectivo'
+                });
+            }
+
             setCierresLocales(prev => new Set([...prev, cajaId]));
             setShowEntregaModal(false);
             setCajaEntregando(null);
-            toast.success(`✅ Entrega de ${caja.cajaNombre || 'Caja'} registrada — ${caja.vendedoraNombre || 'Vendedora'}`);
+            toast.success(`✅ Entrega de ${caja.cajaNombre || 'Caja'} registrada en Bóveda — ${caja.vendedoraNombre || 'Vendedora'}`);
         } catch (err) {
             toast.error('Error al registrar la entrega');
         }
@@ -1111,6 +1126,20 @@ export function ControlCaja({
                     montoCierre: cierre.montoCierre,
                     fechaCierre: ahora,
                 });
+
+                // ── NUEVO: Enviar dinero a la Bóveda Principal ──
+                if (cierre.montoCierre > 0) {
+                    const { addMovimientoBoveda } = await import('@/lib/boveda-store');
+                    addMovimientoBoveda({
+                        bovedaDestinoId: 'boveda-principal',
+                        monto: cierre.montoCierre,
+                        motivo: `Cierre Jornada: ${caja.cajaNombre || 'Caja'} (${caja.vendedoraNombre || 'Vendedora'})`,
+                        tipo: 'Ingreso',
+                        usuarioResponsable: caja.vendedoraNombre || 'Sistema',
+                        metodoPago: 'Efectivo'
+                    });
+                }
+
                 setCierresLocales(prev => new Set([...prev, cierre.cajaId]));
                 cerradas++;
             } catch { /* continúa con las demás */ }
@@ -1119,9 +1148,9 @@ export function ControlCaja({
         setShowCierreJornada(false);
 
         if (alertas > 0) {
-            toast.warning(`⚠️ Jornada cerrada — ${cerradas} cajas · ${alertas} con faltante detectado`);
+            toast.warning(`⚠️ Jornada cerrada y dinero en Bóveda — ${cerradas} cajas · ${alertas} con faltante detectado`);
         } else {
-            toast.success(`✅ Jornada cerrada — ${cerradas} de ${cierres.length} cajas registradas`);
+            toast.success(`✅ Jornada cerrada y dinero depositado en Bóveda — ${cerradas} de ${cierres.length} cajas registradas`);
         }
     };
 
@@ -1272,7 +1301,7 @@ export function ControlCaja({
 
             {/* ══ CONTENIDO PRINCIPAL CON TABS ══ */}
             <Tabs defaultValue="cajas" className="flex-1">
-                <TabsList className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-1.5 h-auto gap-1 shadow-sm flex-wrap">
+                <TabsList className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-1.5 h-auto gap-1 shadow-sm flex overflow-x-auto no-scrollbar justify-start">
                     <TabsTrigger value="cajas"
                         className="flex-1 rounded-xl text-xs font-black uppercase tracking-wide py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm relative">
                         <Store className="w-3.5 h-3.5 mr-1.5" /> Cajas de Turno

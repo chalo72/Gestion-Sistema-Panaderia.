@@ -58,6 +58,7 @@ interface GeneradorPedidoInsumosProps {
   getMejorPrecio: (productoId: string) => any;
   formatCurrency: (value: number) => string;
   onGenerarPedido?: (items: ProyeccionInsumo[]) => void;
+  externalPlanificacion?: { formulacionId: string; arrobas: number; } | null;
 }
 
 interface PlanificacionItem {
@@ -79,11 +80,17 @@ export function GeneradorPedidoInsumos({
   getProductoById,
   getMejorPrecio,
   formatCurrency,
-  onGenerarPedido
+  onGenerarPedido,
+  externalPlanificacion
 }: GeneradorPedidoInsumosProps) {
   // Estado: items de planificación
-  const [planificacion, setPlanificacion] = useState<PlanificacionItem[]>([]);
+  const [planificacionManual, setPlanificacionManual] = useState<PlanificacionItem[]>([]);
   const [mostrarResultados, setMostrarResultados] = useState(false);
+
+  const isExternalMode = !!externalPlanificacion;
+  const planificacion = isExternalMode && externalPlanificacion?.formulacionId
+    ? [{ id: 'ext', tipo: 'formulacion' as const, formulacionId: externalPlanificacion.formulacionId, arrobas: externalPlanificacion.arrobas }]
+    : planificacionManual;
 
   // Agregar item de planificación
   const handleAddPlanificacion = () => {
@@ -91,8 +98,8 @@ export function GeneradorPedidoInsumos({
       toast.error('Primero crea una formulación');
       return;
     }
-    setPlanificacion([
-      ...planificacion,
+    setPlanificacionManual([
+      ...planificacionManual,
       {
         id: generateUUID(),
         tipo: 'formulacion',
@@ -104,14 +111,14 @@ export function GeneradorPedidoInsumos({
 
   // Actualizar item
   const handleUpdateItem = (id: string, field: keyof PlanificacionItem, value: any) => {
-    setPlanificacion(items =>
+    setPlanificacionManual(items =>
       items.map(item => item.id === id ? { ...item, [field]: value } : item)
     );
   };
 
   // Eliminar item
   const handleRemoveItem = (id: string) => {
-    setPlanificacion(items => items.filter(item => item.id !== id));
+    setPlanificacionManual(items => items.filter(item => item.id !== id));
   };
 
   // Calcular necesidades de insumos
@@ -132,11 +139,30 @@ export function GeneradorPedidoInsumos({
           const existing = insumosMap.get(ing.productoId)!;
           existing.cantidadNecesaria += cantidadNecesaria;
           existing.deficit = Math.max(0, existing.cantidadNecesaria - existing.stockActual);
-          existing.costoEstimado = existing.deficit * (mejorPrecio?.precioCosto || ing.costoUnitario);
+          
+          let unitario = mejorPrecio 
+            ? (mejorPrecio.precioCosto / (mejorPrecio.cantidadEmbalaje || 1)) 
+            : ing.costoUnitario;
+
+          if (ing.unidad === 'gr' || ing.unidad === 'ml') {
+            unitario = unitario / 1000;
+          }
+            
+          existing.costoEstimado = existing.deficit * unitario;
         } else {
           const currentStock = stockItem?.stockActual || 0;
           const minStock = stockItem?.stockMinimo || 0;
           const deficit = Math.max(0, cantidadNecesaria - currentStock);
+          
+          let unitario = mejorPrecio 
+            ? (mejorPrecio.precioCosto / (mejorPrecio.cantidadEmbalaje || 1)) 
+            : ing.costoUnitario;
+            
+          // Si el proveedor/catálogo nos da el precio por KG/L pero el ingrediente usa GR/ML,
+          // debemos dividir entre 1000 tal como lo hace FormulacionesView
+          if (ing.unidad === 'gr' || ing.unidad === 'ml') {
+            unitario = unitario / 1000;
+          }
 
           insumosMap.set(ing.productoId, {
             productoId: ing.productoId,
@@ -146,7 +172,7 @@ export function GeneradorPedidoInsumos({
             stockActual: currentStock,
             stockMinimo: minStock,
             deficit,
-            costoEstimado: deficit * (mejorPrecio?.precioCosto || ing.costoUnitario),
+            costoEstimado: deficit * unitario,
             proveedorRecomendado: mejorPrecio?.proveedorId
           });
         }
@@ -212,11 +238,11 @@ export function GeneradorPedidoInsumos({
             <p className="text-xs text-muted-foreground">Planifica tu producción y calcula los insumos necesarios</p>
           </div>
         </div>
-        {planificacion.length > 0 && (
+        {!isExternalMode && planificacion.length > 0 && (
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setPlanificacion([])}
+            onClick={() => setPlanificacionManual([])}
             className="gap-2 rounded-xl"
           >
             <RefreshCw className="w-4 h-4" />
@@ -225,8 +251,9 @@ export function GeneradorPedidoInsumos({
         )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Panel de Planificación */}
+      <div className={cn("grid grid-cols-1 gap-6", isExternalMode ? "lg:grid-cols-1" : "lg:grid-cols-3")}>
+        {/* Panel de Planificación (Solo en modo manual) */}
+        {!isExternalMode && (
         <Card className="lg:col-span-2 rounded-2xl">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
@@ -361,8 +388,9 @@ export function GeneradorPedidoInsumos({
             )}
           </CardContent>
         </Card>
+        )}
 
-        {/* Panel de Resumen */}
+        {/* Panel de Resumen y Resultados */}
         <Card className="rounded-2xl">
           <CardHeader className="pb-3">
             <CardTitle className="text-sm flex items-center gap-2">

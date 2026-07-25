@@ -42,5 +42,25 @@ export const NexusDiagnostics = {
   expose() {
     (window as any).NexusDebug = this;
     console.log('🛠️ [NEXUS]: Herramientas de diagnóstico expuestas en window.NexusDebug');
+  },
+
+  /**
+   * Envía telemetría al servidor Nexus Core (MCP Bridge)
+   */
+  async sendTelemetry(type: string, data: any) {
+    try {
+      const response = await fetch('http://localhost:9000/execute?tool_name=engram_store', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer dev-secret-key'
+        },
+        body: JSON.stringify({ args: { type, content: data } })
+      });
+      if (!response.ok) throw new Error('Nexus Bridge inalcanzable');
+      console.log('🌌 [NEXUS CORE]: Telemetría enviada con éxito');
+    } catch (e) {
+      console.warn('⚠️ [NEXUS CORE]: Servidor Nexus desconectado o en reposo.');
+    }
   }
 };

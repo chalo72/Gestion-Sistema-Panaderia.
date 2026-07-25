@@ -83,8 +83,8 @@ export function InventarioRapido({
     
     const valorTotalInventario = productos.reduce((sum, p) => {
       const inv = inventario.find(i => i.productoId === p.id);
-      const precio = p.precioVenta;
-      return sum + (inv?.stockActual || 0) * precio;
+      const costo = p.precioCosto || 0;
+      return sum + (inv?.stockActual || 0) * costo;
     }, 0);
 
     return { totalProductos, productosEnBajo, valorTotalInventario };

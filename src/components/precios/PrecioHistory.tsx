@@ -91,7 +91,10 @@ export function PrecioHistory({
 
     // Promedio de subidas
     const promedioSubida = subidas.length > 0
-        ? subidas.reduce((sum, h) => sum + ((h.precioNuevo - h.precioAnterior) / h.precioAnterior * 100), 0) / subidas.length
+        ? subidas.reduce((sum, h) => {
+            const anterior = Math.max(0.01, h.precioAnterior);
+            return sum + ((h.precioNuevo - anterior) / anterior * 100);
+          }, 0) / subidas.length
         : 0;
 
     // Índice de estabilidad global (0-100, 100=perfecto)

@@ -67,8 +67,8 @@ export function PrecioModal({
                                 <SelectTrigger className="h-10 rounded-xl border border-slate-200 dark:border-slate-700">
                                     <SelectValue placeholder="Seleccionar..." />
                                 </SelectTrigger>
-                                <SelectContent className="rounded-2xl border-none shadow-2xl">
-                                    {productos.map((p) => (
+                                <SelectContent className="rounded-2xl border-none shadow-2xl max-h-[300px]">
+                                    {[...productos].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '')).map((p) => (
                                         <SelectItem key={p.id} value={p.id} className="py-3 font-bold uppercase text-[10px] tracking-widest">
                                             <div className="flex items-center gap-2">
                                                 <Package className="w-4 h-4 text-blue-500" />

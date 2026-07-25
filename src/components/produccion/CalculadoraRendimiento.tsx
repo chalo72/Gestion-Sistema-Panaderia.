@@ -63,9 +63,12 @@ export function CalculadoraRendimiento({
       return null;
     }
 
-    const pesoUnitario = modelo?.pesoUnitarioGr || pesoInput;
+    const rendimientoMasaKg = formulacion.rendimientoBaseKg || ARROBA_KG;
+    const rendimientoMasaGr = rendimientoMasaKg * 1000;
+
+    const pesoUnitario = Math.max(1, modelo?.pesoUnitarioGr || pesoInput || 1);
     const merma = modelo?.mermaEstimada || 5;
-    const masaUtilPorArroba = ARROBA_GR * (1 - merma / 100);
+    const masaUtilPorArroba = rendimientoMasaGr * (1 - merma / 100);
     const panesPorArroba = Math.floor(masaUtilPorArroba / pesoUnitario);
 
     let arrobas: number;
@@ -77,8 +80,8 @@ export function CalculadoraRendimiento({
         panes = panesPorArroba * arrobas;
         break;
       case 'panes':
-        panes = panesInput;
         arrobas = panesInput / panesPorArroba;
+        panes = panesInput;
         break;
       case 'peso':
         // Cuántos panes de X gramos salen de 1 arroba
@@ -109,9 +112,9 @@ export function CalculadoraRendimiento({
       panes,
       panesPorArroba,
       pesoUnitario,
-      masaTotalKg: arrobas * ARROBA_KG,
-      masaUtilKg: arrobas * (ARROBA_KG * (1 - merma / 100)),
-      mermaKg: arrobas * (ARROBA_KG * merma / 100),
+      masaTotalKg: arrobas * rendimientoMasaKg,
+      masaUtilKg: arrobas * (rendimientoMasaKg * (1 - merma / 100)),
+      mermaKg: arrobas * (rendimientoMasaKg * merma / 100),
       costoTotalFormulacion,
       costoUnitario,
       precioVenta,

@@ -90,10 +90,15 @@ export function FormulacionesView({
   const [tiempoHorneado, setTiempoHorneado] = useState<number>(0);
   const [temperaturaHorno, setTemperaturaHorno] = useState<number>(180);
   const [instrucciones, setInstrucciones] = useState('');
+  const [porcentajeVitina, setPorcentajeVitina] = useState<number>(9);
+  const [cortesPorArroba, setCortesPorArroba] = useState<number>(4);
 
   // Filtrar ingredientes disponibles (tipo 'ingrediente')
   const ingredientesDisponibles = useMemo(() =>
-    productos.filter(p => p.tipo === 'ingrediente'),
+    productos.filter(p => p.tipo === 'ingrediente').sort((a, b) => {
+        if (a.categoria !== b.categoria) return (a.categoria || '').localeCompare(b.categoria || '');
+        return (a.nombre || '').localeCompare(b.nombre || '');
+    }),
     [productos]);
 
   // Filtrar formulaciones por búsqueda
@@ -120,6 +125,8 @@ export function FormulacionesView({
     setTiempoHorneado(0);
     setTemperaturaHorno(180);
     setInstrucciones('');
+    setPorcentajeVitina(9);
+    setCortesPorArroba(4);
     setIsDialogOpen(true);
   };
 
@@ -134,6 +141,8 @@ export function FormulacionesView({
     setTiempoHorneado(formulacion.tiempoHorneado || 0);
     setTemperaturaHorno(formulacion.temperaturaHorno || 180);
     setInstrucciones(formulacion.instrucciones || '');
+    setPorcentajeVitina(formulacion.empasteConfig?.porcentajeVitina || 9);
+    setCortesPorArroba(formulacion.empasteConfig?.cortesPorArroba || 4);
     setIsDialogOpen(true);
   };
 
@@ -148,6 +157,8 @@ export function FormulacionesView({
     setTiempoHorneado(formulacion.tiempoHorneado || 0);
     setTemperaturaHorno(formulacion.temperaturaHorno || 180);
     setInstrucciones(formulacion.instrucciones || '');
+    setPorcentajeVitina(formulacion.empasteConfig?.porcentajeVitina || 9);
+    setCortesPorArroba(formulacion.empasteConfig?.cortesPorArroba || 4);
     setIsDialogOpen(true);
   };
 
@@ -229,7 +240,11 @@ export function FormulacionesView({
       temperaturaHorno: temperaturaHorno || undefined,
       instrucciones: instrucciones.trim() || undefined,
       activo: true,
-      fechaActualizacion: new Date().toISOString()
+      fechaActualizacion: new Date().toISOString(),
+      empasteConfig: {
+        porcentajeVitina,
+        cortesPorArroba
+      }
     };
 
     try {
@@ -482,6 +497,38 @@ export function FormulacionesView({
                     onChange={(e) => setTemperaturaHorno(Number(e.target.value))}
                     className="rounded-xl"
                   />
+                </div>
+
+                {/* Configuración de Empaste */}
+                <div className="grid grid-cols-2 gap-3 p-4 bg-indigo-50 dark:bg-indigo-950/30 rounded-2xl border border-indigo-100 dark:border-indigo-900">
+                  <div className="col-span-2">
+                    <h4 className="text-sm font-bold text-indigo-700 dark:text-indigo-400 flex items-center gap-2">
+                      <Scale className="w-4 h-4" />
+                      Configuración de Empaste
+                    </h4>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-indigo-600/70 dark:text-indigo-400/70">Vitina (%)</label>
+                    <Input
+                      type="number"
+                      step="0.5"
+                      value={porcentajeVitina}
+                      onChange={(e) => setPorcentajeVitina(Number(e.target.value))}
+                      className="rounded-xl border-indigo-200 dark:border-indigo-800 focus-visible:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-indigo-600/70 dark:text-indigo-400/70">Cortes / Arroba</label>
+                    <Input
+                      type="number"
+                      value={cortesPorArroba}
+                      onChange={(e) => setCortesPorArroba(Number(e.target.value))}
+                      className="rounded-xl border-indigo-200 dark:border-indigo-800 focus-visible:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="col-span-2 text-[10px] text-indigo-600/60 dark:text-indigo-400/60 leading-tight">
+                    Porcentaje de vitina recomendado por pastón. Ayuda a guiar al panadero en la tabla de empaste del Plan Diario.
+                  </div>
                 </div>
 
                 {/* Resumen de Costos */}

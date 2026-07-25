@@ -39,6 +39,7 @@ import {
   Bell,
   RotateCcw,
   Loader2,
+  Check,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -113,7 +114,7 @@ interface ProveedoresProps {
   productos: Producto[];
   precios: PrecioProveedor[];
   onAddProveedor: (proveedor: Omit<Proveedor, 'id' | 'createdAt'>) => Promise<Proveedor>;
-  onUpdateProveedor: (id: string, updates: Partial<Proveedor>) => void;
+  onUpdateProveedor: (id: string, updates: Partial<Proveedor>) => Promise<void>;
   onDeleteProveedor: (id: string) => void;
   onAddProducto: (p: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Producto>;
   onAddOrUpdatePrecio: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string; destino?: 'venta' | 'insumo'; tipoEmbalaje?: string; cantidadEmbalaje?: number }) => Promise<void>;
@@ -188,13 +189,15 @@ export function Proveedores({
   const [showRecuperarDialog, setShowRecuperarDialog] = useState(false);
   const [buscandoEliminados, setBuscandoEliminados] = useState(false);
   const [proveedoresEliminados, setProveedoresEliminados] = useState<Array<{
-    proveedor: any; precios: any[]; recuperando: boolean; yaExisteLocal: boolean;
+    proveedor: any; precios: any[]; recuperando: boolean; yaExisteLocal: boolean; yaRecuperado?: boolean;
   }>>([]);
+  const [necesitaRecargar, setNecesitaRecargar] = useState(false);
 
   const buscarProveedoresEliminados = useCallback(async () => {
     setBuscandoEliminados(true);
     setShowRecuperarDialog(true);
     setProveedoresEliminados([]);
+    setNecesitaRecargar(false);
     try {
       // Traer TODOS los proveedores de Supabase
       const { data: supabaseProvs, error } = await supabase
@@ -282,8 +285,11 @@ export function Proveedores({
         };
         await db.addPrecio(precioData);
       }
-      toast.success(`✅ "${p.nombre}" recuperado con ${entry.precios.length} producto(s). Recargando...`);
-      setTimeout(() => window.location.reload(), 1800);
+      toast.success(`✅ "${p.nombre}" recuperado con ${entry.precios.length} producto(s).`);
+      setNecesitaRecargar(true);
+      setProveedoresEliminados(prev =>
+        prev.map((e, i) => i === idx ? { ...e, recuperando: false, yaRecuperado: true } : e)
+      );
     } catch (err) {
       console.error('[Recuperar] Error al restaurar:', err);
       toast.error('Error al recuperar. Verifica la conexión e intenta de nuevo.');
@@ -536,8 +542,13 @@ export function Proveedores({
             let productoId = item.productoId;
 
             // Buscar etiquetas de embalaje con seguridad (Nexus-Shield-Guard)
-            const infoEmbalaje = EMBALAJES.find(e => e.value === item.tipoEmbalaje) || { label: 'Unidad', emoji: '🔹' };
-            const descripcionGenerada = `${infoEmbalaje.label} x${item.cantidadEmbalaje || 1}`;
+            const infoEmbalaje = EMBALAJES.find(e => e.value === item.tipoEmbalaje) || { label: 'Unidad', emoji: '\uD83D\uDD39' };
+            // Factor de conversión: convierte la cantidad ingresada a unidad base (kg ó L)
+            const FACTOR_UM: Record<string, number> = { kg: 1, lb: 0.4536, gr: 0.001, ml: 0.001, L: 1, und: 1 };
+            const unidadMed = (item as any).unidadMedida || 'kg';
+            const factorUM = FACTOR_UM[unidadMed] ?? 1;
+            const cantidadBase = (Number(item.cantidadEmbalaje) || 1) * factorUM;
+            const descripcionGenerada = `${infoEmbalaje.label} x${item.cantidadEmbalaje || 1}${unidadMed !== 'und' ? ' ' + unidadMed : ''}`;
 
             // Crear producto si no existe o si el ID apunta a un producto eliminado (huérfano)
             const yaExiste = productoId ? !!getProductoById(productoId) : false;
@@ -570,13 +581,14 @@ export function Proveedores({
 
             if (productoId) {
               await onAddOrUpdatePrecio({
+                id: item.uid, // onAddOrUpdatePrecio usará este ID si existe
                 productoId,
                 proveedorId: provId,
                 precioCosto: Math.round(Number(item.precioCosto) || 0),
                 notas: item.notas || descripcionGenerada,
                 destino: item.destino,
                 tipoEmbalaje: item.tipoEmbalaje,
-                cantidadEmbalaje: Number(item.cantidadEmbalaje) || 1,
+                cantidadEmbalaje: Math.round(cantidadBase * 1000) / 1000, // guardar en kg/L base
               });
 
               // Sincronización con Módulo de Productos
@@ -627,7 +639,10 @@ export function Proveedores({
         throw err;
       }
       console.error("❌ [Nexus-Volt] Error crítico en el flujo de guardado:", err);
-      toast.error('Error al guardar. Verifica los datos e intenta de nuevo.');
+      const msg = err instanceof Error ? err.message : JSON.stringify(err);
+      toast.error(`Error al guardar: ${msg}`);
+      // Lanzar el error para que ProveedorForm no cierre el modal
+      throw err;
     }
   };
 
@@ -1217,11 +1232,25 @@ export function Proveedores({
                                         <td className="px-4 py-4 text-center">
                                           <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-[10px] font-black uppercase tracking-widest px-2.5 py-1">
                                             {EMBALAJES.find(e => e.value === tipoEmbalaje)?.emoji} {cantidadEmbalaje}
+                                            {precio.notas && /x[\d.]+ (kg|lb|gr|L|ml)/.test(precio.notas)
+                                              ? ` ${precio.notas.match(/x[\d.]+ (kg|lb|gr|L|ml)/)?.[0]?.split(' ')[1] || ''}`
+                                              : ''}
                                           </Badge>
                                         </td>
                                         <td className="px-4 py-4 text-right">
                                           <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{formatCurrency(precioCosto)}</p>
-                                          {cantidadEmbalaje > 1 && <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">P.U: {formatCurrency(costoUnitario)}</p>}
+                                          {cantidadEmbalaje > 1 && (
+                                            <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">
+                                              P.U/{(() => {
+                                                const u = precio.notas && /x[\d.]+ (kg|lb|gr|L|ml)/.test(precio.notas)
+                                                  ? precio.notas.match(/x[\d.]+ (kg|lb|gr|L|ml)/)?.[0]?.split(' ')[1] || 'kg'
+                                                  : 'kg';
+                                                if (['gr', 'lb', 'kg', 'arroba'].includes(u)) return 'kg';
+                                                if (['ml', 'L'].includes(u)) return 'L';
+                                                return 'und';
+                                              })()}: {formatCurrency(costoUnitario)}
+                                            </p>
+                                          )}
                                         </td>
                                         <td className="px-4 py-4 text-center font-black text-[10px] text-emerald-600">
                                           {margenVenta}%
@@ -1569,7 +1598,7 @@ export function Proveedores({
                 <p className="text-sm font-bold text-slate-400">No se encontraron proveedores recuperables.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                   {proveedoresEliminados.length} en la nube — el que tiene más productos es el que buscas:
                 </p>
@@ -1591,12 +1620,14 @@ export function Proveedores({
                     </div>
                     <Button
                       onClick={() => recuperarProveedor(idx)}
-                      disabled={entry.recuperando}
-                      className={`shrink-0 h-9 px-4 text-white rounded-xl text-[10px] font-black uppercase tracking-widest border-none ${entry.precios.length > 0 ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rose-600 hover:bg-rose-700'}`}
+                      disabled={entry.recuperando || entry.yaRecuperado}
+                      className={`shrink-0 h-9 px-4 text-white rounded-xl text-[10px] font-black uppercase tracking-widest border-none ${entry.yaRecuperado ? 'bg-emerald-500' : entry.precios.length > 0 ? 'bg-amber-500 hover:bg-amber-600' : 'bg-rose-600 hover:bg-rose-700'}`}
                     >
                       {entry.recuperando
                         ? <><Loader2 className="w-3 h-3 animate-spin mr-1" />Restaurando...</>
-                        : <><RotateCcw className="w-3 h-3 mr-1" />{entry.yaExisteLocal ? 'Actualizar' : 'Restaurar'}</>
+                        : entry.yaRecuperado
+                          ? <><Check className="w-3 h-3 mr-1" />Recuperado</>
+                          : <><RotateCcw className="w-3 h-3 mr-1" />{entry.yaExisteLocal ? 'Actualizar' : 'Restaurar'}</>
                       }
                     </Button>
                   </div>
@@ -1604,11 +1635,14 @@ export function Proveedores({
               </div>
             )}
             <Button
-              variant="ghost"
-              className="w-full h-10 rounded-2xl font-black uppercase text-[10px] tracking-widest text-slate-400"
-              onClick={() => setShowRecuperarDialog(false)}
+              variant={necesitaRecargar ? "default" : "ghost"}
+              className={`w-full h-10 rounded-2xl font-black uppercase text-[10px] tracking-widest ${necesitaRecargar ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'text-slate-400'}`}
+              onClick={() => {
+                setShowRecuperarDialog(false);
+                if (necesitaRecargar) window.location.reload();
+              }}
             >
-              Cerrar
+              {necesitaRecargar ? 'Aplicar Cambios (Recargar)' : 'Cerrar'}
             </Button>
           </div>
         </DialogContent>

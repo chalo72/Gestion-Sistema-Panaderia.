@@ -188,7 +188,10 @@ export function PlanProduccionModal({
                                         <SelectValue placeholder="Seleccionar producto..." />
                                     </SelectTrigger>
                                     <SelectContent className="bg-slate-900 border-slate-800 text-slate-200 rounded-2xl overflow-hidden backdrop-blur-xl">
-                                        {productos.map(p => (
+                                        {[...productos].sort((a, b) => {
+                                            if (a.categoria !== b.categoria) return (a.categoria || '').localeCompare(b.categoria || '');
+                                            return (a.nombre || '').localeCompare(b.nombre || '');
+                                        }).map(p => (
                                             <SelectItem key={p.id} value={p.id} className="rounded-xl m-1 focus:bg-indigo-600 focus:text-white py-3">
                                                 <div className="flex flex-col">
                                                     <span className="font-bold">{p.nombre}</span>

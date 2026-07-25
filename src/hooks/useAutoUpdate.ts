@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
-const CHECK_INTERVAL    = 30 * 1000;   // Polling cada 30s
+const CHECK_INTERVAL    = 5 * 60 * 1000; // Polling cada 5 minutos (evita bloqueos DDoS de Vercel)
 const STORAGE_KEY       = 'nexus_build_ts';
 const BROADCAST_CHANNEL = 'nexus_update_v1';
 const COUNTDOWN_SECONDS = 8;           // Segundos antes del reload silencioso
@@ -93,7 +93,13 @@ export function useAutoUpdate() {
     if (reloadingRef.current) return;
     setUpdateAvailable(true);
     setNewVersion(version);
-    setCountdown(null); // sin cuenta regresiva automática
+    
+    // Solo mostrar el banner, el usuario decide cuándo recargar manualmente
+    setCountdown(null);
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
   }, []);
 
   // ── Capa 1 (SW): controllerchange ─────────────────────────────────────────

@@ -28,13 +28,14 @@ interface POSHeaderProps {
     vendedoras?: VendedoraOption[];
     vendedoraActivaId?: string | null;
     onSelectVendedora?: (v: VendedoraOption | null) => void;
+    onShowBalanceProduccion?: () => void;
 }
 
 export function POSHeader({
     viewMode, setViewMode,
     tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida,
     cajaActiva, onCerrarCaja, onMovimientoEntrada, onMovimientoSalida,
-    vendedoras = [], vendedoraActivaId = null, onSelectVendedora,
+    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowBalanceProduccion,
 }: POSHeaderProps) {
     const [panelOpen, setPanelOpen] = useState(false);
 
@@ -102,6 +103,13 @@ export function POSHeader({
                         <button onClick={onAddVentaRapida} className="w-8 h-8 rounded-lg border border-dashed border-slate-300 dark:border-slate-800 text-slate-400 hover:text-emerald-500 hover:border-emerald-500 active:bg-emerald-50 transition-all flex items-center justify-center shrink-0" title="Nueva Venta Rápida">
                             <Plus className="w-4 h-4" />
                         </button>
+                        <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 ml-1 mr-1" />
+                        {onShowBalanceProduccion && (
+                            <button onClick={onShowBalanceProduccion} className="h-8 px-3 rounded-lg border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 hover:border-violet-300 transition-all flex items-center gap-1.5 shrink-0" title="Balance Producción vs Ventas">
+                                <span className="text-[12px]">📈</span>
+                                <span className="text-[10px] font-black uppercase tracking-tight">Balance</span>
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -152,6 +160,17 @@ export function POSHeader({
                     >
                         <LayoutGrid className="w-5 h-5" />
                     </button>
+                    
+                    {/* Balance */}
+                    {onShowBalanceProduccion && (
+                        <button
+                            onClick={onShowBalanceProduccion}
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                            title="Balance Producción"
+                        >
+                            <span className="text-[18px]">📈</span>
+                        </button>
+                    )}
                 </div>
             </div>
 

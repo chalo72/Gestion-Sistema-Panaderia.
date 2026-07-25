@@ -148,12 +148,19 @@ export function ModelosPanView({
       pesoUnitarioGr,
       panesPorArroba,
       precioVentaUnitario,
-      costoUnitario,
+      // Conservar costo unitario avanzado si existe configuración de insumos/empaste
+      costoUnitario: (editingModelo?.piqueEmpaste || (editingModelo?.ingredientesAdicionales && editingModelo.ingredientesAdicionales.length > 0)) 
+        ? editingModelo.costoUnitario 
+        : costoUnitario,
       margenPorcentaje,
       mermaEstimada,
       piezasPorLata,
       activo: true,
-      createdAt: editingModelo?.createdAt || new Date().toISOString()
+      createdAt: editingModelo?.createdAt || new Date().toISOString(),
+      ...(editingModelo ? {
+        ingredientesAdicionales: editingModelo.ingredientesAdicionales,
+        piqueEmpaste: editingModelo.piqueEmpaste
+      } : {})
     };
 
     try {

@@ -59,6 +59,7 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
     const esperado      = totalVentas + montoApertura;
     const diferencia    = totalDesglose - esperado;
     const hayConteo     = totalDesglose > 0;
+    const retencionSugerida = Math.max(0, totalVentas * 0.10); // 10% obligatorio sugerido
 
     const diferenciaColor = diferencia === 0
         ? 'emerald'
@@ -108,11 +109,9 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
                         </div>
 
                         {/* KPIs rápidos en header */}
-                        <div className="grid grid-cols-3 gap-3 mt-5">
+                        <div className="grid grid-cols-1 gap-3 mt-5">
                             {[
                                 { label: 'Apertura', value: formatCurrency(montoApertura), color: 'text-white/70' },
-                                { label: 'Ventas', value: formatCurrency(totalVentas), color: 'text-emerald-400' },
-                                { label: 'Balance Sistema', value: formatCurrency(esperado), color: 'text-blue-400' },
                             ].map(kpi => (
                                 <div key={kpi.label} className="bg-white/5 rounded-xl p-3 border border-white/10">
                                     <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-0.5">{kpi.label}</p>
@@ -224,54 +223,28 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
                         </div>
                     </div>
 
-                    {/* Panel de diferencia */}
-                    <div className={cn(
-                        "p-4 rounded-2xl border-2 transition-all",
-                        !hayConteo
-                            ? "bg-slate-50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800"
-                            : diferenciaColor === 'emerald'
-                                ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-700"
-                                : diferenciaColor === 'amber'
-                                    ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-700"
-                                    : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700"
-                    )}>
+                    {/* Panel de cierre ciego */}
+                    <div className="p-4 rounded-2xl border-2 transition-all bg-slate-50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800">
                         {hayConteo ? (
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <div className={cn(
-                                        "w-11 h-11 rounded-xl flex items-center justify-center text-white shadow-md",
-                                        diferenciaColor === 'emerald' ? "bg-emerald-500" :
-                                        diferenciaColor === 'amber'   ? "bg-amber-500" : "bg-red-500"
-                                    )}>
-                                        {diferenciaColor === 'emerald'
-                                            ? <CheckCircle className="w-5 h-5" />
-                                            : <AlertTriangle className="w-5 h-5" />
-                                        }
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Diferencia Final</p>
-                                        <p className={cn("text-xl font-black tabular-nums",
-                                            diferenciaColor === 'emerald' ? "text-emerald-700 dark:text-emerald-400" :
-                                            diferenciaColor === 'amber'   ? "text-amber-700 dark:text-amber-400" : "text-red-700 dark:text-red-400"
-                                        )}>
-                                            {diferencia === 0 ? 'Caja Cuadrada ✓' : `${diferencia > 0 ? '+' : ''}${formatCurrency(diferencia)}`}
-                                        </p>
-                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">
-                                            {diferenciaColor === 'red' ? '⚠ Requiere auditoría' :
-                                             diferenciaColor === 'amber' ? 'Revisar antes de confirmar' :
-                                             'Todo en orden'}
-                                        </p>
-                                    </div>
+                            <div className="flex flex-col gap-3 py-2">
+                                <div className="flex items-center gap-3 text-center justify-center">
+                                    <CheckCircle className="w-5 h-5 text-indigo-500" />
+                                    <p className="text-xs text-indigo-600 dark:text-indigo-400 font-bold uppercase">Monto ingresado. Listo para cerrar.</p>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Sistema esperaba</p>
-                                    <p className="text-base font-black text-slate-700 dark:text-slate-300 tabular-nums">{formatCurrency(esperado)}</p>
+                                <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-xl">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <AlertTriangle className="w-4 h-4 text-emerald-600" />
+                                        <p className="text-xs font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-widest">Retención de Crecimiento (10%)</p>
+                                    </div>
+                                    <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                                        Recuerda transferir <span className="font-black text-lg">{formatCurrency(retencionSugerida)}</span> al Fondo de Inversión. No te saltes este paso si quieres crecer.
+                                    </p>
                                 </div>
                             </div>
                         ) : (
                             <div className="flex items-center gap-3 text-center justify-center py-2">
                                 <Banknote className="w-5 h-5 text-slate-300" />
-                                <p className="text-xs text-slate-400 font-bold uppercase">Ingresa las cantidades para ver la diferencia</p>
+                                <p className="text-xs text-slate-400 font-bold uppercase">Ingresa las cantidades para cerrar tu caja</p>
                             </div>
                         )}
                     </div>

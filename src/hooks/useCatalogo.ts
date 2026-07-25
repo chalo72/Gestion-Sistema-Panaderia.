@@ -352,7 +352,13 @@ export function useCatalogo(deps: {
   const getMejorPrecio = useCallback((productoId: string) => {
     const preciosProducto = precios.filter(p => p.productoId === productoId);
     if (preciosProducto.length === 0) return null;
-    return preciosProducto.reduce((min, p) => p.precioCosto < min.precioCosto ? p : min);
+    // Comparar por costo UNITARIO REAL (precio bulto ÷ cantidad en embalaje)
+    // Así un bulto de 50 kg a $114.286 se evalúa como $2.286/kg, no $114.286
+    return preciosProducto.reduce((min, p) => {
+      const costoUnitP   = p.precioCosto   / (p.cantidadEmbalaje   || 1);
+      const costoUnitMin = min.precioCosto / (min.cantidadEmbalaje || 1);
+      return costoUnitP < costoUnitMin ? p : min;
+    });
   }, [precios]);
 
   const getMejorPrecioByProveedor = useCallback((productoId: string, proveedorId: string) => {

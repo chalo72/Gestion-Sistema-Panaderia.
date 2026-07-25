@@ -85,9 +85,15 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
 
     setIsSavingUser(true);
     try {
+      const { hashPassword } = await import('@/lib/safe-utils');
+      
       if (editingUser) {
         const updates: any = { ...formData };
-        if (!updates.password) delete updates.password;
+        if (!updates.password) {
+          delete updates.password; // No cambiarla si viene vacía
+        } else {
+          updates.password = await hashPassword(updates.password);
+        }
         const success = await updateUsuario(editingUser.id, updates);
         if (success) {
           toast.success(`${formData.nombre} actualizado correctamente`);
@@ -96,10 +102,13 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
           setEditingUser(null);
         }
       } else {
-        const success = await addUsuario(formData);
+        const payload = { ...formData };
+        if (payload.password) {
+          payload.password = await hashPassword(payload.password);
+        }
+        const success = await addUsuario(payload);
         if (success) {
           toast.success(`Usuario ${formData.nombre} creado`);
-          // Buscar el usuario recién creado en localStorage para obtener su id
           try {
             const raw = localStorage.getItem('pricecontrol_local_user_list');
             const all: any[] = raw ? JSON.parse(raw) : [];
@@ -126,7 +135,7 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
       apellido: user.apellido || '',
       rol: user.rol,
       activo: user.activo,
-      password: (user as any).password || '', // Cargar la contraseña actual para que sea visible
+      password: '', // NUNCA cargar la contraseña actual (Hash) por seguridad
     });
     setIsDialogOpen(true);
   };
@@ -188,13 +197,10 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
   };
 
   const handleShareWhatsApp = (user: Usuario) => {
-    const rolePasswords = JSON.parse(localStorage.getItem('pricecontrol_role_passwords') || '{}');
-    const password = (user as any).password || rolePasswords[user.rol] || 'Pendiente asignar';
-
     // Prioridad: URL configurada > window.location.origin
     const appUrl = publicAppUrl || window.location.origin;
 
-    const message = `🌟 *DULCE PLACER - ACCESO PERSONAL* 🌟\n\nHola *${user.nombre}*, aquí tienes tus credenciales para el sistema ERP:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${user.email}\n🔑 *Tu Clave:* ${password}\n\n⚠️ *SEGURIDAD:* Favor guardar estos datos de forma privada. No compartirlos con nadie.`;
+    const message = `🌟 *DULCE PLACER - ACCESO PERSONAL* 🌟\n\nHola *${user.nombre}*, aquí tienes tus credenciales para el sistema ERP:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${user.email}\n🔑 *Tu Clave:* (Solicítala a tu administrador por seguridad)\n\n⚠️ *SEGURIDAD:* Favor guardar estos datos de forma privada. No compartirlos con nadie.`;
     const encodedMessage = encodeURIComponent(message);
     const whatsappUrl = `https://wa.me/?text=${encodedMessage}`;
 
