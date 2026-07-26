@@ -1436,11 +1436,11 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                     </div>
                                                                 </div>
                                                                 <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-2 flex flex-col justify-center items-center border border-emerald-200 dark:border-emerald-500/20 shadow-inner">
-                                                                    <Label className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400">Total Panes</Label>
+                                                                    <Label className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 mb-1">Total Panes (Escribir)</Label>
                                                                     <Input placeholder="0" type="text" inputMode="numeric"
                                                                         value={h.totalPanes || ''}
                                                                         onChange={e => handleHornadaChange(i, 'totalPanes', e.target.value.replace(/[^0-9]/g,''))}
-                                                                        className="h-8 p-0 border-none bg-transparent text-center font-black text-2xl text-emerald-600 dark:text-emerald-400 shadow-none focus-visible:ring-0" />
+                                                                        className="h-10 text-center font-black text-xl rounded-xl border-emerald-200 bg-white text-emerald-700 shadow-sm focus-visible:ring-emerald-500" />
                                                                 </div>
                                                             </div>
                                                         </div>
