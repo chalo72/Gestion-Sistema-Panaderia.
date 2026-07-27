@@ -249,12 +249,12 @@ export function useReportesData(props: ReportesProps) {
                 updated.totalPanes = Math.round(updated.bandejas * updated.panesPorBandeja);
             } else if (field === 'panesPorBandeja') {
                 if (updated.totalPanes > 0 && updated.bandejas === 0) {
-                    updated.bandejas = Number((updated.totalPanes / updated.panesPorBandeja).toFixed(2));
+                    updated.bandejas = Math.ceil(updated.totalPanes / updated.panesPorBandeja);
                 } else {
                     updated.totalPanes = Math.round(updated.bandejas * updated.panesPorBandeja);
                 }
             } else if (field === 'totalPanes' && updated.panesPorBandeja > 0) {
-                updated.bandejas = Number((updated.totalPanes / updated.panesPorBandeja).toFixed(2));
+                updated.bandejas = Math.ceil(updated.totalPanes / updated.panesPorBandeja);
             }
             return updated;
         }));

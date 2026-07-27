@@ -1442,7 +1442,36 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                         onChange={e => handleHornadaChange(i, 'totalPanes', e.target.value.replace(/[^0-9]/g,''))}
                                                                         className="h-10 text-center font-black text-xl rounded-xl border-emerald-200 bg-white text-emerald-700 shadow-sm focus-visible:ring-emerald-500" />
                                                                 </div>
+
+                                                                {/* Explicación visual de latas */}
+                                                                {h.panesPorBandeja > 0 && h.totalPanes > 0 && (() => {
+                                                                    const latasLlenas = Math.floor(h.totalPanes / h.panesPorBandeja);
+                                                                    const resto = h.totalPanes % h.panesPorBandeja;
+                                                                    return (
+                                                                        <div className="col-span-1 sm:col-span-3 flex items-center gap-2 px-2 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-500/20">
+                                                                            <span className="text-indigo-500 text-base">🍞</span>
+                                                                            {resto === 0 ? (
+                                                                                <span className="text-[10px] leading-tight">
+                                                                                    <span className="font-black text-emerald-600 dark:text-emerald-400">{latasLlenas}</span>
+                                                                                    <span className="text-slate-500 dark:text-slate-400"> latas completamente llenas </span>
+                                                                                    <span className="font-bold text-emerald-600 dark:text-emerald-400">✓ Exacto</span>
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-[10px] leading-tight">
+                                                                                    <span className="font-black text-emerald-600 dark:text-emerald-400">{latasLlenas}</span>
+                                                                                    <span className="text-slate-500 dark:text-slate-400"> latas llenas </span>
+                                                                                    <span className="text-slate-400 dark:text-slate-500">({latasLlenas * h.panesPorBandeja} panes)</span>
+                                                                                    <span className="text-slate-400 dark:text-slate-500"> + </span>
+                                                                                    <span className="font-black text-amber-500">{resto}</span>
+                                                                                    <span className="text-slate-500 dark:text-slate-400"> panes en la lata </span>
+                                                                                    <span className="font-black text-indigo-600 dark:text-indigo-400">#{latasLlenas + 1}</span>
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    );
+                                                                })()}
                                                             </div>
+
                                                         </div>
                                                     );
                                                 })}
