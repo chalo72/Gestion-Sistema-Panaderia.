@@ -91,6 +91,7 @@ interface ReportesProps {
     productos?: Producto[];
     categorias?: Categoria[];
     proveedores?: any[];
+    modelosPan?: { nombre: string; piezasPorLata?: number }[];
 }
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
