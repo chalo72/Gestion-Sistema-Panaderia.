@@ -73,7 +73,7 @@ import {
     getCompromisos, saveCompromisos, addCompromiso, deleteCompromiso, updateCompromiso,
     getVentasDiarias, addVentaDiaria, deleteVentaDiaria,
     calcularProyeccionQuincena, generarConsejo,
-    getProducciones, addProduccion, deleteProduccion
+    getProducciones, addProduccion, deleteProduccion, saveProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD
 } from '@/lib/finanzas-personales';
 import { getBovedas, addBoveda, addMovimientoBoveda } from '@/lib/boveda-store';
 import type { HornadaDia, RegistroProduccion, MasaPreparadaDia } from '@/lib/finanzas-personales';
@@ -98,6 +98,34 @@ const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981'
 
 
 
+/** Costo de lo vendido (COGS) = Σ costoBase × cantidad de ítems del periodo. */
+const calcCostoVendidos = (
+    ventasLista: ReportesProps['ventas'],
+    productosLista: NonNullable<ReportesProps['productos']>,
+    periodo: string
+): number => {
+    const ventasPeriodo = ventasLista.filter(v => v.fecha.startsWith(periodo));
+    const costo = ventasPeriodo.reduce((sum, v) => {
+        return sum + (v.items ?? []).reduce((s, item) => {
+            const prod = productosLista.find(p => p.id === item.productoId);
+            const costoUnit = Number(prod?.costoBase) || 0;
+            const qty = Number(item.cantidad) || 0;
+            return s + costoUnit * qty;
+        }, 0);
+    }, 0);
+    return Math.round(costo * 100) / 100;
+};
+
+/** Utilidad bruta = ventas − COGS (no resta gastos operativos). */
+const aplicarCogsAlReporte = <T extends { totalVentas: number; totalGastos: number; utilidadBruta: number }>(
+    base: T,
+    costoVendidos: number
+): T & { costoVendidos: number; utilidadNeta: number } => {
+    const utilidadBruta = Math.round((base.totalVentas - costoVendidos) * 100) / 100;
+    const utilidadNeta = Math.round((utilidadBruta - base.totalGastos) * 100) / 100;
+    return { ...base, costoVendidos, utilidadBruta, utilidadNeta };
+};
+
 export function useReportesData(props: ReportesProps) {
     const { ventas, gastos, formatCurrency, generarReporte, productos = [], categorias = [], proveedores = [] } = props;
     
@@ -105,7 +133,10 @@ export function useReportesData(props: ReportesProps) {
     const { role } = useAuth();
     const currentMonth = new Date().toISOString().slice(0, 7);
 
-    const reporteActual = useMemo(() => generarReporte(currentMonth), [ventas, gastos, currentMonth, generarReporte]);
+    const reporteActual = useMemo(() => {
+        const base = generarReporte(currentMonth);
+        return aplicarCogsAlReporte(base, calcCostoVendidos(ventas, productos, currentMonth));
+    }, [ventas, gastos, productos, currentMonth, generarReporte]);
 
     // Datos comparativos últimos 6 meses
     const comparativoData = useMemo(() => {
@@ -114,7 +145,10 @@ export function useReportesData(props: ReportesProps) {
             const date = new Date();
             date.setMonth(date.getMonth() - i);
             const periodo = date.toISOString().slice(0, 7);
-            const r = generarReporte(periodo);
+            const r = aplicarCogsAlReporte(
+                generarReporte(periodo),
+                calcCostoVendidos(ventas, productos, periodo)
+            );
             data.push({
                 name: date.toLocaleString('es-ES', { month: 'short' }).toUpperCase(),
                 ventas: r.totalVentas,
@@ -123,7 +157,7 @@ export function useReportesData(props: ReportesProps) {
             });
         }
         return data;
-    }, [ventas, gastos, generarReporte]);
+    }, [ventas, gastos, productos, generarReporte]);
 
     // Proyección del mes actual basada en días transcurridos
     const proyeccion = useMemo(() => {
@@ -177,7 +211,10 @@ export function useReportesData(props: ReportesProps) {
         return d.toISOString().slice(0, 7);
     }, []);
 
-    const reporteMesAnterior = useMemo(() => generarReporte(prevPeriodo), [ventas, gastos, prevPeriodo, generarReporte]);
+    const reporteMesAnterior = useMemo(() => {
+        const base = generarReporte(prevPeriodo);
+        return aplicarCogsAlReporte(base, calcCostoVendidos(ventas, productos, prevPeriodo));
+    }, [ventas, gastos, productos, prevPeriodo, generarReporte]);
 
     const calcTrend = (actual: number, anterior: number): string => {
         if (anterior === 0) return actual > 0 ? 'Nuevo' : '—';
@@ -210,7 +247,7 @@ export function useReportesData(props: ReportesProps) {
     // ── Producción del Día ────────────────────────────────────
     const [producciones, setProducciones] = useState<RegistroProduccion[]>(() => getProducciones());
     const [formProd, setFormProd] = useState({
-        fecha: new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10),
+        fecha: fechaLocalHoy(),
         masaDulce: '', // Mantenido por retrocompatibilidad temporal en UI, aunque ya no lo usemos
         masaHojaldrado: '',
         masaBatidoTorta: '',
@@ -265,7 +302,8 @@ export function useReportesData(props: ReportesProps) {
     const handleSaveProduccion = () => {
         const validHornadas = hornadas.filter(h => h.tipoPan.trim() && (h.bandejas > 0 || h.totalPanes > 0));
         const data: Omit<RegistroProduccion, 'id'> = {
-            fecha: formProd.fecha,
+            // Fecha local YYYY-MM-DD (nunca toISOString: en Colombia de noche salta al día siguiente)
+            fecha: normalizarFechaYYYYMMDD(formProd.fecha),
             masas: masasPreparadas,
             hornadas: validHornadas,
             notas: formProd.notas
@@ -279,7 +317,7 @@ export function useReportesData(props: ReportesProps) {
         if (editProduccionId) {
             const existentes = getProducciones();
             const actualizados = existentes.map(p => p.id === editProduccionId ? { ...p, ...data } : p);
-            localStorage.setItem('dp_producciones', JSON.stringify(actualizados));
+            saveProducciones(actualizados);
             setProducciones(actualizados);
             setEditProduccionId(null);
             toast.success(`✅ Producción del ${data.fecha} actualizada`);
@@ -389,24 +427,6 @@ export function useReportesData(props: ReportesProps) {
         totalEfectivo: '', totalNequi: '', totalTransferencia: '', totalCredito: '', notas: ''
     });
 
-    const proyeccionQuincena = useMemo(() => calcularProyeccionQuincena({
-        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total, metodoPago: v.metodoPago })),
-        ventasDiarias,
-        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria })),
-        compromisos,
-        temporadaBaja,
-        margenCostoVariable: 0.5
-    }), [ventas, ventasDiarias, gastos, compromisos, temporadaBaja]);
-
-    const consejo = useMemo(() => generarConsejo({
-        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total, metodoPago: v.metodoPago })),
-        ventasDiarias,
-        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria, descripcion: g.descripcion })),
-        compromisos,
-        temporadaBaja,
-        margenCostoVariable: 0.5
-    }), [ventas, ventasDiarias, gastos, compromisos, temporadaBaja]);
-
     const [periodoFiltro, setPeriodoFiltro] = useState<{ mes: string, quincena: '1' | '2' | 'mes' }>(() => {
         const hoy = new Date();
         const m = hoy.toISOString().slice(0, 7);
@@ -453,10 +473,12 @@ export function useReportesData(props: ReportesProps) {
 
         let ventasPOS = 0;
         let ventasPOSDia = 0;
+        const fechasConPOS = new Set<string>();
         ventas.forEach(v => {
             const f = v.fecha.slice(0, 10);
             if (f >= inicioStr && f <= finStr) {
                 ventasPOS += v.total;
+                fechasConPOS.add(f);
                 if (f === hoyStr) ventasPOSDia += v.total;
             }
         });
@@ -465,9 +487,10 @@ export function useReportesData(props: ReportesProps) {
         let ventasManualesDia = 0;
         let totalVentasManualesHistorico = 0;
 
+        // POS gana: si ese día ya hay tickets POS, el cierre manual no se suma otra vez
         ventasDiarias.forEach(v => {
             totalVentasManualesHistorico += v.total;
-            if (v.fecha >= inicioStr && v.fecha <= finStr) {
+            if (v.fecha >= inicioStr && v.fecha <= finStr && !fechasConPOS.has(v.fecha)) {
                 ventasManuales += v.total;
                 if (v.fecha === hoyStr) {
                     ventasManualesDia += v.total;
@@ -475,7 +498,7 @@ export function useReportesData(props: ReportesProps) {
             }
         });
 
-        const ventasTotalDia = ventasPOSDia + ventasManualesDia;
+        const ventasTotalDia = ventasPOSDia + (fechasConPOS.has(hoyStr) ? 0 : ventasManualesDia);
 
         return {
             inicioStr,
@@ -489,6 +512,7 @@ export function useReportesData(props: ReportesProps) {
             ventasTotalDia,
             totalVentasManualesHistorico,
             label,
+            fechasConPOS: Array.from(fechasConPOS),
         };
     }, [ventas, ventasDiarias, periodoFiltro]);
 
@@ -496,6 +520,7 @@ export function useReportesData(props: ReportesProps) {
     const diagnosticoFinanciero = useMemo(() => {
         // Los gastos/salidas del turno ya vienen restados en el 'total' de ventasDiarias
         // por lo que ventasTotal = Ingreso Neto. Para el P&L, necesitamos el Ingreso Bruto.
+        // Las salidas se leen de TODOS los cierres (aunque el día tenga POS): son plata que salió.
         const operativos = ventasDiarias
             .filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr)
             .reduce((s, v) => s + ((v.cajas && v.cajas['Gastos/Salidas']) ? v.cajas['Gastos/Salidas'] : 0), 0);
@@ -541,18 +566,51 @@ export function useReportesData(props: ReportesProps) {
             
             return s + (limite * multiplicador);
         }, 0);
+
+        // Saldo operativo: no resta topes de compra (son presupuesto, no gasto real;
+        // si se pagó proveedor desde caja, ya está en "operativos").
+        const gananciaNeta = Math.round((ingresos - (fijos + operativos)) * 100) / 100;
+        // Estimado si se consumiera el tope completo de proveedores (solo referencia).
+        const estimadoTrasTopes = Math.round((ingresos - compras - fijos - operativos) * 100) / 100;
         
         return {
             ingresos,
             fijos,
             compras,
             operativos,
-            // Si los proveedores se pagan de la caja diaria (operativos), sumarlos de nuevo causa doble contabilización.
-            // Asumiremos que los Egresos Totales son los Gastos Fijos (Arriendo, Nómina) + Gastos Operativos (Caja diaria, que incluye pago a proveedores).
             totalEgresos: fijos + operativos,
-            gananciaNeta: ingresos - (fijos + operativos)
+            gananciaNeta,
+            estimadoTrasTopes,
         };
     }, [quincenaReal, compromisos, presupuestosMinimos, ventasDiarias, temporadaBaja, periodoFiltro]);
+
+    const proyeccionQuincena = useMemo(() => calcularProyeccionQuincena({
+        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total, metodoPago: v.metodoPago })),
+        ventasDiarias,
+        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria })),
+        compromisos,
+        temporadaBaja,
+        margenCostoVariable: 0.5,
+        periodo: {
+            inicioStr: quincenaReal.inicioStr,
+            finStr: quincenaReal.finStr,
+            quincena: periodoFiltro.quincena,
+        },
+    }), [ventas, ventasDiarias, gastos, compromisos, temporadaBaja, quincenaReal.inicioStr, quincenaReal.finStr, periodoFiltro.quincena]);
+
+    const consejo = useMemo(() => generarConsejo({
+        ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total, metodoPago: v.metodoPago })),
+        ventasDiarias,
+        gastos: gastos.map(g => ({ fecha: g.fecha, monto: g.monto, categoria: g.categoria, descripcion: g.descripcion })),
+        compromisos,
+        temporadaBaja,
+        margenCostoVariable: 0.5,
+        periodo: {
+            inicioStr: quincenaReal.inicioStr,
+            finStr: quincenaReal.finStr,
+            quincena: periodoFiltro.quincena,
+        },
+    }), [ventas, ventasDiarias, gastos, compromisos, temporadaBaja, quincenaReal.inicioStr, quincenaReal.finStr, periodoFiltro.quincena]);
 
     // ── TABLERO DE OBLIGACIONES TOTALES ──────────────────────────
     const promedioGastosMensuales = useMemo(() => {

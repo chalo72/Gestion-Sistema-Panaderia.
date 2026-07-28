@@ -3,15 +3,276 @@ import React from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
-import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2 } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ModeloPanModal } from '@/components/produccion/ModeloPanModal';
 import { Button } from '@/components/ui/button';
-import { deleteProduccion, getProducciones } from '@/lib/finanzas-personales';
+import { deleteProduccion, getProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD } from '@/lib/finanzas-personales';
 import { toast } from 'sonner';
+
+type OpcionMedida = { label: string; val: number };
+
+/** Arrobas/libras en letra para leer fácil (ej. 1.5 → «una arroba y media»). */
+const ARROBAS_EN_LETRAS: OpcionMedida[] = [
+    { val: 0.04, label: '1 libra' },
+    { val: 0.08, label: '2 libras' },
+    { val: 0.12, label: '3 libras' },
+    { val: 0.16, label: '4 libras' },
+    { val: 0.2, label: '5 libras' },
+    { val: 0.24, label: '6 libras' },
+    { val: 0.28, label: '7 libras' },
+    { val: 0.32, label: '8 libras' },
+    { val: 0.36, label: '9 libras' },
+    { val: 0.4, label: '10 libras' },
+    { val: 0.44, label: '11 libras' },
+    { val: 0.48, label: '12 libras' },
+    { val: 0.6, label: '15 libras' },
+    { val: 0.8, label: '20 libras' },
+    { val: 0.25, label: 'un cuarto de arroba' },
+    { val: 0.5, label: 'media arroba' },
+    { val: 0.75, label: 'tres cuartos de arroba' },
+    { val: 1, label: '1 arroba' },
+    { val: 1.25, label: '1 arroba y cuarto' },
+    { val: 1.5, label: 'una arroba y media' },
+    { val: 1.75, label: '1 arroba y tres cuartos' },
+    { val: 2, label: '2 arrobas' },
+    { val: 2.5, label: '2 arrobas y media' },
+    { val: 3, label: '3 arrobas' },
+    { val: 3.5, label: '3 arrobas y media' },
+    { val: 4, label: '4 arrobas' },
+    { val: 5, label: '5 arrobas' },
+    { val: 6, label: '6 arrobas' },
+    { val: 7, label: '7 arrobas' },
+    { val: 8, label: '8 arrobas' },
+    { val: 9, label: '9 arrobas' },
+    { val: 10, label: '10 arrobas' },
+];
+
+/** Siempre intenta hablar en letra (entrada exacta o salida aproximada). */
+const arrobasEnLetras = (arr: number): string => {
+    const n = Number(arr);
+    if (!Number.isFinite(n) || n <= 0) return '—';
+    const exacto = ARROBAS_EN_LETRAS.find((o) => Math.abs(o.val - n) < 0.015);
+    if (exacto) return exacto.label;
+    const cercano = ARROBAS_EN_LETRAS.reduce((best, o) =>
+        Math.abs(o.val - n) < Math.abs(best.val - n) ? o : best
+    );
+    if (Math.abs(cercano.val - n) <= 0.08) return `cerca de ${cercano.label}`;
+    const enteras = Math.floor(n + 1e-9);
+    const frac = n - enteras;
+    const libras = Math.round(n * 25); // 1 arr = 25 libras
+    let cola = '';
+    if (frac >= 0.2 && frac <= 0.3) cola = ' y cuarto';
+    else if (frac >= 0.45 && frac <= 0.55) cola = ' y media';
+    else if (frac >= 0.7 && frac <= 0.8) cola = ' y tres cuartos';
+    if (enteras === 0 && cola === ' y media') return 'media arroba';
+    if (enteras === 0 && cola === ' y cuarto') return 'un cuarto de arroba';
+    if (enteras === 0 && cola === ' y tres cuartos') return 'tres cuartos de arroba';
+    if (enteras === 1 && cola) return `una arroba${cola}`;
+    if (enteras === 1 && !cola) return `1 arroba (≈ ${libras} libras)`;
+    if (enteras > 1 && cola) return `${enteras} arrobas${cola}`;
+    return `${n.toFixed(2)} arrobas (≈ ${libras} libras)`;
+};
+
+const fechaParaMostrar = (fecha: string) => {
+    const f = normalizarFechaYYYYMMDD(fecha);
+    return new Date(`${f}T12:00:00`).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+};
+
+/** Selector de arrobas/libras con buscador (lista larga). */
+function SelectorMedidaArroba({
+    value,
+    opciones,
+    onChange,
+}: {
+    value: number | string;
+    opciones: OpcionMedida[];
+    onChange: (val: number) => void;
+}) {
+    const [open, setOpen] = React.useState(false);
+    const [q, setQ] = React.useState('');
+    const ref = React.useRef<HTMLDivElement>(null);
+    const selected = opciones.find((o) => Number(o.val) === Number(value));
+    const filtered = React.useMemo(() => {
+        const t = q.trim().toLowerCase();
+        if (!t) return opciones;
+        return opciones.filter(
+            (o) =>
+                o.label.toLowerCase().includes(t) ||
+                String(o.val).includes(t) ||
+                `${(o.val * 12.5).toFixed(1)}kg`.includes(t.replace(/\s/g, ''))
+        );
+    }, [opciones, q]);
+
+    React.useEffect(() => {
+        if (!open) return;
+        const close = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => document.removeEventListener('mousedown', close);
+    }, [open]);
+
+    return (
+        <div ref={ref} className="relative w-full min-w-[9.5rem]">
+            <button
+                type="button"
+                onClick={() => {
+                    setOpen((v) => !v);
+                    setQ('');
+                }}
+                className="h-9 w-full text-left text-[11px] font-bold rounded-lg border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-2.5 pr-7 truncate"
+            >
+                {selected ? selected.label : 'Buscar medida…'}
+            </button>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            {open && (
+                <div className="absolute z-50 mt-1 left-0 right-0 sm:min-w-[16rem] rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl overflow-hidden">
+                    <div className="flex items-center gap-2 px-2.5 py-2 border-b border-slate-100 dark:border-white/5">
+                        <Search className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <input
+                            autoFocus
+                            value={q}
+                            onChange={(e) => setQ(e.target.value)}
+                            placeholder="Ej: 6 libras, media, 2 arrobas…"
+                            className="w-full bg-transparent text-xs font-medium outline-none placeholder:text-slate-400"
+                        />
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                        {filtered.length === 0 ? (
+                            <p className="px-3 py-4 text-[11px] text-slate-500 text-center">No hay esa medida. Prueba “libra” o “arroba”.</p>
+                        ) : (
+                            filtered.map((op) => (
+                                <button
+                                    key={`${op.val}-${op.label}`}
+                                    type="button"
+                                    onClick={() => {
+                                        onChange(op.val);
+                                        setOpen(false);
+                                        setQ('');
+                                    }}
+                                    className={cn(
+                                        'w-full text-left px-3 py-2 text-[11px] font-bold hover:bg-indigo-50 dark:hover:bg-indigo-500/10',
+                                        Number(value) === Number(op.val) && 'bg-indigo-50 dark:bg-indigo-500/15 text-indigo-700 dark:text-indigo-300'
+                                    )}
+                                >
+                                    {op.label}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+type ChequeoRendimiento = {
+    masaNombre: string;
+    masaArr: number;
+    panesReales: number;
+    panesEsperados: number;
+    panesMin: number;
+    panesMax: number;
+    estado: 'ok' | 'bajo' | 'alto' | 'sin_modelo' | 'sin_panes';
+    mensaje: string;
+};
+
+/** Comprueba si los panes de cada masa calzan con lo declarado (±12% + merma del modelo). */
+const chequearRendimientoPorMasa = (
+    masas: Array<{ id: string; nombre?: string; cantidadArrobas?: number }>,
+    hornadasList: Array<{ masaId?: string; tipoPan?: string; totalPanes?: number; bandejas?: number; panesPorBandeja?: number }>,
+    modelos: Array<{ nombre: string; panesPorArroba?: number; mermaEstimada?: number }> | undefined
+): ChequeoRendimiento[] => {
+    const TOL = 0.12;
+    return (masas || [])
+        .map((masa) => {
+            const masaArr = Number(masa.cantidadArrobas) || 0;
+            if (masaArr <= 0) return null;
+            const hs = (hornadasList || []).filter((h) => h.masaId === masa.id);
+            const panesReales = hs.reduce((s, h) => {
+                const n = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                return s + (Number.isFinite(n) ? n : 0);
+            }, 0);
+            const nombre = masa.nombre || 'Masa';
+            if (hs.length === 0 || panesReales <= 0) {
+                return {
+                    masaNombre: nombre,
+                    masaArr,
+                    panesReales: 0,
+                    panesEsperados: 0,
+                    panesMin: 0,
+                    panesMax: 0,
+                    estado: 'sin_panes' as const,
+                    mensaje: `Declaró ${arrobasEnLetras(masaArr)} de «${nombre}» pero aún no hay panes ligados a esa masa.`,
+                };
+            }
+            const tipos = [...new Set(hs.map((h) => h.tipoPan).filter(Boolean))] as string[];
+            const mods = tipos
+                .map((t) => modelos?.find((m) => m.nombre === t))
+                .filter((m): m is { nombre: string; panesPorArroba?: number; mermaEstimada?: number } => !!m && Number(m.panesPorArroba) > 0);
+            if (mods.length === 0) {
+                return {
+                    masaNombre: nombre,
+                    masaArr,
+                    panesReales,
+                    panesEsperados: 0,
+                    panesMin: 0,
+                    panesMax: 0,
+                    estado: 'sin_modelo' as const,
+                    mensaje: `Hay ${panesReales} panes de «${nombre}» pero el modelo no tiene «panes por arroba». No se puede comprobar.`,
+                };
+            }
+            // Si hay varios modelos, promedio ponderado por panes reales de cada tipo
+            let esperado = 0;
+            let mermaMax = 0;
+            if (mods.length === 1) {
+                const ppa = Number(mods[0].panesPorArroba);
+                esperado = masaArr * ppa;
+                mermaMax = Math.max(0, Number(mods[0].mermaEstimada) || 0) / 100;
+            } else {
+                const totalP = panesReales || 1;
+                let ppaPond = 0;
+                tipos.forEach((t) => {
+                    const mod = modelos?.find((m) => m.nombre === t);
+                    const ppa = Number(mod?.panesPorArroba) || 0;
+                    if (ppa <= 0) return;
+                    const panesTipo = hs
+                        .filter((h) => h.tipoPan === t)
+                        .reduce((s, h) => s + Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0))), 0);
+                    ppaPond += ppa * (panesTipo / totalP);
+                    mermaMax = Math.max(mermaMax, Math.max(0, Number(mod?.mermaEstimada) || 0) / 100);
+                });
+                esperado = masaArr * ppaPond;
+            }
+            const panesMin = Math.floor(esperado * (1 - TOL - mermaMax));
+            const panesMax = Math.ceil(esperado * (1 + TOL));
+            const masaLetras = arrobasEnLetras(masaArr);
+            let estado: ChequeoRendimiento['estado'] = 'ok';
+            let mensaje = `«${nombre}»: con ${masaLetras} deberían salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}). Salieron ${panesReales}. ✓ Calza.`;
+            if (panesReales < panesMin) {
+                estado = 'bajo';
+                mensaje = `«${nombre}»: dijo ${masaLetras} → deberían salir al menos ~${panesMin} panes, pero solo hay ${panesReales}. Posible masa inflada o panes de menos.`;
+            } else if (panesReales > panesMax) {
+                estado = 'alto';
+                mensaje = `«${nombre}»: dijo ${masaLetras} → máximo ~${panesMax} panes, pero hay ${panesReales}. Posible conteo alto o masa sin declarar.`;
+            }
+            return {
+                masaNombre: nombre,
+                masaArr,
+                panesReales,
+                panesEsperados: Math.round(esperado),
+                panesMin,
+                panesMax,
+                estado,
+                mensaje,
+            };
+        })
+        .filter((x): x is ChequeoRendimiento => x !== null);
+};
 
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any, addMovimientoBoveda: any }) {
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo } = data;
@@ -20,15 +281,82 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
     
     // Add COLORS if needed
     const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
+    /** 1 arroba oficial = 12.5 kg. En Colombia 1 libra ≈ 0.5 kg → 1 arr ≈ 25 libras. */
+    const ARROBA_KG_LOCAL = 12.5;
+    const describirDifArrobas = (arrAbs: number): { titulo: string; detalle: string; fraseCorta: string } => {
+        const kg = arrAbs * ARROBA_KG_LOCAL;
+        const libras = Math.round(kg * 2);
+        let familiar = `${arrAbs.toFixed(2)} arrobas`;
+        if (arrAbs >= 0.9 && arrAbs <= 1.1) familiar = 'casi 1 arroba';
+        else if (arrAbs >= 0.7 && arrAbs < 0.9) familiar = 'casi ¾ de arroba';
+        else if (arrAbs >= 0.45 && arrAbs <= 0.55) familiar = 'media arroba';
+        else if (arrAbs >= 0.35 && arrAbs < 0.45) familiar = 'casi media arroba';
+        else if (arrAbs >= 0.2 && arrAbs <= 0.3) familiar = 'cerca de ¼ de arroba';
+        else if (arrAbs < 0.15) familiar = 'poca masa';
+        return {
+            titulo: familiar,
+            detalle: `≈ ${kg.toFixed(1)} kg · ≈ ${libras} libras (1 arroba = 12.5 kg)`,
+            // Frase lista para leer en voz alta: "media arroba · 6.3 kg · 12 libras"
+            fraseCorta: `${familiar} · ≈ ${kg.toFixed(1)} kg · ≈ ${libras} libras`,
+        };
+    };
+    /** Explicación paso a paso: masa metida vs pan recuperado (arroba + kg + libras). */
+    const explicarComparacionMasaPan = (masaKg: number, panKg: number, masaArr: number, panArr: number, diferenciaArr: number) => {
+        const difAbs = Math.abs(diferenciaArr);
+        const difHumana = describirDifArrobas(difAbs);
+        const metiste = `Metiste ${arrobasEnLetras(masaArr)} (${masaKg.toFixed(1)} kg) de masa.`;
+        const recuperaste = `En pan solo “recuperaste” ≈ ${arrobasEnLetras(panArr)} (${panKg.toFixed(1)} kg).`;
+        if (diferenciaArr < -0.1) {
+            return {
+                pasos: [
+                    metiste,
+                    recuperaste,
+                    `Faltó ≈ ${difHumana.fraseCorta} → eso es el faltante.`,
+                ],
+                nota: 'Esa masa no se convirtió en pan (merma, basura o error al contar). 1 arroba = 12.5 kg ≈ 25 libras.',
+            };
+        }
+        if (diferenciaArr > 0.1) {
+            return {
+                pasos: [
+                    `Metiste ${arrobasEnLetras(masaArr)} (${masaKg.toFixed(1)} kg) de masa.`,
+                    `En pan “recuperaste” ≈ ${arrobasEnLetras(panArr)} (${panKg.toFixed(1)} kg) — más de lo metido.`,
+                    `Sobró ≈ ${difHumana.fraseCorta} → eso es el sobrante.`,
+                ],
+                nota: 'Revisa si faltó anotar masa o si las piezas salieron más pequeñas. 1 arroba = 12.5 kg ≈ 25 libras.',
+            };
+        }
+        return {
+            pasos: [
+                metiste,
+                `En pan “recuperaste” ≈ ${arrobasEnLetras(panArr)} (${panKg.toFixed(1)} kg).`,
+                'Casi igual → cuadró.',
+            ],
+            nota: 'Si masa y pan dan el mismo kg (o casi), el lote cuadra.',
+        };
+    };
     const [pctCrecimiento, setPctCrecimiento] = React.useState(5);
     const [isModeloModalOpen, setIsModeloModalOpen] = React.useState(false);
+    const [iaExpanded, setIaExpanded] = React.useState(false);
+    const [produccionTab, setProduccionTab] = React.useState<'masas' | 'panes' | 'cuadre'>('panes');
+    const [historialExpanded, setHistorialExpanded] = React.useState(false);
 
-    const opcionesArrobas = [
+    // 1 libra ≈ 500 g → 0.04 arr (1 arroba = 12.5 kg = 25 libras)
+    const opcionesArrobas: OpcionMedida[] = [
         { label: "1 Libra (~500g)", val: 0.04 },
         { label: "2 Libras (~1kg)", val: 0.08 },
         { label: "3 Libras (~1.5kg)", val: 0.12 },
         { label: "4 Libras (~2kg)", val: 0.16 },
         { label: "5 Libras (~2.5kg)", val: 0.2 },
+        { label: "6 Libras (~3kg)", val: 0.24 },
+        { label: "7 Libras (~3.5kg)", val: 0.28 },
+        { label: "8 Libras (~4kg)", val: 0.32 },
+        { label: "9 Libras (~4.5kg)", val: 0.36 },
+        { label: "10 Libras (~5kg)", val: 0.4 },
+        { label: "11 Libras (~5.5kg)", val: 0.44 },
+        { label: "12 Libras (~6kg)", val: 0.48 },
+        { label: "15 Libras (~7.5kg)", val: 0.6 },
+        { label: "20 Libras (~10kg)", val: 0.8 },
         { label: "Cuarto de Arroba (¼)", val: 0.25 },
         { label: "Media Arroba (½)", val: 0.5 },
         { label: "Tres cuartos de Arroba (¾)", val: 0.75 },
@@ -46,7 +374,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
         { label: "7 Arrobas", val: 7.0 },
         { label: "8 Arrobas", val: 8.0 },
         { label: "9 Arrobas", val: 9.0 },
-        { label: "10 Arrobas", val: 10.0 }
+        { label: "10 Arrobas", val: 10.0 },
     ];
     
     return (
@@ -83,98 +411,100 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                 return (
                     <>
                     
-                    {/* ── SELECTORES DE PERIODO HISTÓRICO ── */}
-                    <div className="flex flex-wrap items-center gap-3 bg-slate-50 dark:bg-card/50 p-3 rounded-2xl border border-slate-200 dark:border-white/5">
-                        <div className="flex items-center gap-2">
-                            <CalendarDays className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-xs font-medium text-muted-foreground">Analizar:</span>
+                    {/* ── ZONA 1: ENCABEZADO INTELIGENTE ── */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-card/60 px-4 py-3 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+                        {/* Selector período */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <CalendarDays className="w-4 h-4 text-slate-400" />
+                            <input 
+                                type="month" 
+                                className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700 dark:text-slate-200"
+                                value={periodoFiltro.mes}
+                                onChange={(e) => setPeriodoFiltro(p => ({ ...p, mes: e.target.value }))}
+                            />
+                            <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
+                                {(['1','2','mes'] as const).map((q, idx) => (
+                                    <button key={q}
+                                        onClick={() => setPeriodoFiltro(p => ({ ...p, quincena: q }))}
+                                        className={cn("px-3 py-1.5 text-[11px] font-black transition-colors", periodoFiltro.quincena === q ? "bg-emerald-500 text-white" : "text-muted-foreground hover:bg-white/10")}
+                                    >
+                                        {idx === 0 ? '1ª Q' : idx === 1 ? '2ª Q' : 'Mes'}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
-                        <input 
-                            type="month" 
-                            className="bg-background border border-white/10 rounded-lg text-sm px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            value={periodoFiltro.mes}
-                            onChange={(e) => setPeriodoFiltro(p => ({ ...p, mes: e.target.value }))}
-                        />
-                        <div className="flex bg-background border border-white/10 rounded-lg overflow-hidden">
-                            <button
-                                onClick={() => setPeriodoFiltro(p => ({ ...p, quincena: '1' }))}
-                                className={cn("px-3 py-1.5 text-xs font-bold transition-colors", periodoFiltro.quincena === '1' ? "bg-emerald-500 text-white" : "text-muted-foreground hover:bg-white/5")}
-                            >
-                                1ª Quincena
-                            </button>
-                            <button
-                                onClick={() => setPeriodoFiltro(p => ({ ...p, quincena: '2' }))}
-                                className={cn("px-3 py-1.5 text-xs font-bold transition-colors", periodoFiltro.quincena === '2' ? "bg-emerald-500 text-white" : "text-muted-foreground hover:bg-white/5")}
-                            >
-                                2ª Quincena
-                            </button>
-                            <button
-                                onClick={() => setPeriodoFiltro(p => ({ ...p, quincena: 'mes' }))}
-                                className={cn("px-3 py-1.5 text-xs font-bold transition-colors", periodoFiltro.quincena === 'mes' ? "bg-emerald-500 text-white" : "text-muted-foreground hover:bg-white/5")}
-                            >
-                                Mes Completo
-                            </button>
+                        {/* KPIs rápidos inline */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="text-center">
+                                <p className="text-[9px] font-black uppercase text-emerald-500">Ingresos</p>
+                                <p className="text-sm font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(quincenaReal.ventasTotal)}</p>
+                            </div>
+                            <div className="w-px h-8 bg-slate-200 dark:bg-white/10" />
+                            <div className="text-center">
+                                <p className="text-[9px] font-black uppercase text-rose-500">Compromisos</p>
+                                <p className="text-sm font-black text-rose-600 dark:text-rose-400">{formatCurrency(diagnosticoFinanciero.fijos)}</p>
+                            </div>
+                            <div className="w-px h-8 bg-slate-200 dark:bg-white/10" />
+                            <div className="text-center">
+                                <p className="text-[9px] font-black uppercase text-slate-500">Saldo</p>
+                                <p className={cn("text-sm font-black", (quincenaReal.ventasTotal - diagnosticoFinanciero.fijos) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+                                    {formatCurrency(quincenaReal.ventasTotal - diagnosticoFinanciero.fijos)}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
-                    {/* ── CONSEJERO IA INTEGRADO EN EL DASHBOARD ── */}
-                    <Card className="rounded-3xl border-2 shadow-lg border-violet-500/50 bg-violet-500/5">
-                        <CardContent className="p-4 sm:p-6">
-                            <div className="flex items-start gap-4">
-                                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 bg-violet-500/20">
-                                    <Sparkles className="w-6 h-6 text-violet-500" />
+                    {/* ── CONSEJERO IA — colapsable ── */}
+                    <div className="rounded-2xl border-2 border-violet-500/40 bg-violet-500/5 overflow-hidden">
+                        <button
+                            onClick={() => setIaExpanded(x => !x)}
+                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-violet-500/10 transition-colors"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-violet-500/20">
+                                    <Sparkles className="w-4 h-4 text-violet-500" />
                                 </div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <Brain className="w-4 h-4 text-violet-400" />
-                                            <p className="text-[9px] font-black uppercase tracking-widest text-violet-400">Análisis Financiero IA · {quincenaReal.label}</p>
-                                        </div>
-                                    </div>
-                                    
-                                    {!analisisIA && !pidiendoIA ? (
-                                        <div className="space-y-3">
-                                            <h3 className="text-lg font-black text-violet-400">¿Necesitas ayuda con los números?</h3>
-                                            <p className="text-sm text-muted-foreground">Pico-Claw, el agente financiero, puede analizar los datos de esta quincena y darte una estrategia personalizada.</p>
-                                            <Button 
-                                                onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)}
-                                                className="bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2"
-                                            >
-                                                <Bot className="w-4 h-4" />
-                                                Analizar Datos Ahora
-                                            </Button>
-                                        </div>
-                                    ) : (
-                                        <div className="space-y-4">
-                                            <div className="prose prose-sm dark:prose-invert max-w-none text-muted-foreground">
-                                                {analisisIA ? (
-                                                    <div className="whitespace-pre-wrap leading-relaxed text-sm">
-                                                        {analisisIA}
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-2 text-violet-400 animate-pulse font-medium">
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                        Pico-Claw está analizando tus finanzas...
-                                                    </div>
-                                                )}
-                                            </div>
-                                            {analisisIA && !pidiendoIA && (
-                                                <Button 
-                                                    variant="outline" 
-                                                    size="sm"
-                                                    onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)}
-                                                    className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
-                                                >
-                                                    <Sparkles className="w-3.5 h-3.5 mr-2" />
-                                                    Re-evaluar Estrategia
-                                                </Button>
-                                            )}
-                                        </div>
-                                    )}
+                                <div className="text-left">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-violet-500">Pico-Claw · Análisis IA</p>
+                                    <p className="text-[11px] text-violet-400/70 font-medium">
+                                        {analisisIA ? 'Análisis disponible — toca para leer' : pidiendoIA ? 'Analizando...' : 'Toca para pedir consejo financiero'}
+                                    </p>
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
+                            <div className="flex items-center gap-2">
+                                {pidiendoIA && <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />}
+                                {analisisIA && !iaExpanded && <span className="text-[9px] bg-violet-500 text-white px-2 py-0.5 rounded-full font-black">NUEVO</span>}
+                                {iaExpanded ? <ChevronUp className="w-4 h-4 text-violet-400" /> : <ChevronDown className="w-4 h-4 text-violet-400" />}
+                            </div>
+                        </button>
+                        {iaExpanded && (
+                            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-violet-500/20">
+                                {!analisisIA && !pidiendoIA ? (
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">Analiza los datos de esta quincena y recibe una estrategia personalizada.</p>
+                                        <Button onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)} className="bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2">
+                                            <Bot className="w-4 h-4" /> Analizar Datos Ahora
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {analisisIA ? (
+                                            <div className="whitespace-pre-wrap leading-relaxed text-sm text-muted-foreground">{analisisIA}</div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 text-violet-400 animate-pulse font-medium">
+                                                <Loader2 className="w-4 h-4 animate-spin" /> Pico-Claw está analizando tus finanzas...
+                                            </div>
+                                        )}
+                                        {analisisIA && !pidiendoIA && (
+                                            <Button variant="outline" size="sm" onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)} className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10">
+                                                <Sparkles className="w-3.5 h-3.5 mr-2" /> Re-evaluar Estrategia
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
                     {/* ── ESTADO FINANCIERO DEL NEGOCIO (P&L) ── */}
                     <Card className="rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/10 to-blue-950/5 shadow-xl overflow-hidden relative">
@@ -196,8 +526,9 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                     <p className="text-base font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(diagnosticoFinanciero.ingresos)}</p>
                                 </div>
                                 <div onClick={() => setDetallesModal('proveedores')} className="bg-slate-50 dark:bg-card/40 rounded-2xl p-3 border border-slate-200 dark:border-white/5 cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-500 mb-1">Proveedores (Topes)</p>
-                                    <p className="text-base font-black text-amber-600 dark:text-amber-400">- {formatCurrency(diagnosticoFinanciero.compras)}</p>
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-500 mb-1">Tope proveedores</p>
+                                    <p className="text-base font-black text-amber-600 dark:text-amber-400">{formatCurrency(diagnosticoFinanciero.compras)}</p>
+                                    <p className="text-[8px] font-bold text-muted-foreground mt-0.5">Referencia · no restado</p>
                                 </div>
                                 <div onClick={() => setDetallesModal('fijos')} className="bg-slate-50 dark:bg-card/40 rounded-2xl p-3 border border-slate-200 dark:border-white/5 cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
                                     <p className="text-[9px] font-black uppercase tracking-widest text-violet-600 dark:text-violet-500 mb-1">Gastos Fijos/Nómina</p>
@@ -212,46 +543,48 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                     diagnosticoFinanciero.gananciaNeta >= 0 ? "bg-emerald-100 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 hover:bg-emerald-200 dark:hover:bg-emerald-500/20" : "bg-rose-100 dark:bg-rose-500/10 border-rose-300 dark:border-rose-500/30 hover:bg-rose-200 dark:hover:bg-rose-500/20"
                                 )}>
                                     <p className={cn("text-[10px] font-black uppercase tracking-widest mb-1", diagnosticoFinanciero.gananciaNeta >= 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-700 dark:text-rose-400")}>
-                                        Ganancia Neta
+                                        Saldo operativo
                                     </p>
                                     <p className={cn("text-xl font-black", diagnosticoFinanciero.gananciaNeta >= 0 ? "text-emerald-700 dark:text-emerald-500" : "text-rose-700 dark:text-rose-500")}>
                                         {formatCurrency(diagnosticoFinanciero.gananciaNeta)}
                                     </p>
+                                    <p className="text-[8px] font-bold text-muted-foreground mt-0.5">
+                                        Ingresos − fijos − salidas
+                                    </p>
                                 </div>
                             </div>
                             
-                            {/* Barra de progreso de rentabilidad */}
+                            {/* Barra: solo lo que sí entra en el saldo (fijos + diarios + saldo = 100%) */}
                             <div className="mt-4">
                                 <div className="flex justify-between text-[10px] font-bold mb-1.5 px-1 text-muted-foreground">
                                     <span>Ingresos 100%</span>
-                                    <span>Margen Neto: {diagnosticoFinanciero.ingresos > 0 ? ((diagnosticoFinanciero.gananciaNeta / diagnosticoFinanciero.ingresos) * 100).toFixed(1) : 0}%</span>
+                                    <span>Saldo: {diagnosticoFinanciero.ingresos > 0 ? ((diagnosticoFinanciero.gananciaNeta / diagnosticoFinanciero.ingresos) * 100).toFixed(1) : 0}%</span>
                                 </div>
-                                <div className="h-3 w-full bg-rose-500/20 rounded-full flex overflow-hidden">
-                                    <div 
-                                        className="h-full bg-amber-400 transition-all duration-1000 border-r border-black/10" 
-                                        style={{ width: `${diagnosticoFinanciero.ingresos > 0 ? (diagnosticoFinanciero.compras / diagnosticoFinanciero.ingresos) * 100 : 0}%` }}
-                                        title={`Proveedores: ${formatCurrency(diagnosticoFinanciero.compras)}`}
-                                    />
+                                <div className="h-3 w-full bg-slate-200 dark:bg-slate-800 rounded-full flex overflow-hidden">
                                     <div 
                                         className="h-full bg-violet-400 transition-all duration-1000 border-r border-black/10" 
-                                        style={{ width: `${diagnosticoFinanciero.ingresos > 0 ? (diagnosticoFinanciero.fijos / diagnosticoFinanciero.ingresos) * 100 : 0}%` }}
+                                        style={{ width: `${diagnosticoFinanciero.ingresos > 0 ? Math.max(0, (diagnosticoFinanciero.fijos / diagnosticoFinanciero.ingresos) * 100) : 0}%` }}
                                         title={`Fijos: ${formatCurrency(diagnosticoFinanciero.fijos)}`}
                                     />
                                     <div 
                                         className="h-full bg-rose-400 transition-all duration-1000 border-r border-black/10" 
-                                        style={{ width: `${diagnosticoFinanciero.ingresos > 0 ? (diagnosticoFinanciero.operativos / diagnosticoFinanciero.ingresos) * 100 : 0}%` }}
+                                        style={{ width: `${diagnosticoFinanciero.ingresos > 0 ? Math.max(0, (diagnosticoFinanciero.operativos / diagnosticoFinanciero.ingresos) * 100) : 0}%` }}
                                         title={`Operativos: ${formatCurrency(diagnosticoFinanciero.operativos)}`}
                                     />
                                     {diagnosticoFinanciero.gananciaNeta > 0 && (
                                         <div 
-                                            className="h-full bg-emerald-500 transition-all duration-1000 relative"
-                                            style={{ width: `${(diagnosticoFinanciero.gananciaNeta / diagnosticoFinanciero.ingresos) * 100}%` }}
-                                            title={`Ganancia Neta: ${formatCurrency(diagnosticoFinanciero.gananciaNeta)}`}
-                                        >
-                                            <div className="absolute inset-0 bg-white/20" style={{ backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent)', backgroundSize: '1rem 1rem' }}></div>
-                                        </div>
+                                            className="h-full bg-emerald-500 transition-all duration-1000"
+                                            style={{ width: `${Math.max(0, (diagnosticoFinanciero.gananciaNeta / diagnosticoFinanciero.ingresos) * 100)}%` }}
+                                            title={`Saldo operativo: ${formatCurrency(diagnosticoFinanciero.gananciaNeta)}`}
+                                        />
                                     )}
                                 </div>
+                                <p className="text-[9px] text-muted-foreground mt-2 px-1">
+                                    Tope proveedores (referencia): {formatCurrency(diagnosticoFinanciero.compras)}
+                                    {typeof diagnosticoFinanciero.estimadoTrasTopes === 'number' && (
+                                        <> · Si gastaras el tope completo quedaría ≈ {formatCurrency(diagnosticoFinanciero.estimadoTrasTopes)}</>
+                                    )}
+                                </p>
                             </div>
                         </CardContent>
                     </Card>
@@ -309,7 +642,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                     {/* Saldo neto real */}
                     {(() => {
-                        const saldo = (Number(quincenaReal.ventasTotal) || 0) - (Number(totalCompromisosActivos) || 0);
+                        const saldo = (Number(quincenaReal.ventasTotal) || 0) - (Number(diagnosticoFinanciero.fijos) || 0);
                         return (
                             <div className={cn(
                                 "rounded-2xl border-2 px-5 py-3 flex items-center justify-between gap-4 flex-wrap",
@@ -321,7 +654,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         {saldo >= 0 ? `+${formatCurrency(saldo)}` : formatCurrency(saldo)}
                                     </p>
                                     <p className="text-[11px] text-muted-foreground mt-0.5">
-                                        Ingresos reales {formatCurrency(quincenaReal.ventasTotal)} — Compromisos {formatCurrency(totalCompromisosActivos)}
+                                        Ingresos reales {formatCurrency(quincenaReal.ventasTotal)} — Compromisos {formatCurrency(diagnosticoFinanciero.fijos)}
                                     </p>
                                 </div>
                                 {quincenaReal.ventasTotalDia > 0 && (
@@ -1252,20 +1585,34 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                     </div>
                                     <div className="flex flex-col items-end shrink-0">
                                         <Label className="text-[10px] font-black uppercase text-muted-foreground mb-1">Fecha de Auditoría</Label>
-                                        <Input type="date" value={formProd.fecha}
-                                            onChange={e => setFormProd(p => ({ ...p, fecha: e.target.value }))}
+                                        <Input type="date" value={normalizarFechaYYYYMMDD(formProd.fecha)}
+                                            onChange={e => setFormProd(p => ({ ...p, fecha: normalizarFechaYYYYMMDD(e.target.value) }))}
                                             className="h-9 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10" />
                                     </div>
                                 </div>
                             </CardHeader>
                             
                             <CardContent className="p-0">
+                                {/* SUB-TABS DE PRODUCCIÓN */}
+                                <div className="flex border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/20">
+                                    {([['masas','🧱 Masas'],['panes','🍞 Panes'],['cuadre','📊 Cuadre']] as const).map(([key, label]) => (
+                                        <button key={key}
+                                            onClick={() => setProduccionTab(key)}
+                                            className={cn("flex-1 py-2.5 text-[11px] font-black uppercase tracking-wider transition-colors",
+                                                produccionTab === key
+                                                    ? "border-b-2 border-amber-500 text-amber-600 dark:text-amber-400 bg-white dark:bg-slate-900/40"
+                                                    : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-white/5"
+                                            )}
+                                        >{label}</button>
+                                    ))}
+                                </div>
+
                                 <div className="grid grid-cols-1 xl:grid-cols-12 gap-0">
                                     {/* PANEL IZQUIERDO: REGISTRO */}
                                     <div className="xl:col-span-8 p-4 sm:p-6 space-y-6">
                                         
                                         {/* ENTRADA DE MASAS */}
-                                        <div className="space-y-3">
+                                        <div className={cn("space-y-3", produccionTab !== 'masas' && 'hidden')}>
                                             <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-2">
                                                 <Layers className="w-4 h-4 text-indigo-500" />
                                                 <h3 className="text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Declaración de Masa (Entrada)</h3>
@@ -1286,18 +1633,12 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 ))}
                                                             </select>
                                                         </div>
-                                                        <div className="w-32 relative">
-                                                            <select
+                                                        <div className="w-40 sm:w-48 shrink-0">
+                                                            <SelectorMedidaArroba
                                                                 value={m.cantidadArrobas || ''}
-                                                                onChange={e => handleMasaChange(m.id, 'cantidadArrobas', e.target.value)}
-                                                                className="h-9 text-xs font-bold rounded-lg w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3 pr-8"
-                                                            >
-                                                                <option value="">Arrobas...</option>
-                                                                {opcionesArrobas.map(op => (
-                                                                    <option key={op.val} value={op.val}>{op.label}</option>
-                                                                ))}
-                                                            </select>
-                                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[9px] font-black text-muted-foreground uppercase">Arr.</div>
+                                                                opciones={opcionesArrobas}
+                                                                onChange={(val) => handleMasaChange(m.id, 'cantidadArrobas', val)}
+                                                            />
                                                         </div>
                                                         <button type="button" onClick={() => handleRemoveMasa(m.id)}
                                                             className="h-9 w-9 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors">
@@ -1313,7 +1654,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         </div>
 
                                         {/* SALIDA DE PANES (HORNADAS) */}
-                                        <div className="space-y-3 pt-2">
+                                        <div className={cn("space-y-3 pt-2", produccionTab !== 'panes' && 'hidden')}>
                                             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/5 pb-2">
                                                 <div className="flex items-center gap-2">
                                                     <Flame className="w-4 h-4 text-amber-500" />
@@ -1482,13 +1823,63 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             </div>
                                         </div>
 
-                                        <div className="pt-2">
+                                        {/* PESTAÑA CUADRE: resumen + guía (antes el panel quedaba vacío y parecía roto) */}
+                                        <div className={cn("space-y-4", produccionTab !== 'cuadre' && 'hidden')}>
+                                            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-white/5 pb-2">
+                                                <Scale className="w-4 h-4 text-purple-500" />
+                                                <h3 className="text-[11px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400">Cómo funciona el cuadre</h3>
+                                            </div>
+                                            <div className="rounded-2xl border border-purple-200 dark:border-purple-800/40 bg-purple-50/60 dark:bg-purple-950/20 p-4 space-y-3">
+                                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 leading-relaxed">
+                                                    El panel de la derecha compara la <strong>masa que metiste</strong> con el <strong>pan que salió</strong> (pasado a kilos).
+                                                    Primero llena <strong>Masas</strong> y <strong>Panes</strong>; aquí verás el resultado al instante.
+                                                </p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    <Button type="button" variant="outline" className="h-9 rounded-xl text-[10px] font-black uppercase" onClick={() => setProduccionTab('masas')}>
+                                                        Ir a Masas
+                                                    </Button>
+                                                    <Button type="button" variant="outline" className="h-9 rounded-xl text-[10px] font-black uppercase" onClick={() => setProduccionTab('panes')}>
+                                                        Ir a Panes
+                                                    </Button>
+                                                </div>
+                                                <p className="text-[10px] text-muted-foreground font-medium">
+                                                    1 arroba = 12.5 kg · media arroba ≈ 6.3 kg ≈ 12–13 libras
+                                                </p>
+                                            </div>
+                                            {((masasPreparadas || []).length > 0 || (hornadas || []).some(h => h.tipoPan || h.totalPanes > 0 || h.bandejas > 0)) && (
+                                                <div className="grid sm:grid-cols-2 gap-3">
+                                                    <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/40 p-3">
+                                                        <p className="text-[9px] font-black uppercase text-indigo-500 mb-2">Masas registradas</p>
+                                                        {(masasPreparadas || []).length === 0 ? (
+                                                            <p className="text-[11px] text-muted-foreground">Ninguna aún</p>
+                                                        ) : (masasPreparadas || []).map(m => (
+                                                            <p key={m.id} className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                                                {m.nombre || 'Sin nombre'}: {arrobasEnLetras(Number(m.cantidadArrobas) || 0)} ({((m.cantidadArrobas || 0) * ARROBA_KG_LOCAL).toFixed(1)} kg)
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                    <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/40 p-3">
+                                                        <p className="text-[9px] font-black uppercase text-amber-500 mb-2">Lotes de pan</p>
+                                                        {(hornadas || []).filter(h => h.tipoPan || h.totalPanes > 0).length === 0 ? (
+                                                            <p className="text-[11px] text-muted-foreground">Ninguno aún</p>
+                                                        ) : (hornadas || []).filter(h => h.tipoPan || h.totalPanes > 0).map((h, i) => (
+                                                            <p key={i} className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+                                                                {h.tipoPan || 'Sin tipo'}: {h.totalPanes || (h.bandejas * h.panesPorBandeja) || 0} und
+                                                            </p>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className={cn("pt-2", produccionTab === 'cuadre' && 'hidden')}>
                                             <Label className="text-[10px] font-black uppercase text-slate-500">Observaciones (Opcional)</Label>
                                             <Input placeholder="Ej. Se quemó una lata, la masa estaba muy hidratada..." value={formProd.notas}
                                                 onChange={e => setFormProd(p => ({ ...p, notas: e.target.value }))}
                                                 className="h-10 text-sm rounded-xl mt-1 bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-white/10" />
                                         </div>
 
+                                        <div className={cn(produccionTab === 'cuadre' && 'hidden')}>
                                         <Button onClick={handleSaveProduccion} className={cn("w-full rounded-xl text-white font-black uppercase tracking-widest text-[11px] h-12 shadow-xl transition-all hover:scale-[1.02]", editProduccionId ? "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-indigo-500/20" : "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/20")}>
                                             {editProduccionId ? (
                                                 <><Edit2 className="w-4 h-4 mr-2" /> Actualizar Auditoría</>
@@ -1499,13 +1890,14 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         {editProduccionId && (
                                             <Button variant="outline" onClick={() => {
                                                 if (setEditProduccionId) setEditProduccionId(null);
-                                                setFormProd({ fecha: new Date().toISOString().slice(0, 10), notas: '' });
+                                                setFormProd({ fecha: fechaLocalHoy(), notas: '' });
                                                 setMasasPreparadas([]);
                                                 setHornadas([{ tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
                                             }} className="w-full mt-2 rounded-xl border-dashed border-2 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800">
                                                 Cancelar Edición
                                             </Button>
                                         )}
+                                        </div>
 
                                     </div>
 
@@ -1518,24 +1910,36 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             </div>
 
                                             {(() => {
-                                                const totalMasaRegistrada = masasPreparadas.reduce((s, m) => s + (m.cantidadArrobas || 0), 0);
-                                                const totalPanesCalculados = hornadas.reduce((s, h) => s + (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)), 0);
-                                                const totalPanesInput = hornadas.reduce((s, h) => s + Number(h.totalPanes || 0), 0);
+                                                const totalMasaRegistrada = (masasPreparadas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0), 0);
+                                                const totalPanesCalculados = (hornadas || []).reduce((s: number, h: any) => s + (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)), 0);
+                                                const totalPanesInput = (hornadas || []).reduce((s: number, h: any) => s + Number(h.totalPanes || 0), 0);
                                                 const finalPanes = Math.max(totalPanesCalculados, totalPanesInput);
                                                 
                                                 let arrobasEquivalentes = 0;
-                                                hornadas.forEach(h => {
+                                                let panesSinModelo = 0;
+                                                (hornadas || []).forEach((h: any) => {
                                                     const panCant = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
-                                                    if (panCant > 0 && h.tipoPan) {
-                                                        const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
-                                                        if (mod && mod.panesPorArroba > 0) {
-                                                            arrobasEquivalentes += (panCant / mod.panesPorArroba);
-                                                        }
+                                                    if (panCant <= 0 || !h.tipoPan) return;
+                                                    const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
+                                                    if (mod && Number(mod.panesPorArroba) > 0) {
+                                                        arrobasEquivalentes += (panCant / Number(mod.panesPorArroba));
+                                                    } else {
+                                                        panesSinModelo += panCant;
                                                     }
                                                 });
 
                                                 const diferencia = arrobasEquivalentes - totalMasaRegistrada;
-                                                const hasData = totalMasaRegistrada > 0 || arrobasEquivalentes > 0;
+                                                // Antes solo miraba arrobas equivalentes: si el modelo no tenía panesPorArroba, quedaba en "esperando" aunque hubiera panes
+                                                const hasData = totalMasaRegistrada > 0 || arrobasEquivalentes > 0 || finalPanes > 0;
+                                                const difLive = describirDifArrobas(Math.abs(diferencia));
+                                                const masaKgLive = totalMasaRegistrada * ARROBA_KG_LOCAL;
+                                                const panKgLive = arrobasEquivalentes * ARROBA_KG_LOCAL;
+                                                const puedeCuadrar = totalMasaRegistrada > 0 && arrobasEquivalentes > 0;
+                                                const explLive = explicarComparacionMasaPan(
+                                                    masaKgLive, panKgLive, totalMasaRegistrada, arrobasEquivalentes, diferencia
+                                                );
+                                                const chequeosLive = chequearRendimientoPorMasa(masasPreparadas || [], hornadas || [], modelosPan);
+                                                const hayAlertaRendimiento = chequeosLive.some((c) => c.estado === 'bajo' || c.estado === 'alto');
 
                                                 return (
                                                     <div className="space-y-4">
@@ -1543,70 +1947,141 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                         <div className="grid grid-cols-2 gap-3">
                                                             <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
                                                                 <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Masa (Entrada)</p>
-                                                                <p className="text-xl font-black text-indigo-500">{totalMasaRegistrada.toFixed(2)}<span className="text-[10px] ml-1">arr</span></p>
+                                                                <p className="text-xl font-black text-indigo-500">{masaKgLive.toFixed(1)}<span className="text-[10px] ml-1">kg</span></p>
+                                                                <p className="text-[9px] font-bold text-slate-500 mt-1 capitalize">{arrobasEnLetras(totalMasaRegistrada)}</p>
+                                                                <p className="text-[9px] font-bold text-slate-400">{totalMasaRegistrada.toFixed(2)} arr</p>
                                                             </div>
                                                             <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
                                                                 <p className="text-[9px] font-black uppercase text-slate-400 mb-1">Panes (Salida)</p>
                                                                 <p className="text-xl font-black text-emerald-500">{finalPanes.toLocaleString('es-CO')}<span className="text-[10px] ml-1">und</span></p>
-                                                                <p className="text-[9px] font-bold text-slate-400 mt-1">≈ {arrobasEquivalentes.toFixed(2)} arr</p>
+                                                                <p className="text-[9px] font-bold text-slate-500 mt-1 capitalize">≈ {arrobasEnLetras(arrobasEquivalentes)}</p>
+                                                                <p className="text-[9px] font-bold text-slate-400">≈ {panKgLive.toFixed(1)} kg</p>
                                                             </div>
                                                         </div>
 
+                                                        {panesSinModelo > 0 && (
+                                                            <div className="rounded-xl border border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2">
+                                                                <p className="text-[10px] font-bold text-amber-800 dark:text-amber-300 leading-snug">
+                                                                    {panesSinModelo} panes no se pueden pasar a kilos: el modelo no tiene «panes por arroba». Ábrelo en «+ Modelo de Pan» y completa ese dato.
+                                                                </p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Chequeo fuerte: ¿los panes calzan con las arrobas declaradas? */}
+                                                        {chequeosLive.length > 0 && (
+                                                            <div className={cn(
+                                                                "rounded-2xl border p-3 space-y-2",
+                                                                hayAlertaRendimiento
+                                                                    ? "bg-rose-50/80 dark:bg-rose-950/25 border-rose-200 dark:border-rose-800/50"
+                                                                    : "bg-white dark:bg-slate-900/50 border-slate-200 dark:border-white/10"
+                                                            )}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Shield className={cn("w-4 h-4", hayAlertaRendimiento ? "text-rose-500" : "text-indigo-500")} />
+                                                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-700 dark:text-slate-200">
+                                                                        Chequeo panadero (rango de panes)
+                                                                    </h4>
+                                                                </div>
+                                                                <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-snug">
+                                                                    Si dice que hizo X arrobas, los panes ligados a esa masa deben caer en un rango. Si no, hay que revisar.
+                                                                </p>
+                                                                {chequeosLive.map((c, idx) => (
+                                                                    <div key={`${c.masaNombre}-${idx}`} className={cn(
+                                                                        "rounded-xl px-2.5 py-2 text-[10px] font-bold leading-snug",
+                                                                        c.estado === 'bajo' || c.estado === 'alto'
+                                                                            ? "bg-rose-100/80 dark:bg-rose-900/30 text-rose-800 dark:text-rose-200"
+                                                                            : c.estado === 'ok'
+                                                                            ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200"
+                                                                            : "bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300"
+                                                                    )}>
+                                                                        {c.mensaje}
+                                                                        {(c.estado === 'bajo' || c.estado === 'alto' || c.estado === 'ok') && c.panesEsperados > 0 && (
+                                                                            <span className="block mt-1 font-black">
+                                                                                Esperado ≈ {c.panesEsperados} und · rango {c.panesMin}–{c.panesMax} · real {c.panesReales}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+
                                                         {/* Veredicto de Auditoría */}
-                                                        {hasData && (
+                                                        {puedeCuadrar && (
                                                             <div className={cn("rounded-2xl p-4 sm:p-5 border shadow-sm transition-all duration-500", 
                                                                 diferencia < -0.1 ? "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-500/30" :
                                                                 diferencia > 0.1 ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-500/30" :
                                                                 "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-500/30"
                                                             )}>
-                                                                {diferencia < -0.1 ? (
-                                                                    <div className="space-y-3">
-                                                                        <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-                                                                            <AlertTriangle className="w-5 h-5 animate-pulse shrink-0" />
-                                                                            <h4 className="text-sm font-black uppercase tracking-tight">Faltante de Producción</h4>
-                                                                        </div>
-                                                                        <div className="bg-white/50 dark:bg-black/20 p-2 rounded-xl text-center">
-                                                                            <p className="text-xs text-rose-700 dark:text-rose-300 font-medium">
-                                                                                Faltan panes equivalentes a <br/><span className="text-lg font-black">{Math.abs(diferencia).toFixed(2)} arrobas</span>
-                                                                            </p>
-                                                                        </div>
-                                                                        <p className="text-[10px] text-rose-600/80 dark:text-rose-400/80 leading-snug font-medium">Revisa si el panadero olvidó registrar latas o si hay una merma injustificada (masa perdida).</p>
+                                                                <div className="space-y-3">
+                                                                    <div className={cn("flex items-center gap-2",
+                                                                        diferencia < -0.1 ? "text-rose-600 dark:text-rose-400" :
+                                                                        diferencia > 0.1 ? "text-amber-600 dark:text-amber-400" :
+                                                                        "text-emerald-600 dark:text-emerald-400"
+                                                                    )}>
+                                                                        {diferencia < -0.1 ? <AlertTriangle className="w-5 h-5 animate-pulse shrink-0" /> :
+                                                                         diferencia > 0.1 ? <BadgeAlert className="w-5 h-5 shrink-0" /> :
+                                                                         <CheckCheck className="w-5 h-5 shrink-0" />}
+                                                                        <h4 className="text-sm font-black uppercase tracking-tight">
+                                                                            {diferencia < -0.1 ? `Faltante: ${difLive.titulo}` :
+                                                                             diferencia > 0.1 ? `Sobrante: ${difLive.titulo}` :
+                                                                             'Cuadre perfecto'}
+                                                                        </h4>
                                                                     </div>
-                                                                ) : diferencia > 0.1 ? (
-                                                                    <div className="space-y-3">
-                                                                        <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
-                                                                            <BadgeAlert className="w-5 h-5 shrink-0" />
-                                                                            <h4 className="text-sm font-black uppercase tracking-tight">Exceso de Producción</h4>
-                                                                        </div>
-                                                                        <div className="bg-white/50 dark:bg-black/20 p-2 rounded-xl text-center">
-                                                                            <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
-                                                                                Hay panes de más equivalentes a <br/><span className="text-lg font-black">{diferencia.toFixed(2)} arrobas</span>
+                                                                    <div className="bg-white/50 dark:bg-black/20 p-3 rounded-xl space-y-1.5 text-left">
+                                                                        {explLive.pasos.map((paso, i) => (
+                                                                            <p key={i} className={cn(
+                                                                                "text-xs font-medium leading-snug",
+                                                                                i === explLive.pasos.length - 1 ? "text-sm font-black mt-1" : "text-slate-700 dark:text-slate-200",
+                                                                                i === explLive.pasos.length - 1 && diferencia < -0.1 && "text-rose-600 dark:text-rose-400",
+                                                                                i === explLive.pasos.length - 1 && diferencia > 0.1 && "text-amber-600 dark:text-amber-400",
+                                                                                i === explLive.pasos.length - 1 && Math.abs(diferencia) <= 0.1 && "text-emerald-600 dark:text-emerald-400",
+                                                                            )}>
+                                                                                {paso}
                                                                             </p>
-                                                                        </div>
-                                                                        <p className="text-[10px] text-amber-600/80 dark:text-amber-400/80 leading-snug font-medium">Esto suele indicar que los panes se están armando más pequeños o livianos que lo configurado en la receta.</p>
+                                                                        ))}
+                                                                        {(diferencia < -0.1 || diferencia > 0.1) && (
+                                                                            <p className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-2">{difLive.detalle}</p>
+                                                                        )}
                                                                     </div>
-                                                                ) : (
-                                                                    <div className="space-y-3">
-                                                                        <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                                                                            <div className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center shrink-0">
-                                                                                <CheckCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                                                                            </div>
-                                                                            <h4 className="text-sm font-black uppercase tracking-tight">Cuadre Perfecto</h4>
-                                                                        </div>
-                                                                        <div className="bg-white/50 dark:bg-black/20 p-2 rounded-xl text-center">
-                                                                            <p className="text-xs text-emerald-700 dark:text-emerald-300 font-medium">
-                                                                                La masa declarada y los panes producidos coinciden.
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
+                                                                    <p className="text-[10px] leading-snug font-medium text-slate-500 dark:text-slate-400">{explLive.nota}</p>
+                                                                </div>
+                                                            </div>
+                                                        )}
+
+                                                        {hasData && !puedeCuadrar && (
+                                                            <div className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/40 p-4 space-y-2">
+                                                                <p className="text-[11px] font-black uppercase tracking-widest text-slate-500">Falta un lado del cuadre</p>
+                                                                {totalMasaRegistrada <= 0 && (
+                                                                    <p className="text-xs text-slate-600 dark:text-slate-300">Aún no hay masa. Ve a la pestaña <strong>Masas</strong> y registra cuántas arrobas pusiste.</p>
                                                                 )}
+                                                                {arrobasEquivalentes <= 0 && (
+                                                                    <p className="text-xs text-slate-600 dark:text-slate-300">
+                                                                        {finalPanes > 0
+                                                                            ? 'Hay panes contados, pero no se pueden pasar a kilos (falta «panes por arroba» en el modelo).'
+                                                                            : 'Aún no hay panes. Ve a la pestaña Panes y registra las latas.'}
+                                                                    </p>
+                                                                )}
+                                                                <div className="flex flex-wrap gap-2 pt-1">
+                                                                    {totalMasaRegistrada <= 0 && (
+                                                                        <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase" onClick={() => setProduccionTab('masas')}>Masas</Button>
+                                                                    )}
+                                                                    {arrobasEquivalentes <= 0 && (
+                                                                        <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase" onClick={() => setProduccionTab('panes')}>Panes</Button>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         )}
 
                                                         {!hasData && (
-                                                            <div className="text-center p-6 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl opacity-50">
+                                                            <div className="text-center p-6 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-2xl">
                                                                 <Scale className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Esperando datos...</p>
+                                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Esperando datos...</p>
+                                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 mb-3 px-2">
+                                                                    Primero registra masa y panes. Luego el cuadre aparece aquí solo.
+                                                                </p>
+                                                                <div className="flex justify-center gap-2">
+                                                                    <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase" onClick={() => setProduccionTab('masas')}>Masas</Button>
+                                                                    <Button type="button" size="sm" variant="outline" className="h-8 rounded-lg text-[10px] font-black uppercase" onClick={() => setProduccionTab('panes')}>Panes</Button>
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1621,16 +2096,33 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                         {/* Historial de Producción Grouped */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-xl overflow-hidden">
-                            <CardHeader className="pb-3 bg-slate-50/50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-white/5">
-                                <CardTitle className="text-base font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
-                                    <div className="p-2 bg-indigo-500/10 rounded-lg">
-                                        <ClipboardList className="w-4 h-4 text-indigo-500" />
+                            <button
+                                onClick={() => setHistorialExpanded(x => !x)}
+                                className="w-full text-left"
+                            >
+                                <CardHeader className="pb-3 bg-slate-50/50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-white/5 hover:bg-slate-100/80 dark:hover:bg-slate-800/40 transition-colors">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-base font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                                            <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                                <ClipboardList className="w-4 h-4 text-indigo-500" />
+                                            </div>
+                                            Historial de Producción y Auditorías
+                                        </CardTitle>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-[9px] font-black uppercase text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/50">
+                                                {producciones?.length || 0} registros
+                                            </span>
+                                            {historialExpanded
+                                                ? <ChevronUp className="w-4 h-4 text-slate-400" />
+                                                : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                                        </div>
                                     </div>
-                                    Historial de Producción y Auditorías
-                                </CardTitle>
-                                <CardDescription className="text-xs font-medium">Lotes guardados clasificados por fecha de producción</CardDescription>
-                            </CardHeader>
-                            <CardContent className="p-4 sm:p-5">
+                                    <CardDescription className="text-xs font-medium">
+                                        {historialExpanded ? 'Lotes guardados clasificados por fecha de producción' : 'Toca para ver el historial completo'}
+                                    </CardDescription>
+                                </CardHeader>
+                            </button>
+                            {historialExpanded && <CardContent className="p-4 sm:p-5">
                                 {(() => {
                                     const renderCard = (p: any) => {
                                         const totalMasa = (p.masas || []).reduce((s: number, m: any) => s + (m.cantidadArrobas || 0), 0);
@@ -1648,50 +2140,107 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         });
                                         const diferencia = arrobasEquivalentes - totalMasa;
                                         const hasData = totalMasa > 0 || arrobasEquivalentes > 0;
+                                        const difAbs = Math.abs(diferencia);
+                                        const difHumana = describirDifArrobas(difAbs);
+                                        const masaKg = totalMasa * ARROBA_KG_LOCAL;
+                                        const panKg = arrobasEquivalentes * ARROBA_KG_LOCAL;
+                                        const explHist = explicarComparacionMasaPan(masaKg, panKg, totalMasa, arrobasEquivalentes, diferencia);
+                                        const chequeosHist = chequearRendimientoPorMasa(p.masas || [], p.hornadas || [], modelosPan);
+                                        const alertaRendHist = chequeosHist.some((c) => c.estado === 'bajo' || c.estado === 'alto');
 
                                         return (
                                             <div key={p.id} className="relative overflow-hidden bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm flex flex-col">
-                                                {/* VEREDICTO HEADER */}
+                                                {/* VEREDICTO HEADER — explicación clara en kilos y arrobas */}
                                                 {hasData && (
-                                                    <div className={cn("px-4 py-2 border-b flex items-center justify-between",
+                                                    <div className={cn("px-4 py-3 border-b",
                                                         diferencia < -0.1 ? "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/50" :
                                                         diferencia > 0.1 ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/50" :
                                                         "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/50"
                                                     )}>
-                                                        <div className="flex items-center gap-2">
-                                                            {diferencia < -0.1 ? <AlertTriangle className="w-4 h-4 text-rose-500" /> :
-                                                             diferencia > 0.1 ? <BadgeAlert className="w-4 h-4 text-amber-500" /> :
-                                                             <CheckCheck className="w-4 h-4 text-emerald-500" />}
-                                                            <span className={cn("text-[10px] font-black uppercase tracking-widest",
-                                                                diferencia < -0.1 ? "text-rose-700 dark:text-rose-400" :
-                                                                diferencia > 0.1 ? "text-amber-700 dark:text-amber-400" :
-                                                                "text-emerald-700 dark:text-emerald-400"
-                                                            )}>
-                                                                {diferencia < -0.1 ? `FALTANTE: ${Math.abs(diferencia).toFixed(2)} arr` :
-                                                                 diferencia > 0.1 ? `EXCESO: ${diferencia.toFixed(2)} arr` :
-                                                                 "CUADRE EXACTO"}
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <div className="flex items-start gap-2 min-w-0">
+                                                                {diferencia < -0.1 ? <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" /> :
+                                                                 diferencia > 0.1 ? <BadgeAlert className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" /> :
+                                                                 <CheckCheck className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />}
+                                                                <div className="min-w-0 space-y-1.5">
+                                                                    <span className={cn("block text-[11px] font-black uppercase tracking-widest",
+                                                                        diferencia < -0.1 ? "text-rose-700 dark:text-rose-400" :
+                                                                        diferencia > 0.1 ? "text-amber-700 dark:text-amber-400" :
+                                                                        "text-emerald-700 dark:text-emerald-400"
+                                                                    )}>
+                                                                        {diferencia < -0.1 ? `Faltante: ${difHumana.titulo}` :
+                                                                         diferencia > 0.1 ? `Sobrante: ${difHumana.titulo}` :
+                                                                         "Cuadró exacto"}
+                                                                    </span>
+                                                                    {explHist.pasos.map((paso, i) => (
+                                                                        <p key={i} className={cn(
+                                                                            "text-[10px] leading-snug",
+                                                                            i === explHist.pasos.length - 1
+                                                                                ? cn("font-black text-[11px]",
+                                                                                    diferencia < -0.1 ? "text-rose-600 dark:text-rose-400" :
+                                                                                    diferencia > 0.1 ? "text-amber-600 dark:text-amber-400" :
+                                                                                    "text-emerald-600 dark:text-emerald-400")
+                                                                                : "font-bold text-slate-700 dark:text-slate-200"
+                                                                        )}>
+                                                                            {paso}
+                                                                        </p>
+                                                                    ))}
+                                                                    {(diferencia < -0.1 || diferencia > 0.1) && (
+                                                                        <p className="text-[9px] font-bold text-slate-500 dark:text-slate-400">{difHumana.detalle}</p>
+                                                                    )}
+                                                                    <p className="text-[9px] font-medium text-slate-500 dark:text-slate-400 leading-snug">{explHist.nota}</p>
+                                                                </div>
+                                                            </div>
+                                                            <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1 shrink-0">
+                                                                <CalendarDays className="w-3 h-3" />
+                                                                {fechaParaMostrar(p.fecha)}
                                                             </span>
                                                         </div>
-                                                        <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
-                                                            <CalendarDays className="w-3 h-3" />
-                                                            {new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}
-                                                        </span>
                                                     </div>
                                                 )}
 
                                                 <div className="p-4 flex flex-col gap-4">
+                                                    {chequeosHist.length > 0 && (
+                                                        <div className={cn(
+                                                            "rounded-xl border px-3 py-2 space-y-1.5",
+                                                            alertaRendHist
+                                                                ? "border-rose-200 dark:border-rose-800/50 bg-rose-50/70 dark:bg-rose-950/20"
+                                                                : "border-slate-100 dark:border-white/10 bg-slate-50/80 dark:bg-white/5"
+                                                        )}>
+                                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                                                                <Shield className={cn("w-3.5 h-3.5", alertaRendHist ? "text-rose-500" : "text-indigo-500")} />
+                                                                Chequeo panadero
+                                                            </p>
+                                                            {chequeosHist.map((c, idx) => (
+                                                                <p key={`ch-${p.id}-${idx}`} className={cn(
+                                                                    "text-[10px] font-bold leading-snug",
+                                                                    c.estado === 'bajo' || c.estado === 'alto'
+                                                                        ? "text-rose-700 dark:text-rose-300"
+                                                                        : c.estado === 'ok'
+                                                                        ? "text-emerald-700 dark:text-emerald-300"
+                                                                        : "text-slate-600 dark:text-slate-300"
+                                                                )}>
+                                                                    {c.mensaje}
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                     {/* MASAS */}
                                                     {(p.masas?.length > 0) && (
                                                         <div className="space-y-2">
                                                             <div className="flex items-center justify-between">
                                                                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Entrada (Masa)</p>
-                                                                <span className="text-[10px] font-black text-slate-700 dark:text-slate-300">{totalMasa.toFixed(2)} arr.</span>
+                                                                <div className="text-right">
+                                                                    <span className="block text-[10px] font-black text-slate-700 dark:text-slate-300 capitalize">{arrobasEnLetras(totalMasa)}</span>
+                                                                    <span className="block text-[9px] font-bold text-slate-400">{totalMasa.toFixed(2)} arr · {masaKg.toFixed(1)} kg</span>
+                                                                </div>
                                                             </div>
                                                             <div className="grid grid-cols-2 gap-2">
                                                                 {p.masas.map((m: any, i: number) => (
                                                                     <div key={`m-${i}`} className="bg-slate-50 dark:bg-white/5 border border-slate-100 dark:border-white/5 rounded-lg p-2 flex flex-col">
                                                                         <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 truncate">{m.nombre}</span>
-                                                                        <span className="text-[11px] font-black text-slate-800 dark:text-slate-200">{m.cantidadArrobas} arr.</span>
+                                                                        <span className="text-[11px] font-black text-slate-800 dark:text-slate-200 capitalize">{arrobasEnLetras(Number(m.cantidadArrobas) || 0)}</span>
+                                                                        <span className="text-[9px] font-bold text-slate-400">{Number(m.cantidadArrobas || 0).toFixed(2)} arr</span>
                                                                     </div>
                                                                 ))}
                                                             </div>
@@ -1701,23 +2250,36 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                     {/* HORNADAS */}
                                                     {(p.hornadas?.length > 0) && (
                                                         <div className="space-y-2">
-                                                            <div className="flex items-center justify-between">
+                                                            <div className="flex items-center justify-between gap-2">
                                                                 <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Salida (Pan)</p>
                                                                 <div className="text-right">
-                                                                    <span className="block text-[10px] font-black text-slate-700 dark:text-slate-300">{totalPanes.toLocaleString('es-CO')} und.</span>
-                                                                    <span className="block text-[9px] font-bold text-slate-400">≈ {arrobasEquivalentes.toFixed(2)} arr.</span>
+                                                                    <span className="block text-[10px] font-black text-slate-700 dark:text-slate-300">{totalPanes.toLocaleString('es-CO')} und</span>
+                                                                    <span className="block text-[9px] font-black text-slate-600 dark:text-slate-300 capitalize">≈ {arrobasEnLetras(arrobasEquivalentes)}</span>
+                                                                    <span className="block text-[9px] font-bold text-slate-400">≈ {panKg.toFixed(1)} kg de masa</span>
                                                                 </div>
                                                             </div>
+                                                            <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-snug">
+                                                                Esas {totalPanes.toLocaleString('es-CO')} unidades equivalen a ≈ <strong className="capitalize">{arrobasEnLetras(arrobasEquivalentes)}</strong> ({panKg.toFixed(1)} kg) para compararlas con la masa de entrada.
+                                                            </p>
                                                             <div className="flex flex-col gap-1.5">
-                                                                {p.hornadas.map((h: any, i: number) => (
-                                                                    <div key={`h-${i}`} className="flex justify-between items-center bg-indigo-50/50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 px-3 py-2 rounded-lg">
-                                                                        <span className="text-[10px] font-bold text-indigo-900 dark:text-indigo-100">{h.tipoPan}</span>
-                                                                        <div className="text-right flex items-center gap-3">
-                                                                            <span className="text-[9px] text-slate-500 dark:text-slate-400">{h.bandejas} latas × {h.panesPorBandeja} c/u</span>
-                                                                            <span className="text-[11px] font-black text-indigo-600 dark:text-indigo-400">{h.totalPanes} und</span>
+                                                                {p.hornadas.map((h: any, i: number) => {
+                                                                    const panCant = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                                                                    const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
+                                                                    const ppa = Number(mod?.panesPorArroba) || 0;
+                                                                    const arrEq = ppa > 0 && panCant > 0 ? panCant / ppa : 0;
+                                                                    return (
+                                                                    <div key={`h-${i}`} className="flex justify-between items-center gap-2 bg-indigo-50/50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 px-3 py-2 rounded-lg">
+                                                                        <span className="text-[10px] font-bold text-indigo-900 dark:text-indigo-100 truncate">{h.tipoPan}</span>
+                                                                        <div className="text-right shrink-0">
+                                                                            <span className="block text-[11px] font-black text-indigo-600 dark:text-indigo-400">{panCant} und</span>
+                                                                            <span className="block text-[9px] font-bold text-slate-600 dark:text-slate-300 capitalize">
+                                                                                {arrEq > 0 ? `≈ ${arrobasEnLetras(arrEq)}` : 'sin modelo'}
+                                                                            </span>
+                                                                            <span className="block text-[8px] text-slate-400">{h.bandejas} latas × {h.panesPorBandeja}</span>
                                                                         </div>
                                                                     </div>
-                                                                ))}
+                                                                    );
+                                                                })}
                                                             </div>
                                                         </div>
                                                     )}
@@ -1728,10 +2290,10 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                             <button onClick={() => {
                                                                 if (setEditProduccionId) {
                                                                     setEditProduccionId(p.id);
-                                                                    setFormProd({ fecha: p.fecha, notas: p.notas || '' });
+                                                                    setFormProd({ fecha: normalizarFechaYYYYMMDD(p.fecha), notas: p.notas || '' });
                                                                     setMasasPreparadas(p.masas || []);
                                                                     setHornadas(p.hornadas || []);
-                                                                    toast.success(`Editando auditoría del ${p.fecha}`);
+                                                                    toast.success(`Editando auditoría del ${normalizarFechaYYYYMMDD(p.fecha)}`);
                                                                     window.scrollTo({ top: 0, behavior: 'smooth' });
                                                                 }
                                                             }}
@@ -1749,8 +2311,26 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         );
                                     };
 
-                                    const produccionesHoy = producciones.filter(p => p.fecha === formProd.fecha);
-                                    const produccionesAnteriores = producciones.filter(p => p.fecha !== formProd.fecha);
+                                    const fechaFiltro = normalizarFechaYYYYMMDD(formProd.fecha);
+                                    const produccionesHoy = producciones.filter(p => normalizarFechaYYYYMMDD(p.fecha) === fechaFiltro);
+                                    const produccionesAnteriores = producciones.filter(p => normalizarFechaYYYYMMDD(p.fecha) !== fechaFiltro);
+
+                                    // Agrupar otros días por fecha (más reciente primero)
+                                    const gruposOtrosDias = (() => {
+                                        const map = new Map<string, typeof producciones>();
+                                        for (const p of produccionesAnteriores) {
+                                            const f = normalizarFechaYYYYMMDD(p.fecha);
+                                            const arr = map.get(f) || [];
+                                            arr.push(p);
+                                            map.set(f, arr);
+                                        }
+                                        return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+                                    })();
+
+                                    const tituloFechaLarga = (fecha: string) =>
+                                        new Date(`${normalizarFechaYYYYMMDD(fecha)}T12:00:00`).toLocaleDateString('es-CO', {
+                                            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+                                        });
 
                                     return (
                                         <div className="space-y-6">
@@ -1759,7 +2339,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 <div className="flex items-center justify-between bg-indigo-50/80 dark:bg-indigo-950/40 px-3.5 py-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
                                                     <span className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
                                                         <Sparkles className="w-4 h-4 text-indigo-500" />
-                                                        Producción del Día ({new Date(formProd.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })})
+                                                        Producción del Día ({new Date(`${fechaFiltro}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })})
                                                     </span>
                                                     <Badge variant="outline" className="bg-white dark:bg-slate-900 text-[10px] font-bold text-indigo-600 border-indigo-200">
                                                         {produccionesHoy.length} lotes
@@ -1769,7 +2349,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 {produccionesHoy.length === 0 ? (
                                                     <div className="text-center py-8 bg-slate-50/50 dark:bg-white/5 rounded-2xl border border-dashed border-slate-200 dark:border-white/10">
                                                         <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                                                        <p className="text-xs font-bold text-slate-500">Sin lotes para la fecha {formProd.fecha}</p>
+                                                        <p className="text-xs font-bold text-slate-500">Sin lotes para la fecha {fechaFiltro}</p>
                                                         <p className="text-[10px] text-slate-400 mt-0.5">Llenando el formulario de arriba y pulsando Guardar se asignará a este día.</p>
                                                     </div>
                                                 ) : (
@@ -1779,28 +2359,43 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 )}
                                             </div>
 
-                                            {/* SECCIÓN 2: OTRAS FECHAS / HISTORIAL ANTERIOR */}
-                                            {produccionesAnteriores.length > 0 && (
-                                                <div className="space-y-3 pt-4 border-t-2 border-dashed border-slate-200 dark:border-white/10">
+                                            {/* SECCIÓN 2: OTROS DÍAS — agrupados por fecha */}
+                                            {gruposOtrosDias.length > 0 && (
+                                                <div className="space-y-4 pt-4 border-t-2 border-dashed border-slate-200 dark:border-white/10">
                                                     <div className="flex items-center justify-between px-1">
                                                         <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                                                             <History className="w-4 h-4 text-slate-400" />
-                                                            Historial de Otros Días
+                                                            Historial por fecha
                                                         </span>
                                                         <Badge variant="secondary" className="text-[10px] font-bold">
-                                                            {produccionesAnteriores.length} registros
+                                                            {gruposOtrosDias.length} días · {produccionesAnteriores.length} lotes
                                                         </Badge>
                                                     </div>
 
-                                                    <div className="max-h-72 overflow-y-auto space-y-2.5 pr-1 opacity-90 hover:opacity-100 transition-opacity">
-                                                        {produccionesAnteriores.slice(0, 30).map(renderCard)}
+                                                    <div className="max-h-[28rem] overflow-y-auto space-y-5 pr-1">
+                                                        {gruposOtrosDias.slice(0, 60).map(([fechaGrupo, lotes]) => (
+                                                            <div key={fechaGrupo} className="space-y-2.5">
+                                                                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-xl bg-slate-100/95 dark:bg-slate-900/95 border border-slate-200 dark:border-white/10 px-3 py-2 backdrop-blur-sm">
+                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5 capitalize">
+                                                                        <CalendarDays className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                                                        {tituloFechaLarga(fechaGrupo)}
+                                                                    </span>
+                                                                    <Badge variant="outline" className="text-[9px] font-bold shrink-0">
+                                                                        {lotes.length} {lotes.length === 1 ? 'lote' : 'lotes'}
+                                                                    </Badge>
+                                                                </div>
+                                                                <div className="space-y-2.5">
+                                                                    {lotes.map(renderCard)}
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
                                     );
-                                })()}
-                            </CardContent>
+                                })()} 
+                            </CardContent>}
                         </Card>
                     </div>
 
