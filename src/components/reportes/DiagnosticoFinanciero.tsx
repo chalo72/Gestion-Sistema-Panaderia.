@@ -340,6 +340,36 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
     const [iaExpanded, setIaExpanded] = React.useState(false);
     const [produccionTab, setProduccionTab] = React.useState<'masas' | 'panes' | 'cuadre'>('panes');
     const [historialExpanded, setHistorialExpanded] = React.useState(false);
+    // Control de compra real por proveedor
+    const [expandedCompraId, setExpandedCompraId] = React.useState<string | null>(null);
+    const [newLinea, setNewLinea] = React.useState({ producto: '', cantidad: '', montoReal: '' });
+
+    const saveCompras = (updated: any[]) => {
+        setPresupuestosMinimos(updated);
+        localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
+    };
+    const addLineaToCompra = (itemId: string) => {
+        if (!newLinea.producto.trim()) return;
+        const updated = presupuestosMinimos.map((l: any) => l.id === itemId ? {
+            ...l,
+            comprasReales: [...(l.comprasReales || []), {
+                id: Date.now().toString(),
+                producto: newLinea.producto.trim(),
+                cantidad: Number(newLinea.cantidad) || 0,
+                montoReal: Number(newLinea.montoReal) || 0,
+            }],
+            fechaCompra: new Date().toISOString().slice(0, 10),
+        } : l);
+        saveCompras(updated);
+        setNewLinea({ producto: '', cantidad: '', montoReal: '' });
+    };
+    const removeLinea = (itemId: string, lineaId: string) => {
+        const updated = presupuestosMinimos.map((l: any) => l.id === itemId ? {
+            ...l,
+            comprasReales: (l.comprasReales || []).filter((r: any) => r.id !== lineaId),
+        } : l);
+        saveCompras(updated);
+    };
 
     // 1 libra ≈ 500 g → 0.04 arr (1 arroba = 12.5 kg = 25 libras)
     const opcionesArrobas: OpcionMedida[] = [
@@ -2453,28 +2483,169 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         <div key={grupo.label}>
                                             <p className={cn("text-[10px] font-black uppercase tracking-widest mb-2", grupo.color)}>{grupo.label} — {formatCurrency(grupo.total)}</p>
                                             <div className="space-y-1.5">
-                                                {grupo.items.map((item: any) => (
-                                                    <div key={item.id} className={cn("flex items-center justify-between rounded-xl px-3 py-2 border text-sm transition-all",
-                                                        item.estado === 'completado' ? "border-emerald-500/20 bg-emerald-950/10 opacity-60" : "border-white/5 bg-card/30")}>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className={cn("w-2 h-2 rounded-full shrink-0", item.estado === 'completado' ? "bg-emerald-500" : "bg-rose-500")} />
-                                                            <span className="font-bold">{item.proveedor}</span>
-                                                            {item.nota && <span className="text-[10px] text-muted-foreground hidden sm:inline">— {item.nota}</span>}
+                                                {grupo.items.map((item: any) => {
+                                                    const lineas: any[] = item.comprasReales || [];
+                                                    const totalReal = lineas.reduce((s: number, r: any) => s + (r.montoReal || 0), 0);
+                                                    const limite = getLimite(item);
+                                                    const pctUsado = limite > 0 ? Math.min(100, (totalReal / limite) * 100) : 0;
+                                                    const isOpen = expandedCompraId === item.id;
+                                                    return (
+                                                        <div key={item.id} className={cn("rounded-2xl border overflow-hidden transition-all",
+                                                            item.estado === 'completado' ? "border-emerald-500/30 bg-emerald-950/10" : "border-white/10 bg-card/40")}>
+                                                            {/* FILA PRINCIPAL */}
+                                                            <div className="flex items-center justify-between px-3 py-2.5 gap-2">
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    <span className={cn("w-2 h-2 rounded-full shrink-0", item.estado === 'completado' ? "bg-emerald-500" : "bg-rose-500")} />
+                                                                    <span className="font-black text-sm truncate">{item.proveedor}</span>
+                                                                    {item.nota && <span className="text-[10px] text-muted-foreground hidden sm:inline truncate">— {item.nota}</span>}
+                                                                </div>
+                                                                <div className="flex items-center gap-2 shrink-0">
+                                                                    <div className="text-right">
+                                                                        <p className="text-[9px] font-black uppercase text-muted-foreground">Presupuesto</p>
+                                                                        <p className="text-sm font-black">{formatCurrency(limite)}</p>
+                                                                    </div>
+                                                                    {lineas.length > 0 && (
+                                                                        <div className="text-right">
+                                                                            <p className="text-[9px] font-black uppercase text-emerald-500">Gastado</p>
+                                                                            <p className="text-sm font-black text-emerald-400">{formatCurrency(totalReal)}</p>
+                                                                        </div>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => setExpandedCompraId(isOpen ? null : item.id)}
+                                                                        className={cn("text-[9px] font-black uppercase px-2.5 py-1.5 rounded-lg transition-all border",
+                                                                            isOpen ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20")}
+                                                                    >{isOpen ? '▲ Cerrar' : '📦 Registrar'}</button>
+                                                                    <button
+                                                                        onClick={() => saveCompras(presupuestosMinimos.map((l: any) => l.id === item.id ? { ...l, estado: l.estado === 'completado' ? 'pendiente' : 'completado' } : l))}
+                                                                        className={cn("text-[9px] font-black uppercase px-2.5 py-1.5 rounded-lg transition-all border",
+                                                                            item.estado === 'completado' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30" : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30")}
+                                                                    >{item.estado === 'completado' ? '✓ OK' : '⏳ Pendiente'}</button>
+                                                                </div>
+                                                            </div>
+
+                                                            {/* BARRA DE PRESUPUESTO */}
+                                                            {lineas.length > 0 && (
+                                                                <div className="px-3 pb-1">
+                                                                    <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                                                        <div className={cn("h-full rounded-full transition-all duration-700", pctUsado >= 100 ? 'bg-rose-500' : pctUsado >= 80 ? 'bg-amber-500' : 'bg-emerald-500')}
+                                                                            style={{ width: `${pctUsado}%` }} />
+                                                                    </div>
+                                                                    <p className="text-[9px] text-muted-foreground mt-0.5 text-right">
+                                                                        {pctUsado.toFixed(0)}% usado · {formatCurrency(Math.max(0, limite - totalReal))} disponible
+                                                                    </p>
+                                                                </div>
+                                                            )}
+
+                                                            {/* PANEL EXPANDIBLE */}
+                                                            {isOpen && (() => {
+                                                                // Extraer historial de productos comprados antes para este proveedor
+                                                                const historialProductos: { producto: string, cantidad: number, montoReal: number }[] = [];
+                                                                presupuestosMinimos.forEach((l: any) => {
+                                                                    if (l.proveedor === item.proveedor && l.id !== item.id) {
+                                                                        (l.comprasReales || []).forEach((r: any) => {
+                                                                            const existe = historialProductos.find(h => h.producto === r.producto);
+                                                                            if (!existe) historialProductos.push({ producto: r.producto, cantidad: r.cantidad || 0, montoReal: r.montoReal || 0 });
+                                                                        });
+                                                                    }
+                                                                });
+                                                                // También sumar el monto del form actual (para el contador en tiempo real)
+                                                                const montoFormActual = Number(newLinea.montoReal) || 0;
+                                                                const totalConForm = totalReal + montoFormActual;
+                                                                const restante = limite - totalConForm;
+                                                                const pctConForm = limite > 0 ? Math.min(110, (totalConForm / limite) * 100) : 0;
+                                                                return (
+                                                                    <div className="border-t border-white/5 bg-slate-950/40 px-3 py-3 space-y-3">
+
+                                                                        {/* MEDIDOR GRANDE DE PRESUPUESTO */}
+                                                                        <div className={cn("rounded-xl p-3 border text-center", restante < 0 ? "border-rose-500/40 bg-rose-950/30" : restante < limite * 0.2 ? "border-amber-500/40 bg-amber-950/20" : "border-emerald-500/30 bg-emerald-950/20")}>
+                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Disponible del presupuesto</p>
+                                                                            <p className={cn("text-2xl font-black tabular-nums", restante < 0 ? "text-rose-400" : restante < limite * 0.2 ? "text-amber-400" : "text-emerald-400")}>
+                                                                                {restante < 0 ? `−${formatCurrency(Math.abs(restante))} sobrepasado` : formatCurrency(restante)}
+                                                                            </p>
+                                                                            <div className="mt-2 h-2 rounded-full bg-white/5 overflow-hidden">
+                                                                                <div className={cn("h-full rounded-full transition-all duration-500", pctConForm >= 100 ? 'bg-rose-500' : pctConForm >= 80 ? 'bg-amber-500' : 'bg-emerald-500')}
+                                                                                    style={{ width: `${Math.min(100, pctConForm)}%` }} />
+                                                                            </div>
+                                                                            <p className="text-[9px] text-slate-500 mt-1">{formatCurrency(totalConForm)} de {formatCurrency(limite)} ({pctConForm.toFixed(0)}%)</p>
+                                                                        </div>
+
+                                                                        {/* CHIPS DE PRODUCTOS SUGERIDOS DEL HISTORIAL */}
+                                                                        {historialProductos.length > 0 && (
+                                                                            <div className="space-y-1.5">
+                                                                                <p className="text-[9px] font-black uppercase tracking-widest text-violet-400">✨ Comprados antes — toca para agregar rápido</p>
+                                                                                <div className="flex flex-wrap gap-1.5">
+                                                                                    {historialProductos.map((hp, idx) => (
+                                                                                        <button key={idx}
+                                                                                            onClick={() => setNewLinea({ producto: hp.producto, cantidad: String(hp.cantidad || ''), montoReal: String(hp.montoReal || '') })}
+                                                                                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 hover:bg-violet-500/25 transition-all text-left group"
+                                                                                        >
+                                                                                            <span className="text-[11px] font-bold text-violet-300 group-hover:text-violet-200">{hp.producto}</span>
+                                                                                            {hp.montoReal > 0 && <span className="text-[9px] text-violet-400/70 font-black">{formatCurrency(hp.montoReal)}</span>}
+                                                                                        </button>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* LÍNEAS YA REGISTRADAS */}
+                                                                        {lineas.length > 0 && (
+                                                                            <div className="space-y-1">
+                                                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Registrado en esta compra</p>
+                                                                                {lineas.map((r: any) => (
+                                                                                    <div key={r.id} className="flex items-center gap-2 bg-white/5 rounded-lg px-2 py-1.5">
+                                                                                        <span className="flex-1 text-xs font-bold truncate">{r.producto}</span>
+                                                                                        <span className="text-[10px] text-slate-400 shrink-0">{r.cantidad > 0 ? `${r.cantidad} und` : ''}</span>
+                                                                                        <span className="text-xs font-black text-emerald-400 shrink-0">{formatCurrency(r.montoReal)}</span>
+                                                                                        <button onClick={() => removeLinea(item.id, r.id)} className="text-rose-400 hover:text-rose-300 shrink-0"><XCircle className="w-3.5 h-3.5" /></button>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+
+                                                                        {/* FORMULARIO NUEVA LÍNEA */}
+                                                                        <div className="space-y-2">
+                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-indigo-400">+ Agregar producto</p>
+                                                                            <div className="grid grid-cols-3 gap-1.5">
+                                                                                <input
+                                                                                    placeholder="Producto (ej: Gaseosa 2L)"
+                                                                                    value={newLinea.producto}
+                                                                                    onChange={e => setNewLinea(p => ({ ...p, producto: e.target.value }))}
+                                                                                    className="col-span-3 sm:col-span-1 h-8 rounded-lg border border-white/10 bg-white/5 px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-200 placeholder:text-slate-500"
+                                                                                />
+                                                                                <input
+                                                                                    placeholder="Cantidad"
+                                                                                    type="number"
+                                                                                    value={newLinea.cantidad}
+                                                                                    onChange={e => setNewLinea(p => ({ ...p, cantidad: e.target.value }))}
+                                                                                    className="h-8 rounded-lg border border-white/10 bg-white/5 px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-200 placeholder:text-slate-500"
+                                                                                />
+                                                                                <input
+                                                                                    placeholder="$ Monto real"
+                                                                                    type="number"
+                                                                                    value={newLinea.montoReal}
+                                                                                    onChange={e => setNewLinea(p => ({ ...p, montoReal: e.target.value }))}
+                                                                                    className="h-8 rounded-lg border border-white/10 bg-white/5 px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-slate-200 placeholder:text-slate-500"
+                                                                                />
+                                                                            </div>
+                                                                            {/* Alerta si se va a pasar */}
+                                                                            {montoFormActual > 0 && restante < 0 && (
+                                                                                <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30">
+                                                                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                                                                                    <p className="text-[10px] font-black text-rose-400">Te pasas {formatCurrency(Math.abs(restante))} del presupuesto</p>
+                                                                                </div>
+                                                                            )}
+                                                                            <button
+                                                                                onClick={() => addLineaToCompra(item.id)}
+                                                                                disabled={!newLinea.producto.trim()}
+                                                                                className="w-full h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1"
+                                                                            ><Plus className="w-3 h-3" /> Agregar línea</button>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()}
                                                         </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-black">{formatCurrency(getLimite(item))}</span>
-                                                            <button
-                                                                onClick={() => {
-                                                                    const updated = presupuestosMinimos.map((l: any) => l.id === item.id ? { ...l, estado: l.estado === 'completado' ? 'pendiente' : 'completado' } : l);
-                                                                    setPresupuestosMinimos(updated);
-                                                                    localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
-                                                                }}
-                                                                className={cn("text-[8px] font-black uppercase px-2 py-1 rounded-lg transition-all",
-                                                                    item.estado === 'completado' ? "bg-emerald-500/20 text-emerald-400 hover:bg-rose-500/20 hover:text-rose-400" : "bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400")}
-                                                            >{item.estado === 'completado' ? '✓ OK' : '⏳ Marcar'}</button>
-                                                        </div>
-                                                    </div>
-                                                ))}
+                                                    );
+                                                })}
                                             </div>
                                         </div>
                                     ))}
