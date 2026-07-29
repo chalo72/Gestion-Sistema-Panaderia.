@@ -424,6 +424,7 @@ export function useReportesData(props: ReportesProps) {
         id: '' as string | undefined,
         fecha: new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10),
         turno: 'Día Completo' as 'Mañana' | 'Tarde-Noche' | 'Día Completo',
+        evento: '',
         totalEfectivo: '', totalNequi: '', totalTransferencia: '', totalCredito: '', notas: ''
     });
 
@@ -760,6 +761,7 @@ export function useReportesData(props: ReportesProps) {
             id: formVenta.id || undefined,
             fecha: formVenta.fecha,
             turno: formVenta.turno,
+            evento: formVenta.evento || undefined,
             totalEfectivo: ef, 
             totalNequi: nq,
             totalTransferencia: tr, 

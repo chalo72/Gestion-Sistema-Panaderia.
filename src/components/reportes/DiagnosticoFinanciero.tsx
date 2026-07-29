@@ -1298,6 +1298,23 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             </select>
                                         </div>
                                     </div>
+                                    
+                                    <div>
+                                        <Label className="text-[10px] font-black uppercase text-violet-500">Día Especial / Evento (Opcional)</Label>
+                                        <select
+                                            value={formVenta.evento || ''}
+                                            onChange={e => setFormVenta(p => ({ ...p, evento: e.target.value }))}
+                                            className="flex h-9 w-full rounded-xl border border-input bg-violet-500/5 text-violet-600 dark:text-violet-300 px-3 py-1 text-sm shadow-sm transition-colors mt-1 font-bold focus:ring-violet-500"
+                                        >
+                                            <option value="">Normal (Sin evento)</option>
+                                            <option value="Pago Viejitos">👴 Pago Viejitos</option>
+                                            <option value="Renta Ciudadana">🏛️ Renta Ciudadana</option>
+                                            <option value="Ola Invernal">🌧️ Ola Invernal</option>
+                                            <option value="Festivo / Puente">🎉 Festivo / Puente</option>
+                                            <option value="Quincena">💸 Quincena</option>
+                                            <option value="Pago Masivo Otro">💰 Pago Masivo (Otro)</option>
+                                        </select>
+                                    </div>
 
                                     {/* Cajas Dinámicas */}
                                     <div className="space-y-2 border-t border-b border-white/5 py-2">
@@ -1695,6 +1712,11 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 {v.turno}
                                                             </span>
                                                         )}
+                                                        {v.evento && (
+                                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm shadow-amber-500/10">
+                                                                {v.evento}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     {v.notas && <p className="text-[10px] italic text-muted-foreground truncate mt-0.5">"{v.notas}"</p>}
                                                 </div>
@@ -1724,6 +1746,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 id: v.id,
                                                                 fecha: v.fecha,
                                                                 turno: v.turno || 'Día Completo',
+                                                                evento: v.evento || '',
                                                                 totalEfectivo: v.totalEfectivo.toString() || '',
                                                                 totalNequi: v.totalNequi.toString() || '',
                                                                 totalTransferencia: v.totalTransferencia.toString() || '',

@@ -1024,6 +1024,7 @@ export interface VentaDiaria {
   id: string;
   fecha: string; // YYYY-MM-DD
   turno?: 'Mañana' | 'Tarde-Noche' | 'Día Completo';
+  evento?: string; // Etiqueta especial: "Pago Viejitos", "Ola Invernal", etc.
   totalEfectivo: number;
   totalNequi: number;
   totalTransferencia: number;
