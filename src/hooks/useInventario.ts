@@ -28,7 +28,17 @@ export function useInventario({ productos }: UseInventarioParams) {
     try {
       const dbItem = await db.getInventarioItemByProducto(productoId);
       const stockActual = dbItem ? dbItem.stockActual : 0;
-      const nuevoStock = tipo === 'entrada' ? stockActual + cantidad : Math.max(0, stockActual - cantidad);
+      // entrada: suma · salida: resta · ajuste: cantidad = stock absoluto deseado
+      const nuevoStock =
+        tipo === 'entrada'
+          ? stockActual + cantidad
+          : tipo === 'salida'
+            ? Math.max(0, stockActual - cantidad)
+            : Math.max(0, cantidad);
+      const deltaMov = nuevoStock - stockActual;
+      const tipoMov: 'entrada' | 'salida' =
+        tipo === 'entrada' ? 'entrada' : tipo === 'salida' ? 'salida' : (deltaMov >= 0 ? 'entrada' : 'salida');
+      const cantidadMov = tipo === 'ajuste' ? Math.abs(deltaMov) : cantidad;
 
       // Lógica predictiva: Registrar si se agotó
       let nuevaFechaAgotado = dbItem?.fechaAgotado;
@@ -57,7 +67,9 @@ export function useInventario({ productos }: UseInventarioParams) {
         return [...prev, item];
       });
 
-      // 2. Registrar movimiento
+      // 2. Registrar movimiento (si ajuste no cambió nada, no registrar)
+      if (tipo === 'ajuste' && cantidadMov === 0) return;
+
       const usuarioActual = (() => {
         try {
           const u = localStorage.getItem('pricecontrol_local_user');
@@ -67,9 +79,9 @@ export function useInventario({ productos }: UseInventarioParams) {
       const movimiento: MovimientoInventario = {
         id: generateUUID(),
         productoId,
-        tipo: tipo === 'entrada' ? 'entrada' : 'salida',
-        cantidad,
-        motivo,
+        tipo: tipoMov,
+        cantidad: cantidadMov,
+        motivo: tipo === 'ajuste' ? `Ajuste a ${nuevoStock}: ${motivo}` : motivo,
         fecha: new Date().toISOString(),
         usuario: usuarioActual
       };

@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog
 import {
   getAlertas, saveAlertas, getCuadres, getConfigSeguridad, saveConfigSeguridad,
   marcarAlertaLeida, marcarTodasLeidas, generarMensajeAgente,
-  CONFIG_SEGURIDAD_DEFAULT,
+  CONFIG_SEGURIDAD_DEFAULT, pinGerenteEsInseguro, PIN_FABRICA_INSEGURO,
 } from '@/lib/security-agent';
 import type { AlertaSeguridad, CuadreTurno, ConfigSeguridad } from '@/types';
 
@@ -98,7 +98,21 @@ export default function Seguridad({ userRole, ventas = [] }: Props) {
   };
 
   const handleGuardarConfig = () => {
-    saveConfigSeguridad(config);
+    const pin = (config.pinGerente || '').trim();
+    if (!pin) {
+      toast.error('Define un PIN de gerente (mín. 4 dígitos). Tu login de la app no cambia.');
+      return;
+    }
+    if (pin.length < 4) {
+      toast.error('El PIN debe tener al menos 4 dígitos');
+      return;
+    }
+    if (pin === PIN_FABRICA_INSEGURO) {
+      toast.error('No uses 1234 — es el PIN viejo de fábrica. Elige otro.');
+      return;
+    }
+    saveConfigSeguridad({ ...config, pinGerente: pin });
+    setConfig(p => ({ ...p, pinGerente: pin }));
     toast.success('Configuración de seguridad guardada');
   };
 
@@ -507,19 +521,27 @@ export default function Seguridad({ userRole, ventas = [] }: Props) {
 
           <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 space-y-4">
             <p className="text-xs font-black uppercase tracking-widest text-slate-500">Autorización</p>
+            {pinGerenteEsInseguro(config) && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 px-3 py-2 text-[11px] text-amber-800 dark:text-amber-200">
+                PIN vacío o aún es <strong>1234</strong> (fábrica). Conviene cambiarlo aquí.
+                Esto <strong>no cierra tu sesión</strong> ni cambia tu clave de entrar a la app.
+              </div>
+            )}
             <div>
               <label className="text-[11px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wide">PIN de gerente</label>
-              <p className="text-[10px] text-slate-400 mb-1.5">Para autorizar descuentos, cancelaciones y acciones sensibles</p>
+              <p className="text-[10px] text-slate-400 mb-1.5">Para autorizar descuentos, cancelaciones y acciones sensibles (no es tu login)</p>
               <div className="flex gap-2">
                 <Input
                   type={pinVisible ? 'text' : 'password'}
                   value={config.pinGerente}
-                  onChange={e => setConfig(p => ({ ...p, pinGerente: e.target.value }))}
+                  onChange={e => setConfig(p => ({ ...p, pinGerente: e.target.value.replace(/\D/g, '').slice(0, 8) }))}
                   className="h-9 text-sm flex-1"
                   maxLength={8}
-                  placeholder="4-8 dígitos"
+                  placeholder="Elige 4-8 dígitos (no uses 1234)"
+                  inputMode="numeric"
+                  autoComplete="off"
                 />
-                <button onClick={() => setPinVisible(p => !p)} className="h-9 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 text-xs font-bold">
+                <button type="button" onClick={() => setPinVisible(p => !p)} className="h-9 px-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 text-xs font-bold">
                   {pinVisible ? 'Ocultar' : 'Ver'}
                 </button>
               </div>

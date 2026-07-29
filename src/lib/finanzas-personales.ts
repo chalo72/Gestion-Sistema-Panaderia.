@@ -96,6 +96,18 @@ export function deleteVentaDiaria(id: string): void {
 }
 
 // ── Proyección de Quincena ────────────────────────────────────
+
+/** Fecha local YYYY-MM-DD (evita el desfase UTC de toISOString en Colombia). */
+const toLocalYMD = (d: Date): string => {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+const parseLocalYMD = (s: string): Date => {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
+};
+
 export function calcularProyeccionQuincena(params: {
   ventas: { fecha: string; total: number; metodoPago?: string }[];    // ventas del POS
   ventasDiarias: VentaDiaria[];                   // ventas manuales
@@ -103,6 +115,8 @@ export function calcularProyeccionQuincena(params: {
   compromisos: CompromisoFijo[];
   margenCostoVariable?: number; // Ej. 0.5 (50% intocable para compras)
   temporadaBaja?: boolean;      // Si es temporada baja
+  /** Si se pasa, usa este periodo (filtro UI) en vez de la quincena del calendario de hoy. */
+  periodo?: { inicioStr: string; finStr: string; quincena: '1' | '2' | 'mes' };
 }): {
   ingresosTotales: number;
   ventasCredito: number;
@@ -120,31 +134,56 @@ export function calcularProyeccionQuincena(params: {
   cuotaDiariaAhorro: number;
 } {
   const hoy = new Date();
-  const dia = hoy.getDate();
+  const hoyDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   const margen = params.margenCostoVariable ?? 0.5; // Por defecto 50% de costo de reposición
 
-  // Determinar quincena actual
-  const inicioQuincena = dia <= 15
-    ? new Date(hoy.getFullYear(), hoy.getMonth(), 1)
-    : new Date(hoy.getFullYear(), hoy.getMonth(), 16);
-  const finQuincena = dia <= 15
-    ? new Date(hoy.getFullYear(), hoy.getMonth(), 15)
-    : new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+  let inicioCadena: string;
+  let finCadena: string;
+  let quincenaFiltro: '1' | '2' | 'mes';
 
-  const diasQuincena = Math.round((finQuincena.getTime() - inicioQuincena.getTime()) / 86400000) + 1;
-  const diasTranscurridos = Math.max(1, dia <= 15 ? dia : dia - 15);
-  const diasRestantes = diasQuincena - diasTranscurridos;
+  if (params.periodo?.inicioStr && params.periodo?.finStr) {
+    inicioCadena = params.periodo.inicioStr;
+    finCadena = params.periodo.finStr;
+    quincenaFiltro = params.periodo.quincena;
+  } else {
+    const dia = hoy.getDate();
+    const inicioQuincena = dia <= 15
+      ? new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      : new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+    const finQuincena = dia <= 15
+      ? new Date(hoy.getFullYear(), hoy.getMonth(), 15)
+      : new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    inicioCadena = toLocalYMD(inicioQuincena);
+    finCadena = toLocalYMD(finQuincena);
+    quincenaFiltro = dia <= 15 ? '1' : '2';
+  }
 
-  // Ingresos reales en la quincena actual
-  const inicioCadena = inicioQuincena.toISOString().slice(0, 10);
-  const finCadena = finQuincena.toISOString().slice(0, 10);
+  const inicioDate = parseLocalYMD(inicioCadena);
+  const finDate = parseLocalYMD(finCadena);
+  const diasQuincena = Math.round((finDate.getTime() - inicioDate.getTime()) / 86400000) + 1;
 
-  // Separar ventas efectivas de créditos
+  let diasTranscurridos: number;
+  let diasRestantes: number;
+  if (hoyDate < inicioDate) {
+    diasTranscurridos = 0;
+    diasRestantes = diasQuincena;
+  } else if (hoyDate > finDate) {
+    diasTranscurridos = diasQuincena;
+    diasRestantes = 0;
+  } else {
+    diasTranscurridos = Math.max(1, Math.round((hoyDate.getTime() - inicioDate.getTime()) / 86400000) + 1);
+    diasRestantes = Math.max(0, diasQuincena - diasTranscurridos);
+  }
+
+  // Separar ventas efectivas de créditos (POS gana: no sumar cierre manual el mismo día)
   const ventasPeriodo = params.ventas.filter(v => v.fecha >= inicioCadena && v.fecha <= finCadena);
+  const fechasConPOS = new Set(ventasPeriodo.map(v => v.fecha.slice(0, 10)));
   const ventasPOSCredito = ventasPeriodo.filter(v => v.metodoPago === 'credito').reduce((s, v) => s + (Number(v.total) || 0), 0);
   const ventasPOSEfectivo = ventasPeriodo.filter(v => v.metodoPago !== 'credito').reduce((s, v) => s + (Number(v.total) || 0), 0);
 
-  const ventasManualesPeriodo = params.ventasDiarias.filter(v => v.fecha >= inicioCadena && v.fecha <= finCadena);
+  const ventasManualesPeriodo = params.ventasDiarias.filter(v =>
+    v.fecha >= inicioCadena && v.fecha <= finCadena && !fechasConPOS.has(v.fecha)
+  );
   const ventasManualesCredito = ventasManualesPeriodo.reduce((s, v) => s + (Number(v.totalCredito) || 0), 0);
   const ventasManualesEfectivo = ventasManualesPeriodo.reduce((s, v) => s + ((Number(v.total) || 0) - (Number(v.totalCredito) || 0)), 0);
 
@@ -162,23 +201,20 @@ export function calcularProyeccionQuincena(params: {
   const utilidadBruta = efectivoReal * (1 - margen);
   const utilidadBrutaEsperada = ingresoEsperado * (1 - margen);
 
-  // Compromisos activos que caen en esta quincena
+  // Compromisos activos que caen en este periodo
   const compromisosQuincena = params.compromisos
     .filter(c => c.activo)
     .filter(c => {
-      // Nueva lógica con frecuencia
-      if (c.frecuencia === 'quincenal') return true; // Se paga en ambas quincenas
-      if (c.frecuencia === 'solo_q1') return dia <= 15;
-      if (c.frecuencia === 'solo_q2') return dia > 15;
+      if (quincenaFiltro === 'mes') return true;
+      if (c.frecuencia === 'quincenal') return true;
+      if (c.frecuencia === 'solo_q1') return quincenaFiltro === '1';
+      if (c.frecuencia === 'solo_q2') return quincenaFiltro === '2';
       if (c.frecuencia === 'mensual') {
-        // Se paga solo en la quincena que cae el día de cobro
         const d = typeof c.diaDeCobro === 'number' ? c.diaDeCobro : parseInt(c.diaDeCobro as string) || 1;
-        return dia <= 15 ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
+        return quincenaFiltro === '1' ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
       }
-      
-      // Fallback a lógica antigua si no tiene frecuencia definida
       const d = typeof c.diaDeCobro === 'number' ? c.diaDeCobro : parseInt(c.diaDeCobro as string) || 1;
-      return dia <= 15 ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
+      return quincenaFiltro === '1' ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
     });
 
   const totalCompromisos = compromisosQuincena.filter(c => !c.esPropietario).reduce((s, c) => s + (Number(c.monto) || 0), 0);
@@ -217,6 +253,7 @@ export function generarConsejo(params: {
   compromisos: CompromisoFijo[];
   margenCostoVariable?: number;
   temporadaBaja?: boolean;
+  periodo?: { inicioStr: string; finStr: string; quincena: '1' | '2' | 'mes' };
 }): { titulo: string; nivel: 'ok' | 'alerta' | 'critico'; puntos: string[] } {
   const proyeccion = calcularProyeccionQuincena(params);
   const puntos: string[] = [];
@@ -334,19 +371,58 @@ export interface RegistroProduccion {
 
 const KEY_PRODUCCIONES = 'dp_producciones_diarias';
 
+/** Fecha de hoy en calendario LOCAL (evita el salto de día de toISOString/UTC en Colombia). */
+export const fechaLocalHoy = (): string => {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+/**
+ * Normaliza a YYYY-MM-DD sin cambiar el día por zona horaria.
+ * Si viene ISO con hora, toma solo los primeros 10 caracteres (el día que se eligió).
+ */
+export const normalizarFechaYYYYMMDD = (fecha: string | undefined | null): string => {
+  if (!fecha || typeof fecha !== 'string') return fechaLocalHoy();
+  const m = fecha.trim().match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  return fechaLocalHoy();
+};
+
 export function getProducciones(): RegistroProduccion[] {
   try {
     const raw = localStorage.getItem(KEY_PRODUCCIONES);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) return [];
+    const list = JSON.parse(raw) as RegistroProduccion[];
+    let dirty = false;
+    const normalizados = list.map((p) => {
+      const fecha = normalizarFechaYYYYMMDD(p.fecha);
+      if (fecha !== p.fecha) dirty = true;
+      return { ...p, fecha };
+    });
+    // Reordenar por fecha texto (YYYY-MM-DD) — no usar new Date('YYYY-MM-DD') (UTC)
+    normalizados.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+    if (dirty) {
+      try { localStorage.setItem(KEY_PRODUCCIONES, JSON.stringify(normalizados.slice(0, 365))); } catch { /* ignore */ }
+    }
+    return normalizados;
   } catch { return []; }
 }
 
 export function saveProducciones(list: RegistroProduccion[]): void {
-  localStorage.setItem(KEY_PRODUCCIONES, JSON.stringify(list.slice(0, 365)));
+  const normalizados = list.map((p) => ({ ...p, fecha: normalizarFechaYYYYMMDD(p.fecha) }));
+  normalizados.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+  localStorage.setItem(KEY_PRODUCCIONES, JSON.stringify(normalizados.slice(0, 365)));
 }
 
 export function addProduccion(data: Omit<RegistroProduccion, 'id'>): RegistroProduccion {
-  const nuevo: RegistroProduccion = { ...data, id: generateUUID() };
+  const nuevo: RegistroProduccion = {
+    ...data,
+    fecha: normalizarFechaYYYYMMDD(data.fecha),
+    id: generateUUID(),
+  };
   const existentes = getProducciones();
   // Se remueve el filtro de fecha única para permitir múltiples lotes/auditorías por día
   saveProducciones([nuevo, ...existentes]);

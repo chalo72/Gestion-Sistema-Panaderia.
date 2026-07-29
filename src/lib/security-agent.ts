@@ -14,6 +14,11 @@ const STORAGE_KEY_INCIDENTES = 'dp_security_incidentes';
 const STORAGE_KEY_LOGS_ACTIVIDAD = 'dp_security_logs';
 
 // ── Config por defecto ────────────────────────────────────────────
+/** PIN de fábrica: vacío a propósito (antes era '1234' — candado de juguete).
+ *  Si el aparato ya tiene un PIN guardado (incluso 1234), se respeta: no se pisa.
+ *  El login del Director a la app NO usa este PIN. */
+export const PIN_FABRICA_INSEGURO = '1234';
+
 export const CONFIG_SEGURIDAD_DEFAULT: ConfigSeguridad = {
   toleranciaFaltanteCaja: 5000,        // $5.000 COP de tolerancia
   descuentoMaxSinPin: 10,              // 10% máximo sin PIN
@@ -21,7 +26,7 @@ export const CONFIG_SEGURIDAD_DEFAULT: ConfigSeguridad = {
   alertarPatronBajoVentas: true,
   horasParaAlertaTurnoAbierto: 12,
   whatsappAdmin: '',
-  pinGerente: '1234',
+  pinGerente: '',                      // sin PIN débil por defecto en instalaciones nuevas
   activado: true,
   geolocalizacionHabilitada: false,
   horariosRestringidos: false,
@@ -203,7 +208,17 @@ export function analizarVenta(params: {
 // ── Verificar PIN de gerente ──────────────────────────────────────
 export function verificarPinGerente(pin: string): boolean {
   const config = getConfigSeguridad();
-  return pin === config.pinGerente;
+  const esperado = (config.pinGerente || '').trim();
+  const ingresado = (pin || '').trim();
+  // Sin PIN configurado: nadie pasa (hay que definirlo en Seguridad)
+  if (!esperado) return false;
+  return ingresado === esperado;
+}
+
+/** true si el PIN guardado es el débil de fábrica o está vacío */
+export function pinGerenteEsInseguro(config?: ConfigSeguridad): boolean {
+  const pin = (config ?? getConfigSeguridad()).pinGerente?.trim() ?? '';
+  return !pin || pin === PIN_FABRICA_INSEGURO;
 }
 
 // ── Análisis diario (llamar al iniciar sesión admin) ──────────────

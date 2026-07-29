@@ -47,6 +47,7 @@ import type {
   Proveedor,
   ProyeccionInsumo
 } from '@/types';
+import { ARROBA_KG } from '@/types';
 
 interface GeneradorPedidoInsumosProps {
   formulaciones: FormulacionBase[];
@@ -68,8 +69,6 @@ interface PlanificacionItem {
   modeloId?: string;
   arrobas: number;
 }
-
-const ARROBA_KG = 11.5;
 
 export function GeneradorPedidoInsumos({
   formulaciones,

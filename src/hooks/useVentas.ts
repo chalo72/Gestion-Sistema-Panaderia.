@@ -31,11 +31,16 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
 
   // --- Gestión de Caja ---
   const abrirCaja = useCallback(async (usuarioId: string, montoApertura: number) => {
+    const monto = Number(montoApertura);
+    if (!Number.isFinite(monto) || monto < 0) {
+      toast.error('Monto de apertura inválido');
+      throw new Error('Monto de apertura inválido');
+    }
     const sesion: CajaSesion = {
       id: generateUUID(),
       usuarioId,
       fechaApertura: new Date().toISOString(),
-      montoApertura,
+      montoApertura: Math.round(monto * 100) / 100,
       totalVentas: 0,
       totalVentasEfectivo: 0,
       totalCreditos: 0,
@@ -139,8 +144,24 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       throw new Error('Caja cerrada');
     }
 
+    // Si el caller no mandó total, calcularlo de ítems (evita NaN en caja/historial)
+    const totalCalculado = Math.round(
+      (data.items || []).reduce((sum, item) => {
+        const sub =
+          typeof item.subtotal === 'number' && Number.isFinite(item.subtotal)
+            ? item.subtotal
+            : (Number(item.precioUnitario) || 0) * (Number(item.cantidad) || 0);
+        return sum + sub;
+      }, 0) * 100
+    ) / 100;
+    const total =
+      typeof data.total === 'number' && Number.isFinite(data.total) && data.total >= 0
+        ? Math.round(data.total * 100) / 100
+        : totalCalculado;
+
     const venta: Venta = {
       ...data,
+      total,
       id: generateUUID(),
       fecha: new Date().toISOString(),
     };

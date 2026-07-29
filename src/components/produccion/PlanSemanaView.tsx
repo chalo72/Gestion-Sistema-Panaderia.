@@ -19,6 +19,7 @@ import { generateUUID } from '@/lib/safe-utils';
 import type {
   FormulacionBase, ModeloPan, Configuracion, OrdenProduccion, PlanSemanaItem
 } from '@/types';
+import { ARROBA_KG } from '@/types';
 
 const NOMBRES_DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 const NOMBRES_DIAS_CORTO = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -50,7 +51,7 @@ function calcularResumenItem(
   const modelo = modelos.find(m => m.id === item.modeloId);
   if (!formulacion || !modelo) return null;
 
-  const ARROBA_GR = (configuracion.pesoArrobaKg || 11.5) * 1000;
+  const ARROBA_GR = (configuracion.pesoArrobaKg || ARROBA_KG) * 1000;
   const CAPACIDAD_HORNO = configuracion.latasPorHorno || 4;
   const masaUtil = ARROBA_GR * (1 - (modelo.mermaEstimada || 0) / 100);
   const panesPorArroba = Math.floor(masaUtil / modelo.pesoUnitarioGr);

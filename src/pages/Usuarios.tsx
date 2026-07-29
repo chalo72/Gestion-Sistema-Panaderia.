@@ -425,14 +425,17 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
                 variant="ghost" 
                 size="icon" 
                 onClick={() => {
-                  const pass = (user as any).password || 'Sin clave';
-                  toast.info(`Contraseña de ${user.nombre}: ${pass}`, {
-                    icon: <Lock className="w-4 h-4 text-amber-500" />,
-                    duration: 5000
-                  });
+                  // No revelar hash ni clave en claro — tu acceso y el del equipo quedan privados
+                  toast.info(
+                    `Por seguridad no se muestran claves. Usa Editar → nueva contraseña para ${user.nombre}.`,
+                    {
+                      icon: <Lock className="w-4 h-4 text-amber-500" />,
+                      duration: 5000,
+                    }
+                  );
                 }}
                 className="w-8 h-8 rounded-xl text-amber-500 hover:bg-amber-500/10" 
-                title="Ver Contraseña"
+                title="Restablecer clave (no se muestra en pantalla)"
               >
                 <Eye className="w-4 h-4" />
               </Button>

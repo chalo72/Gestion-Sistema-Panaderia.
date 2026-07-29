@@ -1,5 +1,4 @@
-
-import React from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
@@ -8,10 +7,19 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ModeloPanModal } from '@/components/produccion/ModeloPanModal';
 import { Button } from '@/components/ui/button';
 import { deleteProduccion, getProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD } from '@/lib/finanzas-personales';
 import { toast } from 'sonner';
+
+/** Abre Producción → modelos (evita importar ModeloPanModal aquí: ciclo con database y crash en Reportes). */
+const irAModelosPan = (onNavigateTo?: (view: string) => void) => {
+    try {
+        localStorage.setItem('dp_produccion_active_tab', 'modelos');
+        localStorage.setItem('dp_open_add_modelo_dialog', 'true');
+    } catch { /* ignore */ }
+    if (onNavigateTo) onNavigateTo('produccion');
+    else toast('Ve al módulo Producción → Modelos de pan para crear o editar.');
+};
 
 type OpcionMedida = { label: string; val: number };
 
@@ -92,11 +100,11 @@ function SelectorMedidaArroba({
     opciones: OpcionMedida[];
     onChange: (val: number) => void;
 }) {
-    const [open, setOpen] = React.useState(false);
-    const [q, setQ] = React.useState('');
-    const ref = React.useRef<HTMLDivElement>(null);
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState('');
+    const ref = useRef<HTMLDivElement>(null);
     const selected = opciones.find((o) => Number(o.val) === Number(value));
-    const filtered = React.useMemo(() => {
+    const filtered = useMemo(() => {
         const t = q.trim().toLowerCase();
         if (!t) return opciones;
         return opciones.filter(
@@ -107,7 +115,7 @@ function SelectorMedidaArroba({
         );
     }, [opciones, q]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         if (!open) return;
         const close = (e: MouseEvent) => {
             if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
@@ -181,13 +189,187 @@ type ChequeoRendimiento = {
     mensaje: string;
 };
 
+type MetaPanesEnVivo = {
+    masaId: string;
+    masaNombre: string;
+    masaArr: number;
+    panesReales: number;
+    panesEsperados: number;
+    panesMin: number;
+    panesMax: number;
+    pct: number;
+    estado: 'esperando' | 'corto' | 'bien' | 'de_mas' | 'sin_modelo';
+    textoMeta: string;
+    avisoTemprano: string;
+};
+
+const TOL_RENDIMIENTO = 0.12;
+
+/** Meta de panes ANTES del veredicto: con X arrobas deberían salir entre A y B. */
+const calcularMetasEnVivo = (
+    masas: Array<{ id: string; nombre?: string; cantidadArrobas?: number }>,
+    hornadasList: Array<{ masaId?: string; tipoPan?: string; totalPanes?: number; bandejas?: number; panesPorBandeja?: number }>,
+    modelos: Array<{ nombre: string; formulacionId?: string; panesPorArroba?: number; mermaEstimada?: number }> | undefined,
+    formulaciones: Array<{ id: string; nombre: string }> | undefined
+): MetaPanesEnVivo[] => {
+    return (masas || [])
+        .map((masa) => {
+            const masaArr = Number(masa.cantidadArrobas) || 0;
+            if (masaArr <= 0) return null;
+            const nombre = masa.nombre || 'Masa';
+            const hs = (hornadasList || []).filter((h) => h.masaId === masa.id);
+            const panesReales = hs.reduce((s, h) => {
+                const n = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                return s + (Number.isFinite(n) ? n : 0);
+            }, 0);
+
+            // Modelos: primero los de las hornadas; si no hay, todos de la formulación
+            const tiposHornada = [...new Set(hs.map((h) => h.tipoPan).filter(Boolean))] as string[];
+            let mods = tiposHornada
+                .map((t) => modelos?.find((m) => m.nombre === t))
+                .filter((m): m is NonNullable<typeof m> => !!m && Number(m.panesPorArroba) > 0);
+
+            if (mods.length === 0 && masa.nombre && formulaciones && modelos) {
+                const form = formulaciones.find((f) => f.nombre === masa.nombre);
+                if (form) {
+                    mods = modelos.filter((m) => m.formulacionId === form.id && Number(m.panesPorArroba) > 0);
+                }
+            }
+            // Fallback: si solo hay un modelo con ese nombre de masa en tipopan raro, usar todos con ppa
+            if (mods.length === 0 && modelos) {
+                mods = modelos.filter((m) => Number(m.panesPorArroba) > 0);
+                // Too broad if many models — only if exactly 1 total model
+                if (mods.length !== 1) mods = [];
+            }
+
+            if (mods.length === 0) {
+                return {
+                    masaId: masa.id,
+                    masaNombre: nombre,
+                    masaArr,
+                    panesReales,
+                    panesEsperados: 0,
+                    panesMin: 0,
+                    panesMax: 0,
+                    pct: 0,
+                    estado: 'sin_modelo' as const,
+                    textoMeta: `Falta el dato «panes por arroba» en el modelo de pan de «${nombre}».`,
+                    avisoTemprano: 'Sin modelo no se puede avisar si el panadero va corto.',
+                };
+            }
+
+            const ppas = mods.map((m) => Number(m.panesPorArroba));
+            const mermas = mods.map((m) => Math.max(0, Number(m.mermaEstimada) || 0) / 100);
+            const ppaMin = Math.min(...ppas);
+            const ppaMax = Math.max(...ppas);
+            const ppaMid = ppas.reduce((a, b) => a + b, 0) / ppas.length;
+            const mermaMax = Math.max(0, ...mermas);
+            const esperado = masaArr * ppaMid;
+            const panesMin = Math.floor(masaArr * ppaMin * (1 - TOL_RENDIMIENTO - mermaMax));
+            const panesMax = Math.ceil(masaArr * ppaMax * (1 + TOL_RENDIMIENTO));
+            const pct = panesMax > 0 ? Math.min(150, Math.round((panesReales / Math.max(esperado, 1)) * 100)) : 0;
+
+            let estado: MetaPanesEnVivo['estado'] = 'esperando';
+            let avisoTemprano = `Meta: con ${arrobasEnLetras(masaArr)} deberían salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}). Aún no hay panes ligados.`;
+            if (panesReales > 0) {
+                if (panesReales < panesMin) {
+                    estado = 'corto';
+                    avisoTemprano = `⚠️ Va corto: van ${panesReales} de ${panesMin}–${panesMax} esperados. Puede estar picando grueso o declaró más masa de la real.`;
+                } else if (panesReales > panesMax) {
+                    estado = 'de_mas';
+                    avisoTemprano = `⚠️ Va de más: van ${panesReales} y el máximo es ~${panesMax}. Puede estar picando delgado o faltó anotar masa.`;
+                } else {
+                    estado = 'bien';
+                    avisoTemprano = `✓ Va bien: ${panesReales} panes dentro del rango ${panesMin}–${panesMax}.`;
+                }
+            }
+
+            return {
+                masaId: masa.id,
+                masaNombre: nombre,
+                masaArr,
+                panesReales,
+                panesEsperados: Math.round(esperado),
+                panesMin,
+                panesMax,
+                pct: panesReales <= 0 ? 0 : pct,
+                estado,
+                textoMeta: `Meta con ${arrobasEnLetras(masaArr)}: ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax})`,
+                avisoTemprano,
+            };
+        })
+        .filter((x): x is MetaPanesEnVivo => x !== null);
+};
+
+/** Barra de avance: corta / bien / de más — antes del veredicto final. */
+function BarraAvancePanadero({ metas }: { metas: MetaPanesEnVivo[] }) {
+    if (metas.length === 0) return null;
+    return (
+        <div className="space-y-2.5 rounded-2xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/60 dark:bg-indigo-950/30 p-3">
+            <div className="flex items-center gap-2">
+                <Gauge className="w-4 h-4 text-indigo-500" />
+                <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-700 dark:text-indigo-300">
+                    Validación temprana (antes del veredicto)
+                </h4>
+            </div>
+            <p className="text-[9px] text-slate-600 dark:text-slate-400 leading-snug">
+                Si dice que hizo cierta masa, aquí se ve al momento si los panes van cortos o de más — no hay que esperar al cuadre final.
+            </p>
+            {metas.map((m) => {
+                const ancho = m.panesMax > 0
+                    ? Math.min(100, Math.round((m.panesReales / m.panesMax) * 100))
+                    : 0;
+                const colorBarra =
+                    m.estado === 'corto' ? 'bg-rose-500' :
+                    m.estado === 'de_mas' ? 'bg-amber-500' :
+                    m.estado === 'bien' ? 'bg-emerald-500' :
+                    'bg-slate-300 dark:bg-slate-600';
+                return (
+                    <div key={m.masaId} className="space-y-1.5 rounded-xl bg-white/80 dark:bg-black/20 border border-white/60 dark:border-white/5 px-3 py-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                                <p className="text-[11px] font-black text-slate-800 dark:text-slate-100 truncate">{m.masaNombre}</p>
+                                <p className="text-[9px] font-bold text-slate-500 capitalize">{m.textoMeta}</p>
+                            </div>
+                            <span className={cn(
+                                'text-[9px] font-black uppercase shrink-0 px-2 py-0.5 rounded-md',
+                                m.estado === 'corto' && 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
+                                m.estado === 'de_mas' && 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+                                m.estado === 'bien' && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+                                (m.estado === 'esperando' || m.estado === 'sin_modelo') && 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+                            )}>
+                                {m.estado === 'corto' ? 'Corto' : m.estado === 'de_mas' ? 'De más' : m.estado === 'bien' ? 'Bien' : m.estado === 'sin_modelo' ? 'Sin modelo' : 'Esperando'}
+                            </span>
+                        </div>
+                        <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                            <div
+                                className={cn('h-full rounded-full transition-all duration-500', colorBarra)}
+                                style={{ width: `${m.panesReales <= 0 ? 4 : Math.max(6, ancho)}%` }}
+                            />
+                        </div>
+                        <p className="text-[10px] font-bold leading-snug text-slate-700 dark:text-slate-200">
+                            {m.avisoTemprano}
+                        </p>
+                        {m.panesEsperados > 0 && (
+                            <p className="text-[9px] font-black text-slate-500">
+                                Van {m.panesReales} / meta ≈ {m.panesEsperados} und
+                                {m.panesReales > 0 ? ` (${m.pct}%)` : ''}
+                            </p>
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+};
+
 /** Comprueba si los panes de cada masa calzan con lo declarado (±12% + merma del modelo). */
 const chequearRendimientoPorMasa = (
     masas: Array<{ id: string; nombre?: string; cantidadArrobas?: number }>,
     hornadasList: Array<{ masaId?: string; tipoPan?: string; totalPanes?: number; bandejas?: number; panesPorBandeja?: number }>,
     modelos: Array<{ nombre: string; panesPorArroba?: number; mermaEstimada?: number }> | undefined
 ): ChequeoRendimiento[] => {
-    const TOL = 0.12;
+    const TOL = TOL_RENDIMIENTO;
     return (masas || [])
         .map((masa) => {
             const masaArr = Number(masa.cantidadArrobas) || 0;
@@ -335,14 +517,19 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
             nota: 'Si masa y pan dan el mismo kg (o casi), el lote cuadra.',
         };
     };
-    const [pctCrecimiento, setPctCrecimiento] = React.useState(5);
-    const [isModeloModalOpen, setIsModeloModalOpen] = React.useState(false);
-    const [iaExpanded, setIaExpanded] = React.useState(false);
-    const [produccionTab, setProduccionTab] = React.useState<'masas' | 'panes' | 'cuadre'>('panes');
-    const [historialExpanded, setHistorialExpanded] = React.useState(false);
+    const [pctCrecimiento, setPctCrecimiento] = useState(5);
+    const [iaExpanded, setIaExpanded] = useState(false);
+    const [produccionTab, setProduccionTab] = useState<'masas' | 'panes' | 'cuadre'>('panes');
+    const [historialExpanded, setHistorialExpanded] = useState(false);
     // Control de compra real por proveedor
-    const [expandedCompraId, setExpandedCompraId] = React.useState<string | null>(null);
-    const [newLinea, setNewLinea] = React.useState({ producto: '', cantidad: '', montoReal: '' });
+    const [expandedCompraId, setExpandedCompraId] = useState<string | null>(null);
+    const [newLinea, setNewLinea] = useState({ producto: '', cantidad: '', montoReal: '' });
+
+    /** Meta + barra en vivo: avisa si el panadero va corto/de más ANTES del veredicto. */
+    const metasEnVivo = useMemo(
+        () => calcularMetasEnVivo(masasPreparadas || [], hornadas || [], modelosPan, formulaciones),
+        [masasPreparadas, hornadas, modelosPan, formulaciones]
+    );
 
     const saveCompras = (updated: any[]) => {
         setPresupuestosMinimos(updated);
@@ -1681,6 +1868,13 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                     <Plus className="w-4 h-4" /> Registrar Masa
                                                 </button>
                                             </div>
+                                            {/* Meta al declarar masa — antes de panear */}
+                                            <BarraAvancePanadero metas={metasEnVivo} />
+                                            {metasEnVivo.some(m => m.estado === 'esperando') && (
+                                                <p className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 leading-snug">
+                                                    Siguiente: ve a la pestaña <strong>Panes</strong>, liga cada hornada a esta masa y anota latas. La barra se irá llenando sola.
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* SALIDA DE PANES (HORNADAS) */}
@@ -1692,12 +1886,13 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 </div>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setIsModeloModalOpen(true)}
+                                                    onClick={() => irAModelosPan(onNavigateTo)}
                                                     className="text-[10px] font-black uppercase tracking-wider text-indigo-500 hover:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 px-2.5 py-1 rounded-lg border border-indigo-200 dark:border-indigo-800/60 transition-all flex items-center gap-1.5 shadow-sm"
                                                 >
                                                     🥖 + Modelo de Pan →
                                                 </button>
                                             </div>
+                                            <BarraAvancePanadero metas={metasEnVivo} />
                                             
                                             <div className="space-y-3">
                                                 {hornadas.map((h, i) => {
@@ -1938,6 +2133,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 <Target className="w-5 h-5 text-purple-500" />
                                                 <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-slate-200">Cuadre en Tiempo Real</h3>
                                             </div>
+                                            <BarraAvancePanadero metas={metasEnVivo} />
 
                                             {(() => {
                                                 const totalMasaRegistrada = (masasPreparadas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0), 0);
@@ -2656,15 +2852,6 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                     </>
                 );
             })()}
-                {/* Modal para Crear Modelos de Pan Rápidamente */}
-                <ModeloPanModal 
-                    isOpen={isModeloModalOpen} 
-                    onClose={() => setIsModeloModalOpen(false)} 
-                    formulaciones={formulaciones || []}
-                    onSuccess={() => {
-                        toast.success("Modelo creado exitosamente.");
-                    }}
-                />
         </TabsContent>
     );
 }

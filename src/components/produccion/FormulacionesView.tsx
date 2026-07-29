@@ -43,6 +43,7 @@ import type {
   FormulacionBase,
   IngredienteFormulacion
 } from '@/types';
+import { ARROBA_KG as ARROBA_KG_VALUE } from '@/types';
 
 interface FormulacionesViewProps {
   formulaciones: FormulacionBase[];
@@ -54,8 +55,6 @@ interface FormulacionesViewProps {
   onDeleteFormulacion: (id: string) => Promise<void>;
   formatCurrency: (value: number) => string;
 }
-
-const ARROBA_KG_VALUE = 11.5;
 
 const CATEGORIAS_FORMULACION = [
   { value: 'panes',      label: 'Panes',      color: 'bg-amber-500'  },

@@ -77,8 +77,10 @@ export interface OrdenProduccion {
 // SISTEMA DE FORMULACIÓN POR ARROBA
 // ============================================
 
-// Constante: 1 arroba = 11.5 kg de masa (estándar panadería colombiana)
-export const ARROBA_KG = 11.5;
+// Constante oficial Dulce Placer: 1 arroba = 12.5 kg = 12500 g (agentspec + Director AUTORIZO 2026-07-26)
+export const ARROBA_KG = 12.5;
+/** Gramos por arroba — usar en cálculos de panes/masa */
+export const ARROBA_GR = ARROBA_KG * 1000; // 12500
 
 // Ingrediente dentro de una formulación (por arroba)
 export interface IngredienteFormulacion {
@@ -99,7 +101,7 @@ export interface FormulacionBase {
   descripcion?: string;
   categoria: 'panes' | 'pasteleria' | 'tortas' | 'hojaldres' | 'galletas' | 'dulces' | 'especiales';
   ingredientes: IngredienteFormulacion[];
-  rendimientoBaseKg: number;   // Kg de masa resultante por arroba (~11.5 pero puede variar)
+  rendimientoBaseKg: number;   // Kg de masa resultante por arroba (~ARROBA_KG pero puede variar)
   costoTotalArroba: number;    // Suma de costos de ingredientes
   tiempoFermentacion?: number; // Minutos
   tiempoHorneado?: number;     // Minutos
@@ -515,7 +517,7 @@ export interface Configuracion {
   carpetasClientes?: string[];  // NUEVO: Nombres de carpetas/categorías para los créditos de clientes
   aiMode?: 'local' | 'hybrid' | 'off'; // MODO DE IA: Local, Híbrido o Apagado (Kill Switch)
   latasPorHorno?: number;       // Capacidad del horno en latas
-  pesoArrobaKg?: number;        // Peso de la arroba configurable (default 11.5 kg)
+  pesoArrobaKg?: number;        // Peso de la arroba configurable (default ARROBA_KG = 12.5)
   tiposLata?: TipoLata[];       // Tipos de lata configurados por el admin
   tiposDia?: TipoDiaConfig[];   // Plantillas de día: Normal, Alto, Evento
   whatsappApiKey?: string;      // API key de CallMeBot para envío automático sin interacción
@@ -858,6 +860,8 @@ export interface Recepcion {
   observaciones?: string;
   fechaRecepcion: string;
   imagenFactura?: string;
+  /** Cómo se pagó / se pagará la factura (alimenta el gasto en egresos) */
+  metodoPago?: MetodoPago;
 }
 
 // ============================================

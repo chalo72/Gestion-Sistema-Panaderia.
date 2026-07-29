@@ -70,7 +70,7 @@ interface VentasProps {
     ventas: Venta[];
     cajaActiva: CajaSesion | undefined;
     onRegistrarVenta: (data: any) => Promise<Venta>;
-    onAbrirCaja: (usuarioId: string, montoApertura: number) => Promise<CajaSesion>;
+    onAbrirCaja: (montoApertura: number) => Promise<CajaSesion>;
     onCerrarCaja: (montoCierre: number) => Promise<CajaSesion | undefined>;
     formatCurrency: (value: number) => string;
     usuario: any;
@@ -150,12 +150,15 @@ export function Ventas(props: VentasProps) {
     const [descuento, setDescuento] = useState(0);
 
     const handleSetDescuento = (newDesc: number) => {
-        setDescuento(newDesc);
-        if (newDesc > 0 && totalCart > 0 && (newDesc / totalCart) > 0.15) {
+        // No permitir descuento negativo ni mayor al carrito
+        const tope = safeNumber(totalCart);
+        const clamped = Math.round(Math.max(0, Math.min(safeNumber(newDesc), tope)) * 100) / 100;
+        setDescuento(clamped);
+        if (clamped > 0 && tope > 0 && (clamped / tope) > 0.15) {
              import('@/lib/ojo-bionico').then(m => {
                  m.OjoBionico.capturarAnomalia(
                      'odysseus', 
-                     `Se aplicó un descuento de $${newDesc} sobre un total de $${totalCart}`,
+                     `Se aplicó un descuento de $${clamped} sobre un total de $${tope}`,
                      'Monitor de facturación en segundo plano',
                      'Posible manipulación de precios detectada.',
                      'No aplica, captura estática.',
@@ -402,6 +405,12 @@ export function Ventas(props: VentasProps) {
         }, 0);
     }, [cart]);
 
+    /** Total real a cobrar (el descuento ya no es solo cosmético) */
+    const totalACobrar = useMemo(
+        () => Math.round(Math.max(0, safeNumber(totalCart) - safeNumber(descuento)) * 100) / 100,
+        [totalCart, descuento]
+    );
+
     // ==========================================
     // ACCIONES DEL CARRITO
     // ==========================================
@@ -435,6 +444,16 @@ export function Ventas(props: VentasProps) {
             if (!existing) return prev;
             const newQuantity = existing.cantidad + delta;
             if (newQuantity <= 0) return prev.filter(item => item.producto.id !== productoId);
+
+            // Bloquear subir cantidad por encima del stock (si hay registro de inventario)
+            if (delta > 0) {
+                const inv = inventario.find(i => i.productoId === productoId);
+                if (inv && newQuantity > inv.stockActual) {
+                    toast.warning(`Stock insuficiente: solo ${inv.stockActual} unidades disponibles`);
+                    return prev;
+                }
+            }
+
             return prev.map(item =>
                 item.producto.id === productoId ? { ...item, cantidad: newQuantity } : item
             );
@@ -671,7 +690,7 @@ export function Ventas(props: VentasProps) {
     const handleFinalizarVenta = async () => {
         if (cart.length === 0) return;
         // Validación de dinero suficiente (segunda barrera además del disabled)
-        if (tipoTransaccion !== 'credito' && metodoPago === 'efectivo' && safeNumber(dineroRecibido) < totalCart) {
+        if (tipoTransaccion !== 'credito' && metodoPago === 'efectivo' && safeNumber(dineroRecibido) < totalACobrar) {
             toast.error('El dinero recibido es insuficiente');
             return;
         }
@@ -697,14 +716,28 @@ export function Ventas(props: VentasProps) {
         }
         try {
             setIsProcessing(true);
-            const totalToPay = totalCart;
+
+            // Barrera final: no cobrar si el carrito pide más stock del disponible
+            for (const item of cart) {
+                const inv = inventario.find(i => i.productoId === item.producto.id);
+                if (inv && item.cantidad > inv.stockActual) {
+                    toast.error(`Stock insuficiente de ${item.producto.nombre}`, {
+                        description: `En carrito: ${item.cantidad} · Disponible: ${inv.stockActual}`,
+                    });
+                    setIsProcessing(false);
+                    return;
+                }
+            }
+
+            const totalToPay = totalACobrar;
             const ventaData = {
                 items: cart.map(item => ({
                     productoId: item.producto.id,
                     cantidad: item.cantidad,
                     precioUnitario: safeNumber(item.producto.precioVenta),
-                    subtotal: safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1)
+                    subtotal: Math.round(safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1) * 100) / 100
                 })),
+                total: totalToPay,
                 metodoPago: tipoTransaccion === 'credito' ? 'credito' as MetodoPago : metodoPago,
                 cliente: cliente.trim() || 'Cliente Anónimo',
                 usuarioId: vendedoraActiva?.id || usuario?.id || 'anon',
@@ -712,6 +745,7 @@ export function Ventas(props: VentasProps) {
                 tipoTransaccion,
                 dineroRecibido: tipoTransaccion === 'credito' ? totalToPay : safeNumber(dineroRecibido),
                 vueltas: tipoTransaccion === 'credito' ? 0 : Math.max(0, safeNumber(dineroRecibido) - totalToPay),
+                notas: descuento > 0 ? `Descuento aplicado: $${descuento}` : undefined,
                 fecha: new Date().toISOString()
             };
 
@@ -720,11 +754,15 @@ export function Ventas(props: VentasProps) {
             
             // Sincronización con el módulo de Créditos a Clientes
             if (tipoTransaccion === 'credito' && props.onAddCreditoCliente) {
-                const existingClient = props.creditosClientes?.find(c => c.clienteNombre.toLowerCase() === cliente.trim().toLowerCase());
+                const existingCredit = props.creditosClientes?.find(c => c.clienteNombre.toLowerCase() === cliente.trim().toLowerCase());
+                const masterMatch = (masterClientes || []).find(
+                    c => c.nombre.toLowerCase() === cliente.trim().toLowerCase()
+                );
                 
                 await props.onAddCreditoCliente({
+                    clienteId: existingCredit?.clienteId || masterMatch?.id,
                     clienteNombre: cliente.trim(),
-                    categoriaCliente: existingClient?.categoriaCliente || '',
+                    categoriaCliente: existingCredit?.categoriaCliente || '',
                     monto: totalToPay,
                     saldo: totalToPay,
                     descripcion: 'Crédito generado automáticamente desde POS',
@@ -1040,7 +1078,7 @@ export function Ventas(props: VentasProps) {
                             </span>
                             <div className="flex flex-col items-start leading-none">
                                 <span className="text-[11px] font-black">
-                                    {formatCurrency(Math.max(0, totalCart - descuento))}
+                                    {formatCurrency(totalACobrar)}
                                 </span>
                                 <span className="text-[9px] opacity-70 font-bold uppercase">Ver ticket</span>
                             </div>
@@ -1060,7 +1098,12 @@ export function Ventas(props: VentasProps) {
                     {/* Header con total */}
                     <div className="bg-slate-900 text-white p-6">
                         <span className="text-xs font-semibold text-slate-400 block mb-1">Total a Cobrar</span>
-                        <h2 className="text-4xl font-extrabold text-emerald-400">{formatCurrency(totalCart)}</h2>
+                        <h2 className="text-4xl font-extrabold text-emerald-400">{formatCurrency(totalACobrar)}</h2>
+                        {descuento > 0 && (
+                            <p className="text-xs text-emerald-300/80 mt-1">
+                                Subtotal {formatCurrency(totalCart)} − descuento {formatCurrency(descuento)}
+                            </p>
+                        )}
                         <DialogDescription className="text-xs text-slate-500 mt-1">
                             {activeTab?.tipo === 'mesa' ? `Cobro de ${activeTab.label}` : 'Venta Rápida — Selecciona el método de pago'}
                         </DialogDescription>
@@ -1159,22 +1202,22 @@ export function Ventas(props: VentasProps) {
                                             {formatCurrency(b)}
                                         </button>
                                     ))}
-                                    <button onClick={() => setDineroRecibido(totalCart)}
+                                    <button onClick={() => setDineroRecibido(totalACobrar)}
                                         className="px-3 py-1.5 rounded-lg bg-emerald-100 border border-emerald-200 text-xs font-bold text-emerald-700 hover:bg-emerald-200 transition-colors">
                                         Exacto
                                     </button>
                                 </div>
                                 {/* Cambio */}
                                 <div className={cn("p-4 rounded-xl text-center",
-                                    dineroRecibido >= totalCart ? "bg-emerald-50" : "bg-red-50"
+                                    dineroRecibido >= totalACobrar ? "bg-emerald-50" : "bg-red-50"
                                 )}>
                                     <span className="text-xs font-semibold text-slate-500 block mb-1">
-                                        {dineroRecibido >= totalCart ? '💰 Cambio / Vueltas' : '⚠️ Falta dinero'}
+                                        {dineroRecibido >= totalACobrar ? '💰 Cambio / Vueltas' : '⚠️ Falta dinero'}
                                     </span>
                                     <span className={cn("text-3xl font-extrabold",
-                                        dineroRecibido >= totalCart ? "text-emerald-600" : "text-red-600"
+                                        dineroRecibido >= totalACobrar ? "text-emerald-600" : "text-red-600"
                                     )}>
-                                        {formatCurrency(Math.abs(dineroRecibido - totalCart))}
+                                        {formatCurrency(Math.abs(dineroRecibido - totalACobrar))}
                                     </span>
                                 </div>
                             </div>
@@ -1211,7 +1254,7 @@ export function Ventas(props: VentasProps) {
                         <div className="flex gap-3 pt-2">
                             <Button variant="ghost" onClick={() => setShowPagoModal(false)}
                                 className="h-14 flex-1 rounded-xl text-sm font-bold text-slate-400">Cancelar</Button>
-                            <Button disabled={(tipoTransaccion !== 'credito' && dineroRecibido < totalCart) || (tipoTransaccion === 'credito' && !cliente.trim())}
+                            <Button disabled={(tipoTransaccion !== 'credito' && dineroRecibido < totalACobrar) || (tipoTransaccion === 'credito' && !cliente.trim())}
                                 onClick={() => handleFinalizarVenta()}
                                 className="h-14 flex-[2] rounded-xl bg-primary hover:bg-orange-600 text-white text-base font-bold shadow-lg">
                                 {tipoTransaccion === 'credito' ? '📋 Registrar Fiado' : '✅ Confirmar Pago'}
@@ -1379,7 +1422,9 @@ export function Ventas(props: VentasProps) {
                 isOpen={showAperturaModal}
                 onClose={() => setShowAperturaModal(false)}
                 onAbrir={async (montoApertura: number) => {
-                    await onAbrirCaja(usuario?.id || 'anon', montoApertura);
+                    // App cablea onAbrirCaja(monto) → abrirCaja(userId, monto).
+                    // Antes se pasaba (usuarioId, monto) y el userId caía como monto → NaN.
+                    await onAbrirCaja(montoApertura);
                     setShowAperturaModal(false);
                 }}
             />

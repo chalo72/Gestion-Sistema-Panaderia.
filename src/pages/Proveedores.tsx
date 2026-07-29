@@ -73,7 +73,7 @@ const EMBALAJES: { value: TipoEmbalaje; label: string; emoji: string; desc: stri
   { value: 'garrafa', label: 'Garrafa',  emoji: '🧴', desc: 'Garrafa o bidón de líquido' },
   { value: 'caneca',  label: 'Caneca',   emoji: '🪣', desc: 'Caneca o tambor'            },
   { value: 'bandeja', label: 'Bandeja',  emoji: '🍱', desc: 'Bandeja o charola'          },
-  { value: 'arroba',  label: 'Arroba',   emoji: '⚖️', desc: 'Arroba (11.5 kg)'           },
+  { value: 'arroba',  label: 'Arroba',   emoji: '⚖️', desc: 'Arroba (12.5 kg)'           },
   { value: 'docena',  label: 'Docena',   emoji: '🔢', desc: '12 unidades'                },
   { value: 'rollo',   label: 'Rollo',    emoji: '🧻', desc: 'Rollo o bobina'             },
   { value: 'atado',   label: 'Atado',    emoji: '🪢', desc: 'Atado o manojo'             },

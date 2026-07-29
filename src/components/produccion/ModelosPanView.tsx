@@ -36,6 +36,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { ModeloPan, FormulacionBase } from '@/types';
+import { ARROBA_KG, ARROBA_GR } from '@/types';
 
 interface ModelosPanViewProps {
   modelos: ModeloPan[];
@@ -45,9 +46,6 @@ interface ModelosPanViewProps {
   onDeleteModelo: (id: string) => Promise<void>;
   formatCurrency: (value: number) => string;
 }
-
-const ARROBA_KG = 11.5;
-const ARROBA_GR = ARROBA_KG * 1000; // 11,500 gramos
 
 export function ModelosPanView({
   modelos,

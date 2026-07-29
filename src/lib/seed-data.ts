@@ -116,7 +116,7 @@ export const DATOS_EJEMPLO = {
       activo: true,
       fechaActualizacion: new Date().toISOString(),
       ingredientes: [
-        { id: 'a1111111-1111-4111-a111-111111111111', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f51', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 11.5, unidad: 'kg', costoUnitario: 1.20, costoTotalArroba: 13.8, porcentajePanadero: 100 },
+        { id: 'a1111111-1111-4111-a111-111111111111', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f51', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 12.5, unidad: 'kg', costoUnitario: 1.20, costoTotalArroba: 13.8, porcentajePanadero: 100 },
         { id: 'a1111111-1111-4111-a111-111111111112', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f51', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00004', cantidadPorArroba: 5, unidad: 'und', costoUnitario: 4.5, costoTotalArroba: 22.5 },
       ]
     },
@@ -131,7 +131,7 @@ export const DATOS_EJEMPLO = {
       activo: true,
       fechaActualizacion: new Date().toISOString(),
       ingredientes: [
-        { id: 'a1111111-1111-4111-a111-111111111113', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f52', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 11.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
+        { id: 'a1111111-1111-4111-a111-111111111113', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f52', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 12.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
       ]
     },
     {
@@ -145,7 +145,7 @@ export const DATOS_EJEMPLO = {
       activo: true,
       fechaActualizacion: new Date().toISOString(),
       ingredientes: [
-        { id: 'a1111111-1111-4111-a111-111111111114', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f53', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 11.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
+        { id: 'a1111111-1111-4111-a111-111111111114', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f53', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 12.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
         { id: 'a1111111-1111-4111-a111-111111111115', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f53', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00003', cantidadPorArroba: 4.5, unidad: 'kg', costoUnitario: 6.5, costoTotalArroba: 29.25 },
       ]
     },
@@ -160,7 +160,7 @@ export const DATOS_EJEMPLO = {
       activo: true,
       fechaActualizacion: new Date().toISOString(),
       ingredientes: [
-        { id: 'a1111111-1111-4111-a111-111111111116', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f54', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 11.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
+        { id: 'a1111111-1111-4111-a111-111111111116', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f54', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 12.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
       ]
     },
     {
@@ -174,7 +174,7 @@ export const DATOS_EJEMPLO = {
       activo: true,
       fechaActualizacion: new Date().toISOString(),
       ingredientes: [
-        { id: 'a1111111-1111-4111-a111-111111111117', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f55', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 11.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
+        { id: 'a1111111-1111-4111-a111-111111111117', formulacionId: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f55', productoId: 'f5a6b7c8-d9e0-4123-a456-b7c8d9e00001', cantidadPorArroba: 12.5, unidad: 'kg', costoUnitario: 1.2, costoTotalArroba: 13.8 },
       ]
     }
   ],

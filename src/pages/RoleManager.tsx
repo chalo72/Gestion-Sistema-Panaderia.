@@ -90,17 +90,17 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
         }
     };
 
-    // ── WhatsApp ─────────────────────────────────────────────────────────────
+    // ── WhatsApp (sin clave en el mensaje — se da en persona / por otro canal) ─
     const handleShareWhatsApp = (role: UserRole) => {
-        const password = passwords[role];
-        if (!password || password === '••••••••') {
-            toast.error(`Ingresa una contraseña nueva en texto para ${ROLE_DESCRIPTIONS[role].nombre} si deseas enviarla por WhatsApp.`);
-            return;
-        }
         const appUrl = publicAppUrl || window.location.origin;
-        const message = `🌟 *DULCE PLACER - ACCESO SISTEMA* 🌟\n\n👤 *Rol:* ${ROLE_DESCRIPTIONS[role].nombre}\n🔗 *App:* ${appUrl}\n🔑 *Clave:* ${password}\n\n⚠️ No compartir esta clave.`;
+        const message =
+            `🌟 *DULCE PLACER - ACCESO SISTEMA* 🌟\n\n` +
+            `👤 *Rol:* ${ROLE_DESCRIPTIONS[role].nombre}\n` +
+            `🔗 *App:* ${appUrl}\n` +
+            `🔑 *Clave:* te la entrega el administrador en persona (no se envía por chat).\n\n` +
+            `⚠️ No reenvíes este mensaje con claves.`;
         window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
-        toast.success(`Preparando envío para ${ROLE_DESCRIPTIONS[role].nombre}`);
+        toast.success(`Link de acceso listo (sin clave) para ${ROLE_DESCRIPTIONS[role].nombre}`);
     };
 
     // ── Guardar contraseñas ──────────────────────────────────────────────────

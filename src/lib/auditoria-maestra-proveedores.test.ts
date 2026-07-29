@@ -27,10 +27,10 @@ const calcularMargenReal = (costoUnitario: number, precioVenta: number): number 
 describe('🛡️ AUDITORÍA MAESTRA: Cálculos Financieros Proveedores', () => {
 
     describe('📦 Pruebas de Embalaje y Costo Unitario', () => {
-        it('Debe calcular correctamente el costo unitario de una Arroba (11.5kg)', () => {
+        it('Debe calcular correctamente el costo unitario de una Arroba (12.5kg)', () => {
             const precioBulto = 45000;
-            const pesoKg = 11.5;
-            const costoEsperado = Number((45000 / 11.5).toFixed(4)); // ~3913.0435
+            const pesoKg = 12.5;
+            const costoEsperado = Number((45000 / 12.5).toFixed(4)); // 3600
             expect(calcularCostoUnitario(precioBulto, pesoKg)).toBe(costoEsperado);
         });
 

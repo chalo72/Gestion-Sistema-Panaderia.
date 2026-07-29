@@ -26,6 +26,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { FormulacionBase, ModeloPan, Producto } from '@/types';
+import { ARROBA_KG, ARROBA_GR } from '@/types';
 
 interface CalculadoraRendimientoProps {
   formulaciones: FormulacionBase[];
@@ -33,9 +34,6 @@ interface CalculadoraRendimientoProps {
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
 }
-
-const ARROBA_KG = 11.5;
-const ARROBA_GR = ARROBA_KG * 1000;
 
 export function CalculadoraRendimiento({
   formulaciones,

@@ -310,7 +310,17 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     const [isGuardandoTicket, setIsGuardandoTicket] = useState(false);
 
-    const guardarEnHistorial = async (items: typeof carritoPos, total: number, foto?: string, metodo?: MetodoPago) => {
+    /**
+     * @param yaRegistradaEnCaja — si true, no vuelve a llamar registrarVenta ni a bajar stock
+     *   (registrarVenta ya descuenta inventario; batchAjustarStock duplicaba la baja).
+     */
+    const guardarEnHistorial = async (
+        items: typeof carritoPos,
+        total: number,
+        foto?: string,
+        metodo?: MetodoPago,
+        yaRegistradaEnCaja = false
+    ) => {
         if (!viendoPerfilCliente) return;
         if (isGuardandoTicket) return; // anti-doble-clic
         setIsGuardandoTicket(true);
@@ -329,6 +339,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
         // 1. Guardar en Base de Datos Centralizada
         let creditoGuardadoEnNube = false;
+        let stockYaDescontado = yaRegistradaEnCaja;
         try {
             if (metodo === 'credito') {
                 if (addCreditoCliente) {
@@ -347,7 +358,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     });
                     creditoGuardadoEnNube = true;
                 }
-            } else {
+            } else if (!yaRegistradaEnCaja) {
                 if (registrarVenta) {
                     if (!cajaActiva) {
                         toast.error('Atención: La venta se guardó localmente, pero NO en la base de datos central porque no hay una caja abierta.');
@@ -360,6 +371,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             clienteNombre: nuevo.clienteNombre,
                             tipoVenta: 'mayorista'
                         });
+                        // registrarVenta ya bajó stock vía onAjustarStock
+                        stockYaDescontado = true;
                     }
                 }
             }
@@ -368,24 +381,26 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             toast.error('Error al sincronizar con la base de datos principal');
         }
 
-        // Descontar del inventario siempre (con o sin caja, efectivo o crédito)
-        try {
-            await db.batchAjustarStock(items.map(item => ({
-                productoId: item.productoId,
-                cantidad: item.cantidad,
-                tipo: 'salida',
-                motivo: `Venta mayorista: ${viendoPerfilCliente.nombre}`,
-            })));
-            const agotados: string[] = [];
-            for (const item of items) {
-                const inv = await db.getInventarioItemByProducto(item.productoId);
-                if (inv && inv.stockActual <= 0) agotados.push(item.nombre);
+        // Solo bajar stock aquí si registrarVenta no lo hizo (crédito, sin caja, o error previo)
+        if (!stockYaDescontado) {
+            try {
+                await db.batchAjustarStock(items.map(item => ({
+                    productoId: item.productoId,
+                    cantidad: item.cantidad,
+                    tipo: 'salida',
+                    motivo: `Venta mayorista: ${viendoPerfilCliente.nombre}`,
+                })));
+                const agotados: string[] = [];
+                for (const item of items) {
+                    const inv = await db.getInventarioItemByProducto(item.productoId);
+                    if (inv && inv.stockActual <= 0) agotados.push(item.nombre);
+                }
+                if (agotados.length > 0) {
+                    toast.warning(`Stock agotado: ${agotados.join(', ')}`, { duration: 5000 });
+                }
+            } catch (e) {
+                console.warn('[Mayoristas] No se pudo actualizar inventario:', e);
             }
-            if (agotados.length > 0) {
-                toast.warning(`Stock agotado: ${agotados.join(', ')}`, { duration: 5000 });
-            }
-        } catch (e) {
-            console.warn('[Mayoristas] No se pudo actualizar inventario:', e);
         }
 
         // Persistir en IndexedDB como respaldo
@@ -682,7 +697,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 if (aPagar >= saldo) {
                     // pago completo: registrar y eliminar de pendientes
                     await registrarVenta({ items: tp.items, total: saldo, metodoPago: metodoAbonoMultiple as MetodoPago, notas: 'Ticket pendiente pagado', cliente: viendoPerfilCliente.nombre });
-                    await guardarEnHistorial(tp.items, saldo, tp.fotoFactura, metodoAbonoMultiple as MetodoPago);
+                    // yaRegistradaEnCaja: evita segunda venta + segunda/tercera baja de stock
+                    await guardarEnHistorial(tp.items, saldo, tp.fotoFactura, metodoAbonoMultiple as MetodoPago, true);
                     
                     // eliminar pendiente
                     actualizarTicketsPersistidos(ticketsPendientes.filter(t => t.id !== tp.id));

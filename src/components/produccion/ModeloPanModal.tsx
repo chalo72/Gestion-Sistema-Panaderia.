@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,8 @@ import { Save, Calculator, Package, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateUUID } from '@/lib/safe-utils';
 import type { ModeloPan, FormulacionBase } from '@/types';
+import { ARROBA_GR } from '@/types';
 import { db } from '@/lib/database';
-
-const ARROBA_GR = 12500; // 1 arroba = 12.5 kg = 12500 gr
 
 interface ModeloPanModalProps {
   isOpen: boolean;

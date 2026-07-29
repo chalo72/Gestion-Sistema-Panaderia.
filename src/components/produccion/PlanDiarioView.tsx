@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import type { FormulacionBase, ModeloPan, Producto, Configuracion, InventarioItem } from '@/types';
+import { ARROBA_KG as ARROBA_KG_DEFAULT } from '@/types';
 
 interface PlanDiarioViewProps {
   productos: Producto[];
@@ -136,7 +137,7 @@ export function PlanDiarioView({
   useEffect(() => {
     localStorage.setItem('draft_sobrante_fisico', JSON.stringify(sobranteFisico));
   }, [sobranteFisico]);
-  const ARROBA_KG = configuracion.pesoArrobaKg || 11.5;
+  const ARROBA_KG = configuracion.pesoArrobaKg || ARROBA_KG_DEFAULT;
 
   // Estado para el modal del Análisis IA
   const [analisisIaItem, setAnalisisIaItem] = useState<any>(null);

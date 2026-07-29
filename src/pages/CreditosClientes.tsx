@@ -122,65 +122,81 @@ export default function CreditosClientes({
     const [tab, setTab] = useState<Tab>('clientes');
     const [isScanning, setIsScanning] = useState(false);
 
+    /**
+     * Escaneo seguro: SOLO revisa la tabla real de créditos clientes.
+     * Antes escaneaba todas las colecciones (gastos, productos…) y creaba deudas falsas.
+     */
     const runDeepScan = async () => {
         setIsScanning(true);
         try {
-            const collections = ['productos', 'proveedores', 'precios', 'clientes', 'ventas', 'inventario', 'movimientos', 'recepciones', 'historial', 'sesiones_caja', 'backups', 'pre_pedidos', 'alertas', 'gastos', 'mesas', 'ahorros', 'creditos_clientes', 'creditos_trabajadores', 'trabajadores', 'pedidos_activos', 'recetas', 'formulaciones', 'modelosPan', 'produccion', 'nominas'];
-            let foundCredits = 0;
-            
-            const request = indexedDB.open('dulce-placer-db');
-            request.onsuccess = async (event: any) => {
-                const idb = event.target.result;
-                const tx = idb.transaction(collections, 'readonly');
-                
-                for (const col of collections) {
-                    try {
-                        const store = tx.objectStore(col);
-                        const allReq = store.getAll();
-                        allReq.onsuccess = () => {
-                            const data = allReq.result;
-                            if (data && data.length > 0) {
-                                const sospechosos = data.filter((item: any) => 
-                                    item.saldo !== undefined || 
-                                    item.monto !== undefined || 
-                                    (item.clienteNombre && typeof item.clienteNombre === 'string') ||
-                                    (item.cliente_nombre && typeof item.cliente_nombre === 'string')
-                                );
-                                
-                                if (sospechosos.length > 0 && col !== 'clientes' && col !== 'ventas') {
-                                    sospechosos.forEach((s: any) => {
-                                        if (!creditosClientes.find(c => c.id === s.id)) {
-                                            const cRestaurado = {
-                                                ...s,
-                                                id: s.id || crypto.randomUUID(),
-                                                clienteNombre: s.clienteNombre || s.cliente_nombre || s.nombre || 'Recuperado',
-                                                monto: s.monto || s.saldo || 0,
-                                                saldo: s.saldo || s.monto || 0,
-                                                fecha: s.fecha || new Date().toISOString(),
-                                                estado: s.estado || 'activo'
-                                            };
-                                            onAddCreditoCliente(cRestaurado);
-                                            foundCredits++;
-                                        }
-                                    });
-                                }
-                            }
-                        };
-                    } catch(e) {}
-                }
-                
-                setTimeout(() => {
-                    setIsScanning(false);
-                    if (foundCredits > 0) {
-                        toast.success(`¡ESCANEO COMPLETADO! Se recuperaron ${foundCredits} créditos ocultos.`);
-                    } else {
-                        toast.error('Escaneo profundo completado: No se encontraron créditos ocultos.');
-                    }
-                }, 2000);
+            const { db } = await import('@/lib/database');
+            const enDisco = await db.getAllCreditosClientes();
+            const idsEnPantalla = new Set(creditosClientes.map(c => c.id));
+
+            const esCreditoValido = (item: Record<string, unknown>): boolean => {
+                const nombre = String(item.clienteNombre ?? item.cliente_nombre ?? '').trim();
+                const monto = Number(item.monto ?? item.saldo ?? NaN);
+                return Boolean(nombre) && Number.isFinite(monto) && monto > 0;
             };
+
+            const candidatos = (Array.isArray(enDisco) ? enDisco : []).filter(
+                (item: Record<string, unknown>) => {
+                    const id = String(item.id ?? '');
+                    if (!id || idsEnPantalla.has(id)) return false;
+                    return esCreditoValido(item);
+                }
+            );
+
+            if (candidatos.length === 0) {
+                toast.info('Escaneo: no hay créditos ocultos en la base local.', {
+                    description: 'Solo se revisa la libreta de fiados (no se inventan deudas).',
+                });
+                return;
+            }
+
+            const preview = candidatos
+                .slice(0, 5)
+                .map((c: Record<string, unknown>) =>
+                    `• ${String(c.clienteNombre ?? c.cliente_nombre)} ($${Number(c.saldo ?? c.monto).toLocaleString('es-CO')})`
+                )
+                .join('\n');
+            const extra = candidatos.length > 5 ? `\n… y ${candidatos.length - 5} más` : '';
+
+            const confirmar = window.confirm(
+                `Se encontraron ${candidatos.length} crédito(s) en la base local que no están en pantalla:\n\n` +
+                `${preview}${extra}\n\n` +
+                `¿Recargarlos a la lista?\n(No se crean deudas nuevas de otras tablas.)`
+            );
+
+            if (!confirmar) {
+                toast.message('Escaneo cancelado: no se restauró nada.');
+                return;
+            }
+
+            let restaurados = 0;
+            for (const s of candidatos) {
+                const row = s as Record<string, unknown>;
+                const monto = Number(row.monto ?? row.saldo) || 0;
+                const saldo = Number(row.saldo ?? row.monto) || 0;
+                await onAddCreditoCliente({
+                    ...(row as object),
+                    id: String(row.id),
+                    clienteNombre: String(row.clienteNombre ?? row.cliente_nombre ?? 'Recuperado'),
+                    monto,
+                    saldo,
+                    fecha: String(row.fecha ?? new Date().toISOString()),
+                    estado: (row.estado as 'activo' | 'pagado' | 'vencido') || 'activo',
+                    pagos: Array.isArray(row.pagos) ? row.pagos : [],
+                } as Parameters<typeof onAddCreditoCliente>[0] & { id: string });
+                restaurados++;
+            }
+
+            toast.success(`Se recargaron ${restaurados} crédito(s) desde la base local.`);
         } catch (error) {
-            setIsScanning(false);
+            console.error('[Créditos] Escaneo profundo:', error);
             toast.error('Error durante el escaneo profundo.');
+        } finally {
+            setIsScanning(false);
         }
     };
 
@@ -197,6 +213,31 @@ export default function CreditosClientes({
         const t = setTimeout(() => setDataReady(true), 900);
         return () => clearTimeout(t);
     }, [creditosClientes.length, clientes.length]);
+
+    // Auto-marcar vencidos (una pasada; evita bucles al actualizar estado)
+    const vencidosAutoRef = useRef<Set<string>>(new Set());
+    useEffect(() => {
+        if (!dataReady) return;
+        const hoy = new Date();
+        hoy.setHours(0, 0, 0, 0);
+        const porVencer = creditosClientes.filter(c => {
+            if (vencidosAutoRef.current.has(c.id)) return false;
+            if (c.estado === 'pagado' || c.estado === 'vencido') return false;
+            if (!c.fechaVencimiento || c.saldo <= 0) return false;
+            const vence = new Date(c.fechaVencimiento);
+            if (isNaN(vence.getTime())) return false;
+            vence.setHours(0, 0, 0, 0);
+            return vence < hoy;
+        });
+        if (porVencer.length === 0) return;
+        void (async () => {
+            for (const c of porVencer) {
+                vencidosAutoRef.current.add(c.id);
+                await onUpdateCreditoCliente(c.id, { estado: 'vencido' });
+            }
+            toast.info(`${porVencer.length} crédito(s) marcados como vencidos automáticamente`);
+        })();
+    }, [dataReady, creditosClientes, onUpdateCreditoCliente]);
 
     // ── Estado tab clientes ────────────────────────────────────────────────
     const [searchCliente, setSearchCliente] = useState('');
@@ -1594,10 +1635,11 @@ export default function CreditosClientes({
                             <Button 
                                 onClick={runDeepScan} 
                                 disabled={isScanning}
+                                title="Solo busca créditos reales guardados que no se ven en pantalla. No inventa deudas."
                                 className={`bg-orange-500 hover:bg-orange-600 text-white ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                                 <Search className={`w-4 h-4 mr-2 ${isScanning ? 'animate-spin' : ''}`} />
-                                {isScanning ? 'Buscando...' : 'Escaneo Profundo'}
+                                {isScanning ? 'Buscando...' : 'Recuperar ocultos'}
                             </Button>
                         </div>
 

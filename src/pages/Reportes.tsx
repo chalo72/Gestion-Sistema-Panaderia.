@@ -1,4 +1,5 @@
 
+import { generateUUID } from '@/lib/safe-utils';
 import { useMemo, useState, useEffect } from 'react';
 import {
     BarChart,
@@ -91,9 +92,14 @@ interface ReportesProps {
     productos?: Producto[];
     categorias?: Categoria[];
     proveedores?: any[];
+    precios?: any[];
+    precios?: any[];
     formulaciones?: any[];
     modelosPan?: any[];
     onNavigateTo?: (view: string) => void;
+    cajaActiva?: any;
+    onAddRecepcion?: (data: any) => Promise<any>;
+    onConfirmarRecepcion?: (data: any) => Promise<void>;
 }
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
@@ -107,9 +113,107 @@ import { TablaFlujoCaja } from '@/components/reportes/TablaFlujoCaja';
 export default function Reportes(props: ReportesProps) {
     const reportesData = useReportesData(props);
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData } = reportesData;
-    const { formatCurrency, ventas, gastos, productos, categorias, proveedores } = props;
-    
+    const { formatCurrency, ventas, gastos, productos, categorias, proveedores, precios, cajaActiva, onAddRecepcion, onConfirmarRecepcion } = props;
 
+    // Control de compra real en tab Presupuestos
+    const [expandedPresId, setExpandedPresId] = useState<string | null>(null);
+    const [presLinea, setPresLinea] = useState({ producto: '', cantidad: '', montoReal: '' });
+    
+    // Control de Ingreso Rapido a Inventario
+    const [recepcionModal, setRecepcionModal] = useState<any | null>(null);
+    const [recepcionForm, setRecepcionForm] = useState({
+        fecha: new Date().toISOString().split('T')[0],
+        metodoPago: 'efectivo',
+        cajaOrigenId: ''
+    });
+
+    const handleConfirmarRecepcionDirecta = async () => {
+        if (!recepcionModal || !onAddRecepcion || !onConfirmarRecepcion) return;
+        try {
+            const proveedor = proveedores?.find(p => p.nombre.toLowerCase() === recepcionModal.proveedor.toLowerCase());
+            if (!proveedor) {
+                toast.error('Proveedor no encontrado en el catálogo');
+                return;
+            }
+            if (!recepcionModal.lineas || recepcionModal.lineas.length === 0) {
+                toast.error('No hay productos registrados en esta compra.');
+                return;
+            }
+            const items = [];
+            for (const linea of recepcionModal.lineas) {
+                const prod = productos?.find(p => p.nombre.toLowerCase() === linea.producto.toLowerCase());
+                if (!prod) {
+                    toast.error(`El producto "${linea.producto}" no existe en el inventario. Por favor créalo en la pestaña Inventario primero.`);
+                    return;
+                }
+                const cant = Number(linea.cantidad) || 1;
+                const montoR = Number(linea.montoReal) || 0;
+                items.push({
+                    id: generateUUID(),
+                    productoId: prod.id,
+                    cantidadEsperada: cant,
+                    cantidadRecibida: cant,
+                    precioEsperado: montoR / cant,
+                    precioFacturado: montoR / cant,
+                    embalajeOk: true,
+                    productoOk: true,
+                    cantidadOk: true,
+                    modeloOk: true
+                });
+            }
+
+            const totalFactura = items.reduce((sum, item) => sum + (item.cantidadRecibida * item.precioFacturado), 0);
+
+            const recepcion = await onAddRecepcion({
+                proveedorId: proveedor.id,
+                numeroFactura: `ESTANDAR-${Date.now().toString().slice(-6)}`,
+                fechaFactura: recepcionForm.fecha,
+                fechaRecepcion: recepcionForm.fecha,
+                totalFactura,
+                items,
+                estado: 'en_proceso',
+                recibidoPor: role || 'Sistema',
+                metodoPago: recepcionForm.metodoPago as any,
+                cajaOrigenId: recepcionForm.cajaOrigenId || (recepcionForm.metodoPago === 'efectivo' ? cajaActiva?.id : undefined)
+            });
+
+            await onConfirmarRecepcion(recepcion);
+            
+            savePresCompras(presupuestosMinimos.map((l: any) => l.id === recepcionModal.id ? { ...l, estado: 'completado' } : l));
+            
+            toast.success('¡Inventario actualizado y Gasto registrado exitosamente!');
+            setRecepcionModal(null);
+            setExpandedPresId(null);
+        } catch (error: any) {
+            console.error(error);
+            toast.error(error.message || 'Error al procesar la recepción');
+        }
+    };
+    const savePresCompras = (updated: any[]) => {
+        setPresupuestosMinimos(updated);
+        localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
+    };
+    const addPresLinea = (itemId: string) => {
+        if (!presLinea.producto.trim()) return;
+        const updated = presupuestosMinimos.map((l: any) => l.id === itemId ? {
+            ...l,
+            comprasReales: [...(l.comprasReales || []), {
+                id: Date.now().toString(),
+                producto: presLinea.producto.trim(),
+                cantidad: Number(presLinea.cantidad) || 0,
+                montoReal: Number(presLinea.montoReal) || 0,
+            }],
+            fechaCompra: new Date().toISOString().slice(0, 10),
+        } : l);
+        savePresCompras(updated);
+        setPresLinea({ producto: '', cantidad: '', montoReal: '' });
+    };
+    const removePresLinea = (itemId: string, lineaId: string) => {
+        const updated = presupuestosMinimos.map((l: any) => l.id === itemId ? {
+            ...l, comprasReales: (l.comprasReales || []).filter((r: any) => r.id !== lineaId),
+        } : l);
+        savePresCompras(updated);
+    };
 
     return (
         <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
@@ -187,7 +291,7 @@ export default function Reportes(props: ReportesProps) {
                 {[
                     { label: 'Ventas mes', val: reporteActual.totalVentas, color: 'text-emerald-600 dark:text-emerald-400', border: 'border-emerald-200 dark:border-emerald-800' },
                     { label: 'Gastos mes', val: reporteActual.totalGastos, color: 'text-rose-600 dark:text-rose-400', border: 'border-rose-200 dark:border-rose-800' },
-                    { label: 'Utilidad bruta', val: reporteActual.utilidadBruta, color: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-800' },
+                    { label: 'Utilidad bruta (ventas − costo)', val: reporteActual.utilidadBruta, color: 'text-indigo-600 dark:text-indigo-400', border: 'border-indigo-200 dark:border-indigo-800' },
                     { label: 'Total compromisos', val: totalCompromisosActivos, color: 'text-violet-600 dark:text-violet-400', border: 'border-violet-200 dark:border-violet-800', cta: true },
                 ].map(item => (
                     <div
@@ -719,71 +823,223 @@ export default function Reportes(props: ReportesProps) {
                                             <CardContent className="p-3 space-y-2">
                                                 {filtered.map((item: any) => {
                                                     const limiteActual = temporadaBaja && item.montoBaja !== undefined ? item.montoBaja : item.monto;
+                                                    const lineas: any[] = item.comprasReales || [];
+                                                    const totalReal = lineas.reduce((s: number, r: any) => s + (r.montoReal || 0), 0);
+                                                    const pctUsado = limiteActual > 0 ? Math.min(110, (totalReal / limiteActual) * 100) : 0;
+                                                    const isOpen = expandedPresId === item.id;
+                                                    // Historial del mismo proveedor en otras entradas
+                                                    const historial: { producto: string, cantidad: number, montoReal: number }[] = [];
+                                                    presupuestosMinimos.forEach((l: any) => {
+                                                        if (l.proveedor === item.proveedor && l.id !== item.id) {
+                                                            (l.comprasReales || []).forEach((r: any) => {
+                                                                if (!historial.find(h => h.producto === r.producto))
+                                                                    historial.push({ producto: r.producto, cantidad: r.cantidad || 0, montoReal: r.montoReal || 0 });
+                                                            });
+                                                        }
+                                                    });
+                                                    const montoForm = Number(presLinea.montoReal) || 0;
+                                                    const totalConForm = totalReal + (isOpen ? montoForm : 0);
+                                                    const restante = limiteActual - totalConForm;
+                                                    const pctConForm = limiteActual > 0 ? Math.min(110, (totalConForm / limiteActual) * 100) : 0;
                                                     return (
-                                                        <div key={item.id} className={cn("flex items-center gap-3 rounded-2xl p-3 border transition-colors", item.estado === 'completado' ? "border-emerald-500/30 bg-emerald-950/10" : temporadaBaja ? "border-cyan-500/20 bg-cyan-950/10" : "border-white/5 bg-card/20")}>
-                                                            <div className="flex-1 min-w-0">
-                                                                <div className="flex items-center gap-2 flex-wrap">
-                                                                    <span className="text-sm font-black text-foreground truncate">{item.proveedor}</span>
-                                                                    <span className={cn("text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full", item.frecuencia === 'Semanal' ? "bg-amber-500/20 text-amber-400" : item.frecuencia === 'Quincenal' ? "bg-violet-500/20 text-violet-400" : "bg-blue-500/20 text-blue-400")}>{item.frecuencia}</span>
-                                                                </div>
-                                                                {(item.diaPedido || item.diaPago) && (
-                                                                    <p className="text-[9px] text-muted-foreground mt-0.5 font-bold">
-                                                                        {item.diaPedido && `📝 Preventa: ${item.diaPedido}`} {item.diaPedido && item.diaPago && ' | '} {item.diaPago && `🚚 Llega y Pago: ${item.diaPago}`}
-                                                                    </p>
-                                                                )}
-                                                                {item.nota && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">"{item.nota}"</p>}
-                                                            </div>
-                                                            <div className="text-right flex flex-col items-end gap-1 shrink-0">
-                                                                <div className="flex items-center gap-2">
-                                                                    {temporadaBaja && item.montoBaja !== undefined && item.montoBaja < item.monto && (
-                                                                        <span className="text-[10px] line-through text-muted-foreground">{formatCurrency(item.monto)}</span>
+                                                        <div key={item.id} className={cn("rounded-2xl border overflow-hidden transition-all", item.estado === 'completado' ? "border-emerald-500/30 bg-emerald-950/10" : temporadaBaja ? "border-cyan-500/20 bg-cyan-950/10" : "border-white/5 bg-card/20")}>
+                                                            {/* FILA PRINCIPAL */}
+                                                            <div className="flex items-center gap-3 p-3 flex-wrap">
+                                                                <div className="flex-1 min-w-0">
+                                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                                        <span className="text-sm font-black text-foreground truncate">{item.proveedor}</span>
+                                                                        <span className={cn("text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full", item.frecuencia === 'Semanal' ? "bg-amber-500/20 text-amber-400" : item.frecuencia === 'Quincenal' ? "bg-violet-500/20 text-violet-400" : "bg-blue-500/20 text-blue-400")}>{item.frecuencia}</span>
+                                                                    </div>
+                                                                    {(item.diaPedido || item.diaPago) && (
+                                                                        <p className="text-[9px] text-muted-foreground mt-0.5 font-bold">
+                                                                            {item.diaPedido && `📝 Preventa: ${item.diaPedido}`}{item.diaPedido && item.diaPago && ' | '}{item.diaPago && `🚚 Llega: ${item.diaPago}`}
+                                                                        </p>
                                                                     )}
-                                                                    <p className={cn("text-sm font-black", temporadaBaja ? "text-cyan-500" : "text-foreground")}>
-                                                                        {formatCurrency(limiteActual)}
-                                                                    </p>
+                                                                    {item.nota && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">"{item.nota}"</p>}
                                                                 </div>
-                                                                <div className="flex gap-2 items-center mt-1">
+                                                                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                                                                    <div className="text-right">
+                                                                        {temporadaBaja && item.montoBaja !== undefined && item.montoBaja < item.monto && (
+                                                                            <span className="text-[10px] line-through text-muted-foreground block">{formatCurrency(item.monto)}</span>
+                                                                        )}
+                                                                        <p className={cn("text-sm font-black", temporadaBaja ? "text-cyan-500" : "text-foreground")}>{formatCurrency(limiteActual)}</p>
+                                                                        {lineas.length > 0 && <p className="text-[9px] font-black text-emerald-400">Gastado: {formatCurrency(totalReal)}</p>}
+                                                                    </div>
                                                                     <button
-                                                                        onClick={() => {
-                                                                            const updated = presupuestosMinimos.map((l: any) => l.id === item.id ? { ...l, estado: l.estado === 'completado' ? 'pendiente' : 'completado' } : l);
-                                                                            setPresupuestosMinimos(updated);
-                                                                            localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
-                                                                        }}
-                                                                        className={cn("text-[9px] font-bold px-2 py-1 rounded-lg uppercase transition-all", 
-                                                                            item.estado === 'completado' ? "bg-emerald-500/20 text-emerald-400 hover:bg-rose-500/20 hover:text-rose-400" : "bg-rose-500/10 text-rose-400 hover:bg-emerald-500/20 hover:text-emerald-400")}
-                                                                    >
-                                                                        {item.estado === 'completado' ? '✓ Comprado' : '⏳ Pendiente'}
-                                                                    </button>
-                                                                    <button 
-                                                                        className="text-indigo-400 hover:text-indigo-300 p-1 font-bold text-[9px] uppercase tracking-wider"
-                                                                        onClick={() => {
-                                                                            setEditCompraId(item.id);
-                                                                            (document.getElementById('compra_proveedor') as HTMLInputElement).value = item.proveedor;
-                                                                            (document.getElementById('compra_monto') as HTMLInputElement).value = item.monto.toString();
-                                                                            (document.getElementById('compra_baja') as HTMLInputElement).value = item.montoBaja ? item.montoBaja.toString() : '';
-                                                                            (document.getElementById('compra_frecuencia') as HTMLSelectElement).value = item.frecuencia;
-                                                                            (document.getElementById('compra_dia_pedido') as HTMLSelectElement).value = item.diaPedido || '';
-                                                                            (document.getElementById('compra_dia_pago') as HTMLSelectElement).value = item.diaPago || '';
-                                                                            (document.getElementById('compra_nota') as HTMLInputElement).value = item.nota || '';
-                                                                            // Scroll to top of tab
-                                                                            document.getElementById('compra_proveedor')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                                                            toast.info('Modificando presupuesto...');
-                                                                        }}
-                                                                    >
-                                                                        Editar
-                                                                    </button>
-                                                                    <button 
-                                                                        className="text-rose-500 hover:text-rose-400 p-1"
-                                                                        onClick={() => {
-                                                                            const updated = presupuestosMinimos.filter((l: any) => l.id !== item.id);
-                                                                            setPresupuestosMinimos(updated);
-                                                                            localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
-                                                                        }}
-                                                                    >
+                                                                        onClick={() => { setExpandedPresId(isOpen ? null : item.id); setPresLinea({ producto: '', cantidad: '', montoReal: '' }); }}
+                                                                        className={cn("text-[9px] font-black uppercase px-2.5 py-1.5 rounded-lg border transition-all",
+                                                                            isOpen ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20")}
+                                                                    >{isOpen ? '▲ Cerrar' : '📦 Registrar'}</button>
+                                                                    <button
+                                                                        onClick={() => savePresCompras(presupuestosMinimos.map((l: any) => l.id === item.id ? { ...l, estado: l.estado === 'completado' ? 'pendiente' : 'completado' } : l))}
+                                                                        className={cn("text-[9px] font-bold px-2.5 py-1.5 rounded-lg uppercase border transition-all",
+                                                                            item.estado === 'completado' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30" : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30")}
+                                                                    >{item.estado === 'completado' ? '✓ Comprado' : '⏳ Pendiente'}</button>
+                                                                    <button className="text-indigo-400 hover:text-indigo-300 text-[9px] font-bold uppercase tracking-wider"
+                                                                        onClick={() => { setEditCompraId(item.id); (document.getElementById('compra_proveedor') as HTMLInputElement).value = item.proveedor; (document.getElementById('compra_monto') as HTMLInputElement).value = item.monto.toString(); (document.getElementById('compra_baja') as HTMLInputElement).value = item.montoBaja ? item.montoBaja.toString() : ''; (document.getElementById('compra_frecuencia') as HTMLSelectElement).value = item.frecuencia; (document.getElementById('compra_dia_pedido') as HTMLSelectElement).value = item.diaPedido || ''; (document.getElementById('compra_dia_pago') as HTMLSelectElement).value = item.diaPago || ''; (document.getElementById('compra_nota') as HTMLInputElement).value = item.nota || ''; document.getElementById('compra_proveedor')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); toast.info('Modificando presupuesto...'); }}
+                                                                    >Editar</button>
+                                                                    <button className="text-rose-500 hover:text-rose-400 p-1"
+                                                                        onClick={() => savePresCompras(presupuestosMinimos.filter((l: any) => l.id !== item.id))}>
                                                                         <Trash2 className="w-3.5 h-3.5" />
                                                                     </button>
                                                                 </div>
                                                             </div>
+                                                            {/* BARRA DE PROGRESO */}
+                                                            {lineas.length > 0 && (
+                                                                <div className="px-3 pb-1">
+                                                                    <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+                                                                        <div className={cn("h-full rounded-full transition-all duration-700", pctUsado >= 100 ? 'bg-rose-500' : pctUsado >= 80 ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${Math.min(100, pctUsado)}%` }} />
+                                                                    </div>
+                                                                    <p className="text-[9px] text-muted-foreground mt-0.5 text-right">{pctUsado.toFixed(0)}% · {formatCurrency(Math.max(0, limiteActual - totalReal))} disponible</p>
+                                                                </div>
+                                                            )}
+                                                            {/* PANEL EXPANDIBLE */}
+                                                            {isOpen && (
+                                                                <div className="border-t border-border bg-slate-100/50 dark:bg-slate-950/40 px-3 py-3 space-y-3">
+                                                                    {/* MEDIDOR */}
+                                                                    <div className={cn("rounded-xl p-3 border text-center transition-colors", restante < 0 ? "border-rose-500/40 bg-rose-500/10 dark:bg-rose-950/30" : restante < limiteActual * 0.2 ? "border-amber-500/40 bg-amber-500/10 dark:bg-amber-950/20" : "border-emerald-500/30 bg-emerald-500/10 dark:bg-emerald-950/20")}>
+                                                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-0.5">Disponible del presupuesto</p>
+                                                                        <p className={cn("text-2xl font-black tabular-nums", restante < 0 ? "text-rose-600 dark:text-rose-400" : restante < limiteActual * 0.2 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400")}>
+                                                                            {restante < 0 ? `−${formatCurrency(Math.abs(restante))} sobrepasado` : formatCurrency(restante)}
+                                                                        </p>
+                                                                        <div className="mt-2 h-2 rounded-full bg-slate-200 dark:bg-white/5 overflow-hidden">
+                                                                            <div className={cn("h-full rounded-full transition-all duration-500", pctConForm >= 100 ? 'bg-rose-500' : pctConForm >= 80 ? 'bg-amber-500' : 'bg-emerald-500')} style={{ width: `${Math.min(100, pctConForm)}%` }} />
+                                                                        </div>
+                                                                        <p className="text-[9px] text-muted-foreground mt-1">{formatCurrency(totalConForm)} de {formatCurrency(limiteActual)} ({pctConForm.toFixed(0)}%)</p>                                                                      </div>
+                                                                      {/* SUGERENCIA IA */}
+                                                                      {restante > 0 && (() => {
+                                                                          const currentProv = proveedores?.find(prov => prov.nombre.toLowerCase().replace(/[\s-]/g, '') === item.proveedor.toLowerCase().replace(/[\s-]/g, ''));
+                                                                          if (!currentProv || !precios || !productos) return null;
+                                                                          const provPrices = precios.filter(p => p.proveedorId === currentProv.id && p.precioCosto > 0).sort((a, b) => b.precioCosto - a.precioCosto);
+                                                                          if (provPrices.length === 0) return null;
+                                                                          
+                                                                          let target = restante;
+                                                                          const suggestions = [];
+                                                                          for (const p of provPrices) {
+                                                                              if (target >= p.precioCosto) {
+                                                                                  const qty = Math.floor(target / p.precioCosto);
+                                                                                  const prodObj = productos.find(prod => prod.id === p.productoId);
+                                                                                  if (prodObj) {
+                                                                                      suggestions.push(`${qty}x ${prodObj.nombre}`);
+                                                                                      target -= (qty * p.precioCosto);
+                                                                                  }
+                                                                              }
+                                                                          }
+                                                                          
+                                                                          if (suggestions.length === 0) return null;
+                                                                          
+                                                                          return (
+                                                                              <div className="flex items-start gap-2 bg-indigo-500/10 border border-indigo-500/20 p-2.5 rounded-xl">
+                                                                                  <Bot className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                                                                                  <p className="text-[10.5px] leading-relaxed font-medium text-indigo-700 dark:text-indigo-300">
+                                                                                      <span className="font-black tracking-wider uppercase text-[9px] mb-1 block">💡 Estrategia IA:</span>
+                                                                                      Para completar $({formatCurrency(item.monto)}) pide:<br/>
+                                                                                      <span className="font-bold text-indigo-600 dark:text-indigo-400">$({suggestions.join(' + ')})</span>
+                                                                                  </p>
+                                                                              </div>
+                                                                          );
+                                                                      })()}
+                                                                      {/* CHIPS HISTORIAL */}
+                                                                    {historial.length > 0 && (
+                                                                        <div className="space-y-1.5">
+                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-violet-600 dark:text-violet-400">✨ Comprados antes — toca para pre-llenar</p>
+                                                                            <div className="flex flex-wrap gap-1.5">
+                                                                                {historial.map((hp, idx) => (
+                                                                                    <button key={idx}
+                                                                                        onClick={() => setPresLinea({ producto: hp.producto, cantidad: String(hp.cantidad || ''), montoReal: String(hp.montoReal || '') })}
+                                                                                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-violet-100 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 hover:bg-violet-200 dark:hover:bg-violet-500/25 transition-all">
+                                                                                        <span className="text-[11px] font-bold text-violet-700 dark:text-violet-300">{hp.producto}</span>
+                                                                                        {hp.montoReal > 0 && <span className="text-[9px] text-violet-500/70 dark:text-violet-400/70 font-black">{formatCurrency(hp.montoReal)}</span>}
+                                                                                    </button>
+                                                                                ))}
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                    {/* LÍNEAS REGISTRADAS */}
+                                                                    {lineas.length > 0 && (
+                                                                        <div className="space-y-1">
+                                                                            <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">Registrado en esta compra</p>
+                                                                            {lineas.map((r: any) => (
+                                                                                <div key={r.id} className="flex items-center gap-2 bg-white dark:bg-white/5 border border-slate-200 dark:border-transparent rounded-lg px-2 py-1.5">
+                                                                                    <span className="flex-1 text-xs font-bold text-foreground truncate">{r.producto}</span>
+                                                                                    <span className="text-[10px] text-muted-foreground shrink-0">{r.cantidad > 0 ? `${r.cantidad} und` : ''}</span>
+                                                                                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 shrink-0">{formatCurrency(r.montoReal)}</span>
+                                                                                    <button onClick={() => removePresLinea(item.id, r.id)} className="text-rose-500 dark:text-rose-400 hover:text-rose-600 dark:hover:text-rose-300 shrink-0"><XCircle className="w-3.5 h-3.5" /></button>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                    {/* FORMULARIO */}
+                                                                    <div className="space-y-2">
+                                                                        <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">+ Agregar producto</p>
+                                                                        <div className="grid grid-cols-3 gap-1.5">
+                                                                            <input placeholder="Producto (ej: Gaseosa 2L)" value={presLinea.producto} onChange={e => {
+                                                                                const val = e.target.value;
+                                                                                const currentProv = proveedores?.find(prov => prov.nombre.toLowerCase().replace(/[\s-]/g, '') === item.proveedor.toLowerCase().replace(/[\s-]/g, ''));
+                                                                                const prod = productos?.find(p => p.nombre.toLowerCase().trim() === val.toLowerCase().trim());
+                                                                                let newMonto = presLinea.montoReal;
+                                                                                let newCant = presLinea.cantidad;
+                                                                                if (prod) {
+                                                                                    newCant = newCant || '1';
+                                                                                    let calcPrecio = prod.precioCompra || prod.costoCalculado || 0;
+                                                                                    if (currentProv && precios) {
+                                                                                        const precioObj = precios.find(precio => precio.productoId === prod.id && precio.proveedorId === currentProv.id);
+                                                                                        if (precioObj && precioObj.precioCosto > 0) calcPrecio = precioObj.precioCosto;
+                                                                                    }
+                                                                                    if (calcPrecio > 0) newMonto = String(calcPrecio * Number(newCant));
+                                                                                }
+                                                                                setPresLinea(p => ({ ...p, producto: val, cantidad: newCant, montoReal: newMonto }));
+                                                                            }} list={`cat-prod-${item.id}`}
+                                                                                className="col-span-3 sm:col-span-1 h-8 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground" />
+                                                                            <datalist id={`cat-prod-${item.id}`}>
+                                                                                {productos?.filter(p => {
+                                                                                    const currentProv = proveedores?.find(prov => prov.nombre.toLowerCase().replace(/[\s-]/g, '') === item.proveedor.toLowerCase().replace(/[\s-]/g, ''));
+                                                                                    if (!currentProv || !precios) return true;
+                                                                                    return precios.some(precio => precio.productoId === p.id && precio.proveedorId === currentProv.id);
+                                                                                }).map(p => <option key={p.id} value={p.nombre}>{p.tipo}</option>)}
+                                                                            </datalist>
+                                                                            <input placeholder="Cantidad" type="number" value={presLinea.cantidad} onChange={e => {
+                                                                                const val = e.target.value;
+                                                                                const currentProv = proveedores?.find(prov => prov.nombre.toLowerCase().replace(/[\s-]/g, '') === item.proveedor.toLowerCase().replace(/[\s-]/g, ''));
+                                                                                const prod = productos?.find(p => p.nombre.toLowerCase().trim() === presLinea.producto.toLowerCase().trim());
+                                                                                let newMonto = presLinea.montoReal;
+                                                                                if (prod) {
+                                                                                    let calcPrecio = prod.precioCompra || prod.costoCalculado || 0;
+                                                                                    if (currentProv && precios) {
+                                                                                        const precioObj = precios.find(precio => precio.productoId === prod.id && precio.proveedorId === currentProv.id);
+                                                                                        if (precioObj && precioObj.precioCosto > 0) calcPrecio = precioObj.precioCosto;
+                                                                                    }
+                                                                                    if (calcPrecio > 0) newMonto = String(calcPrecio * (Number(val) || 0));
+                                                                                }
+                                                                                setPresLinea(p => ({ ...p, cantidad: val, montoReal: newMonto }));
+                                                                            }}
+                                                                                className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground" />
+                                                                            <input placeholder="$ Monto real" type="number" value={presLinea.montoReal} onChange={e => setPresLinea(p => ({ ...p, montoReal: e.target.value }))}
+                                                                                className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground" />
+                                                                        </div>
+                                                                        {Number(presLinea.montoReal) > 0 && restante < 0 && (
+                                                                            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-rose-100 dark:bg-rose-500/10 border border-rose-300 dark:border-rose-500/30">
+                                                                                <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
+                                                                                <div className="flex flex-col">
+                                                                                    <p className="text-[10px] font-black text-rose-600 dark:text-rose-400">Te pasas {formatCurrency(Math.abs(restante))} del presupuesto</p>
+                                                                                    <p className="text-[8px] font-medium text-rose-600/70 dark:text-rose-400/70">Puedes agregarlo si es una excepción justificada.</p>
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
+                                                                        <button onClick={() => addPresLinea(item.id)} disabled={!presLinea.producto.trim()}
+                                                                            className="w-full h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1">
+                                                                            <Plus className="w-3 h-3" /> Agregar línea
+                                                                        </button>
+
+                                                                        {lineas.length > 0 && (
+                                                                            <button onClick={() => setRecepcionModal({ ...item, lineas })}
+                                                                                className="w-full h-8 mt-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1">
+                                                                                <CheckCircle2 className="w-3 h-3" /> Confirmar e Ingresar
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     );
                                                 })}
@@ -967,18 +1223,18 @@ export default function Reportes(props: ReportesProps) {
                             {detallesModal === 'proveedores' && 'Tope de Proveedores'}
                             {detallesModal === 'fijos' && 'Gastos Fijos y Nómina'}
                             {detallesModal === 'diarios' && 'Gastos Operativos (Diarios)'}
-                            {detallesModal === 'neta' && 'Ganancia Neta'}
+                            {detallesModal === 'neta' && 'Saldo operativo'}
                             {detallesModal === 'ventas_hoy' && 'Detalle Ventas de Hoy'}
                             {detallesModal === 'proyeccion_ventas' && 'Proyección de Ventas'}
                             {detallesModal === 'proyeccion_costos' && 'Proyección de Costos'}
                             {detallesModal === 'proyeccion_compromisos' && 'Proyección de Compromisos'}
                         </DialogTitle>
                         <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
-                            {detallesModal === 'ingresos' && 'Suma total del efectivo de cajas y métodos digitales de las ventas de la quincena.'}
-                            {detallesModal === 'proveedores' && 'Lista de todos los presupuestos activos proyectados como tope para esta quincena.'}
-                            {detallesModal === 'fijos' && 'Compromisos fijos que tocan pago en esta quincena.'}
+                            {detallesModal === 'ingresos' && 'Ventas POS + cierres de caja (solo días sin POS) + reintegro de salidas del turno.'}
+                            {detallesModal === 'proveedores' && 'Tope presupuestado de compras (referencia). No se resta del saldo operativo: si pagaste proveedor desde caja, ya está en gastos diarios.'}
+                            {detallesModal === 'fijos' && 'Compromisos fijos que tocan pago en este periodo.'}
                             {detallesModal === 'diarios' && 'Salidas de caja diarias durante el turno.'}
-                            {detallesModal === 'neta' && 'Cálculo final: Ingresos - (Proveedores + Fijos + Diarios).'}
+                            {detallesModal === 'neta' && 'Cálculo: Ingresos − Fijos − Gastos diarios. Los topes de proveedores son solo referencia.'}
                             {detallesModal === 'ventas_hoy' && 'Desglose exacto de las ventas registradas el día de hoy.'}
                             {detallesModal === 'proyeccion_ventas' && 'Cálculo estimado basado en tu promedio de ventas diarias y los días que faltan para terminar la quincena.'}
                             {detallesModal === 'proyeccion_costos' && 'Se asume que la mitad de lo vendido se reinvierte en materia prima para seguir produciendo.'}
@@ -990,8 +1246,12 @@ export default function Reportes(props: ReportesProps) {
                         {detallesModal === 'ingresos' && (
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20">
-                                    <span className="text-sm font-bold text-emerald-400">Ingreso por Ventas POS</span>
-                                    <span className="text-sm font-black text-emerald-500">{formatCurrency(quincenaReal.ventasTotal)}</span>
+                                    <span className="text-sm font-bold text-emerald-400">Ventas POS</span>
+                                    <span className="text-sm font-black text-emerald-500">{formatCurrency(quincenaReal.ventasPOS)}</span>
+                                </div>
+                                <div className="flex justify-between items-center bg-cyan-500/10 p-3 rounded-xl border border-cyan-500/20">
+                                    <span className="text-sm font-bold text-cyan-400">Cierres de caja (días sin POS)</span>
+                                    <span className="text-sm font-black text-cyan-500">{formatCurrency(quincenaReal.ventasManuales)}</span>
                                 </div>
                                 <div className="flex justify-between items-center bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
                                     <span className="text-sm font-bold text-rose-400">Reintegro de Gastos Diarios</span>
@@ -1040,12 +1300,28 @@ export default function Reportes(props: ReportesProps) {
 
                         {detallesModal === 'fijos' && (
                             <div className="space-y-2">
-                                {compromisos.length === 0 && <p className="text-center text-xs text-muted-foreground py-4">No hay compromisos fijos activos</p>}
-                                {compromisos.filter(c => c.activo).map((c, i) => (
+                                {compromisos.filter(c => {
+                                    if (!c.activo) return false;
+                                    if (periodoFiltro.quincena === 'mes') return true;
+                                    if (c.frecuencia === 'quincenal') return true;
+                                    if (c.frecuencia === 'solo_q1') return periodoFiltro.quincena === '1';
+                                    if (c.frecuencia === 'solo_q2') return periodoFiltro.quincena === '2';
+                                    const d = typeof c.diaDeCobro === 'number' ? c.diaDeCobro : parseInt(String(c.diaDeCobro)) || 1;
+                                    return periodoFiltro.quincena === '1' ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
+                                }).length === 0 && <p className="text-center text-xs text-muted-foreground py-4">No hay compromisos fijos en este periodo</p>}
+                                {compromisos.filter(c => {
+                                    if (!c.activo) return false;
+                                    if (periodoFiltro.quincena === 'mes') return true;
+                                    if (c.frecuencia === 'quincenal') return true;
+                                    if (c.frecuencia === 'solo_q1') return periodoFiltro.quincena === '1';
+                                    if (c.frecuencia === 'solo_q2') return periodoFiltro.quincena === '2';
+                                    const d = typeof c.diaDeCobro === 'number' ? c.diaDeCobro : parseInt(String(c.diaDeCobro)) || 1;
+                                    return periodoFiltro.quincena === '1' ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
+                                }).map((c, i) => (
                                     <div key={i} className="flex justify-between items-center bg-slate-50 dark:bg-card/50 p-3 rounded-xl border border-slate-200 dark:border-white/5">
                                         <div>
                                             <p className="text-xs font-bold text-slate-900 dark:text-white">{c.nombre}</p>
-                                            <p className="text-[10px] text-muted-foreground">{c.categoria} - Día {c.diaDeCobro}</p>
+                                            <p className="text-[10px] text-muted-foreground">{c.categoria} - Día {c.diaDeCobro}{c.frecuencia ? ` · ${c.frecuencia}` : ''}</p>
                                         </div>
                                         <span className="text-sm font-black text-violet-500">{formatCurrency(c.monto)}</span>
                                     </div>
@@ -1085,23 +1361,28 @@ export default function Reportes(props: ReportesProps) {
                                     <span className="text-sm font-black text-emerald-500">{formatCurrency(diagnosticoFinanciero.ingresos)}</span>
                                 </div>
                                 <div className="flex justify-between items-center bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
-                                    <span className="text-sm font-bold text-amber-400">- Proveedores (Tope)</span>
-                                    <span className="text-sm font-black text-amber-500">- {formatCurrency(diagnosticoFinanciero.compras)}</span>
+                                    <span className="text-sm font-bold text-amber-400">Tope proveedores (solo referencia)</span>
+                                    <span className="text-sm font-black text-amber-500">{formatCurrency(diagnosticoFinanciero.compras)}</span>
                                 </div>
                                 <div className="flex justify-between items-center bg-violet-500/10 p-3 rounded-xl border border-violet-500/20">
-                                    <span className="text-sm font-bold text-violet-400">- Gastos Fijos</span>
+                                    <span className="text-sm font-bold text-violet-400">− Gastos Fijos</span>
                                     <span className="text-sm font-black text-violet-500">- {formatCurrency(diagnosticoFinanciero.fijos)}</span>
                                 </div>
                                 <div className="flex justify-between items-center bg-rose-500/10 p-3 rounded-xl border border-rose-500/20">
-                                    <span className="text-sm font-bold text-rose-400">- Gastos Diarios</span>
+                                    <span className="text-sm font-bold text-rose-400">− Gastos Diarios</span>
                                     <span className="text-sm font-black text-rose-500">- {formatCurrency(diagnosticoFinanciero.operativos)}</span>
                                 </div>
                                 <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-card/60 rounded-2xl border border-slate-200 dark:border-white/10 mt-4 shadow-lg">
-                                    <span className="text-sm font-black uppercase text-slate-900 dark:text-white">Ganancia Neta Real</span>
+                                    <span className="text-sm font-black uppercase text-slate-900 dark:text-white">Saldo operativo</span>
                                     <span className={cn("text-2xl font-black", diagnosticoFinanciero.gananciaNeta >= 0 ? "text-emerald-500" : "text-rose-500")}>
                                         {formatCurrency(diagnosticoFinanciero.gananciaNeta)}
                                     </span>
                                 </div>
+                                {typeof diagnosticoFinanciero.estimadoTrasTopes === 'number' && (
+                                    <p className="text-[11px] text-muted-foreground text-center">
+                                        Si gastaras el tope completo de proveedores: ≈ {formatCurrency(diagnosticoFinanciero.estimadoTrasTopes)}
+                                    </p>
+                                )}
                             </div>
                         )}
 
@@ -1235,7 +1516,90 @@ export default function Reportes(props: ReportesProps) {
                 </DialogContent>
             </Dialog>
 
+            {/* Modal Confirmacion Rapida Recepcion */}
+            <Dialog open={!!recepcionModal} onOpenChange={(open) => !open && setRecepcionModal(null)}>
+                <DialogContent className="max-w-md bg-card/95 backdrop-blur-xl border-white/10 rounded-[2rem] p-6 shadow-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                            <Package className="w-5 h-5 text-indigo-500" />
+                            Ingreso Rápido de Inventario
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-slate-500 dark:text-slate-400">
+                            Confirma los datos para ingresar el pedido estándar de <b>{recepcionModal?.proveedor}</b> al inventario.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-2">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Fecha de Recepción</Label>
+                                <Input type="date" className="h-9 text-xs font-bold bg-background/50 border-input" 
+                                    value={recepcionForm.fecha} 
+                                    onChange={e => setRecepcionForm(f => ({ ...f, fecha: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">No. Factura (Opcional)</Label>
+                                <Input placeholder="Opcional" className="h-9 text-xs font-bold bg-background/50 border-input" 
+                                    value={recepcionForm.factura} 
+                                    onChange={e => setRecepcionForm(f => ({ ...f, factura: e.target.value }))} />
+                            </div>
+                        </div>
+
+                        <div className="space-y-1">
+                            <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Método de Pago</Label>
+                            <select className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                value={recepcionForm.metodoPago} 
+                                onChange={e => setRecepcionForm(f => ({ ...f, metodoPago: e.target.value, cajaOrigenId: '' }))}>
+                                <option value="efectivo">Efectivo en Caja</option>
+                                <option value="boveda">Pago desde Bóveda</option>
+                                <option value="credito">Dejar a Crédito</option>
+                            </select>
+                        </div>
+
+                        {recepcionForm.metodoPago === 'efectivo' && (
+                            <div className="space-y-1">
+                                <Label className="text-[10px] uppercase font-black tracking-widest text-muted-foreground">Caja de Origen</Label>
+                                <select className="flex h-9 w-full rounded-md border border-input bg-background/50 px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                    value={recepcionForm.cajaOrigenId} 
+                                    onChange={e => setRecepcionForm(f => ({ ...f, cajaOrigenId: e.target.value }))}>
+                                    <option value="" disabled>Seleccionar caja...</option>
+                                    <option value={cajaActiva?.id}>Caja Principal (Turno Actual)</option>
+                                    {cajas?.filter((c: any) => c.id !== cajaActiva?.id && c.estado === 'abierta').map((c: any) => (
+                                        <option key={c.id} value={c.id}>Otra: {c.usuarioNombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        <div className="rounded-xl border border-input bg-black/5 dark:bg-white/5 p-3 mt-4 max-h-40 overflow-y-auto space-y-1">
+                            <p className="text-[9px] uppercase font-black text-muted-foreground mb-2">Resumen de Productos ({recepcionModal?.lineas?.length})</p>
+                            {recepcionModal?.lineas?.map((l: any, i: number) => (
+                                <div key={i} className="flex justify-between items-center text-xs">
+                                    <span className="font-bold">{l.cantidad}x {l.producto}</span>
+                                    <span className="font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(l.montoReal)}</span>
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex justify-between items-center pt-2 border-t border-input mt-2">
+                            <span className="text-sm font-black text-slate-500">Total a Pagar:</span>
+                            <span className="text-lg font-black text-foreground">
+                                {formatCurrency(recepcionModal?.lineas?.reduce((acc: number, l: any) => acc + (Number(l.montoReal) || 0), 0) || 0)}
+                            </span>
+                        </div>
+
+                        <Button onClick={handleConfirmarRecepcionDirecta} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-500/25 h-12">
+                            Confirmar Ingreso y Pago
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
+
+
+
+
 

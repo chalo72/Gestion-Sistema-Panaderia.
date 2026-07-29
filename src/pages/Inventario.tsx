@@ -356,7 +356,8 @@ export function Inventario({
         const sinContar = inventarioConProducto.filter(i => getFreshness(lastCounted[i.productoId]) === 'nunca').length;
         const viejos = inventarioConProducto.filter(i => getFreshness(lastCounted[i.productoId]) === 'viejo').length;
         const saludPct = total > 0 ? Math.round((ok / total) * 100) : 0;
-        const valorTotal = inventarioConProducto.reduce((s, i) => s + (i.stockActual * (i.producto?.precioVenta || 0)), 0);
+        // Valor a costo (lo invertido en stock), no a precio de venta
+        const valorTotal = inventarioConProducto.reduce((s, i) => s + (i.stockActual * (i.producto?.costoBase || 0)), 0);
         const urgentes = bajo + agotado + sinContar + viejos;
         return { total, ok, bajo, agotado, sinContar, viejos, saludPct, valorTotal, urgentes };
     }, [inventarioConProducto, lastCounted]);
@@ -884,7 +885,7 @@ export function Inventario({
                     <div className="bg-gradient-to-r from-indigo-600 to-violet-600 rounded-2xl p-5 text-white shadow-lg shadow-indigo-500/20">
                         <p className="text-xs font-black uppercase tracking-widest text-indigo-200 mb-1">Valor total del inventario</p>
                         <p className="text-3xl font-black">{formatCurrency(stats.valorTotal)}</p>
-                        <p className="text-xs text-indigo-300 mt-1">Basado en precios de venta × stock actual</p>
+                        <p className="text-xs text-indigo-300 mt-1">Basado en costo × stock actual (lo invertido)</p>
                     </div>
 
                     {/* Rotación rápida */}
@@ -1778,9 +1779,17 @@ export function Inventario({
                         </div>
                         <div className="p-6 space-y-4">
                             <div>
-                                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Cantidad</p>
+                                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">
+                                    {ajusteModal.tipo === 'ajuste' ? 'Nuevo stock (cantidad absoluta)' : 'Cantidad'}
+                                </p>
                                 <Input type="number" autoFocus value={ajusteCantidad} onChange={e => setAjusteCantidad(e.target.value)}
-                                    placeholder="0" className="h-14 text-2xl font-black text-center rounded-xl" />
+                                    placeholder={ajusteModal.tipo === 'ajuste' ? 'Ej: 25 (queda en 25)' : '0'}
+                                    className="h-14 text-2xl font-black text-center rounded-xl" />
+                                {ajusteModal.tipo === 'ajuste' && (
+                                    <p className="text-[10px] text-muted-foreground mt-1.5">
+                                        No suma ni resta: deja el inventario exactamente en este número.
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <p className="text-xs font-black uppercase tracking-widest text-muted-foreground mb-2">Motivo</p>

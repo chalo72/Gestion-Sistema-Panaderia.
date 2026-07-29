@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { Configuracion, MonedaCode } from '@/types';
+import { ARROBA_KG } from '@/types';
 
 interface ConfiguracionProps {
   configuracion: Configuracion;
@@ -41,7 +42,7 @@ function Configuracion(props: ConfiguracionProps) {
   const [notificaciones, setNotificaciones] = useState(true);
   const [presupuesto, setPresupuesto] = useState('0');
   const [latasPorHorno, setLatasPorHorno] = useState('4');
-  const [pesoArrobaKg, setPesoArrobaKg] = useState('11.5');
+  const [pesoArrobaKg, setPesoArrobaKg] = useState('12.5');
   const [showConfirmClear, setShowConfirmClear] = useState(false);
   const [isRecovering, setIsRecovering] = useState(false);
   const [migrando, setMigrando] = useState(false);
@@ -73,7 +74,7 @@ function Configuracion(props: ConfiguracionProps) {
       setTelefonoNegocio(configuracion.telefonoNegocio || '');
       setWhatsappApiKey(configuracion.whatsappApiKey || '');
       setLatasPorHorno((configuracion.latasPorHorno || 4).toString());
-      setPesoArrobaKg((configuracion.pesoArrobaKg || 11.5).toString());
+      setPesoArrobaKg((configuracion.pesoArrobaKg || ARROBA_KG).toString());
     }
   }, [configuracion]);
 
@@ -101,7 +102,7 @@ function Configuracion(props: ConfiguracionProps) {
         publicUrl: publicUrl.trim(),
         aiMode: aiMode,
         latasPorHorno: parseInt(latasPorHorno) || 4,
-        pesoArrobaKg: parseFloat(pesoArrobaKg) || 11.5,
+        pesoArrobaKg: parseFloat(pesoArrobaKg) || ARROBA_KG,
         telefonoNegocio: telefonoNegocio.trim(),
         whatsappApiKey: whatsappApiKey.trim(),
       };

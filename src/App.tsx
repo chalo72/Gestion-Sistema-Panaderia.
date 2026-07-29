@@ -13,8 +13,10 @@ import {
 import { usePriceControl } from '@/hooks/usePriceControl';
 import { useAuth, useCan } from '@/contexts/AuthContext';
 import { useTheme } from '@/hooks/useTheme';
+import { usePermisosModulos } from '@/hooks/usePermisosModulos';
 import { Toaster, toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { puedeAccederVista } from '@/lib/view-guards';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/layout/PageTransition';
@@ -26,40 +28,42 @@ import type { ViewType } from '@/types';
 import Dashboard from '@/pages/Dashboard';
 import { Login } from '@/pages/Login';
 
-// Lazy — se cargan solo cuando el usuario navega a esa sección
-const Productos          = lazy(() => import('@/pages/Productos'));
-const Ventas             = lazy(() => import('@/pages/Ventas').then(m => ({ default: m.Ventas })));
-const Inventario         = lazy(() => import('@/pages/Inventario'));
-const PrePedidos         = lazy(() => import('@/pages/PrePedidos'));
-const Recepciones        = lazy(() => import('@/pages/Recepciones'));
+// Lazy — se cargan solo cuando el usuario navega a esa sección (Módulos pesados o poco frecuentes)
 const Alertas            = lazy(() => import('@/pages/Alertas').then(m => ({ default: m.Alertas })));
-const Produccion         = lazy(() => import('@/pages/Produccion').then(m => ({ default: m.Produccion })));
-const Recetas            = lazy(() => import('@/pages/Recetas'));
 const Configuracion      = lazy(() => import('@/pages/Configuracion'));
 const Usuarios           = lazy(() => import('@/pages/Usuarios').then(m => ({ default: m.Usuarios })));
 const RoleManager        = lazy(() => import('@/pages/RoleManager'));
-const ControlCaja        = lazy(() => import('@/pages/ControlCaja').then(m => ({ default: m.ControlCaja })));
-const Ahorros            = lazy(() => import('@/pages/Ahorros'));
-const CreditosClientes   = lazy(() => import('@/pages/CreditosClientes'));
 const AgentesIA          = lazy(() => import('@/pages/AgentesIA'));
 const Videovigilancia    = lazy(() => import('@/pages/Videovigilancia').then(m => ({ default: m.Videovigilancia })));
 const HistorialVentas    = lazy(() => import('@/pages/HistorialVentas'));
-const Oficina            = lazy(() => import('@/pages/Oficina'));
 const Trabajadores       = lazy(() => import('@/pages/Trabajadores'));
 const Asistencia         = lazy(() => import('@/pages/Asistencia'));
 const Nomina             = lazy(() => import('@/pages/Nomina'));
-const Gastos             = lazy(() => import('@/pages/Gastos'));
-const Proveedores        = lazy(() => import('@/pages/Proveedores'));
-const Mayoristas         = lazy(() => import('@/pages/Mayoristas'));
-const Reportes           = lazy(() => import('@/pages/Reportes'));
-const Precios            = lazy(() => import('@/pages/Precios'));
 const CargaMasiva        = lazy(() => import('@/pages/CargaMasiva'));
 const ListaPreciosProvincial = lazy(() => import('@/pages/ListaPreciosProvincial'));
-const Clientes           = lazy(() => import('@/pages/Clientes'));
 const Seguridad          = lazy(() => import('@/pages/Seguridad'));
 const Comunicaciones     = lazy(() => import('@/pages/Comunicaciones'));
 const Boveda             = lazy(() => import('@/pages/Boveda'));
 const Inversiones        = lazy(() => import('@/pages/Inversiones'));
+const Mayoristas         = lazy(() => import('@/pages/Mayoristas'));
+const Ahorros            = lazy(() => import('@/pages/Ahorros'));
+const PrePedidos         = lazy(() => import('@/pages/PrePedidos'));
+const Recepciones        = lazy(() => import('@/pages/Recepciones'));
+
+// Carga Inmediata — Módulos principales del negocio (Navegación instantánea a costo de un inicio un poco más pesado)
+const Productos = lazy(() => import('@/pages/Productos'));
+const Ventas = lazy(() => import('@/pages/Ventas').then(m => ({ default: m.Ventas })));
+const Inventario = lazy(() => import('@/pages/Inventario'));
+const Produccion = lazy(() => import('@/pages/Produccion').then(m => ({ default: m.Produccion })));
+const Recetas = lazy(() => import('@/pages/Recetas'));
+const ControlCaja = lazy(() => import('@/pages/ControlCaja').then(m => ({ default: m.ControlCaja })));
+const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
+const Oficina = lazy(() => import('@/pages/Oficina'));
+const Gastos = lazy(() => import('@/pages/Gastos'));
+const Proveedores = lazy(() => import('@/pages/Proveedores'));
+const Reportes = lazy(() => import('@/pages/Reportes'));
+const Precios = lazy(() => import('@/pages/Precios'));
+const Clientes = lazy(() => import('@/pages/Clientes'));
 
 // Fallback de carga entre páginas
 const PageLoader = () => (
@@ -72,6 +76,8 @@ const App = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const { theme, setTheme } = useTheme();
   const { usuario: user, logout, isLoading: isAuthLoading } = useAuth();
+  const { check, isAdmin, role } = useCan();
+  const { puedeVer } = usePermisosModulos();
   const { 
     productos, 
     proveedores, 
@@ -235,6 +241,29 @@ const App = () => {
     // Si hay usuario activo pero la vista es login → redirigir inmediatamente al dashboard
     if (user && currentView === 'login') return null;
     if (!user && currentView !== 'login') return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
+
+    // Candado de vista (mismo criterio que el menú). ADMIN siempre pasa.
+    if (
+      user &&
+      !puedeAccederVista(currentView, { isAdmin, role, check, puedeVer })
+    ) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4 px-6">
+          <ShieldCheck className="w-14 h-14 text-slate-400" />
+          <p className="text-lg font-black uppercase tracking-widest text-slate-500">Sin acceso</p>
+          <p className="text-sm text-slate-400 text-center max-w-sm">
+            No tienes permiso para esta pantalla. Si la necesitas, pídeselo al administrador.
+          </p>
+          <Button
+            type="button"
+            onClick={() => setCurrentView('dashboard')}
+            className="rounded-xl font-bold"
+          >
+            Ir al Centro de Mando
+          </Button>
+        </div>
+      );
+    }
 
     switch (currentView) {
       case 'dashboard':
@@ -462,7 +491,7 @@ const App = () => {
           />
         );
       case 'ahorro':
-        return <Ahorros ahorros={ahorros} ventas={ventas} formatCurrency={formatCurrency} />;
+        return <Ahorros ahorros={ahorros} ventas={ventas} gastos={gastos} formatCurrency={formatCurrency} />;
       case 'creditos':
         return (
           <CreditosClientes 
@@ -565,11 +594,35 @@ const App = () => {
             gastos={gastos}
             productos={productos}
             proveedores={proveedores}
+            precios={precios}
             generarReporte={generarReporte}
             formatCurrency={formatCurrency}
             formulaciones={formulaciones}
             modelosPan={modelosPan}
             onNavigateTo={(view: any) => setCurrentView(view)}
+            cajaActiva={cajaActiva}
+            onAddRecepcion={onAddRecepcion}
+            onConfirmarRecepcion={async (recepcion) => {
+              const pedidoVinculado = prepedidos.find(p => p.id === recepcion.prePedidoId);
+              await onConfirmarRecepcion(recepcion, pedidoVinculado);
+              
+              if (recepcion.totalFactura > 0) {
+                 const metodoPago = recepcion.metodoPago || 'efectivo';
+                 const estadoGasto = metodoPago === 'credito' ? 'pendiente' : 'pagado';
+                 await addGasto({
+                     descripcion: `Compra Mercancía: Factura #${recepcion.numeroFactura || 'S/N'}`,
+                     monto: recepcion.totalFactura,
+                     categoria: 'Materia Prima',
+                     fecha: recepcion.fechaFactura || new Date().toISOString(),
+                     estado: estadoGasto,
+                     proveedorId: recepcion.proveedorId,
+                     metodoPago,
+                     cajaOrigenId: recepcion.cajaOrigenId,
+                     usuarioId: user?.id || 'sistema',
+                     comprobanteUrl: recepcion.imagenFactura,
+                 });
+              }
+            }}
           />
         );
       case 'boveda':
@@ -659,16 +712,18 @@ const App = () => {
               const pedidoVinculado = prepedidos.find(p => p.id === recepcion.prePedidoId);
               await onConfirmarRecepcion(recepcion, pedidoVinculado);
               
-              // Sincronización Automática con Gastos (Fase 3 Auditoría Financiera)
+              // Gasto refleja forma de pago real (crédito → pendiente; no forzar efectivo/pagado)
               if (recepcion.totalFactura > 0) {
+                 const metodoPago = recepcion.metodoPago || 'efectivo';
+                 const estadoGasto = metodoPago === 'credito' ? 'pendiente' : 'pagado';
                  await addGasto({
                      descripcion: `Compra Mercancía: Factura #${recepcion.numeroFactura || 'S/N'}`,
                      monto: recepcion.totalFactura,
                      categoria: 'Materia Prima',
                      fecha: recepcion.fechaFactura || new Date().toISOString(),
-                     estado: 'pagado',
+                     estado: estadoGasto,
                      proveedorId: recepcion.proveedorId,
-                     metodoPago: 'efectivo',
+                     metodoPago,
                      usuarioId: user?.id || 'sistema',
                      comprobanteUrl: recepcion.imagenFactura,
                  });

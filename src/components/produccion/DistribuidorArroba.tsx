@@ -9,7 +9,8 @@ import { Badge } from '@/components/ui/badge';
 import { Calculator, PieChart, ArrowRight, Wand2, PlusCircle, CheckCircle2, AlertTriangle, Layers3, Flame, Trash2, Plus, ClipboardCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { FormulacionBase, ModeloPan, Venta } from '@/types';
+import type { FormulacionBase, ModeloPan, Venta, Producto } from '@/types';
+import { ARROBA_KG } from '@/types';
 
 interface DistribuidorArrobaProps {
   productos?: Producto[];
@@ -25,8 +26,6 @@ interface DistribuidorArrobaProps {
   onSimulationChange?: (formId: string, arrobas: number) => void;
   onGuardarAuditoria?: (cortes: { modeloId: string; cantidad: number; pesoCrudoTotal: number; porcentajeArroba: number }[], formId: string, arrobas: number, masaTotalKg: number, masaConsumidaKg: number, masaLibreKg: number) => void;
 }
-
-const ARROBA_KG = 11.5;
 
 export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, onAñadirAlPlan, onSimulationChange, onGuardarAuditoria }: DistribuidorArrobaProps) {
   const [formId, setFormId] = useState<string>('');

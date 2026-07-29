@@ -110,6 +110,7 @@ export interface IDatabase {
   getAllAlertas(): Promise<any[]>;
   addAlerta(a: any): Promise<void>;
   updateAlerta(a: any): Promise<void>;
+  deleteAlerta(id: string): Promise<void>;
   clearAllAlertas(): Promise<void>;
 
   getAgenteMisiones(agenteId?: string): Promise<any[]>;
@@ -467,6 +468,7 @@ class NexusDatabase implements IDatabase {
   async getAllAlertas() { return this.adapter.getCollection('alertas'); }
   async addAlerta(a: any) { return this.adapter.setDocument('alertas', a.id, a); }
   async updateAlerta(a: any) { return this.adapter.setDocument('alertas', a.id, a); }
+  async deleteAlerta(id: string) { return this._delete('alertas', id); }
   async clearAllAlertas() {
     const alertas = await this.adapter.getCollection<any>('alertas');
     for (const a of alertas) await this._delete('alertas', a.id);

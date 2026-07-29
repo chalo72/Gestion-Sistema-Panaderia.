@@ -107,3 +107,39 @@ export function addMovimientoBoveda(data: Omit<MovimientoBoveda, 'id' | 'fecha'>
   saveMovimientos([nuevo, ...getMovimientosBoveda()]);
   return nuevo;
 }
+
+/** Respaldo JSON para copiar bóveda entre aparatos (hoy vive solo en este navegador). */
+export type BovedaBackup = {
+  version: 1;
+  exportadoEn: string;
+  bovedas: Boveda[];
+  movimientos: MovimientoBoveda[];
+};
+
+export function exportBovedaBackup(): string {
+  const payload: BovedaBackup = {
+    version: 1,
+    exportadoEn: new Date().toISOString(),
+    bovedas: getBovedas(),
+    movimientos: getMovimientosBoveda(),
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+export function importBovedaBackup(json: string): { ok: true } | { ok: false; error: string } {
+  try {
+    const parsed: unknown = JSON.parse(json);
+    if (!parsed || typeof parsed !== 'object') {
+      return { ok: false, error: 'El archivo no es un JSON válido' };
+    }
+    const obj = parsed as Record<string, unknown>;
+    if (!Array.isArray(obj.bovedas) || !Array.isArray(obj.movimientos)) {
+      return { ok: false, error: 'Faltan bóvedas o movimientos en el respaldo' };
+    }
+    saveBovedas(obj.bovedas as Boveda[]);
+    saveMovimientos(obj.movimientos as MovimientoBoveda[]);
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'No se pudo leer el archivo de respaldo' };
+  }
+}

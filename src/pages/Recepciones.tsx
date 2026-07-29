@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/database';
-import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor } from '@/types';
+import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor, MetodoPago } from '@/types';
 import { procesarImagenFactura, matchProductoEnCatalogo, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import type { Categoria as CategoriaTipo } from '@/types';
@@ -159,6 +159,7 @@ export default function Recepciones({
         imagenFactura: string | null;
         items: RecepcionItem[];
         observaciones: string;
+        metodoPago: MetodoPago;
     }>({
         proveedorId: '',
         prePedidoId: undefined,
@@ -166,7 +167,8 @@ export default function Recepciones({
         fechaFactura: new Date().toISOString().split('T')[0],
         imagenFactura: null,
         items: [],
-        observaciones: ''
+        observaciones: '',
+        metodoPago: 'efectivo',
     });
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -648,7 +650,8 @@ export default function Recepciones({
             fechaFactura: new Date().toISOString().split('T')[0],
             imagenFactura: null,
             items,
-            observaciones: ''
+            observaciones: '',
+            metodoPago: recepcion.metodoPago || 'efectivo',
         });
         setView('new');
         toast.success(`${items.length} productos cargados de la recepción anterior`);
@@ -729,7 +732,8 @@ export default function Recepciones({
                 recibidoPor: usuario?.nombre || usuario?.email || 'Sistema',
                 fechaRecepcion: new Date().toISOString(),
                 imagenFactura: newRecepcion.imagenFactura || undefined,
-                observaciones: newRecepcion.observaciones
+                observaciones: newRecepcion.observaciones,
+                metodoPago: newRecepcion.metodoPago,
             };
 
             await onAddRecepcion(recepcionCompleta as any);
@@ -779,7 +783,8 @@ export default function Recepciones({
                 fechaFactura: new Date().toISOString().split('T')[0],
                 imagenFactura: null,
                 items: [],
-                observaciones: ''
+                observaciones: '',
+                metodoPago: 'efectivo',
             });
         } catch (error) {
             console.error(error);
@@ -1385,6 +1390,31 @@ export default function Recepciones({
                                     placeholder="Notas..." rows={2}
                                     className="hidden sm:block h-12 px-2 py-1.5 rounded-xl bg-white/10 border border-white/10 text-[10px] text-white placeholder:text-white/30 outline-none resize-none w-28"
                                 />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[9px] font-black uppercase tracking-widest text-indigo-300/80">
+                                    Forma de pago de la factura
+                                </label>
+                                <select
+                                    value={newRecepcion.metodoPago}
+                                    onChange={e => setNewRecepcion(p => ({
+                                        ...p,
+                                        metodoPago: e.target.value as MetodoPago,
+                                    }))}
+                                    className="w-full h-10 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold px-3 outline-none"
+                                >
+                                    <option value="efectivo" className="text-slate-900">Efectivo (pagado)</option>
+                                    <option value="transferencia" className="text-slate-900">Transferencia (pagado)</option>
+                                    <option value="nequi" className="text-slate-900">Nequi (pagado)</option>
+                                    <option value="tarjeta" className="text-slate-900">Tarjeta (pagado)</option>
+                                    <option value="credito" className="text-slate-900">Crédito / fiado (pendiente)</option>
+                                    <option value="otro" className="text-slate-900">Otro</option>
+                                </select>
+                                {newRecepcion.metodoPago === 'credito' && (
+                                    <p className="text-[10px] text-amber-300/90 font-medium">
+                                        El egreso quedará como pendiente (aún no pagado).
+                                    </p>
+                                )}
                             </div>
                             <button
                                 disabled={newRecepcion.items.length === 0}

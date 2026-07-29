@@ -26,6 +26,32 @@ function guardarIngresos(lista: (Gasto & { esIngreso: true })[]) {
     try { localStorage.setItem(INGRESOS_KEY, JSON.stringify(lista)); } catch {}
 }
 
+function exportarIngresosJson(lista: (Gasto & { esIngreso: true })[]): string {
+    return JSON.stringify({
+        version: 1,
+        exportadoEn: new Date().toISOString(),
+        ingresos: lista,
+    }, null, 2);
+}
+
+function importarIngresosJson(json: string): { ok: true; ingresos: (Gasto & { esIngreso: true })[] } | { ok: false; error: string } {
+    try {
+        const parsed: unknown = JSON.parse(json);
+        if (!parsed || typeof parsed !== 'object') {
+            return { ok: false, error: 'El archivo no es un JSON válido' };
+        }
+        const obj = parsed as Record<string, unknown>;
+        const lista = Array.isArray(obj.ingresos) ? obj.ingresos : Array.isArray(parsed) ? parsed : null;
+        if (!lista) return { ok: false, error: 'No se encontraron ingresos en el archivo' };
+        return {
+            ok: true,
+            ingresos: lista.map((item) => ({ ...(item as Gasto), esIngreso: true as const })),
+        };
+    } catch {
+        return { ok: false, error: 'No se pudo leer el archivo' };
+    }
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface GastosProps {
     gastos: Gasto[];
@@ -348,6 +374,70 @@ export default function Gastos({
                 formatCurrency={formatCurrency}
                 isOnline={isOnline}
             />
+
+            {/* Ingresos extras viven solo en este aparato */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-amber-800 dark:text-amber-200">Ingresos extras: solo en este aparato</p>
+                    <p className="text-xs font-medium text-amber-700/90 dark:text-amber-300/80 mt-0.5">
+                        No se copian solos a otro celular. Exporta un respaldo si vas a cambiar de equipo.
+                    </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            try {
+                                const blob = new Blob([exportarIngresosJson(ingresos)], { type: 'application/json' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `ingresos-extras-${new Date().toISOString().slice(0, 10)}.json`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                                toast.success('Respaldo de ingresos descargado');
+                            } catch {
+                                toast.error('No se pudo exportar');
+                            }
+                        }}
+                        className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200"
+                    >
+                        Exportar
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => document.getElementById('ingresos-import-file')?.click()}
+                        className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200"
+                    >
+                        Importar
+                    </button>
+                    <input
+                        id="ingresos-import-file"
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                const text = typeof reader.result === 'string' ? reader.result : '';
+                                const result = importarIngresosJson(text);
+                                if (!result.ok) {
+                                    toast.error(result.error);
+                                    return;
+                                }
+                                setIngresos(result.ingresos);
+                                guardarIngresos(result.ingresos);
+                                toast.success('Ingresos restaurados en este aparato');
+                            };
+                            reader.onerror = () => toast.error('No se pudo leer el archivo');
+                            reader.readAsText(file);
+                        }}
+                    />
+                </div>
+            </div>
 
             <input
                 id="receipt-upload"

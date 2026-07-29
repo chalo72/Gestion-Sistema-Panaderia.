@@ -6,13 +6,14 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Lock, ArrowRightLeft, TrendingDown, TrendingUp, PiggyBank, Building2, PlusCircle, History, AlertCircle, CheckCircle, BrainCircuit, Bot } from 'lucide-react';
+import { Lock, ArrowRightLeft, TrendingDown, TrendingUp, PiggyBank, Building2, PlusCircle, History, AlertCircle, CheckCircle, BrainCircuit, Bot, Download, Upload } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
-  getBovedas, saveBovedas, addBoveda, updateBovedaSaldo,
-  getMovimientosBoveda, addMovimientoBoveda, 
+  getBovedas, addBoveda,
+  getMovimientosBoveda, addMovimientoBoveda,
+  exportBovedaBackup, importBovedaBackup,
   type Boveda, type MovimientoBoveda, type TipoMovimientoBoveda 
 } from '@/lib/boveda-store';
 import { cn } from '@/lib/utils';
@@ -60,6 +61,39 @@ export default function BovedaPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleExportarRespaldo = () => {
+    try {
+      const json = exportBovedaBackup();
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `boveda-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Respaldo descargado — guárdalo en otro lugar seguro');
+    } catch {
+      toast.error('No se pudo exportar el respaldo');
+    }
+  };
+
+  const handleImportarRespaldo = (file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      const result = importBovedaBackup(text);
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      loadData();
+      toast.success('Respaldo restaurado en este aparato');
+    };
+    reader.onerror = () => toast.error('No se pudo leer el archivo');
+    reader.readAsText(file);
+  };
 
   const totalGlobal = useMemo(() => bovedas.reduce((acc, b) => acc + b.saldo, 0), [bovedas]);
 
@@ -256,6 +290,26 @@ export default function BovedaPage() {
             </div>
           </div>
           <div className="flex gap-2 flex-wrap">
+            <Button onClick={handleExportarRespaldo} variant="outline" className="rounded-xl font-black text-xs uppercase h-11 border-slate-200 text-slate-600 hover:bg-slate-50 gap-2">
+              <Download className="w-4 h-4" /> Exportar
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-xl font-black text-xs uppercase h-11 border-slate-200 text-slate-600 hover:bg-slate-50 gap-2"
+              onClick={() => document.getElementById('boveda-import-file')?.click()}
+            >
+              <Upload className="w-4 h-4" /> Importar
+            </Button>
+            <input
+              id="boveda-import-file"
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(e) => {
+                handleImportarRespaldo(e.target.files?.[0] ?? null);
+                e.target.value = '';
+              }}
+            />
             <Button onClick={pedirAuditoriaIA} variant="outline" className="rounded-xl font-black text-xs uppercase h-11 border-indigo-200 text-indigo-600 hover:bg-indigo-50 gap-2">
               <BrainCircuit className="w-4 h-4" /> Auditoría IA
             </Button>
@@ -268,6 +322,17 @@ export default function BovedaPage() {
             <Button onClick={() => { setTipoMov('Transferencia'); setShowMovimiento(true); }} className="rounded-xl font-black text-xs uppercase h-11 bg-indigo-600 hover:bg-indigo-700 text-white">
               <ArrowRightLeft className="w-4 h-4 mr-2" /> Transferir
             </Button>
+          </div>
+        </div>
+
+        {/* Aviso: datos solo en este aparato */}
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-black text-amber-800 dark:text-amber-200">Solo en este celular o PC</p>
+            <p className="text-xs font-medium text-amber-700/90 dark:text-amber-300/80 mt-0.5">
+              La bóveda aún no se copia sola a la nube. Si cambias de aparato, usa Exportar aquí e Importar allá (como pasar la libreta de saldos).
+            </p>
           </div>
         </div>
 

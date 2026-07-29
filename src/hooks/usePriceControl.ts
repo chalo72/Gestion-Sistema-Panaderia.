@@ -17,6 +17,7 @@ import type {
   Cliente,
   RegistroAsistencia,
 } from '@/types';
+import { ARROBA_KG } from '@/types';
 import { toast } from 'sonner';
 
 import { safeNumber } from '@/lib/safe-utils';
@@ -47,7 +48,7 @@ const defaultConfig: Configuracion = {
   presupuestoMensual: 0,
   aiMode: 'hybrid', // ✅ Campo requerido por la interfaz Configuracion
   latasPorHorno: 4,
-  pesoArrobaKg: 11.5,
+  pesoArrobaKg: ARROBA_KG, // 12.5 kg — báscula oficial
 };
 
 // PROTEGIDO: No modificar sin revisión. Hook principal de gestión de precios, inventario y ventas validado en producción.
@@ -166,6 +167,11 @@ export function usePriceControl() {
           unidades: config.unidades || config.metadata?.unidades || defaultConfig.unidades,
           destinos: config.destinos || config.metadata?.destinos || (defaultConfig as any).destinos,
         } as Configuracion : defaultConfig;
+
+        // Migración suave: báscula oficial 12.5 kg (antes 11.5 en varias pantallas)
+        if (finalConfig.pesoArrobaKg == null || finalConfig.pesoArrobaKg === 11.5) {
+          finalConfig = { ...finalConfig, pesoArrobaKg: ARROBA_KG };
+        }
 
         // ✅ FIX: Normalizar nombres para comparación (evitar duplicados por mayúsculas/espacios)
         const normalizar = (s: string) => s.toLowerCase().trim();

@@ -921,7 +921,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                         {
                             n: 1,
                             titulo: 'Fórmula Maestra',
-                            desc: 'Define qué ingredientes lleva tu masa y en qué proporción por arroba (11.5 kg de harina).',
+                            desc: 'Define qué ingredientes lleva tu masa y en qué proporción por arroba (12.5 kg de harina).',
                             accion: 'Nueva Fórmula Maestra',
                             onClick: openCreateFormulacion,
                             done: tieneFormulas,
@@ -1631,7 +1631,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                         {editingFormulacion ? 'Editar Fórmula Maestra' : 'Nueva Fórmula Maestra'}
                                     </DialogTitle>
                                     <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                                        Proporciones por arroba · 11.5 kg de harina
+                                        Proporciones por arroba · 12.5 kg de harina
                                     </DialogDescription>
                                 </div>
                             </div>

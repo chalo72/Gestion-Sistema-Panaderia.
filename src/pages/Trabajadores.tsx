@@ -171,13 +171,16 @@ export default function Trabajadores({
         setIsSavingAcceso(true);
         try {
             const username = (trabajadorParaAcceso.email?.trim() || trabajadorParaAcceso.nombre.toLowerCase().replace(/\s+/g, '.')).toLowerCase();
+            // Hashear antes de guardar — no afecta logins legacy del Director (Auth acepta plano y hash)
+            const { hashPassword } = await import('@/lib/safe-utils');
+            const passwordHasheada = await hashPassword(accesoPassword.trim());
             const ok = await addUsuario({
                 email: username,
                 nombre: trabajadorParaAcceso.nombre.split(' ')[0],
                 apellido: trabajadorParaAcceso.nombre.split(' ').slice(1).join(' ') || '',
                 rol: ROL_TO_SYSTEM_ROLE[trabajadorParaAcceso.rol],
                 activo: true,
-                password: accesoPassword,
+                password: passwordHasheada,
             });
             if (ok) {
                 toast.success(`Acceso creado para ${trabajadorParaAcceso.nombre}`);

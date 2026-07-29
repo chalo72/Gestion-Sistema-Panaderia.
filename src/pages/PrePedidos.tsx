@@ -80,7 +80,13 @@ interface PrePedidosProps {
   getMejorPrecioByProveedor: (productoId: string, proveedorId: string) => PrecioProveedor | undefined;
   getPreciosByProveedor: (proveedorId: string) => PrecioProveedor[];
   formatCurrency: (amount: number) => string;
-  onAjustarStock: (productoId: string, cantidad: number, motivo: string) => void;
+  /** tipo debe ser 'entrada' | 'salida' | 'ajuste' — si se omite, el motor interpreta el 3.er arg como tipo y puede RESTAR stock */
+  onAjustarStock: (
+    productoId: string,
+    cantidad: number,
+    tipo: 'entrada' | 'salida' | 'ajuste',
+    motivo: string
+  ) => void;
   onGenerarSugerencias: () => Promise<number>;
   onNavigateToRecepciones?: () => void;
 }
@@ -209,12 +215,19 @@ export default function PrePedidos({
       }
     } else {
       if (confirm(`¿Seguro que deseas hacer una entrada rápida (ajuste de stock automático sin registro de factura)?`)) {
-        // Ajustar inventario para cada item
-        pedido.items.forEach(item => {
-          onAjustarStock(item.productoId, item.cantidad, `Recepcion OC: ${pedido.nombre}`);
-        });
-        onUpdatePrePedido(pedido.id, { estado: 'recibido' });
-        toast.success('Entrada rápida completada e inventario actualizado');
+        // Sumar stock: el 3.er argumento DEBE ser 'entrada' (firma real en useInventario)
+        void (async () => {
+          for (const item of pedido.items) {
+            await onAjustarStock(
+              item.productoId,
+              item.cantidad,
+              'entrada',
+              `Recepcion OC: ${pedido.nombre}`
+            );
+          }
+          onUpdatePrePedido(pedido.id, { estado: 'recibido' });
+          toast.success('Entrada rápida completada e inventario actualizado');
+        })();
       }
     }
   };

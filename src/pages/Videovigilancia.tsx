@@ -154,8 +154,8 @@ export function Videovigilancia() {
       setAnalizando(true);
       try {
         const contexto = `Estas viendo la cámara: ${camara.nombre}. Tu misión es buscar anomalías (gente inactiva, suciedad, fuego, robo). Si todo está normal di "NORMAL: Todo en orden". Si ves algo extraño lanza "ALERTA: [Descripción]". Responde muy corto.`;
-        // En una app real, frame iría en el tercer parámetro. Si falla por CORS, enviamos undefined.
-        const res = await consultarAgente('odysseus', contexto, frame || undefined);
+        // Firma: (tipo, mensaje, onChunk, imagen?, contexto?) — frame va en imagen, no como 3er arg.
+        const res = await consultarAgente('odysseus', contexto, () => {}, frame || undefined);
         
         const esAlerta = res.toLowerCase().includes('alerta') || res.toLowerCase().includes('anomalía');
         agregarLog(`[${camara.nombre}] ${res.trim()}`, esAlerta);

@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import type { Producto, AlertaPrecio } from '@/types';
 import { FindingsFeed } from '@/components/agentes/FindingsFeed';
 import { FinancialDashboard } from '@/components/FinancialDashboard';
+import { ManoDerechaDirector } from '@/components/dashboard/mano-derecha-director';
 
 // Fallback preventivo (Hoisted safe)
 const LayoutList = LayoutListIcon || Package;
@@ -69,6 +70,7 @@ export default function Dashboard(props: DashboardProps) {
     estadisticas,
     alertas,
     onMarcarAlertaLeida,
+    onViewAlertas,
     onViewProductos,
     onViewProveedores,
     onViewRecepciones,
@@ -77,6 +79,7 @@ export default function Dashboard(props: DashboardProps) {
     onViewAhorros,
     getProductoById,
     formatCurrency,
+    nombre,
     ventas
   } = props;
 
@@ -155,6 +158,22 @@ export default function Dashboard(props: DashboardProps) {
       <DashboardHeader
         onViewVentas={onViewVentas}
         onViewProductos={onViewProductos}
+        onViewRecepciones={onViewRecepciones}
+      />
+
+      {/* Mano derecha del Director — pulso, dinero, producción, 3 decisiones */}
+      <ManoDerechaDirector
+        nombre={nombre}
+        ingresosHoy={Number(estadisticas.ingresosHoy || 0)}
+        gastosHoy={Number(estadisticas.gastosHoy || 0)}
+        ventasHoy={Number(estadisticas.ventasHoy || 0)}
+        itemsBajoStock={Number(estadisticas.itemsBajoStock || 0)}
+        alertasNoLeidas={alertasNoLeidas.length}
+        ventas={ventas}
+        formatCurrency={formatCurrency}
+        onViewVentas={onViewVentas}
+        onViewInventario={onViewInventario}
+        onViewAlertas={onViewAlertas}
         onViewRecepciones={onViewRecepciones}
       />
 

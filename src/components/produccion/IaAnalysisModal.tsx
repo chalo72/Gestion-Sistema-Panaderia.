@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Sparkles, Brain, Scale, ChefHat, Info } from 'lucide-react';
 import { formatMasaAmo, formatGramosAMedidas } from '@/helpers/pesoFormatter';
 import type { FormulacionBase, ModeloPan, PlanItem } from '@/types';
+import { ARROBA_KG } from '@/types';
 
 interface IaAnalysisModalProps {
   isOpen: boolean;
@@ -87,7 +88,7 @@ export function IaAnalysisModal({
             <li className="flex gap-3">
               <span className="shrink-0 mt-0.5">✂️</span>
               <div>
-                <strong>Producción planeada:</strong> Según los panes que has agregado, vas a gastar unos <strong>{formatMasaAmo((usedKg / (form?.rendimientoBaseKg || 11.5)))}</strong>.
+                <strong>Producción planeada:</strong> Según los panes que has agregado, vas a gastar unos <strong>{formatMasaAmo((usedKg / (form?.rendimientoBaseKg || ARROBA_KG)))}</strong>.
               </div>
             </li>
 
