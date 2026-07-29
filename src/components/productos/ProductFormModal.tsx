@@ -79,9 +79,9 @@ export function ProductFormModal({
 
     const margen      = parseFloat(formData.margenUtilidad) || 0;
     const pvpManual   = parseFloat(formData.precioVenta)    || 0;
-    const pvpSugerido = costoReal > 0 && margen > 0 ? costoReal * (1 + margen / 100) : null;
+    const pvpSugerido = costoReal > 0 && margen > 0 ? (margen < 100 ? costoReal / (1 - margen / 100) : costoReal * (1 + margen / 100)) : null;
     const margenReal  = pvpManual > 0 && costoReal > 0
-        ? ((pvpManual - costoReal) / costoReal) * 100
+        ? ((pvpManual - costoReal) / pvpManual) * 100
         : null;
 
     // Sincronizar costo calculado con el campo principal si la calculadora está activa
@@ -97,7 +97,7 @@ export function ProductFormModal({
     // Analisis IA Mayorista
     const descMayorista = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
     const precioMayoristaFinal = pvpManual > 0 ? pvpManual * (1 - descMayorista / 100) : 0;
-    const margenMayoristaFinal = costoReal > 0 && precioMayoristaFinal > 0 ? ((precioMayoristaFinal - costoReal) / costoReal) * 100 : 0;
+    const margenMayoristaFinal = costoReal > 0 && precioMayoristaFinal > 0 ? ((precioMayoristaFinal - costoReal) / precioMayoristaFinal) * 100 : 0;
 
     const handleCrearCategoria = async () => {
         if (!miniNombre.trim() || !onAddCategoria) return;
@@ -421,7 +421,7 @@ export function ProductFormModal({
                                             const precioNum = parseFloat(formData.precioVenta);
                                             // Si hay precio de venta, recalcular el margen
                                             if (!isNaN(costoNum) && costoNum > 0 && !isNaN(precioNum) && precioNum > 0) {
-                                                const nuevoMargen = ((precioNum - costoNum) / costoNum) * 100;
+                                                const nuevoMargen = ((precioNum - costoNum) / precioNum) * 100;
                                                 setFormData({ ...formData, precioCosto: newCosto, margenUtilidad: nuevoMargen.toFixed(1) });
                                             } else {
                                                 setFormData({ ...formData, precioCosto: newCosto });
@@ -509,7 +509,7 @@ export function ProductFormModal({
                                                 const precioNum = parseFloat(newPrecio);
                                                 // Si hay costo base, recalcular el margen automáticamente
                                                 if (costoReal > 0 && !isNaN(precioNum) && precioNum > 0) {
-                                                    const nuevoMargen = ((precioNum - costoReal) / costoReal) * 100;
+                                                    const nuevoMargen = ((precioNum - costoReal) / precioNum) * 100;
                                                     setFormData({ ...formData, precioVenta: newPrecio, margenUtilidad: nuevoMargen.toFixed(1) });
                                                 } else {
                                                     setFormData({ ...formData, precioVenta: newPrecio });
@@ -536,7 +536,7 @@ export function ProductFormModal({
                                                 const margenNum = parseFloat(newMargen);
                                                 // Si hay costo base, recalcular el precio automáticamente
                                                 if (costoReal > 0 && !isNaN(margenNum)) {
-                                                    const nuevoPrecio = Math.round(costoReal * (1 + margenNum / 100) / 100) * 100;
+                                                    const nuevoPrecio = margenNum < 100 ? Math.round(costoReal / (1 - margenNum / 100) / 100) * 100 : Math.round(costoReal * (1 + margenNum / 100) / 100) * 100;
                                                     setFormData({ ...formData, margenUtilidad: newMargen, precioVenta: nuevoPrecio > 0 ? nuevoPrecio.toString() : formData.precioVenta });
                                                 } else {
                                                     setFormData({ ...formData, margenUtilidad: newMargen });

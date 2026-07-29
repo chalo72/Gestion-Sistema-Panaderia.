@@ -352,7 +352,7 @@ export default function Productos({
                             // Costo unitario: preferir costoBase del producto; si no, calcular desde proveedor
                             const cb = Number(producto.costoBase || (mp ? mp.precioCosto / (mp.cantidadEmbalaje || 1) : 0));
                             const pv = Number(producto.precioVenta || 0);
-                            const ut = cb > 0 ? ((pv - cb) / cb) * 100 : 0;
+                            const ut = pv > 0 ? ((pv - cb) / pv) * 100 : 0;
                             return <ProductCard key={producto.id} producto={producto} mejorPrecio={mp} utilidad={ut}
                                 categoriaColor={getCategoriaColor(producto.categoria)} formatCurrency={formatCurrency}
                                 onEdit={handleEdit} onDelete={handleDelete}
@@ -381,7 +381,7 @@ export default function Productos({
                                     // Costo unitario: preferir costoBase del producto; si no, calcular desde proveedor
                                     const cb = Number(producto.costoBase || (mp ? mp.precioCosto / (mp.cantidadEmbalaje || 1) : 0));
                                     const pv = Number(producto.precioVenta || 0);
-                                    const ut = cb > 0 ? ((pv - cb) / cb) * 100 : 0;
+                                    const ut = pv > 0 ? ((pv - cb) / pv) * 100 : 0;
                                     const cc = getCategoriaColor(producto.categoria);
                                     const isExp = expandedProducto === producto.id;
                                     const pp = getPreciosByProducto(producto.id);
@@ -475,7 +475,7 @@ export default function Productos({
                                                                 <div className="text-center py-8 bg-white rounded-xl border border-dashed border-slate-200"><Building2 className="w-8 h-8 mx-auto mb-2 text-slate-200" /><p className="text-sm font-semibold text-slate-300">Sin proveedores vinculados</p></div>
                                                             ) : (
                                                                 <div className="space-y-2">{pp.map(precio => <ProductPriceItem key={precio.id} precio={precio} proveedor={getProveedorById(precio.proveedorId)}
-                                                                    utilidad={Number(precio.precioCosto) > 0 ? ((Number(producto.precioVenta) - Number(precio.precioCosto)) / Number(precio.precioCosto)) * 100 : 0}
+                                                                    utilidad={Number(producto.precioVenta) > 0 ? ((Number(producto.precioVenta) - Number(precio.precioCosto)) / Number(producto.precioVenta)) * 100 : 0}
                                                                     esMejorPrecio={mp?.id === precio.id} onDelete={onDeletePrecio} formatCurrency={formatCurrency} />)}</div>
                                                             )}
                                                         </div>
