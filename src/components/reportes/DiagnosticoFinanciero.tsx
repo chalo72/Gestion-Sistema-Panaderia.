@@ -1715,7 +1715,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 Object.entries(v.cajas).forEach(([k, val]) => {
                                                                     const lowerK = k.toLowerCase().trim();
                                                                     const mappedKey = keyMap[lowerK] || k;
-                                                                    normalizedCajas[mappedKey] = val;
+                                                                    normalizedCajas[mappedKey] = (normalizedCajas[mappedKey] || 0) + val;
                                                                 });
                                                             }
 
@@ -2855,3 +2855,4 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
         </TabsContent>
     );
 }
+
