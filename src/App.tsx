@@ -223,29 +223,7 @@ const App = () => {
     }
   }, [user, isAuthLoading, currentView]);
 
-  // ── PREFETCH DE MÓDULOS CRÍTICOS ──
-  // Descarga silenciosamente el código de las páginas principales en segundo plano
-  // para que al hacer clic en el menú, la pantalla cambie de inmediato sin "loaders".
-  useEffect(() => {
-    if (user && loaded) {
-      const timer = setTimeout(() => {
-        try {
-          import('@/pages/Reportes');
-          import('@/pages/Ventas');
-          import('@/pages/Productos');
-          import('@/pages/ControlCaja');
-          import('@/pages/Inventario');
-          import('@/pages/Produccion');
-          import('@/pages/Proveedores');
-          import('@/pages/Gastos');
-          import('@/pages/Precios');
-        } catch (e) {
-          console.debug('Prefetch modules error', e);
-        }
-      }, 2500);
-      return () => clearTimeout(timer);
-    }
-  }, [user, loaded]);
+
 
   if (isAuthLoading || !loaded) {
     return (
