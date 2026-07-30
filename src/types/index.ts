@@ -938,6 +938,7 @@ export interface CajaSesion {
   cajaNombre?: string;
   turno?: 'Mañana' | 'Tarde-Noche';
   vendedoraNombre?: string;
+  eventoEspecial?: string;
 }
 // ============================================
 // PRÉSTAMOS ENTRE CAJAS

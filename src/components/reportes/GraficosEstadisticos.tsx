@@ -151,6 +151,36 @@ export function GraficosEstadisticos({ data }: { data: any }) {
                             </Card>
                         ))}
                     </div>
+
+                    {/* Rendimiento de Eventos Especiales */}
+                    {data.eventosStats && data.eventosStats.length > 0 && (
+                        <div className="mt-8 space-y-4">
+                            <h3 className="text-lg font-black uppercase tracking-tighter flex items-center gap-2">
+                                <CalendarDays className="w-5 h-5 text-indigo-500" /> Rendimiento en Días de Subsidios / Eventos
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                {data.eventosStats.map((evt: any, i: number) => (
+                                    <Card key={i} className="rounded-[2rem] border-white/5 bg-card/40 backdrop-blur-md overflow-hidden shadow-lg hover:bg-card/60 transition-colors">
+                                        <CardContent className="p-5 flex items-center gap-4">
+                                            <div className="w-14 h-14 rounded-2xl bg-indigo-500/10 flex flex-col items-center justify-center shrink-0 border border-indigo-500/20">
+                                                <CalendarDays className="w-5 h-5 text-indigo-500 mb-1" />
+                                                <span className="text-[10px] font-black text-indigo-500 uppercase">{evt.diasCount} {evt.diasCount === 1 ? 'día' : 'días'}</span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-black uppercase tracking-widest text-muted-foreground truncate">{evt.evento}</p>
+                                                <p className="text-xl font-black text-foreground tabular-nums tracking-tighter">
+                                                    {data.formatCurrency(evt.total)}
+                                                </p>
+                                                <p className="text-[10px] font-bold text-emerald-500 flex items-center gap-1 mt-0.5">
+                                                    <TrendingUp className="w-3 h-3" /> Promedio: {data.formatCurrency(evt.promedioDiario)}/día
+                                                </p>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </TabsContent>
     );
 }

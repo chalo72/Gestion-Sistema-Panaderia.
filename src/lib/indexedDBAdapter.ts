@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from './dbAdapter';
+import { mergeHydrateItem } from './sync-merge-local-gana';
 
 /**
  * 🏠 INDEXEDDB ADAPTER — Dulce Placer ERP
@@ -250,10 +251,9 @@ export class IndexedDBAdapter implements DatabaseAdapter {
   // ─────────────────────────────────────────────
 
   /**
-   * Hidrata la base de datos local con datos provenientes de la nube.
-   * Usado al arrancar la app para cargar datos de Firebase → IndexedDB.
-   * @param collection - Nombre de la colección
-   * @param items - Array de documentos de la nube
+   * Hidrata IndexedDB con datos de la nube.
+   * LOCAL SIEMPRE GANA: si ya existe el id, se hace merge (nube solo rellena huecos).
+   * En `precios` protege cantidadEmbalaje, tipoEmbalaje y precioCosto locales.
    */
   async hydrateFromCloud<T extends { id: string }>(collection: string, items: T[]): Promise<void> {
     if (!items || items.length === 0) return;
@@ -276,10 +276,20 @@ export class IndexedDBAdapter implements DatabaseAdapter {
         const store = tx.objectStore(collection);
 
         for (const item of chunk) {
-          const request = store.put({ ...(item as any), id: item.id });
-          request.onerror = (e) => {
+          // get + merge + put en la misma tx (LOCAL GANA; nube solo llena huecos)
+          const getReq = store.get(item.id);
+          getReq.onsuccess = () => {
+            const existing = getReq.result as T | undefined;
+            const merged = mergeHydrateItem(collection, existing, { ...(item as T), id: item.id });
+            const putReq = store.put(merged);
+            putReq.onerror = (e) => {
+              errorOccurred = true;
+              console.error(`❌ [IndexedDB]: Error al hidratar en '${collection}' id='${item.id}'`, (e.target as IDBRequest).error);
+            };
+          };
+          getReq.onerror = (e) => {
             errorOccurred = true;
-            console.error(`❌ [IndexedDB]: Error al hidratar en '${collection}' id='${item.id}'`, (e.target as any).error);
+            console.error(`❌ [IndexedDB]: Error al leer local '${collection}' id='${item.id}'`, (e.target as IDBRequest).error);
           };
         }
 
@@ -297,7 +307,7 @@ export class IndexedDBAdapter implements DatabaseAdapter {
     }
 
     if (!errorOccurred) {
-      console.log(`☁️→🏠 [IndexedDB]: Hidratado '${collection}' con ${items.length} items de la nube (por chunks).`);
+      console.log(`☁️→🏠 [IndexedDB]: Hidratado '${collection}' con ${items.length} items (MERGE LOCAL GANA).`);
     }
   }
 

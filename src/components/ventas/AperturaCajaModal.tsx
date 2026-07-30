@@ -44,6 +44,15 @@ const TURNOS = [
 
 const EMOJIS_RAPIDOS = ['🏪','🍦','🍟','🍺','🎂','☕','🎁','🛒','💰','🍕','🥤','🍰','🧁','🛍️','🏬'];
 
+const EVENTOS_ESPECIALES = [
+    'Ninguno', 
+    'Pago Colombia Mayor', 
+    'Pago Ola Invernal', 
+    'Renta Ciudadana', 
+    'Quincena', 
+    'Día de la Madre'
+];
+
 interface CajaConfig { vendedoras: string[]; montoApertura: number; incluida: boolean; }
 
 interface AperturaCajaModalProps {
@@ -58,6 +67,7 @@ function configDefault(): CajaConfig {
 
 export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModalProps) {
     const [turno,           setTurno]           = useState<'Mañana' | 'Tarde' | 'Noche'>('Mañana');
+    const [evento,          setEvento]          = useState<string>('Ninguno');
     const [montoGlobal,     setMontoGlobal]     = useState<number>(0);
     const [usarMontoGlobal, setUsarMontoGlobal] = useState<boolean>(true);
     const [loading,         setLoading]         = useState(false);
@@ -203,6 +213,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                     cajaNombre:      caja.nombre,
                     turno,
                     vendedoraNombre: cfg.vendedoras.length > 0 ? cfg.vendedoras.join(', ') : undefined,
+                    eventoEspecial:  evento === 'Ninguno' ? undefined : evento
                 }));
             } catch { /* ignorar */ }
             await onAbrir(monto);
@@ -398,6 +409,25 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                     </button>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* Eventos Especiales */}
+                        <div className="space-y-2 mt-4">
+                            <label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                Evento de Ventas (Opcional)
+                            </label>
+                            <select
+                                value={evento}
+                                onChange={(e) => setEvento(e.target.value)}
+                                className="w-full h-12 px-4 rounded-xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-sm font-bold text-slate-700 dark:text-slate-300 outline-none focus:border-indigo-400 transition-all"
+                            >
+                                {EVENTOS_ESPECIALES.map(evt => (
+                                    <option key={evt} value={evt}>{evt}</option>
+                                ))}
+                            </select>
+                            <p className="text-[10px] text-slate-400 font-medium">
+                                Marca si hoy es día de pagos de subsidios para separar estas ventas en las métricas.
+                            </p>
                         </div>
 
                         {/* Efectivo inicial */}

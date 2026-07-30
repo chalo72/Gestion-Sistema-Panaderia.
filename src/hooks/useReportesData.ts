@@ -904,12 +904,45 @@ export function useReportesData(props: ReportesProps) {
         },
     ];
     
+    // --- ESTADÍSTICAS DE EVENTOS MASIVOS ---
+    const eventosStats = useMemo(() => {
+        const stats: Record<string, { total: number, dias: Set<string> }> = {};
+        
+        // Sumar ventas asociadas a cajas con eventos (modo POS moderno)
+        cajas.forEach(c => {
+            if (c.eventoEspecial && c.eventoEspecial !== 'Ninguno') {
+                if (!stats[c.eventoEspecial]) stats[c.eventoEspecial] = { total: 0, dias: new Set() };
+                stats[c.eventoEspecial].total += (c.totalVentasEfectivo || 0) + (c.totalCreditos || 0);
+                stats[c.eventoEspecial].dias.add(c.fechaApertura.slice(0, 10));
+            }
+        });
+        
+        // Sumar ventas manuales del pasado
+        ventasDiarias.forEach(v => {
+            if (v.evento && v.evento !== 'Ninguno') {
+                if (!stats[v.evento]) stats[v.evento] = { total: 0, dias: new Set() };
+                stats[v.evento].total += v.total;
+                stats[v.evento].dias.add(v.fecha);
+            }
+        });
+
+        return Object.entries(stats)
+            .map(([evento, data]) => ({
+                evento,
+                total: data.total,
+                diasCount: data.dias.size,
+                promedioDiario: data.dias.size > 0 ? data.total / data.dias.size : 0
+            }))
+            .sort((a, b) => b.total - a.total); // Mayor a menor
+    }, [cajas, ventasDiarias]);
+    
     return {
         role,
         currentMonth,
         reporteActual,
         comparativoData,
         proyeccion,
+        eventosStats,
         hoy: new Date(),
         diaActual: new Date().getDate(),
         diasDelMes: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate(),

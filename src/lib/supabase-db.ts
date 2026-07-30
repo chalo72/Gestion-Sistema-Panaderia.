@@ -245,17 +245,21 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async getPrecioByProductoProveedor(productoId: string, proveedorId: string): Promise<DBPrecio | undefined> {
+        // Puede haber varias presentaciones (bulto/unidad); tomamos la primera
         const { data, error } = await supabase.from('precios')
             .select('*')
             .eq('producto_id', productoId)
             .eq('proveedor_id', proveedorId)
-            .maybeSingle();
+            .limit(1);
         if (error) throw error;
-        return data ? this.mapPrecioFromDB(data) : undefined;
+        const row = Array.isArray(data) ? data[0] : data;
+        return row ? this.mapPrecioFromDB(row) : undefined;
     }
 
     async addPrecio(precio: DBPrecio): Promise<void> {
-        const { error } = await supabase.from('precios').upsert(this.mapPrecioToDB(precio), { onConflict: 'producto_id,proveedor_id' });
+        // Upsert por `id` (no por producto+proveedor): permite varias presentaciones
+        // del mismo producto (ej. bulto 50 kg y unidad) sin aplastarse entre sí.
+        const { error } = await supabase.from('precios').upsert(this.mapPrecioToDB(precio), { onConflict: 'id' });
         if (error) throw error;
     }
 

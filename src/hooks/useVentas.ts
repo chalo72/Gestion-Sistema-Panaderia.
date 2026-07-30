@@ -36,6 +36,17 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       toast.error('Monto de apertura inválido');
       throw new Error('Monto de apertura inválido');
     }
+
+    // Leer extras pasados por localStorage desde AperturaCajaModal
+    let extras: any = {};
+    try {
+      const raw = localStorage.getItem('dp_caja_extras');
+      if (raw) {
+        extras = JSON.parse(raw);
+        localStorage.removeItem('dp_caja_extras'); // Consumido
+      }
+    } catch (e) { /* ignore */ }
+
     const sesion: CajaSesion = {
       id: generateUUID(),
       usuarioId,
@@ -47,7 +58,11 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       montoCierre: undefined,
       estado: 'abierta',
       movimientos: [],
-      ventasIds: []
+      ventasIds: [],
+      cajaNombre: extras.cajaNombre,
+      turno: extras.turno,
+      vendedoraNombre: extras.vendedoraNombre,
+      eventoEspecial: extras.eventoEspecial
     };
     await db.addSesionCaja(sesion as any);
     _supaDB.addSesionCaja(sesion as any).catch(() => {});

@@ -13,6 +13,7 @@ import { SupabaseDatabase } from '@/lib/supabase-db';
 import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
 import { originalDbMethods, supabaseDB } from '@/lib/supabase-sync-bridge';
 import { db, localAdapter } from '@/lib/database';
+import { mergePrecioLocalGana } from '@/lib/sync-merge-local-gana';
 
 const _sdb = new SupabaseDatabase();
 
@@ -46,7 +47,13 @@ const HANDLERS: Record<string, Handler> = {
   precios: {
     localTableName:  'precios',
     getFromSupabase: () => _sdb.getAllPrecios(),
-    writeToLocal:    (d) => orig('updatePrecio', db.updatePrecio.bind(db))(d),
+    // LOCAL GANA: no pisar cantidadEmbalaje / precioCosto locales con nube incompleta
+    writeToLocal:    async (d) => {
+      const locales = await db.getAllPrecios().catch(() => [] as Array<{ id: string }>);
+      const local = locales.find((p) => p.id === d.id);
+      const merged = mergePrecioLocalGana(local, d);
+      return orig('updatePrecio', db.updatePrecio.bind(db))(merged);
+    },
     deleteFromLocal: (id) => orig('deletePrecio', db.deletePrecio.bind(db))(id),
   },
   ventas: {
