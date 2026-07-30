@@ -404,8 +404,14 @@ class NexusDatabase implements IDatabase {
 
   // Proveedores
   async getAllProveedores() { return this.adapter.getCollection('proveedores'); }
-  async addProveedor(p: any) { return this.adapter.setDocument('proveedores', p.id, p); }
-  async updateProveedor(p: any) { return this.adapter.setDocument('proveedores', p.id, p); }
+  async addProveedor(p: any) { 
+    await this.adapter.setDocument('proveedores', p.id, p); 
+    this._supabaseSync('add', 'proveedores', p);
+  }
+  async updateProveedor(p: any) { 
+    await this.adapter.setDocument('proveedores', p.id, p); 
+    this._supabaseSync('update', 'proveedores', p);
+  }
   async deleteProveedor(id: string) { return this._delete('proveedores', id); }
 
   // Precios
@@ -414,8 +420,14 @@ class NexusDatabase implements IDatabase {
     const precios = await this.getAllPrecios();
     return precios.find(p => p.productoId === productoId && p.proveedorId === proveedorId);
   }
-  async addPrecio(p: any) { return this.adapter.setDocument('precios', p.id, p); }
-  async updatePrecio(p: any) { return this.adapter.setDocument('precios', p.id, p); }
+  async addPrecio(p: any) { 
+    await this.adapter.setDocument('precios', p.id, p); 
+    this._supabaseSync('add', 'precios', p);
+  }
+  async updatePrecio(p: any) { 
+    await this.adapter.setDocument('precios', p.id, p); 
+    this._supabaseSync('update', 'precios', p);
+  }
   async deletePrecio(id: string) { return this._delete('precios', id); }
 
   // Lápidas (Tombstones para sincronización)
