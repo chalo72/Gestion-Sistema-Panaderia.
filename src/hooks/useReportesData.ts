@@ -127,7 +127,7 @@ const aplicarCogsAlReporte = <T extends { totalVentas: number; totalGastos: numb
 };
 
 export function useReportesData(props: ReportesProps) {
-    const { ventas, gastos, formatCurrency, generarReporte, productos = [], categorias = [], proveedores = [] } = props;
+    const { ventas, sesionesCaja = [], gastos, formatCurrency, generarReporte, productos = [], categorias = [], proveedores = [] } = props;
     
     
     const { role } = useAuth();
@@ -909,7 +909,7 @@ export function useReportesData(props: ReportesProps) {
         const stats: Record<string, { total: number, dias: Set<string> }> = {};
         
         // Sumar ventas asociadas a cajas con eventos (modo POS moderno)
-        cajas.forEach(c => {
+        sesionesCaja.forEach(c => {
             if (c.eventoEspecial && c.eventoEspecial !== 'Ninguno') {
                 if (!stats[c.eventoEspecial]) stats[c.eventoEspecial] = { total: 0, dias: new Set() };
                 stats[c.eventoEspecial].total += (c.totalVentasEfectivo || 0) + (c.totalCreditos || 0);
@@ -934,7 +934,7 @@ export function useReportesData(props: ReportesProps) {
                 promedioDiario: data.dias.size > 0 ? data.total / data.dias.size : 0
             }))
             .sort((a, b) => b.total - a.total); // Mayor a menor
-    }, [cajas, ventasDiarias]);
+    }, [sesionesCaja, ventasDiarias]);
     
     return {
         role,

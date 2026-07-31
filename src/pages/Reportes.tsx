@@ -86,6 +86,7 @@ import { Bot, Sparkles, Loader2 } from 'lucide-react';
 
 interface ReportesProps {
     ventas: Venta[];
+    sesionesCaja?: any[];
     gastos: Gasto[];
     formatCurrency: (value: number) => string;
     generarReporte: (periodo: string) => ReporteFinanciero;

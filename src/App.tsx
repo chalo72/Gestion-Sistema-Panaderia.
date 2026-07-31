@@ -592,8 +592,9 @@ const App = () => {
       case 'reportes':
         return (
           <Reportes 
-            ventas={ventas}
-            gastos={gastos}
+              ventas={ventas}
+              sesionesCaja={sesionesCaja}
+              gastos={gastos}
             productos={productos}
             proveedores={proveedores}
             precios={precios}
