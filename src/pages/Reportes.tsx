@@ -101,6 +101,7 @@ interface ReportesProps {
     cajaActiva?: any;
     onAddRecepcion?: (data: any) => Promise<any>;
     onConfirmarRecepcion?: (data: any) => Promise<void>;
+    addGasto?: (gasto: any) => Promise<void>;
 }
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
@@ -570,7 +571,7 @@ export default function Reportes(props: ReportesProps) {
                 {/* ══════════════════════════════════════════════════
                     TAB 4: MI QUINCENA
                 ══════════════════════════════════════════════════ */}
-                <DiagnosticoFinanciero data={{...reportesData, formatCurrency, ventas, gastos, formulaciones: props.formulaciones, modelosPan: props.modelosPan, onNavigateTo: props.onNavigateTo}} />
+                <DiagnosticoFinanciero data={{...reportesData, formatCurrency, ventas, gastos, formulaciones: props.formulaciones, modelosPan: props.modelosPan, onNavigateTo: props.onNavigateTo, addGasto: props.addGasto}} />
 
                 {/* ══════════════════════════════════════════════════
                     TAB: PRESUPUESTOS (COMPRAS)
@@ -1234,7 +1235,7 @@ export default function Reportes(props: ReportesProps) {
                             {detallesModal === 'ingresos' && 'Ventas POS + cierres de caja (solo días sin POS) + reintegro de salidas del turno.'}
                             {detallesModal === 'proveedores' && 'Tope presupuestado de compras (referencia). No se resta del saldo operativo: si pagaste proveedor desde caja, ya está en gastos diarios.'}
                             {detallesModal === 'fijos' && 'Compromisos fijos que tocan pago en este periodo.'}
-                            {detallesModal === 'diarios' && 'Salidas de caja diarias durante el turno.'}
+                            {detallesModal === 'diarios' && 'Salidas de caja del turno + gastos del registro rápido (módulo Gastos).'}
                             {detallesModal === 'neta' && 'Cálculo: Ingresos − Fijos − Gastos diarios. Los topes de proveedores son solo referencia.'}
                             {detallesModal === 'ventas_hoy' && 'Desglose exacto de las ventas registradas el día de hoy.'}
                             {detallesModal === 'proyeccion_ventas' && 'Cálculo estimado basado en tu promedio de ventas diarias y los días que faltan para terminar la quincena.'}
@@ -1335,19 +1336,50 @@ export default function Reportes(props: ReportesProps) {
                         )}
 
                         {detallesModal === 'diarios' && (
-                            <div className="space-y-2">
-                                {ventasDiarias.filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr && v.cajas && v.cajas['Gastos/Salidas']).length === 0 && <p className="text-center text-xs text-muted-foreground py-4">No hay gastos diarios en este periodo</p>}
-                                {ventasDiarias
-                                    .filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr && v.cajas && v.cajas['Gastos/Salidas'])
-                                    .map((v, i) => (
-                                        <div key={i} className="flex justify-between items-center bg-slate-50 dark:bg-card/50 p-3 rounded-xl border border-slate-200 dark:border-white/5">
-                                            <div>
-                                                <p className="text-xs font-bold text-slate-900 dark:text-white">{v.fecha}</p>
-                                                <p className="text-[10px] text-muted-foreground">Turno: {v.turno}</p>
-                                            </div>
-                                            <span className="text-sm font-black text-rose-500">{formatCurrency(v.cajas!['Gastos/Salidas'])}</span>
-                                        </div>
-                                    ))}
+                            <div className="space-y-3">
+                                {(() => {
+                                    const salidas = ventasDiarias.filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr && v.cajas && Number(v.cajas['Gastos/Salidas']) > 0);
+                                    const libreta = gastos.filter(g => {
+                                        if (g.estado === 'anulado') return false;
+                                        const f = (g.fecha || '').slice(0, 10);
+                                        return f >= quincenaReal.inicioStr && f <= quincenaReal.finStr;
+                                    });
+                                    if (salidas.length === 0 && libreta.length === 0) {
+                                        return <p className="text-center text-xs text-muted-foreground py-4">No hay gastos diarios en este periodo</p>;
+                                    }
+                                    return (
+                                        <>
+                                            {salidas.length > 0 && (
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Salidas de caja (cierres)</p>
+                                                    {salidas.map((v, i) => (
+                                                        <div key={`caja-${v.id || i}`} className="flex justify-between items-center bg-slate-50 dark:bg-card/50 p-3 rounded-xl border border-slate-200 dark:border-white/5">
+                                                            <div>
+                                                                <p className="text-xs font-bold text-slate-900 dark:text-white">{v.fecha}</p>
+                                                                <p className="text-[10px] text-muted-foreground">Turno: {v.turno}</p>
+                                                            </div>
+                                                            <span className="text-sm font-black text-rose-500">{formatCurrency(v.cajas!['Gastos/Salidas'])}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {libreta.length > 0 && (
+                                                <div className="space-y-2">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground px-1">Registro rápido / módulo Gastos</p>
+                                                    {libreta.map((g) => (
+                                                        <div key={g.id} className="flex justify-between items-center bg-rose-50/80 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-200/60 dark:border-rose-900/40">
+                                                            <div>
+                                                                <p className="text-xs font-bold text-slate-900 dark:text-white">{g.descripcion || 'Gasto'}</p>
+                                                                <p className="text-[10px] text-muted-foreground">{(g.fecha || '').slice(0, 10)} · {g.categoria}</p>
+                                                            </div>
+                                                            <span className="text-sm font-black text-rose-500">{formatCurrency(Number(g.monto) || 0)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                                 <div className="flex justify-between items-center p-3 border-t border-slate-200 dark:border-white/10 mt-2">
                                     <span className="text-sm font-black text-slate-900 dark:text-white">TOTAL GASTOS DIARIOS</span>
                                     <span className="text-lg font-black text-rose-500">{formatCurrency(diagnosticoFinanciero.operativos)}</span>

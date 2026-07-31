@@ -141,46 +141,9 @@ const Recetas: React.FC<RecetasProps> = ({
         }).catch(() => {});
     }, []);
 
-    // AUTO-HEAL: Corregir automáticamente costoUnitario con valores exorbitantes (ej. 50300)
-    useEffect(() => {
-        if (modelosPan.length === 0 || formulaciones.length === 0) return;
-        modelosPan.forEach(m => {
-            if ((m.costoUnitario > 10000 && m.pesoUnitarioGr < 1000) || m.margenPorcentaje < -100) {
-                const form = formulaciones.find(f => f.id === m.formulacionId);
-                if (form && form.rendimientoBaseKg > 0) {
-                    const costoPorGramo = form.costoTotalArroba / (form.rendimientoBaseKg * 1000);
-                    const costoMasaUnidad = (m.pesoUnitarioGr / (1 - ((m.mermaEstimada || 0) / 100))) * costoPorGramo;
-                    const costoInsumosAdicionales = (m.ingredientesAdicionales || []).reduce((sum, ing) => sum + (ing.costo || 0), 0);
-                    
-                    let costoVitinaUnidad = 0;
-                    if (m.piqueEmpaste && m.piqueEmpaste.insumoId !== 'none') {
-                        const pe = m.piqueEmpaste;
-                        const masaEmpasteGr = pe.pesoMasaGr || 0;
-                        
-                        const prod = productos.find(p => p.id === pe.insumoId);
-                        let cu = 0;
-                        if (prod && prod.costoBase && prod.cantidadEmbalaje) {
-                            cu = (prod.costoBase / prod.cantidadEmbalaje) / factorUnidad(prod.unidadCosto || 'kg');
-                        }
-                        const costoTotalEmpaste = cu * pe.cantidadInsumo * factorUnidad(pe.unidadInsumo || 'lb');
-
-                        const panesPorPique = (masaEmpasteGr * (1 - ((m.mermaEstimada || 0) / 100))) / m.pesoUnitarioGr;
-                        costoVitinaUnidad = panesPorPique > 0 ? costoTotalEmpaste / panesPorPique : 0;
-                    }
-                    const costoUnitReal = costoMasaUnidad + costoInsumosAdicionales + costoVitinaUnidad;
-                    if (Math.abs(m.costoUnitario - costoUnitReal) > 10 || m.margenPorcentaje < -1000) {
-                        const margenReal = m.precioVentaUnitario > 0 && costoUnitReal > 0 
-                            ? Math.round(((m.precioVentaUnitario - costoUnitReal) / m.precioVentaUnitario) * 100) 
-                            : 0;
-                        updateModeloPan(m.id, { 
-                            costoUnitario: costoUnitReal,
-                            margenPorcentaje: margenReal
-                        }).catch(() => {});
-                    }
-                }
-            }
-        });
-    }, [modelosPan, formulaciones, productos, updateModeloPan]);
+    // AUTO-HEAL ELIMINADO (causaba React #185): al montar Recetas llamaba updateModeloPan
+    // en bucle (modelosPan cambia → effect → update → modelosPan…). Los costos se corrigen
+    // al guardar el modelo de pan, no al abrir el módulo.
 
     // ── Reparación de insumos + jalón desde Supabase ──────────────────────
     // productosReparados: null = usar prop, array = usar reparados (post-sync)
@@ -479,10 +442,12 @@ const Recetas: React.FC<RecetasProps> = ({
     useEffect(() => {
         if (!selectedProductoId || editingReceta) return;
         const anterior = recetas.find(r => r.productoId === selectedProductoId);
-        if (anterior?.porcionesResultantes && anterior.porcionesResultantes > 0) {
-            setPorciones(anterior.porcionesResultantes);
+        const next = anterior?.porcionesResultantes;
+        if (next && next > 0) {
+            setPorciones((prev) => (prev === next ? prev : next));
         }
-    }, [selectedProductoId]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedProductoId, editingReceta]);
 
     const saveReceta = async () => {
         if (!selectedProductoId) { toast.error('Selecciona un producto'); return; }

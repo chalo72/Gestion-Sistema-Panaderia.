@@ -522,11 +522,23 @@ export function useReportesData(props: ReportesProps) {
         // Los gastos/salidas del turno ya vienen restados en el 'total' de ventasDiarias
         // por lo que ventasTotal = Ingreso Neto. Para el P&L, necesitamos el Ingreso Bruto.
         // Las salidas se leen de TODOS los cierres (aunque el día tenga POS): son plata que salió.
-        const operativos = ventasDiarias
+        const salidasCaja = ventasDiarias
             .filter(v => v.fecha >= quincenaReal.inicioStr && v.fecha <= quincenaReal.finStr)
-            .reduce((s, v) => s + ((v.cajas && v.cajas['Gastos/Salidas']) ? v.cajas['Gastos/Salidas'] : 0), 0);
-            
-        const ingresos = quincenaReal.ventasTotal + operativos;
+            .reduce((s, v) => s + ((v.cajas && v.cajas['Gastos/Salidas']) ? Number(v.cajas['Gastos/Salidas']) || 0 : 0), 0);
+
+        // Registro rápido / módulo Gastos (antes NO entraban a "Gastos Diarios" → parecía que no se guardaban)
+        const gastosLibreta = gastos
+            .filter((g) => {
+                if (g.estado === 'anulado') return false;
+                const f = normalizarFechaYYYYMMDD(g.fecha);
+                return f >= quincenaReal.inicioStr && f <= quincenaReal.finStr;
+            })
+            .reduce((s, g) => s + (Number(g.monto) || 0), 0);
+
+        const operativos = salidasCaja + gastosLibreta;
+
+        // Solo reintegamos salidas de caja (ya restadas del total de cierres). La libreta de Gastos no estaba en ventasTotal.
+        const ingresos = quincenaReal.ventasTotal + salidasCaja;
         
         // Fijos de la quincena (solo los que se cobran en estos 15 días, o el mes completo si aplica)
         const fijos = compromisos
@@ -579,11 +591,13 @@ export function useReportesData(props: ReportesProps) {
             fijos,
             compras,
             operativos,
+            salidasCaja,
+            gastosLibreta,
             totalEgresos: fijos + operativos,
             gananciaNeta,
             estimadoTrasTopes,
         };
-    }, [quincenaReal, compromisos, presupuestosMinimos, ventasDiarias, temporadaBaja, periodoFiltro]);
+    }, [quincenaReal, compromisos, presupuestosMinimos, ventasDiarias, gastos, temporadaBaja, periodoFiltro]);
 
     const proyeccionQuincena = useMemo(() => calcularProyeccionQuincena({
         ventas: ventas.map(v => ({ fecha: v.fecha.slice(0, 10), total: v.total, metodoPago: v.metodoPago })),

@@ -10,6 +10,8 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { deleteProduccion, getProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD } from '@/lib/finanzas-personales';
 import { toast } from 'sonner';
+import { QuickEntryBar } from '@/components/gastos/QuickEntryBar';
+import type { GastoCategoria, MetodoPago } from '@/types';
 
 /** Abre Producción → modelos (evita importar ModeloPanModal aquí: ciclo con database y crash en Reportes). */
 const irAModelosPan = (onNavigateTo?: (view: string) => void) => {
@@ -457,9 +459,36 @@ const chequearRendimientoPorMasa = (
 };
 
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any, addMovimientoBoveda: any }) {
-    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo } = data;
+    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto } = data;
 
 
+    
+    const handleSaveGastoDiario = async (gastoData: {
+        descripcion: string;
+        monto: number;
+        categoria: GastoCategoria;
+        metodoPago: string;
+        esIngreso?: boolean;
+    }) => {
+        if (gastoData.esIngreso) {
+            toast.info('Los ingresos se registran en Ventas / Caja. Esta barra es para gastos diarios.');
+            return;
+        }
+        if (!addGasto) {
+            toast.error('No se pudo guardar el gasto');
+            return;
+        }
+        await addGasto({
+            descripcion: gastoData.descripcion,
+            monto: gastoData.monto,
+            categoria: gastoData.categoria || 'Otros',
+            fecha: new Date().toISOString(),
+            metodoPago: (gastoData.metodoPago || 'efectivo') as MetodoPago,
+            estado: 'pagado',
+            usuarioId: 'director',
+        });
+        toast.success('Gasto guardado. Ya suma en Gastos Diarios de Mi Quincena.');
+    };
     
     // Add COLORS if needed
     const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
@@ -887,6 +916,15 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                         );
                     })()}
 
+                    {/* ── REGISTRO RÁPIDO DE GASTOS DIARIOS ── */}
+                    <div className="mb-6">
+                        <div className="flex items-center gap-2 mb-3 px-2">
+                            <ShoppingBag className="w-4 h-4 text-emerald-500" />
+                            <h3 className="text-sm font-black text-slate-700 dark:text-slate-300">Registro Rápido de Gastos Diarios</h3>
+                        </div>
+                        <QuickEntryBar onSave={handleSaveGastoDiario} />
+                    </div>
+
                     {/* ── SEMÁFORO Y SOBRES (MI QUINCENA PRO) ── */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Semáforo de Utilidad - Rediseñado para Claridad */}
@@ -927,9 +965,13 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         <span className="text-xs font-bold border-b border-dashed border-amber-400/50">(-) Costos de Reposición (50%)</span>
                                         <span className="text-sm font-black">-{formatCurrency(proyeccionQuincena.ingresoEsperado - proyeccionQuincena.utilidadBrutaEsperada)}</span>
                                     </div>
-                                    <div className="flex justify-between items-center text-rose-600 dark:text-rose-400/80 pb-3 border-b border-black/10 dark:border-white/10 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 p-1.5 -mx-1.5 rounded transition-colors" onClick={() => setDetallesModal('proyeccion_compromisos')}>
+                                    <div className="flex justify-between items-center text-rose-600 dark:text-rose-400/80 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 p-1.5 -mx-1.5 rounded transition-colors" onClick={() => setDetallesModal('proyeccion_compromisos')}>
                                         <span className="text-xs font-bold border-b border-dashed border-rose-400/50">(-) Compromisos y Salarios</span>
                                         <span className="text-sm font-black">-{formatCurrency(proyeccionQuincena.totalCompromisos + proyeccionQuincena.totalSalarios)}</span>
+                                    </div>
+                                    <div className="flex justify-between items-center text-orange-500 dark:text-orange-400/80 pb-3 border-b border-black/10 dark:border-white/10 p-1.5 -mx-1.5 rounded">
+                                        <span className="text-xs font-bold">(-) Gastos Diarios Acumulados</span>
+                                        <span className="text-sm font-black">-{formatCurrency(proyeccionQuincena.totalGastosDiarios || 0)}</span>
                                     </div>
                                     <div className="flex justify-between items-center pt-1">
                                         <span className="text-xs font-black uppercase text-slate-500 dark:text-slate-400">Plata que te Sobra</span>
