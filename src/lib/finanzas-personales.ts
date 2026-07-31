@@ -83,8 +83,8 @@ export function addVentaDiaria(data: Omit<VentaDiaria, 'id' | 'total'> & { id?: 
     // Si por alguna razón no existía, lo agregamos
     if (!existentes.some(v => v.id === data.id)) actualizados.unshift(nueva);
   } else {
-    const sinDuplicados = existentes.filter(v => !(v.fecha === data.fecha && v.turno === data.turno));
-    actualizados = [nueva, ...sinDuplicados];
+    // Ya no filtramos por fecha y turno para permitir múltiples registros (cierres parciales)
+    actualizados = [nueva, ...existentes];
   }
   
   saveVentasDiarias(actualizados);

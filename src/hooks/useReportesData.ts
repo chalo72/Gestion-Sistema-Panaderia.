@@ -800,16 +800,17 @@ export function useReportesData(props: ReportesProps) {
         syncToBoveda('Transferencia', tr, 'Banco', 'Transferencia');
         
         setVentasDiarias(getVentasDiarias());
-        setFormVenta({ 
+        setFormVenta(prev => ({ 
             id: undefined,
-            fecha: new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 10), 
-            turno: 'Día Completo',
+            fecha: prev.fecha,
+            turno: prev.turno,
+            evento: prev.evento || 'Ninguno',
             totalEfectivo: '', 
             totalNequi: '', 
             totalTransferencia: '', 
             totalCredito: '', 
             notas: '' 
-        });
+        }));
         toast.success(`Venta del día registrada: ${formatCurrency(nueva.total)}`);
     };
 
