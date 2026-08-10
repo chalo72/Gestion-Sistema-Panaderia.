@@ -53,7 +53,7 @@ export const ROLES_CONFIGURABLES = [
 
 const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos'];
 const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas'];
-const VER_PANADERO   = ['dashboard','produccion','recetas','inventario'];
+const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes'];
 const VER_AUXILIAR   = ['dashboard','ventas'];
 const TODOS          = MODULOS_CONFIGURABLES.map(m => m.id);
 
@@ -71,12 +71,33 @@ const DEFAULT_PERMISOS: PermisosModulos = {
   AUXILIAR:  defaultParaRol(VER_AUXILIAR),
 };
 
+/** Parche único: el menú de módulos ocultaba Reportes al Panadero aunque la matriz ya lo permitía. */
+const PATCH_PANADERO_REPORTES = 'dp_patch_panadero_reportes_20260810';
+
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
 export function cargarPermisos(): PermisosModulos {
   try {
     const raw = localStorage.getItem(PERMISOS_KEY);
-    if (raw) return JSON.parse(raw) as PermisosModulos;
+    if (raw) {
+      const parsed = JSON.parse(raw) as PermisosModulos;
+      if (!localStorage.getItem(PATCH_PANADERO_REPORTES)) {
+        const next: PermisosModulos = {
+          ...parsed,
+          PANADERO: {
+            ...(parsed.PANADERO || DEFAULT_PERMISOS.PANADERO),
+            reportes: {
+              ver: true,
+              eliminar: parsed.PANADERO?.reportes?.eliminar ?? false,
+            },
+          },
+        };
+        localStorage.setItem(PERMISOS_KEY, JSON.stringify(next));
+        localStorage.setItem(PATCH_PANADERO_REPORTES, '1');
+        return next;
+      }
+      return parsed;
+    }
   } catch {}
   return DEFAULT_PERMISOS;
 }

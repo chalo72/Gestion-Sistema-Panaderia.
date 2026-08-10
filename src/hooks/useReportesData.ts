@@ -58,7 +58,7 @@ import {
     DialogTitle,
     DialogDescription,
 } from '@/components/ui/dialog';
-import type { Venta, Gasto, ReporteFinanciero, Producto, Categoria, CompromisoFijo, GastoCategoria } from '@/types';
+import type { Venta, Gasto, ReporteFinanciero, Producto, Categoria, CompromisoFijo, GastoCategoria, CajaSesion, Proveedor, PrecioProveedor } from '@/types';
 import { cn } from '@/lib/utils';
 import { HistorialVentasCategoria } from '@/components/ventas/HistorialVentasCategoria';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
@@ -76,22 +76,26 @@ import {
     getProducciones, addProduccion, deleteProduccion, saveProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD
 } from '@/lib/finanzas-personales';
 import { getBovedas, addBoveda, addMovimientoBoveda } from '@/lib/boveda-store';
+import { syncArqueoCajasABoveda } from '@/lib/boveda-pos-sync';
 import type { HornadaDia, RegistroProduccion, MasaPreparadaDia } from '@/lib/finanzas-personales';
 import { getConfigSeguridad } from '@/lib/security-agent';
 import type { VentaDiaria } from '@/types';
-import { consultarAgente } from '@/constants/agentes';
-import type { AgenteId } from '@/constants/agentes';
 import { Bot, Sparkles, Loader2 } from 'lucide-react';
 
-interface ReportesProps {
+export interface ReportesProps {
     ventas: Venta[];
     gastos: Gasto[];
+    sesionesCaja?: CajaSesion[];
     formatCurrency: (value: number) => string;
     generarReporte: (periodo: string) => ReporteFinanciero;
     productos?: Producto[];
     categorias?: Categoria[];
-    proveedores?: any[];
-    modelosPan?: { nombre: string; piezasPorLata?: number }[];
+    proveedores?: Proveedor[];
+    precios?: PrecioProveedor[];
+    cajaActiva?: CajaSesion;
+    addGasto?: (gasto: Omit<Gasto, 'id'>) => Promise<void>;
+    updateGasto?: (id: string, updates: Partial<Gasto>) => Promise<void>;
+    deleteGasto?: (id: string) => Promise<void>;
 }
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
@@ -171,21 +175,30 @@ export function useReportesData(props: ReportesProps) {
     }, [reporteActual]);
 
     // Análisis de rentabilidad por producto
-    const rentabilidadProductos = useMemo(() => {
-        const mapaVentas: Record<string, { ingresos: number; unidades: number; nombre: string }> = {};
+    const { rentabilidadProductos, topVendidos, topMargen } = useMemo(() => {
+        const mapaVentas: Record<string, { ingresos: number; unidades: number; nombre: string; margenAbsoluto: number }> = {};
         ventas.forEach(v => {
             v.items?.forEach(item => {
                 if (!mapaVentas[item.productoId]) {
                     const prod = productos.find(p => p.id === item.productoId);
-                    mapaVentas[item.productoId] = { ingresos: 0, unidades: 0, nombre: prod?.nombre || item.productoId };
+                    mapaVentas[item.productoId] = { ingresos: 0, unidades: 0, nombre: prod?.nombre || item.productoId, margenAbsoluto: 0 };
                 }
                 mapaVentas[item.productoId].ingresos += item.subtotal;
                 mapaVentas[item.productoId].unidades += item.cantidad;
+                
+                const prod = productos.find(p => p.id === item.productoId);
+                const costoUnitario = prod ? (prod.precioCosto || prod.costoBase || 0) : 0;
+                mapaVentas[item.productoId].margenAbsoluto += (item.subtotal - (item.cantidad * costoUnitario));
             });
         });
-        return Object.values(mapaVentas)
-            .sort((a, b) => b.ingresos - a.ingresos)
-            .slice(0, 10);
+        
+        const todos = Object.values(mapaVentas);
+        
+        return {
+            rentabilidadProductos: [...todos].sort((a, b) => b.ingresos - a.ingresos).slice(0, 10),
+            topVendidos: [...todos].sort((a, b) => b.unidades - a.unidades).slice(0, 5),
+            topMargen: [...todos].sort((a, b) => b.margenAbsoluto - a.margenAbsoluto).slice(0, 5)
+        };
     }, [ventas, productos]);
 
     const totalVentasProductos = rentabilidadProductos.reduce((s, p) => s + p.ingresos, 0);
@@ -246,6 +259,17 @@ export function useReportesData(props: ReportesProps) {
 
     // ── Producción del Día ────────────────────────────────────
     const [producciones, setProducciones] = useState<RegistroProduccion[]>(() => getProducciones());
+
+    useEffect(() => {
+        const refrescar = () => setProducciones(getProducciones());
+        window.addEventListener('dp_producciones_changed', refrescar);
+        window.addEventListener('storage', refrescar);
+        return () => {
+            window.removeEventListener('dp_producciones_changed', refrescar);
+            window.removeEventListener('storage', refrescar);
+        };
+    }, []);
+
     const [formProd, setFormProd] = useState({
         fecha: fechaLocalHoy(),
         masaDulce: '', // Mantenido por retrocompatibilidad temporal en UI, aunque ya no lo usemos
@@ -348,6 +372,8 @@ export function useReportesData(props: ReportesProps) {
             };
             const prompt = `Analiza los siguientes datos financieros de mi panadería correspondientes a la ${quincenaLocal.label}. Ingresos: $${diagnosticoLocal.ingresos}, Fijos: $${diagnosticoLocal.fijos}, Proveedores: $${diagnosticoLocal.compras}, Gastos Diarios: $${diagnosticoLocal.operativos}. Ganancia Neta: $${diagnosticoLocal.gananciaNeta}. Dime qué estrategia tomar, en qué estoy fallando y cómo administrar mejor el dinero. Sé directo, profesional pero motivador. Formatea tu respuesta con emojis, viñetas y negritas para que sea fácil de leer en un dashboard.`;
             
+            // Import dinámico: evita arrastrar agentes/database al chunk de Reportes
+            const { consultarAgente } = await import('@/constants/agentes');
             await consultarAgente(
                 'pico-claw',
                 prompt,
@@ -771,6 +797,7 @@ export function useReportesData(props: ReportesProps) {
 
         if (totalVal <= 0) { toast.error('Ingresa al menos un monto en cajas o métodos de pago'); return; }
         
+        const esEdicion = Boolean(formVenta.id);
         const nueva = addVentaDiaria({
             id: formVenta.id || undefined,
             fecha: formVenta.fecha,
@@ -784,34 +811,17 @@ export function useReportesData(props: ReportesProps) {
             cajas: cajas
         });
 
-        // Sincronización automática con Bóvedas de Tesorería
-        const bovedasExistentes = getBovedas();
-        const syncToBoveda = (nombre: string, monto: number, tipo: any, metodoPago: string) => {
-            if (monto <= 0) return;
-            let boveda = bovedasExistentes.find(b => b.nombre.toLowerCase() === nombre.toLowerCase());
-            if (!boveda) {
-                boveda = addBoveda({ nombre, tipo });
-                bovedasExistentes.push(boveda);
-            }
-            addMovimientoBoveda({
-                bovedaDestinoId: boveda.id,
-                monto: monto,
-                motivo: `Arqueo de Caja - ${formVenta.turno} (${formVenta.fecha})`,
-                tipo: 'Ingreso',
-                usuarioResponsable: role || 'Admin',
-                metodoPago: metodoPago
-            });
-        };
-
-        if (cajas) {
-            Object.entries(cajas).forEach(([nombreCaja, montoRaw]) => {
-                syncToBoveda(nombreCaja, parseFloat(montoRaw as string) || 0, 'Caja Fuerte', 'Efectivo');
+        // Solo al registrar (no al editar): evita sumar dos veces el mismo arqueo en Bóveda
+        if (!esEdicion) {
+            syncArqueoCajasABoveda({
+                cajas: cajas as Record<string, string | number> | undefined,
+                nequi: nq,
+                transferencia: tr,
+                turno: formVenta.turno || 'Día Completo',
+                fecha: formVenta.fecha,
+                usuario: role || 'Admin',
             });
         }
-        
-        // Sincronizar métodos digitales (opcional pero muy útil)
-        syncToBoveda('Nequi', nq, 'Banco', 'Nequi');
-        syncToBoveda('Transferencia', tr, 'Banco', 'Transferencia');
         
         setVentasDiarias(getVentasDiarias());
         setFormVenta(prev => ({ 
@@ -823,9 +833,14 @@ export function useReportesData(props: ReportesProps) {
             totalNequi: '', 
             totalTransferencia: '', 
             totalCredito: '', 
-            notas: '' 
+            notas: '',
+            cajas: {},
         }));
-        toast.success(`Venta del día registrada: ${formatCurrency(nueva.total)}`);
+        toast.success(
+            esEdicion
+                ? `Venta del día actualizada: ${formatCurrency(nueva.total)}.`
+                : `Venta del día registrada: ${formatCurrency(nueva.total)}. Cajas POS sincronizadas con Bóveda.`
+        );
     };
 
     const handleDeleteVentaDiaria = (id: string) => {
@@ -964,6 +979,8 @@ export function useReportesData(props: ReportesProps) {
         ventasMesActual: reporteActual.totalVentas,
         tasaDiaria: reporteActual.totalVentas / (new Date().getDate() || 1),
         rentabilidadProductos,
+        topVendidos,
+        topMargen,
         totalVentasProductos,
         gastosData,
         ventasMetodoData,
@@ -1004,7 +1021,7 @@ export function useReportesData(props: ReportesProps) {
         isStringField: (f: string) => f === 'tipoPan' || f === 'masaId',
         updated: null,
         handleSaveProduccion,
-        validHornadas: hornadas.filter(h => h.tipoPan?.trim() && h.bandejas > 0),
+        validHornadas: hornadas.filter(h => h.tipoPan?.trim() && (Number(h.bandejas) > 0 || Number(h.totalPanes) > 0 || (Number(h.bandejas) * Number(h.panesPorBandeja)) > 0)),
         masaTotal: masasPreparadas.reduce((sum, m) => sum + m.cantidadArrobas, 0),
         nueva: null,
         pinModal,

@@ -2,16 +2,24 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
-import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2, ChevronDown, ChevronUp, Search } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2, ChevronDown, ChevronUp, Search, ChefHat, ShoppingCart, PlusCircle, MinusCircle, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { deleteProduccion, getProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD } from '@/lib/finanzas-personales';
 import { toast } from 'sonner';
-import { QuickEntryBar } from '@/components/gastos/QuickEntryBar';
+import { GastoDiarioForm } from '@/components/gastos/gasto-diario-form';
 import type { GastoCategoria, MetodoPago } from '@/types';
+import { normalizarFechaYYYYMMDD, getProducciones, deleteProduccion } from '@/lib/finanzas-personales';
+import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogDescription,
+} from '@/components/ui/dialog';
 
 /** Abre Producción → modelos (evita importar ModeloPanModal aquí: ciclo con database y crash en Reportes). */
 const irAModelosPan = (onNavigateTo?: (view: string) => void) => {
@@ -24,6 +32,19 @@ const irAModelosPan = (onNavigateTo?: (view: string) => void) => {
 };
 
 type OpcionMedida = { label: string; val: number };
+
+/** Cantidad de panes de un lote (total escrito o bandejas × panes/lata). */
+const panesDeHornada = (h: {
+    totalPanes?: number | string;
+    bandejas?: number | string;
+    panesPorBandeja?: number | string;
+}): number => {
+    const total = Number(h.totalPanes) || 0;
+    if (total > 0) return total;
+    const bandejas = Number(h.bandejas) || 0;
+    const porLata = Number(h.panesPorBandeja) || 0;
+    return Math.round(bandejas * porLata);
+};
 
 /** Arrobas/libras en letra para leer fácil (ej. 1.5 → «una arroba y media»). */
 const ARROBAS_EN_LETRAS: OpcionMedida[] = [
@@ -221,7 +242,7 @@ const calcularMetasEnVivo = (
             const nombre = masa.nombre || 'Masa';
             const hs = (hornadasList || []).filter((h) => h.masaId === masa.id);
             const panesReales = hs.reduce((s, h) => {
-                const n = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                const n = panesDeHornada(h);
                 return s + (Number.isFinite(n) ? n : 0);
             }, 0);
 
@@ -378,7 +399,7 @@ const chequearRendimientoPorMasa = (
             if (masaArr <= 0) return null;
             const hs = (hornadasList || []).filter((h) => h.masaId === masa.id);
             const panesReales = hs.reduce((s, h) => {
-                const n = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                const n = panesDeHornada(h);
                 return s + (Number.isFinite(n) ? n : 0);
             }, 0);
             const nombre = masa.nombre || 'Masa';
@@ -407,42 +428,41 @@ const chequearRendimientoPorMasa = (
                     panesMin: 0,
                     panesMax: 0,
                     estado: 'sin_modelo' as const,
-                    mensaje: `Hay ${panesReales} panes de «${nombre}» pero el modelo no tiene «panes por arroba». No se puede comprobar.`,
+                    mensaje: `Hay ${panesReales} panes, pero el modelo no tiene configurado «panes por arroba». No se puede comprobar.`,
                 };
             }
-            // Si hay varios modelos, promedio ponderado por panes reales de cada tipo
-            let esperado = 0;
+            // Calcular el rendimiento promedio real basado en la mezcla exacta de panes
+            let masaEquivalenteTotal = 0;
             let mermaMax = 0;
-            if (mods.length === 1) {
-                const ppa = Number(mods[0].panesPorArroba);
-                esperado = masaArr * ppa;
-                mermaMax = Math.max(0, Number(mods[0].mermaEstimada) || 0) / 100;
-            } else {
-                const totalP = panesReales || 1;
-                let ppaPond = 0;
-                tipos.forEach((t) => {
-                    const mod = modelos?.find((m) => m.nombre === t);
-                    const ppa = Number(mod?.panesPorArroba) || 0;
-                    if (ppa <= 0) return;
-                    const panesTipo = hs
-                        .filter((h) => h.tipoPan === t)
-                        .reduce((s, h) => s + Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0))), 0);
-                    ppaPond += ppa * (panesTipo / totalP);
-                    mermaMax = Math.max(mermaMax, Math.max(0, Number(mod?.mermaEstimada) || 0) / 100);
-                });
-                esperado = masaArr * ppaPond;
+            
+            tipos.forEach((t) => {
+                const mod = modelos?.find((m) => m.nombre === t);
+                const ppa = Number(mod?.panesPorArroba) || 0;
+                if (ppa <= 0) return;
+                const panesTipo = hs
+                    .filter((h) => h.tipoPan === t)
+                    .reduce((s, h) => s + panesDeHornada(h), 0);
+                
+                masaEquivalenteTotal += (panesTipo / ppa);
+                mermaMax = Math.max(mermaMax, Math.max(0, Number(mod?.mermaEstimada) || 0) / 100);
+            });
+
+            let esperado = 0;
+            if (masaEquivalenteTotal > 0) {
+                const rendimientoPromedio = panesReales / masaEquivalenteTotal;
+                esperado = masaArr * rendimientoPromedio;
             }
             const panesMin = Math.floor(esperado * (1 - TOL - mermaMax));
             const panesMax = Math.ceil(esperado * (1 + TOL));
             const masaLetras = arrobasEnLetras(masaArr);
             let estado: ChequeoRendimiento['estado'] = 'ok';
-            let mensaje = `«${nombre}»: con ${masaLetras} deberían salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}). Salieron ${panesReales}. ✓ Calza.`;
+            let mensaje = `con ${masaLetras} deberían salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}). Salieron ${panesReales}. ✓ Calza.`;
             if (panesReales < panesMin) {
                 estado = 'bajo';
-                mensaje = `«${nombre}»: dijo ${masaLetras} → deberían salir al menos ~${panesMin} panes, pero solo hay ${panesReales}. Posible masa inflada o panes de menos.`;
+                mensaje = `dijo ${masaLetras} → deberían salir al menos ~${panesMin} panes, pero solo hay ${panesReales}. Posible masa inflada o panes de menos.`;
             } else if (panesReales > panesMax) {
                 estado = 'alto';
-                mensaje = `«${nombre}»: dijo ${masaLetras} → máximo ~${panesMax} panes, pero hay ${panesReales}. Posible conteo alto o masa sin declarar.`;
+                mensaje = `dijo ${masaLetras} → máximo ~${panesMax} panes, pero hay ${panesReales}. Posible conteo alto o masa sin declarar.`;
             }
             return {
                 masaNombre: nombre,
@@ -458,18 +478,69 @@ const chequearRendimientoPorMasa = (
         .filter((x): x is ChequeoRendimiento => x !== null);
 };
 
+/** Resume chequeos de panes por masa: esperado según arroba, rango, real y diferencia. */
+const resumenChequeosPanes = (chequeos: ChequeoRendimiento[]) => {
+    const utiles = (chequeos || []).filter(
+        (c) => c.estado === 'ok' || c.estado === 'bajo' || c.estado === 'alto'
+    );
+    if (utiles.length === 0) {
+        const haySinModelo = (chequeos || []).some((c) => c.estado === 'sin_modelo');
+        const haySinPanes = (chequeos || []).some((c) => c.estado === 'sin_panes');
+        return {
+            tieneMeta: false as const,
+            esperado: 0,
+            panesMin: 0,
+            panesMax: 0,
+            real: (chequeos || []).reduce((s, c) => s + (Number(c.panesReales) || 0), 0),
+            diferencia: 0,
+            estado: (haySinModelo ? 'sin_modelo' : haySinPanes ? 'sin_panes' : 'sin_datos') as
+                | 'sin_modelo'
+                | 'sin_panes'
+                | 'sin_datos',
+            etiqueta: haySinModelo ? 'Sin modelo' : haySinPanes ? 'Sin panes' : 'Sin meta',
+        };
+    }
+    const esperado = utiles.reduce((s, c) => s + (Number(c.panesEsperados) || 0), 0);
+    const panesMin = utiles.reduce((s, c) => s + (Number(c.panesMin) || 0), 0);
+    const panesMax = utiles.reduce((s, c) => s + (Number(c.panesMax) || 0), 0);
+    const real = utiles.reduce((s, c) => s + (Number(c.panesReales) || 0), 0);
+    const diferencia = real - esperado;
+    const estado = utiles.some((c) => c.estado === 'bajo')
+        ? ('bajo' as const)
+        : utiles.some((c) => c.estado === 'alto')
+          ? ('alto' as const)
+          : ('ok' as const);
+    return {
+        tieneMeta: true as const,
+        esperado,
+        panesMin,
+        panesMax,
+        real,
+        diferencia,
+        estado,
+        etiqueta: estado === 'ok' ? 'En rango' : estado === 'bajo' ? 'Bajo meta' : 'Sobre meta',
+    };
+};
+
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any, addMovimientoBoveda: any }) {
-    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto } = data;
+    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto, updateGasto, deleteGasto, proveedores, productos, precios, cajaActiva, sesionesCaja } = data;
+    const [editGastoId, setEditGastoId] = useState<string | null>(null);
+    const [editGastoData, setEditGastoData] = useState<any>(null);
+    const [isSavingGasto, setIsSavingGasto] = useState(false);
 
-
+    const [gastoExpanded, setGastoExpanded] = useState(false);
+    const [ventasCardExpanded, setVentasCardExpanded] = useState(false);
+    const [compromisosCardExpanded, setCompromisosCardExpanded] = useState(false);
     
-    const handleSaveGastoDiario = async (gastoData: {
-        descripcion: string;
-        monto: number;
-        categoria: GastoCategoria;
-        metodoPago: string;
-        esIngreso?: boolean;
-    }) => {
+    // Estados para hacer colapsables las demás tarjetas principales
+    const [estadoExpanded, setEstadoExpanded] = useState(false);
+    const [semaforoExpanded, setSemaforoExpanded] = useState(false);
+    const [produccionExpanded, setProduccionExpanded] = useState(false);
+    const [comprasExpanded, setComprasExpanded] = useState(false);
+    const [saldoRealExpanded, setSaldoRealExpanded] = useState(false);
+    const [showAuditorias, setShowAuditorias] = useState(true);
+
+    const handleSaveGastoDiario = async (gastoData: any) => {
         if (gastoData.esIngreso) {
             toast.info('Los ingresos se registran en Ventas / Caja. Esta barra es para gastos diarios.');
             return;
@@ -478,25 +549,14 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
             toast.error('No se pudo guardar el gasto');
             return;
         }
-        await addGasto({
-            descripcion: gastoData.descripcion,
-            monto: gastoData.monto,
-            categoria: gastoData.categoria || 'Otros',
-            fecha: new Date().toISOString(),
-            metodoPago: (gastoData.metodoPago || 'efectivo') as MetodoPago,
-            estado: 'pagado',
-            usuarioId: 'director',
-        });
+        await addGasto(gastoData);
         toast.success('Gasto guardado. Ya suma en Gastos Diarios de Mi Quincena.');
     };
     
     // Add COLORS if needed
     const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
-    /** 1 arroba oficial = 12.5 kg. En Colombia 1 libra ≈ 0.5 kg → 1 arr ≈ 25 libras. */
-    const ARROBA_KG_LOCAL = 12.5;
-    const describirDifArrobas = (arrAbs: number): { titulo: string; detalle: string; fraseCorta: string } => {
-        const kg = arrAbs * ARROBA_KG_LOCAL;
-        const libras = Math.round(kg * 2);
+    const describirDifArrobas = (arrAbs: number, difKg: number): { titulo: string; detalle: string; fraseCorta: string } => {
+        const libras = Math.round(difKg * 2);
         let familiar = `${arrAbs.toFixed(2)} arrobas`;
         if (arrAbs >= 0.9 && arrAbs <= 1.1) familiar = 'casi 1 arroba';
         else if (arrAbs >= 0.7 && arrAbs < 0.9) familiar = 'casi ¾ de arroba';
@@ -506,17 +566,19 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
         else if (arrAbs < 0.15) familiar = 'poca masa';
         return {
             titulo: familiar,
-            detalle: `≈ ${kg.toFixed(1)} kg · ≈ ${libras} libras (1 arroba = 12.5 kg)`,
+            detalle: `≈ ${difKg.toFixed(1)} kg · ≈ ${libras} libras (Peso real calculando mezcla exacta)`,
             // Frase lista para leer en voz alta: "media arroba · 6.3 kg · 12 libras"
-            fraseCorta: `${familiar} · ≈ ${kg.toFixed(1)} kg · ≈ ${libras} libras`,
+            fraseCorta: `${familiar} · ≈ ${difKg.toFixed(1)} kg · ≈ ${libras} libras`,
         };
     };
     /** Explicación paso a paso: masa metida vs pan recuperado (arroba + kg + libras). */
     const explicarComparacionMasaPan = (masaKg: number, panKg: number, masaArr: number, panArr: number, diferenciaArr: number) => {
         const difAbs = Math.abs(diferenciaArr);
-        const difHumana = describirDifArrobas(difAbs);
+        const difKg = Math.abs(masaKg - panKg);
+        const difHumana = describirDifArrobas(difAbs, difKg);
         const metiste = `Metiste ${arrobasEnLetras(masaArr)} (${masaKg.toFixed(1)} kg) de masa.`;
         const recuperaste = `En pan solo “recuperaste” ≈ ${arrobasEnLetras(panArr)} (${panKg.toFixed(1)} kg).`;
+        const recuperasteBien = `En pan “recuperaste” ≈ ${arrobasEnLetras(panArr)} (${panKg.toFixed(1)} kg) — más de lo metido.`;
         if (diferenciaArr < -0.1) {
             return {
                 pasos: [
@@ -524,32 +586,34 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                     recuperaste,
                     `Faltó ≈ ${difHumana.fraseCorta} → eso es el faltante.`,
                 ],
-                nota: 'Esa masa no se convirtió en pan (merma, basura o error al contar). 1 arroba = 12.5 kg ≈ 25 libras.',
+                nota: 'Esa masa no se convirtió en pan (merma, basura o error al contar). Peso calculado con el factor real de la masa.',
             };
         }
         if (diferenciaArr > 0.1) {
             return {
                 pasos: [
-                    `Metiste ${arrobasEnLetras(masaArr)} (${masaKg.toFixed(1)} kg) de masa.`,
-                    `En pan “recuperaste” ≈ ${arrobasEnLetras(panArr)} (${panKg.toFixed(1)} kg) — más de lo metido.`,
+                    metiste,
+                    recuperasteBien,
                     `Sobró ≈ ${difHumana.fraseCorta} → eso es el sobrante.`,
                 ],
-                nota: 'Revisa si faltó anotar masa o si las piezas salieron más pequeñas. 1 arroba = 12.5 kg ≈ 25 libras.',
+                nota: 'Revisa si faltó anotar masa o si las piezas salieron más pequeñas. Peso calculado con el factor real de la masa.',
             };
         }
         return {
             pasos: [
                 metiste,
-                `En pan “recuperaste” ≈ ${arrobasEnLetras(panArr)} (${panKg.toFixed(1)} kg).`,
-                'Casi igual → cuadró.',
+                recuperaste,
+                `Diferencia mínima de ${difHumana.fraseCorta}. ¡Todo cuadra bien!`,
             ],
-            nota: 'Si masa y pan dan el mismo kg (o casi), el lote cuadra.',
+            nota: 'El pan recuperado concuerda casi perfecto con la masa ingresada.',
         };
     };
     const [pctCrecimiento, setPctCrecimiento] = useState(5);
     const [iaExpanded, setIaExpanded] = useState(false);
     const [produccionTab, setProduccionTab] = useState<'masas' | 'panes' | 'cuadre'>('panes');
     const [historialExpanded, setHistorialExpanded] = useState(false);
+    /** Ficha del historial abierta al hacer clic (detalle de masas / lotes). */
+    const [detalleProduccionId, setDetalleProduccionId] = useState<string | null>(null);
     // Control de compra real por proveedor
     const [expandedCompraId, setExpandedCompraId] = useState<string | null>(null);
     const [newLinea, setNewLinea] = useState({ producto: '', cantidad: '', montoReal: '' });
@@ -700,6 +764,94 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                         </div>
                     </div>
 
+                    {/* ── REGISTRO RÁPIDO DE GASTOS DIARIOS ── */}
+                    <div className="mb-6 rounded-2xl border-2 border-emerald-500/20 bg-emerald-500/5 p-4">
+                        <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-black flex items-center gap-2 text-emerald-900 dark:text-emerald-100">
+                                💸 Gastos de la Quincena
+                            </h2>
+                            <div 
+                                className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-muted-foreground shrink-0 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10"
+                                onClick={(e) => { e.stopPropagation(); setGastoExpanded(x => !x); }}
+                            >
+                                {gastoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                            </div>
+                        </div>
+                        {gastoExpanded && (
+                            <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <GastoDiarioForm 
+                                    onSave={handleSaveGastoDiario}
+                                    onUpdateGasto={async (id, updates) => {
+                                        if (updateGasto) {
+                                            await updateGasto(id, updates);
+                                            toast.success('Gasto actualizado ✓');
+                                        }
+                                    }}
+                                    onAnular={async (id, motivo) => {
+                                        if (updateGasto) {
+                                            const gastoAnterior = gastos.find(g => g.id === id);
+                                            await updateGasto(id, { estado: 'anulado', descripcion: `[ANULADO: ${motivo}] ${gastoAnterior?.descripcion || ''}` });
+                                            toast.success('Gasto anulado ✓');
+                                        }
+                                    }}
+                                    proveedores={proveedores}
+                                    productos={productos}
+                                    precios={precios}
+                                    cajaActiva={cajaActiva}
+                                    sesionesCaja={sesionesCaja}
+                                    gastos={gastos}
+                                    hoyStr={hoyStr}
+                                    formatCurrency={formatCurrency}
+                                />
+                                
+                                {/* COMPARATIVA DE GASTOS RECIENTES */}
+                                {(() => {
+                                    // Usamos hoyStr prop para evitar desfases de zona horaria (UTC vs Local)
+                                    const [y, m, d] = (hoyStr || new Date().toISOString().split('T')[0]).split('-');
+                                    const hoyObj = new Date(Number(y), Number(m) - 1, Number(d), 12, 0, 0);
+                                    
+                                    const ayerObj = new Date(hoyObj); ayerObj.setDate(ayerObj.getDate() - 1);
+                                    const anteayerObj = new Date(hoyObj); anteayerObj.setDate(anteayerObj.getDate() - 2);
+
+                                    const toYMD = (dt: Date) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+                                    
+                                    const fHoy = toYMD(hoyObj);
+                                    const fAyer = toYMD(ayerObj);
+                                    const fAnteayer = toYMD(anteayerObj);
+
+                                    const gHoy = gastos?.filter((g: any) => g.estado !== 'anulado' && normalizarFechaYYYYMMDD(g.fecha) === fHoy) || [];
+                                    const gAyer = gastos?.filter((g: any) => g.estado !== 'anulado' && normalizarFechaYYYYMMDD(g.fecha) === fAyer) || [];
+                                    const gAnteayer = gastos?.filter((g: any) => g.estado !== 'anulado' && normalizarFechaYYYYMMDD(g.fecha) === fAnteayer) || [];
+
+                                    
+                                    const tHoy = gHoy.reduce((a: number,b: any)=>a+b.monto, 0);
+                                    const tAyer = gAyer.reduce((a: number,b: any)=>a+b.monto, 0);
+                                    const tAnteayer = gAnteayer.reduce((a: number,b: any)=>a+b.monto, 0);
+
+                                    return (
+                                        <div className="grid grid-cols-3 gap-2 mt-4">
+                                            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-white/5 flex flex-col justify-between">
+                                                <p className="text-[10px] font-black uppercase text-slate-400">Hoy</p>
+                                                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(tHoy)}</p>
+                                                <p className="text-[9px] text-muted-foreground truncate">{gHoy.length} reg.</p>
+                                            </div>
+                                            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-white/5 flex flex-col justify-between">
+                                                <p className="text-[10px] font-black uppercase text-slate-400">Ayer</p>
+                                                <p className="text-lg font-black text-slate-700 dark:text-slate-300">{formatCurrency(tAyer)}</p>
+                                                <p className="text-[9px] text-muted-foreground truncate">{gAyer.length} reg.</p>
+                                            </div>
+                                            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-white/5 flex flex-col justify-between">
+                                                <p className="text-[10px] font-black uppercase text-slate-400">Anteayer</p>
+                                                <p className="text-lg font-black text-slate-700 dark:text-slate-300">{formatCurrency(tAnteayer)}</p>
+                                                <p className="text-[9px] text-muted-foreground truncate">{gAnteayer.length} reg.</p>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+                    </div>
+
                     {/* ── CONSEJERO IA — colapsable ── */}
                     <div className="rounded-2xl border-2 border-violet-500/40 bg-violet-500/5 overflow-hidden">
                         <button
@@ -757,14 +909,20 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                         <div className="absolute top-0 right-0 p-4 opacity-10">
                             <TrendingUp className="w-24 h-24" />
                         </div>
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-lg font-black flex items-center gap-2 text-cyan-500">
-                                📊 Estado General del Negocio
-                            </CardTitle>
-                            <CardDescription className="text-xs">
+                        <CardHeader className="pb-3 bg-cyan-500/5 dark:bg-cyan-500/10 border-b border-cyan-500/10 hover:bg-cyan-500/10 dark:hover:bg-cyan-500/20 transition-colors cursor-pointer" onClick={(e) => { e.stopPropagation(); setEstadoExpanded(x => !x); }}>
+                            <div className="flex items-center justify-between">
+                                <CardTitle className="text-lg font-black flex items-center gap-2 text-cyan-600 dark:text-cyan-400">
+                                    📊 Estado General del Negocio
+                                </CardTitle>
+                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 shrink-0">
+                                    {estadoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </div>
+                            </div>
+                            <CardDescription className="text-xs font-medium text-cyan-700/70 dark:text-cyan-300/70">
                                 Diagnóstico de pérdidas y ganancias de {quincenaReal.label}.
                             </CardDescription>
                         </CardHeader>
+                        {estadoExpanded && (
                         <CardContent>
                             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
                                 <div onClick={() => setDetallesModal('ingresos')} className="bg-slate-50 dark:bg-card/40 rounded-2xl p-3 border border-slate-200 dark:border-white/5 cursor-pointer hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
@@ -833,6 +991,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                 </p>
                             </div>
                         </CardContent>
+                        )}
                     </Card>
 
                     {/* ── RESUMEN REAL — 4 cajas prominentes ── */}
@@ -891,41 +1050,104 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                         const saldo = (Number(quincenaReal.ventasTotal) || 0) - (Number(diagnosticoFinanciero.fijos) || 0);
                         return (
                             <div className={cn(
-                                "rounded-2xl border-2 px-5 py-3 flex items-center justify-between gap-4 flex-wrap",
-                                saldo >= 0 ? "border-emerald-400/40 bg-emerald-500/5" : "border-rose-400/40 bg-rose-500/5"
+                                "rounded-2xl border-2 transition-all duration-300",
+                                saldo >= 0 ? "border-emerald-400/40 bg-emerald-500/5 hover:border-emerald-400/60" : "border-rose-400/40 bg-rose-500/5 hover:border-rose-400/60"
                             )}>
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Saldo real de la quincena hasta hoy</p>
-                                    <p className={cn("text-2xl font-black", saldo >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                                        {saldo >= 0 ? `+${formatCurrency(saldo)}` : formatCurrency(saldo)}
-                                    </p>
-                                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                                        Ingresos reales {formatCurrency(quincenaReal.ventasTotal)} — Compromisos {formatCurrency(diagnosticoFinanciero.fijos)}
-                                    </p>
+                                <div 
+                                    className="px-5 py-4 flex items-center justify-between gap-4 flex-wrap cursor-pointer group"
+                                    onClick={(e) => { e.stopPropagation(); setSaldoRealExpanded(!saldoRealExpanded); }}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className={cn(
+                                            "w-12 h-12 rounded-xl flex items-center justify-center shadow-inner transition-transform group-active:scale-95 shrink-0",
+                                            saldo >= 0 ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"
+                                        )}>
+                                            {saldo >= 0 ? <TrendingUp className="w-6 h-6" /> : <TrendingDown className="w-6 h-6" />}
+                                        </div>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                                Saldo real de la quincena hasta hoy
+                                            </p>
+                                            <p className={cn("text-3xl font-black tracking-tight", saldo >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                                                {saldo >= 0 ? `+${formatCurrency(saldo)}` : formatCurrency(saldo)}
+                                            </p>
+                                            <p className="text-[11.5px] text-muted-foreground mt-1">
+                                                Ingresos reales {formatCurrency(quincenaReal.ventasTotal)} — Compromisos fijos {formatCurrency(diagnosticoFinanciero.fijos)}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-4 ml-auto">
+                                        {quincenaReal.ventasTotalDia > 0 && (
+                                            <div 
+                                                onClick={(e) => { e.stopPropagation(); setDetallesModal('ventas_hoy'); }}
+                                                className="text-right bg-card/80 rounded-xl px-4 py-2 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors shadow-sm"
+                                            >
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ventas registradas hoy</p>
+                                                <p className="text-xl font-black text-amber-400">{formatCurrency(quincenaReal.ventasTotalDia)}</p>
+                                            </div>
+                                        )}
+                                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-muted-foreground shrink-0 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10 transition-colors">
+                                            {saldoRealExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        </div>
+                                    </div>
                                 </div>
-                                {quincenaReal.ventasTotalDia > 0 && (
-                                    <div 
-                                        onClick={() => setDetallesModal('ventas_hoy')}
-                                        className="text-right bg-card/60 rounded-xl px-4 py-2 border border-white/5 cursor-pointer hover:bg-white/5 transition-colors"
-                                    >
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ventas registradas hoy</p>
-                                        <p className="text-xl font-black text-amber-400">{formatCurrency(quincenaReal.ventasTotalDia)}</p>
+                                
+                                {saldoRealExpanded && (
+                                    <div className="px-5 pb-5 pt-3 border-t border-black/5 dark:border-white/5 animate-in slide-in-from-top-2">
+                                        <div className="p-4 bg-white/60 dark:bg-black/30 rounded-xl border border-black/5 dark:border-white/5 max-w-2xl shadow-sm">
+                                            <div className="grid sm:grid-cols-2 gap-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="w-7 h-7 rounded-full bg-indigo-500/15 flex items-center justify-center shrink-0 mt-0.5">
+                                                        <Brain className="w-4 h-4 text-indigo-500" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[11px] font-black uppercase tracking-widest text-indigo-500 dark:text-indigo-400 mb-1">¿De dónde sale este valor?</p>
+                                                        <p className="text-[12px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                                                            Es la diferencia estricta entre <strong>todo el dinero real que ha ingresado por ventas</strong> en lo que va de esta quincena ({formatCurrency(quincenaReal.ventasTotal)}) y <strong>absolutamente todos los compromisos fijos</strong> calculados para esta quincena completa (arriendo, servicios, nómina de turno y extras, deudas fijas, que suman {formatCurrency(diagnosticoFinanciero.fijos)}).
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="flex items-start gap-3">
+                                                    <div className={cn(
+                                                        "w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5",
+                                                        saldo >= 0 ? "bg-emerald-500/15" : "bg-rose-500/15"
+                                                    )}>
+                                                        <Target className={cn("w-4 h-4", saldo >= 0 ? "text-emerald-500" : "text-rose-500")} />
+                                                    </div>
+                                                    <div>
+                                                        <p className={cn("text-[11px] font-black uppercase tracking-widest mb-1", saldo >= 0 ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400")}>¿Qué me indica hoy?</p>
+                                                        <p className="text-[12px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                                                            {saldo >= 0 
+                                                                ? "¡Excelente noticia! Como es positivo, significa que tus ventas actuales YA pagaron todos los gastos fijos (has superado el punto de equilibrio). Todo lo que ingreses de ahora en adelante es ganancia neta y libre para invertir, ahorrar, o usar como excedente." 
+                                                                : "Como es negativo, te indica de manera precisa cuánto dinero en ventas te hace falta todavía en lo que queda de esta quincena para alcanzar el punto de equilibrio y lograr pagar todos los compromisos sin quedar debiendo nada."}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                 )}
                             </div>
                         );
                     })()}
 
-                    {/* ── REGISTRO RÁPIDO DE GASTOS DIARIOS ── */}
-                    <div className="mb-6">
-                        <div className="flex items-center gap-2 mb-3 px-2">
-                            <ShoppingBag className="w-4 h-4 text-emerald-500" />
-                            <h3 className="text-sm font-black text-slate-700 dark:text-slate-300">Registro Rápido de Gastos Diarios</h3>
-                        </div>
-                        <QuickEntryBar onSave={handleSaveGastoDiario} />
-                    </div>
-
                     {/* ── SEMÁFORO Y SOBRES (MI QUINCENA PRO) ── */}
+                    <div 
+                        className="flex items-center justify-between mb-4 mt-8 cursor-pointer bg-violet-500/5 dark:bg-violet-500/10 hover:bg-violet-500/10 dark:hover:bg-violet-500/20 p-3 px-4 rounded-2xl border border-violet-500/10 shadow-sm transition-all group" 
+                        onClick={(e) => { e.stopPropagation(); setSemaforoExpanded(x => !x); }}
+                    >
+                        <h2 className="text-lg font-black flex items-center gap-2 text-violet-700 dark:text-violet-300">
+                            🧭 Proyección y Sobres Inteligentes
+                        </h2>
+                        <div 
+                            className="flex items-center justify-center w-8 h-8 rounded-full bg-violet-500/10 text-violet-600 dark:text-violet-400 shrink-0 transition-colors"
+                        >
+                            {semaforoExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                        </div>
+                    </div>
+                    {semaforoExpanded && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Semáforo de Utilidad - Rediseñado para Claridad */}
                         <Card className={cn(
@@ -1015,6 +1237,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                             </CardContent>
                         </Card>
                     </div>
+                    )}
                     
                     {/* ── MODO SUPERVIVENCIA: CAJAS SAGRADAS VS FONDO COMÚN ── */}
                     {quincenaReal.ventasTotalDia > 0 && (
@@ -1187,11 +1410,20 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                         {/* Columna izq — Compromisos fijos */}
-                        <Card className="rounded-3xl border-white/5 bg-card/30">
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-base font-black">Compromisos Fijos</CardTitle>
-                                <CardDescription className="text-xs">Arriendo, préstamos, servicios, salarios</CardDescription>
+                        <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-sm overflow-hidden">
+                            <CardHeader 
+                                className="pb-3 flex flex-row items-center justify-between cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors"
+                                onClick={(e) => { e.stopPropagation(); setCompromisosCardExpanded(x => !x); }}
+                            >
+                                <div>
+                                    <CardTitle className="text-base font-black text-slate-800 dark:text-slate-100">Compromisos Fijos</CardTitle>
+                                    <CardDescription className="text-xs font-medium">Arriendo, préstamos, servicios, salarios</CardDescription>
+                                </div>
+                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0">
+                                    {compromisosCardExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </div>
                             </CardHeader>
+                            {compromisosCardExpanded && (
                             <CardContent className="space-y-3">
                                 {/* Formulario nuevo/edición de compromiso */}
                                 <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-2 border border-white/5">
@@ -1310,14 +1542,24 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                     </div>
                                 ))}
                             </CardContent>
+                            )}
                         </Card>
 
                         {/* Columna der — Registro de ventas del día */}
-                        <Card className="rounded-3xl border-white/5 bg-card/30">
-                            <CardHeader className="pb-3">
-                                <CardTitle className="text-base font-black">Ventas del Día</CardTitle>
-                                <CardDescription className="text-xs">Registro manual detallado por caja (efectivo) y otros métodos</CardDescription>
+                        <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-sm overflow-hidden">
+                            <CardHeader 
+                                className="pb-3 flex flex-row items-center justify-between cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors"
+                                onClick={(e) => { e.stopPropagation(); setVentasCardExpanded(x => !x); }}
+                            >
+                                <div>
+                                    <CardTitle className="text-base font-black text-slate-800 dark:text-slate-100">Ventas del Día</CardTitle>
+                                    <CardDescription className="text-xs font-medium">Registro manual detallado por caja (efectivo) y otros métodos</CardDescription>
+                                </div>
+                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0">
+                                    {ventasCardExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                </div>
                             </CardHeader>
+                            {ventasCardExpanded && (
                             <CardContent className="space-y-3">
                                 <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-3 border border-white/5">
                                     <div className="grid grid-cols-2 gap-2">
@@ -1724,156 +1966,243 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                     <p className="text-center text-xs text-muted-foreground py-4">Sin ventas registradas manualmente aún</p>
                                 )}
                                 <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                                    {ventasDiarias.slice(0, 30).map(v => {
-                                        // Cálculos para la vista del historial
-                                        const princ = v.totalEfectivo || 0; // en cajas.Principal o el viejo totalEfectivo
-                                        const nequi = v.totalNequi || 0;
-                                        const princMasNequi = princ + nequi;
+                                    {/* VISTA ESCRITORIO (TABLA) */}
+                                    <div className="hidden md:block w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
+                                        <table className="w-full text-left border-collapse text-xs">
+                                            <thead>
+                                                <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400">
+                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Fecha / Turno</th>
+                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Neto (Princ+Nequi)</th>
+                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Gastos</th>
+                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Otras Cajas</th>
+                                                    <th className="px-4 py-2 font-black uppercase tracking-wider text-right">Total General</th>
+                                                    <th className="px-4 py-2 font-black uppercase tracking-wider text-center">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {ventasDiarias.slice(0, 30).map(v => {
+                                                    const princ = v.totalEfectivo || 0;
+                                                    const nequi = v.totalNequi || 0;
+                                                    const princMasNequi = princ + nequi;
+                                                    let sumOtras = 0; let gastos = 0;
+                                                    if (v.cajas) {
+                                                        Object.entries(v.cajas).forEach(([k, val]) => {
+                                                            if (k === 'Gastos/Salidas') gastos += (val || 0);
+                                                            else if (k !== 'Principal') sumOtras += (val || 0);
+                                                        });
+                                                    }
+                                                    const totalGeneral = princMasNequi + sumOtras - gastos + (v.totalTransferencia || 0) + (v.totalCredito || 0);
+                                                    return (
+                                                        <tr key={v.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
+                                                            <td className="px-4 py-2">
+                                                                <div className="font-bold text-slate-800 dark:text-slate-200">{new Date(v.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                                                                {(v.turno && v.turno !== 'Día Completo' || v.evento) && (
+                                                                    <div className="flex gap-1 mt-1">
+                                                                        {v.turno && v.turno !== 'Día Completo' && <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-violet-500/10 text-violet-500">{v.turno}</span>}
+                                                                        {v.evento && <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500/10 text-amber-500">{v.evento}</span>}
+                                                                    </div>
+                                                                )}
+                                                            </td>
+                                                            <td className="px-4 py-2 font-medium text-indigo-600 dark:text-indigo-400">{formatCurrency(princMasNequi - gastos)}</td>
+                                                            <td className="px-4 py-2 font-medium text-rose-600 dark:text-rose-400">{gastos > 0 ? formatCurrency(gastos) : '-'}</td>
+                                                            <td className="px-4 py-2">
+                                                                <div className="font-medium text-emerald-600 dark:text-emerald-400">{sumOtras > 0 ? formatCurrency(sumOtras) : '-'}</div>
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {v.cajas && Object.entries(v.cajas).map(([k, val]) => val > 0 && k !== 'Principal' && k !== 'Gastos/Salidas' && (
+                                                                        <span key={k} className="text-[9px] text-slate-500">{k.substring(0,3)}: {formatCurrency(val)}</span>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-4 py-2 font-black text-emerald-600 dark:text-emerald-400 text-right">{formatCurrency(totalGeneral)}</td>
+                                                            <td className="px-4 py-2">
+                                                                <div className="flex items-center justify-center gap-2">
+                                                                    <button onClick={() => {
+                                                                        const normalizedCajas: any = {};
+                                                                        if (v.cajas) {
+                                                                            const keyMap: any = { 'principal': 'Principal', 'helados': 'Helados', 'helado': 'Helados', 'mecato': 'Mecato', 'michelada': 'Michelada', 'bebidas': 'Michelada', 'tinto': 'Tinto', 'fritos': 'Fritos', 'tortas': 'Tortas', 'torta': 'Tortas', 'juegos': 'Juegos', 'juego': 'Juegos', 'piñateria': 'PIÑATERIA', 'gastos': 'Gastos/Salidas', 'salidas': 'Gastos/Salidas', 'gastos/salidas': 'Gastos/Salidas' };
+                                                                            Object.entries(v.cajas).forEach(([k, val]) => {
+                                                                                const mappedKey = keyMap[k.toLowerCase().trim()] || k;
+                                                                                normalizedCajas[mappedKey] = (normalizedCajas[mappedKey] || 0) + val;
+                                                                            });
+                                                                        }
+                                                                        setFormVenta({ id: v.id, fecha: v.fecha, turno: v.turno || 'Día Completo', evento: v.evento || '', totalEfectivo: v.totalEfectivo.toString() || '', totalNequi: v.totalNequi.toString() || '', totalTransferencia: v.totalTransferencia.toString() || '', totalCredito: v.totalCredito.toString() || '', notas: v.notas || '', cajas: normalizedCajas });
+                                                                        toast.info("Venta cargada para editar.");
+                                                                    }} className="text-indigo-500 hover:text-indigo-700 p-1"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                                    <button onClick={() => handleDeleteVentaDiaria(v.id)} className="text-slate-400 hover:text-rose-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
 
-                                        let sumOtras = 0;
-                                        let gastos = 0;
-                                        if (v.cajas) {
-                                            Object.entries(v.cajas).forEach(([k, val]) => {
-                                                if (k === 'Gastos/Salidas') {
-                                                    gastos += (val || 0);
-                                                } else if (k !== 'Principal') {
-                                                    sumOtras += (val || 0);
-                                                }
-                                            });
-                                        }
-                                        const totalGeneral = princMasNequi + sumOtras - gastos + (v.totalTransferencia || 0) + (v.totalCredito || 0);
+                                    {/* VISTA MÓVIL (TARJETAS) */}
+                                    <div className="md:hidden space-y-2">
+                                        {ventasDiarias.slice(0, 30).map(v => {
+                                            // Cálculos para la vista del historial
+                                            const princ = v.totalEfectivo || 0; // en cajas.Principal o el viejo totalEfectivo
+                                            const nequi = v.totalNequi || 0;
+                                            const princMasNequi = princ + nequi;
 
-                                        return (
-                                        <div key={v.id} className="flex flex-col gap-1.5 rounded-2xl p-3 bg-card/40 border border-white/5">
-                                            <div className="flex items-center justify-between">
-                                                <div className="flex-1 min-w-0">
+                                            let sumOtras = 0;
+                                            let gastos = 0;
+                                            if (v.cajas) {
+                                                Object.entries(v.cajas).forEach(([k, val]) => {
+                                                    if (k === 'Gastos/Salidas') {
+                                                        gastos += (val || 0);
+                                                    } else if (k !== 'Principal') {
+                                                        sumOtras += (val || 0);
+                                                    }
+                                                });
+                                            }
+                                            const totalGeneral = princMasNequi + sumOtras - gastos + (v.totalTransferencia || 0) + (v.totalCredito || 0);
+
+                                            return (
+                                            <div key={v.id} className="flex flex-col gap-1.5 rounded-2xl p-3 bg-card/40 border border-white/5 shadow-sm">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-sm font-black text-slate-800 dark:text-slate-200">{new Date(v.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
+                                                            {v.turno && v.turno !== 'Día Completo' && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-violet-500/20 text-violet-500 border border-violet-500/30">
+                                                                    {v.turno}
+                                                                </span>
+                                                            )}
+                                                            {v.evento && (
+                                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-500/20 text-amber-500 border border-amber-500/30">
+                                                                    {v.evento}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {v.notas && <p className="text-[10px] italic text-slate-500 truncate mt-0.5">"{v.notas}"</p>}
+                                                    </div>
                                                     <div className="flex items-center gap-2">
-                                                        <p className="text-sm font-black">{new Date(v.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
-                                                        {v.turno && v.turno !== 'Día Completo' && (
-                                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-violet-500/20 text-violet-400 border border-violet-500/30 shadow-sm">
-                                                                {v.turno}
+                                                        <p className="text-sm font-black text-emerald-500 shrink-0">{formatCurrency(totalGeneral)}</p>
+                                                        <button 
+                                                            onClick={() => {
+                                                                const normalizedCajas: any = {};
+                                                                if (v.cajas) {
+                                                                    const keyMap: any = {
+                                                                        'principal': 'Principal', 'helados': 'Helados', 'helado': 'Helados',
+                                                                        'mecato': 'Mecato', 'michelada': 'Michelada', 'bebidas': 'Michelada',
+                                                                        'tinto': 'Tinto', 'fritos': 'Fritos', 'tortas': 'Tortas', 'torta': 'Tortas',
+                                                                        'juegos': 'Juegos', 'juego': 'Juegos', 'piñateria': 'PIÑATERIA',
+                                                                        'gastos': 'Gastos/Salidas', 'salidas': 'Gastos/Salidas', 'gastos/salidas': 'Gastos/Salidas'
+                                                                    };
+                                                                    Object.entries(v.cajas).forEach(([k, val]) => {
+                                                                        const lowerK = k.toLowerCase().trim();
+                                                                        const mappedKey = keyMap[lowerK] || k;
+                                                                        normalizedCajas[mappedKey] = (normalizedCajas[mappedKey] || 0) + val;
+                                                                    });
+                                                                }
+                                                                setFormVenta({
+                                                                    id: v.id, fecha: v.fecha, turno: v.turno || 'Día Completo', evento: v.evento || '',
+                                                                    totalEfectivo: v.totalEfectivo.toString() || '', totalNequi: v.totalNequi.toString() || '',
+                                                                    totalTransferencia: v.totalTransferencia.toString() || '', totalCredito: v.totalCredito.toString() || '',
+                                                                    notas: v.notas || '', cajas: normalizedCajas
+                                                                });
+                                                                toast.info("Venta cargada en el formulario para editar.");
+                                                            }} 
+                                                            className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 hover:underline"
+                                                        >
+                                                            Editar
+                                                        </button>
+                                                        <button onClick={() => handleDeleteVentaDiaria(v.id)} className="shrink-0 text-slate-400 hover:text-rose-500 transition-colors">
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="text-xs text-slate-500 border-t border-slate-100 dark:border-white/5 pt-2 flex flex-col gap-2">
+                                                    
+                                                    {/* Detalle agrupado que solicitó el usuario */}
+                                                    <div className="flex flex-wrap items-center gap-1.5">
+                                                        <span className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-300">
+                                                            P+N: {formatCurrency(princMasNequi - gastos)}
+                                                        </span>
+                                                        {gastos > 0 && (
+                                                            <span className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-1.5 py-0.5 rounded text-[10px] font-bold text-rose-600 dark:text-rose-300">
+                                                                Gastos: -{formatCurrency(gastos)}
                                                             </span>
                                                         )}
-                                                        {v.evento && (
-                                                            <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm shadow-amber-500/10">
-                                                                {v.evento}
+                                                        {sumOtras > 0 && (
+                                                            <span className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-1.5 py-0.5 rounded text-[10px] font-bold text-emerald-600 dark:text-emerald-300">
+                                                                Otras: {formatCurrency(sumOtras)}
+                                                            </span>
+                                                        )}
+                                                        {v.totalTransferencia > 0 && (
+                                                            <span className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 px-1.5 py-0.5 rounded text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                                                                Transf: {formatCurrency(v.totalTransferencia)}
+                                                            </span>
+                                                        )}
+                                                        {v.totalCredito > 0 && (
+                                                            <span className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                                                                Cred: {formatCurrency(v.totalCredito)}
                                                             </span>
                                                         )}
                                                     </div>
-                                                    {v.notas && <p className="text-[10px] italic text-muted-foreground truncate mt-0.5">"{v.notas}"</p>}
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                    <p className="text-sm font-black text-emerald-400 shrink-0">{formatCurrency(totalGeneral)}</p>
-                                                    <button 
-                                                        onClick={() => {
-                                                            // Normalizar llaves para evitar duplicados en cajas
-                                                            const normalizedCajas: any = {};
-                                                            if (v.cajas) {
-                                                                const keyMap: any = {
-                                                                    'principal': 'Principal', 'helados': 'Helados', 'helado': 'Helados',
-                                                                    'mecato': 'Mecato', 'michelada': 'Michelada', 'bebidas': 'Michelada',
-                                                                    'tinto': 'Tinto', 'fritos': 'Fritos', 'tortas': 'Tortas', 'torta': 'Tortas',
-                                                                    'juegos': 'Juegos', 'juego': 'Juegos', 'piñateria': 'PIÑATERIA',
-                                                                    'gastos': 'Gastos/Salidas', 'salidas': 'Gastos/Salidas', 'gastos/salidas': 'Gastos/Salidas'
-                                                                };
-                                                                Object.entries(v.cajas).forEach(([k, val]) => {
-                                                                    const lowerK = k.toLowerCase().trim();
-                                                                    const mappedKey = keyMap[lowerK] || k;
-                                                                    normalizedCajas[mappedKey] = (normalizedCajas[mappedKey] || 0) + val;
-                                                                });
-                                                            }
 
-                                                            // Cargar en el form para edición fácil
-                                                            setFormVenta({
-                                                                id: v.id,
-                                                                fecha: v.fecha,
-                                                                turno: v.turno || 'Día Completo',
-                                                                evento: v.evento || '',
-                                                                totalEfectivo: v.totalEfectivo.toString() || '',
-                                                                totalNequi: v.totalNequi.toString() || '',
-                                                                totalTransferencia: v.totalTransferencia.toString() || '',
-                                                                totalCredito: v.totalCredito.toString() || '',
-                                                                notas: v.notas || '',
-                                                                cajas: normalizedCajas
-                                                            });
-                                                            toast.info("Venta cargada en el formulario para editar. Vuelve a guardar para sobrescribir.");
-                                                        }} 
-                                                        className="text-[10px] font-bold text-indigo-400 hover:text-indigo-600 hover:underline"
-                                                    >
-                                                        Editar
-                                                    </button>
-                                                    <button onClick={() => handleDeleteVentaDiaria(v.id)} className="shrink-0 text-muted-foreground hover:text-rose-400 transition-colors">
-                                                        <Trash2 className="w-3.5 h-3.5" />
-                                                    </button>
+                                                    {/* Desglose individual de cajas pequeñas */}
+                                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                                        {v.cajas && Object.entries(v.cajas).map(([k, val]) => val > 0 && k !== 'Principal' && k !== 'Gastos/Salidas' && (
+                                                            <span key={k} className="bg-slate-100 dark:bg-slate-800/50 px-1.5 py-0.5 rounded text-[9px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700/50">
+                                                                {k}: {formatCurrency(val)}
+                                                            </span>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div className="text-xs text-muted-foreground border-t border-white/5 pt-2 flex flex-col gap-2">
-                                                
-                                                {/* Detalle agrupado que solicitó el usuario */}
-                                                <div className="flex flex-wrap items-center gap-2">
-                                                    <span className="bg-indigo-500/10 border border-indigo-500/20 px-2 py-1 rounded text-xs font-black text-indigo-500 dark:text-indigo-300">
-                                                        Princ+Nequi (Neto): {formatCurrency(princMasNequi - gastos)}
-                                                    </span>
-                                                    {gastos > 0 && (
-                                                        <span className="bg-rose-500/10 border border-rose-500/20 px-2 py-1 rounded text-xs font-black text-rose-600 dark:text-rose-300">
-                                                            Gastos: - {formatCurrency(gastos)}
-                                                        </span>
-                                                    )}
-                                                    {sumOtras > 0 && (
-                                                        <span className="bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded text-xs font-black text-emerald-600 dark:text-emerald-300">
-                                                            Otras Cajas: {formatCurrency(sumOtras)}
-                                                        </span>
-                                                    )}
-                                                    {v.totalTransferencia > 0 && (
-                                                        <span className="bg-blue-50 dark:bg-blue-950/20 px-2 py-1 rounded text-xs font-black text-blue-600 dark:text-blue-400">
-                                                            Transf: {formatCurrency(v.totalTransferencia)}
-                                                        </span>
-                                                    )}
-                                                    {v.totalCredito > 0 && (
-                                                        <span className="bg-amber-50 dark:bg-amber-950/20 px-2 py-1 rounded text-xs font-black text-amber-600 dark:text-amber-400">
-                                                            Cred: {formatCurrency(v.totalCredito)}
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                {/* Desglose individual de cajas pequeñas */}
-                                                <div className="flex flex-wrap gap-1.5 mt-0.5">
-                                                    {v.cajas && Object.entries(v.cajas).map(([k, val]) => val > 0 && k !== 'Principal' && k !== 'Gastos/Salidas' && (
-                                                <span key={k} className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                                                            {k}: {formatCurrency(val)}
-                                                        </span>
-                                                    ))}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )})}
+                                        )})}
+                                    </div>
                                 </div>
                             </CardContent>
+                            )}
                         </Card>
 
                         {/* ── Auditoría de Producción ─────────────────────────────── */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-xl overflow-hidden">
                             <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500" />
-                            <CardHeader className="pb-3 bg-slate-50/50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-white/5">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                    <div>
-                                        <CardTitle className="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
-                                            <div className="p-2 bg-amber-500/10 rounded-lg">
-                                                <ClipboardCheck className="w-5 h-5 text-amber-500" />
-                                            </div>
-                                            Auditoría de Producción
-                                        </CardTitle>
-                                        <CardDescription className="text-xs font-medium mt-1">Control estricto de entrada de masa vs. salida de pan</CardDescription>
+                            <CardHeader 
+                                className="pb-3 cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors" 
+                                onClick={(e) => { e.stopPropagation(); setProduccionExpanded(x => !x); }}
+                            >
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                                        <div className="p-2 bg-rose-500/10 rounded-lg">
+                                            <ChefHat className="w-5 h-5 text-rose-500" />
+                                        </div>
+                                        Auditoría de Producción
+                                    </CardTitle>
+                                    <div 
+                                        className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0 sm:hidden"
+                                    >
+                                        {produccionExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                                     </div>
-                                    <div className="flex flex-col items-end shrink-0">
-                                        <Label className="text-[10px] font-black uppercase text-muted-foreground mb-1">Fecha de Auditoría</Label>
-                                        <Input type="date" value={normalizarFechaYYYYMMDD(formProd.fecha)}
-                                            onChange={e => setFormProd(p => ({ ...p, fecha: normalizarFechaYYYYMMDD(e.target.value) }))}
-                                            className="h-9 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10" />
+                                </div>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-2">
+                                    <CardDescription className="text-xs font-medium">
+                                        Registra masas, contabiliza panes, y compara lo que debería haber en vitrina.
+                                    </CardDescription>
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs font-black uppercase tracking-widest text-muted-foreground whitespace-nowrap">Fecha</span>
+                                            <Input 
+                                                type="date" 
+                                                value={formProd.fecha.slice(0, 10)}
+                                                onClick={e => e.stopPropagation()}
+                                                onChange={e => setFormProd(p => ({ ...p, fecha: normalizarFechaYYYYMMDD(e.target.value) }))}
+                                                className="h-9 text-xs font-bold rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-white/10" />
+                                        </div>
+                                        <div 
+                                            className="hidden sm:flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0"
+                                        >
+                                            {produccionExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        </div>
                                     </div>
                                 </div>
                             </CardHeader>
-                            
+                            {produccionExpanded && (
                             <CardContent className="p-0">
                                 {/* SUB-TABS DE PRODUCCIÓN */}
                                 <div className="flex border-b border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-slate-900/20">
@@ -1900,7 +2229,52 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 <h3 className="text-[11px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">Declaración de Masa (Entrada)</h3>
                                             </div>
                                             
-                                            <div className="grid gap-2">
+                                            {/* VISTA ESCRITORIO (TABLA) */}
+                                            <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 mt-2 mb-2">
+                                                <table className="w-full text-left border-collapse text-xs">
+                                                    <thead>
+                                                        <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400">
+                                                            <th className="px-4 py-2 font-black uppercase tracking-wider">Tipo de Masa</th>
+                                                            <th className="px-4 py-2 font-black uppercase tracking-wider w-48">Cantidad (Arrobas)</th>
+                                                            <th className="px-4 py-2 font-black uppercase tracking-wider text-right w-12">Acciones</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {masasPreparadas.map((m) => (
+                                                            <tr key={m.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-900/50">
+                                                                <td className="px-4 py-2 align-middle">
+                                                                    <select
+                                                                        value={m.nombre}
+                                                                        onChange={e => handleMasaChange(m.id, 'nombre', e.target.value)}
+                                                                        className="h-9 text-xs font-bold rounded-lg w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3"
+                                                                    >
+                                                                        <option value="">Selecciona Masa...</option>
+                                                                        {formulaciones?.filter((f: any) => f.activo).map((f: any) => (
+                                                                            <option key={f.id} value={f.nombre}>{f.nombre}</option>
+                                                                        ))}
+                                                                    </select>
+                                                                </td>
+                                                                <td className="px-4 py-2 align-middle w-48">
+                                                                    <SelectorMedidaArroba
+                                                                        value={m.cantidadArrobas || ''}
+                                                                        opciones={opcionesArrobas}
+                                                                        onChange={(val) => handleMasaChange(m.id, 'cantidadArrobas', val)}
+                                                                    />
+                                                                </td>
+                                                                <td className="px-4 py-2 align-middle w-12 text-right">
+                                                                    <button type="button" onClick={() => handleRemoveMasa(m.id)}
+                                                                        className="h-9 w-9 inline-flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors">
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            {/* VISTA MÓVIL (TARJETAS) */}
+                                            <div className="md:hidden grid gap-2 mb-2">
                                                 {masasPreparadas.map((m) => (
                                                     <div key={m.id} className="flex gap-2 items-center bg-slate-50 dark:bg-white/5 p-2 rounded-xl border border-slate-200 dark:border-white/5">
                                                         <div className="flex-1">
@@ -1909,7 +2283,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 onChange={e => handleMasaChange(m.id, 'nombre', e.target.value)}
                                                                 className="h-9 text-xs font-bold rounded-lg w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3"
                                                             >
-                                                                <option value="">Selecciona Masa Declarada...</option>
+                                                                <option value="">Selecciona Masa...</option>
                                                                 {formulaciones?.filter((f: any) => f.activo).map((f: any) => (
                                                                     <option key={f.id} value={f.nombre}>{f.nombre}</option>
                                                                 ))}
@@ -1928,11 +2302,11 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                         </button>
                                                     </div>
                                                 ))}
-                                                <button type="button" onClick={handleAddMasa}
-                                                    className="w-full h-10 rounded-xl border-2 border-dashed border-indigo-200 dark:border-indigo-500/30 text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/5 transition-colors flex items-center justify-center gap-2">
-                                                    <Plus className="w-4 h-4" /> Registrar Masa
-                                                </button>
                                             </div>
+                                            <button type="button" onClick={handleAddMasa}
+                                                className="w-full h-10 rounded-xl border-2 border-dashed border-indigo-200 dark:border-indigo-500/30 text-[10px] font-black uppercase tracking-widest text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/5 transition-colors flex items-center justify-center gap-2">
+                                                <Plus className="w-4 h-4" /> Registrar Masa
+                                            </button>
                                             {/* Meta al declarar masa — antes de panear */}
                                             <BarraAvancePanadero metas={metasEnVivo} />
                                             {metasEnVivo.some(m => m.estado === 'esperando') && (
@@ -1959,7 +2333,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             </div>
                                             <BarraAvancePanadero metas={metasEnVivo} />
                                             
-                                            <div className="space-y-3">
+                                            <div className="grid grid-cols-1 gap-4">
                                                 {hornadas.map((h, i) => {
                                                     const masaVinculada = masasPreparadas.find((x: any) => x.id === h.masaId);
                                                     const formCorr = masaVinculada ? formulaciones?.find((f: any) => f.nombre === masaVinculada.nombre) : null;
@@ -1968,7 +2342,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                     const faltaConfiguracion = h.tipoPan && panSeleccionado && !panSeleccionado.piezasPorLata;
 
                                                     return (
-                                                        <div key={i} className={cn("relative p-3 sm:p-4 rounded-2xl border transition-all duration-300", 
+                                                        <div key={i} className={cn("relative p-4 sm:p-5 rounded-2xl border transition-all duration-300 w-full min-w-0", 
                                                             faltaConfiguracion ? "bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50" : "bg-slate-50 dark:bg-slate-900/30 border-slate-200 dark:border-white/5")}>
                                                             
                                                             {/* Header de la Hornada */}
@@ -2001,11 +2375,11 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 )}
                                                             </div>
 
-                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                                                                <div>
-                                                                    <Label className="text-[9px] font-black uppercase text-slate-500 mb-1">Modelo de Pan</Label>
+                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 min-w-0">
+                                                                <div className="min-w-0">
+                                                                    <Label className="text-[10px] font-black uppercase text-slate-500 mb-1.5 block">Modelo de Pan</Label>
                                                                     <select
-                                                                        className={cn("h-9 text-xs font-bold rounded-xl w-full border bg-white dark:bg-slate-900 px-3", faltaConfiguracion ? "border-rose-300 dark:border-rose-700/50 ring-1 ring-rose-500/20 text-rose-700 dark:text-rose-300" : "border-slate-200 dark:border-white/10")}
+                                                                        className={cn("h-11 text-sm font-bold rounded-xl w-full min-w-0 border bg-white dark:bg-slate-900 px-3 truncate", faltaConfiguracion ? "border-rose-300 dark:border-rose-700/50 ring-1 ring-rose-500/20 text-rose-700 dark:text-rose-300" : "border-slate-200 dark:border-white/10")}
                                                                         value={h.tipoPan}
                                                                         onChange={e => {
                                                                             const val = e.target.value;
@@ -2027,10 +2401,10 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                     </select>
                                                                 </div>
                                                                 {masasPreparadas.length > 0 && (
-                                                                    <div>
-                                                                        <Label className="text-[9px] font-black uppercase text-slate-500 mb-1">Masa Origen (Opcional)</Label>
+                                                                    <div className="min-w-0">
+                                                                        <Label className="text-[10px] font-black uppercase text-slate-500 mb-1.5 block">Masa Origen (Opcional)</Label>
                                                                         <select
-                                                                            className="h-9 text-xs rounded-xl w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3"
+                                                                            className="h-11 text-sm rounded-xl w-full min-w-0 border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3"
                                                                             value={h.masaId || ''}
                                                                             onChange={e => handleHornadaChange(i, 'masaId', e.target.value)}
                                                                         >
@@ -2043,35 +2417,35 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 )}
                                                             </div>
 
-                                                            {/* Inputs numéricos con estilo claro */}
-                                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-white dark:bg-black/20 p-3 rounded-xl border border-slate-100 dark:border-white/5">
-                                                                <div>
-                                                                    <Label className="text-[9px] font-black uppercase text-slate-500 flex justify-between">Bandejas / Latas</Label>
-                                                                    <div className="relative mt-1">
-                                                                        <Input placeholder="0" type="text" inputMode="numeric"
-                                                                            value={h.bandejas || ''}
-                                                                            onChange={e => handleHornadaChange(i, 'bandejas', e.target.value.replace(/[^0-9.]/g,''))}
-                                                                            className="h-10 text-center font-black text-lg rounded-xl border-slate-200 dark:border-slate-800 focus-visible:ring-indigo-500" />
-                                                                    </div>
-                                                                </div>
-                                                                <div>
-                                                                    <Label className="text-[9px] font-black uppercase text-slate-500 flex justify-between">
-                                                                        Panes/lata
-                                                                        {faltaConfiguracion && <span className="text-rose-500 font-bold">*Falta</span>}
+                                                            {/* Inputs numéricos — una columna en móvil, tres cómodas en pantallas anchas */}
+                                                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white dark:bg-black/20 p-4 rounded-xl border border-slate-100 dark:border-white/5">
+                                                                <div className="min-w-0 space-y-1.5">
+                                                                    <Label className="text-[10px] font-black uppercase text-slate-500 leading-tight block">
+                                                                        Bandejas / Latas
                                                                     </Label>
-                                                                    <div className="relative mt-1">
-                                                                        <Input placeholder="0" type="text" inputMode="numeric"
-                                                                            value={h.panesPorBandeja || ''}
-                                                                            onChange={e => handleHornadaChange(i, 'panesPorBandeja', e.target.value.replace(/[^0-9]/g,''))}
-                                                                            className={cn("h-10 text-center font-black text-lg rounded-xl focus-visible:ring-indigo-500", faltaConfiguracion ? "border-rose-300 dark:border-rose-700/50 bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400" : "border-slate-200 dark:border-slate-800")} />
-                                                                    </div>
+                                                                    <Input placeholder="0" type="text" inputMode="numeric"
+                                                                        value={h.bandejas || ''}
+                                                                        onChange={e => handleHornadaChange(i, 'bandejas', e.target.value.replace(/[^0-9.]/g,''))}
+                                                                        className="h-12 w-full text-center font-black text-lg rounded-xl border-slate-200 dark:border-slate-800 focus-visible:ring-indigo-500" />
                                                                 </div>
-                                                                <div className="bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-2 flex flex-col justify-center items-center border border-emerald-200 dark:border-emerald-500/20 shadow-inner">
-                                                                    <Label className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400 mb-1">Total Panes (Escribir)</Label>
+                                                                <div className="min-w-0 space-y-1.5">
+                                                                    <Label className="text-[10px] font-black uppercase text-slate-500 leading-tight block">
+                                                                        Panes por lata
+                                                                        {faltaConfiguracion && <span className="text-rose-500 font-bold ml-1">*Falta</span>}
+                                                                    </Label>
+                                                                    <Input placeholder="0" type="text" inputMode="numeric"
+                                                                        value={h.panesPorBandeja || ''}
+                                                                        onChange={e => handleHornadaChange(i, 'panesPorBandeja', e.target.value.replace(/[^0-9]/g,''))}
+                                                                        className={cn("h-12 w-full text-center font-black text-lg rounded-xl focus-visible:ring-indigo-500", faltaConfiguracion ? "border-rose-300 dark:border-rose-700/50 bg-rose-50 dark:bg-rose-900/10 text-rose-600 dark:text-rose-400" : "border-slate-200 dark:border-slate-800")} />
+                                                                </div>
+                                                                <div className="min-w-0 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl p-3 flex flex-col justify-center border border-emerald-200 dark:border-emerald-500/20 shadow-inner space-y-1.5">
+                                                                    <Label className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 leading-tight block text-center">
+                                                                        Total panes
+                                                                    </Label>
                                                                     <Input placeholder="0" type="text" inputMode="numeric"
                                                                         value={h.totalPanes || ''}
                                                                         onChange={e => handleHornadaChange(i, 'totalPanes', e.target.value.replace(/[^0-9]/g,''))}
-                                                                        className="h-10 text-center font-black text-xl rounded-xl border-emerald-200 bg-white text-emerald-700 shadow-sm focus-visible:ring-emerald-500" />
+                                                                        className="h-12 w-full text-center font-black text-xl rounded-xl border-emerald-200 bg-white text-emerald-700 shadow-sm focus-visible:ring-emerald-500" />
                                                                 </div>
 
                                                                 {/* Explicación visual de latas */}
@@ -2079,16 +2453,16 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                     const latasLlenas = Math.floor(h.totalPanes / h.panesPorBandeja);
                                                                     const resto = h.totalPanes % h.panesPorBandeja;
                                                                     return (
-                                                                        <div className="col-span-1 sm:col-span-3 flex items-center gap-2 px-2 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-500/20">
+                                                                        <div className="md:col-span-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-500/20">
                                                                             <span className="text-indigo-500 text-base">🍞</span>
                                                                             {resto === 0 ? (
-                                                                                <span className="text-[10px] leading-tight">
+                                                                                <span className="text-[11px] leading-snug">
                                                                                     <span className="font-black text-emerald-600 dark:text-emerald-400">{latasLlenas}</span>
                                                                                     <span className="text-slate-500 dark:text-slate-400"> latas completamente llenas </span>
                                                                                     <span className="font-bold text-emerald-600 dark:text-emerald-400">✓ Exacto</span>
                                                                                 </span>
                                                                             ) : (
-                                                                                <span className="text-[10px] leading-tight">
+                                                                                <span className="text-[11px] leading-snug">
                                                                                     <span className="font-black text-emerald-600 dark:text-emerald-400">{latasLlenas}</span>
                                                                                     <span className="text-slate-500 dark:text-slate-400"> latas llenas </span>
                                                                                     <span className="text-slate-400 dark:text-slate-500">({latasLlenas * h.panesPorBandeja} panes)</span>
@@ -2107,7 +2481,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                     );
                                                 })}
                                                 <button type="button" onClick={handleAddHornada}
-                                                    className="w-full h-10 rounded-xl border-2 border-dashed border-amber-200 dark:border-amber-500/30 text-[10px] font-black uppercase tracking-widest text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/5 transition-colors flex items-center justify-center gap-2">
+                                                    className="w-full min-h-[3rem] rounded-xl border-2 border-dashed border-amber-200 dark:border-amber-500/30 text-[11px] font-black uppercase tracking-widest text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-500/5 transition-colors flex items-center justify-center gap-2 py-3">
                                                     <Plus className="w-4 h-4" /> Agregar Lote de Pan
                                                 </button>
                                             </div>
@@ -2144,17 +2518,17 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                             <p className="text-[11px] text-muted-foreground">Ninguna aún</p>
                                                         ) : (masasPreparadas || []).map(m => (
                                                             <p key={m.id} className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                                                                {m.nombre || 'Sin nombre'}: {arrobasEnLetras(Number(m.cantidadArrobas) || 0)} ({((m.cantidadArrobas || 0) * ARROBA_KG_LOCAL).toFixed(1)} kg)
+                                                                {m.nombre || 'Sin nombre'}: {arrobasEnLetras(Number(m.cantidadArrobas) || 0)} ({((m.cantidadArrobas || 0) * resolverKgPorArrobaMasa({ nombre: m.nombre })).toFixed(1)} kg)
                                                             </p>
                                                         ))}
                                                     </div>
                                                     <div className="rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900/40 p-3">
                                                         <p className="text-[9px] font-black uppercase text-amber-500 mb-2">Lotes de pan</p>
-                                                        {(hornadas || []).filter(h => h.tipoPan || h.totalPanes > 0).length === 0 ? (
+                                                        {(hornadas || []).filter(h => h.tipoPan || panesDeHornada(h) > 0).length === 0 ? (
                                                             <p className="text-[11px] text-muted-foreground">Ninguno aún</p>
-                                                        ) : (hornadas || []).filter(h => h.tipoPan || h.totalPanes > 0).map((h, i) => (
+                                                        ) : (hornadas || []).filter(h => h.tipoPan || panesDeHornada(h) > 0).map((h, i) => (
                                                             <p key={i} className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
-                                                                {h.tipoPan || 'Sin tipo'}: {h.totalPanes || (h.bandejas * h.panesPorBandeja) || 0} und
+                                                                {h.tipoPan || 'Sin tipo'}: {panesDeHornada(h).toLocaleString('es-CO')} und
                                                             </p>
                                                         ))}
                                                     </div>
@@ -2170,7 +2544,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         </div>
 
                                         <div className={cn(produccionTab === 'cuadre' && 'hidden')}>
-                                        <Button onClick={handleSaveProduccion} className={cn("w-full rounded-xl text-white font-black uppercase tracking-widest text-[11px] h-12 shadow-xl transition-all hover:scale-[1.02]", editProduccionId ? "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-indigo-500/20" : "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/20")}>
+                                        <Button onClick={handleSaveProduccion} className={cn("w-full rounded-xl text-white font-black uppercase tracking-widest text-[11px] h-12 shadow-xl transition-all hover:scale-[1.02)", editProduccionId ? "bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 shadow-indigo-500/20" : "bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 shadow-emerald-500/20")}>
                                             {editProduccionId ? (
                                                 <><Edit2 className="w-4 h-4 mr-2" /> Actualizar Auditoría</>
                                             ) : (
@@ -2202,14 +2576,14 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                                             {(() => {
                                                 const totalMasaRegistrada = (masasPreparadas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0), 0);
-                                                const totalPanesCalculados = (hornadas || []).reduce((s: number, h: any) => s + (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)), 0);
-                                                const totalPanesInput = (hornadas || []).reduce((s: number, h: any) => s + Number(h.totalPanes || 0), 0);
-                                                const finalPanes = Math.max(totalPanesCalculados, totalPanesInput);
+                                                const totalPanesCalculados = (hornadas || []).reduce((s: number, h: any) => s + panesDeHornada(h), 0);
+                                                const totalPanesInput = totalPanesCalculados;
+                                                const finalPanes = totalPanesCalculados;
                                                 
                                                 let arrobasEquivalentes = 0;
                                                 let panesSinModelo = 0;
                                                 (hornadas || []).forEach((h: any) => {
-                                                    const panCant = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                                                    const panCant = panesDeHornada(h);
                                                     if (panCant <= 0 || !h.tipoPan) return;
                                                     const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
                                                     if (mod && Number(mod.panesPorArroba) > 0) {
@@ -2222,9 +2596,23 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 const diferencia = arrobasEquivalentes - totalMasaRegistrada;
                                                 // Antes solo miraba arrobas equivalentes: si el modelo no tenía panesPorArroba, quedaba en "esperando" aunque hubiera panes
                                                 const hasData = totalMasaRegistrada > 0 || arrobasEquivalentes > 0 || finalPanes > 0;
-                                                const difLive = describirDifArrobas(Math.abs(diferencia));
-                                                const masaKgLive = totalMasaRegistrada * ARROBA_KG_LOCAL;
-                                                const panKgLive = arrobasEquivalentes * ARROBA_KG_LOCAL;
+                                                
+                                                const masaKgLive = (masasPreparadas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0) * resolverKgPorArrobaMasa({ nombre: m.nombre }), 0);
+                                                
+                                                let panKgLive = 0;
+                                                (hornadas || []).forEach((h: any) => {
+                                                    const panCant = panesDeHornada(h);
+                                                    if (panCant <= 0 || !h.tipoPan) return;
+                                                    const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
+                                                    if (mod && Number(mod.panesPorArroba) > 0) {
+                                                        const arr = panCant / Number(mod.panesPorArroba);
+                                                        const masaOrig = (masasPreparadas || []).find((m: any) => m.id === h.masaId);
+                                                        panKgLive += arr * resolverKgPorArrobaMasa({ nombre: masaOrig?.nombre || '' });
+                                                    }
+                                                });
+                                                
+                                                const difKgLive = Math.abs(masaKgLive - panKgLive);
+                                                const difLive = describirDifArrobas(Math.abs(diferencia), difKgLive);
                                                 const puedeCuadrar = totalMasaRegistrada > 0 && arrobasEquivalentes > 0;
                                                 const explLive = explicarComparacionMasaPan(
                                                     masaKgLive, panKgLive, totalMasaRegistrada, arrobasEquivalentes, diferencia
@@ -2284,6 +2672,12 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                             ? "bg-emerald-50 dark:bg-emerald-950/30 text-emerald-800 dark:text-emerald-200"
                                                                             : "bg-slate-50 dark:bg-white/5 text-slate-600 dark:text-slate-300"
                                                                     )}>
+                                                                        <strong className={cn(
+                                                                            "px-1.5 py-0.5 rounded mr-1 inline-block uppercase tracking-wider",
+                                                                            c.estado === 'bajo' || c.estado === 'alto' ? "bg-rose-200/50 dark:bg-rose-800/40 text-rose-900 dark:text-rose-100" :
+                                                                            c.estado === 'ok' ? "bg-emerald-200/50 dark:bg-emerald-800/40 text-emerald-900 dark:text-emerald-100" :
+                                                                            "bg-slate-200/50 dark:bg-slate-700/40 text-slate-900 dark:text-slate-100"
+                                                                        )}>«{c.masaNombre}»</strong>
                                                                         {c.mensaje}
                                                                         {(c.estado === 'bajo' || c.estado === 'alto' || c.estado === 'ok') && c.panesEsperados > 0 && (
                                                                             <span className="block mt-1 font-black">
@@ -2382,6 +2776,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                     </div>
                                 </div>
                             </CardContent>
+                            )}
                         </Card>
                         {/* ──────────────────────────────────────────────────────────── */}
 
@@ -2403,9 +2798,12 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             <span className="text-[9px] font-black uppercase text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/50">
                                                 {producciones?.length || 0} registros
                                             </span>
-                                            {historialExpanded
-                                                ? <ChevronUp className="w-4 h-4 text-slate-400" />
-                                                : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                                            <div 
+                                                className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-muted-foreground shrink-0 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10"
+                                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); setHistorialExpanded(x => !x); }}
+                                            >
+                                                {historialExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                                            </div>
                                         </div>
                                     </div>
                                     <CardDescription className="text-xs font-medium">
@@ -2415,32 +2813,199 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                             </button>
                             {historialExpanded && <CardContent className="p-4 sm:p-5">
                                 {(() => {
-                                    const renderCard = (p: any) => {
-                                        const totalMasa = (p.masas || []).reduce((s: number, m: any) => s + (m.cantidadArrobas || 0), 0);
-                                        const totalPanes = (p.hornadas || []).reduce((s: number, h: any) => s + h.totalPanes, 0);
+                                    const calculateMetrics = (p: any) => {
+                                        const totalMasa = (p.masas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0), 0);
+                                        const totalPanes = (p.hornadas || []).reduce(
+                                            (s: number, h: any) => s + panesDeHornada(h),
+                                            0
+                                        );
                                         
                                         let arrobasEquivalentes = 0;
                                         (p.hornadas || []).forEach((h: any) => {
-                                            const panCant = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                                            const panCant = panesDeHornada(h);
                                             if (panCant > 0 && h.tipoPan) {
                                                 const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
-                                                if (mod && mod.panesPorArroba > 0) {
-                                                    arrobasEquivalentes += (panCant / mod.panesPorArroba);
+                                                if (mod && Number(mod.panesPorArroba) > 0) {
+                                                    arrobasEquivalentes += (panCant / Number(mod.panesPorArroba));
                                                 }
                                             }
                                         });
                                         const diferencia = arrobasEquivalentes - totalMasa;
-                                        const hasData = totalMasa > 0 || arrobasEquivalentes > 0;
+                                        const hasData = totalMasa > 0 || arrobasEquivalentes > 0 || totalPanes > 0;
                                         const difAbs = Math.abs(diferencia);
-                                        const difHumana = describirDifArrobas(difAbs);
-                                        const masaKg = totalMasa * ARROBA_KG_LOCAL;
-                                        const panKg = arrobasEquivalentes * ARROBA_KG_LOCAL;
+                                        const masaKg = (p.masas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0) * resolverKgPorArrobaMasa({ nombre: m.nombre }), 0);
+                                        let panKg = 0;
+                                        (p.hornadas || []).forEach((h: any) => {
+                                            const panCant = panesDeHornada(h);
+                                            if (panCant > 0 && h.tipoPan) {
+                                                const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
+                                                if (mod && Number(mod.panesPorArroba) > 0) {
+                                                    const arr = panCant / Number(mod.panesPorArroba);
+                                                    const masaOrig = (p.masas || []).find((m: any) => m.id === h.masaId);
+                                                    panKg += arr * resolverKgPorArrobaMasa({ nombre: masaOrig?.nombre || '' });
+                                                }
+                                            }
+                                        });
+                                        const difKg = Math.abs(masaKg - panKg);
+                                        const difHumana = describirDifArrobas(difAbs, difKg);
                                         const explHist = explicarComparacionMasaPan(masaKg, panKg, totalMasa, arrobasEquivalentes, diferencia);
                                         const chequeosHist = chequearRendimientoPorMasa(p.masas || [], p.hornadas || [], modelosPan);
                                         const alertaRendHist = chequeosHist.some((c) => c.estado === 'bajo' || c.estado === 'alto');
+                                        const metaPanes = resumenChequeosPanes(chequeosHist);
+                                        return { totalMasa, totalPanes, arrobasEquivalentes, diferencia, hasData, difAbs, masaKg, panKg, difKg, difHumana, explHist, chequeosHist, alertaRendHist, metaPanes };
+                                    };
+
+                                    const celdaMetaPanes = (meta: ReturnType<typeof resumenChequeosPanes>) => {
+                                        if (!meta.tieneMeta) {
+                                            return (
+                                                <div className="text-[10px] text-slate-400 font-bold">
+                                                    {meta.etiqueta}
+                                                    {meta.real > 0 && (
+                                                        <span className="block text-slate-500 mt-0.5">
+                                                            Real: {meta.real.toLocaleString('es-CO')}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            );
+                                        }
+                                        const diffTxt =
+                                            meta.diferencia === 0
+                                                ? '0'
+                                                : meta.diferencia > 0
+                                                  ? `+${meta.diferencia.toLocaleString('es-CO')}`
+                                                  : meta.diferencia.toLocaleString('es-CO');
+                                        return (
+                                            <div className="space-y-1 min-w-[120px]">
+                                                <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                                    Esperado ≈ <span className="font-black text-slate-800 dark:text-slate-100">{meta.esperado.toLocaleString('es-CO')}</span>
+                                                </div>
+                                                <div className="text-[10px] font-bold text-slate-500">
+                                                    Rango {meta.panesMin.toLocaleString('es-CO')}–{meta.panesMax.toLocaleString('es-CO')}
+                                                </div>
+                                                <div className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">
+                                                    Salió {meta.real.toLocaleString('es-CO')}
+                                                </div>
+                                                <div className={cn(
+                                                    "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
+                                                    meta.estado === 'ok'
+                                                        ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                                                        : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
+                                                )}>
+                                                    Diff {diffTxt}
+                                                    <span className="normal-case tracking-normal font-bold opacity-80">· {meta.etiqueta}</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    };
+
+                                    const renderDesktopTableRow = (p: any) => {
+                                        const m = calculateMetrics(p);
+                                        const masasLista = (p.masas || []) as { id?: string; nombre?: string; cantidadArrobas?: number }[];
+                                        return (
+                                            <tr
+                                                key={p.id}
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => setDetalleProduccionId(p.id)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        setDetalleProduccionId(p.id);
+                                                    }
+                                                }}
+                                                className="border-b border-slate-100 dark:border-white/5 hover:bg-indigo-50/60 dark:hover:bg-indigo-950/20 transition-colors cursor-pointer"
+                                                title="Clic para ver detalles"
+                                            >
+                                                <td className="px-4 py-3 align-top">
+                                                    <div className="font-bold text-slate-800 dark:text-slate-200">{new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
+                                                    <div className="text-[10px] text-slate-500 line-clamp-2 max-w-[160px]">{p.notas || 'Sin notas'}</div>
+                                                    <div className="text-[9px] font-bold text-indigo-500 mt-1 flex items-center gap-0.5">
+                                                        Ver detalles <ChevronRight className="w-3 h-3" />
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 align-top">
+                                                    {m.hasData ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            <div className="flex items-center gap-1.5">
+                                                                {m.diferencia < -0.1 ? <AlertTriangle className="w-3.5 h-3.5 text-rose-500" /> : m.diferencia > 0.1 ? <BadgeAlert className="w-3.5 h-3.5 text-amber-500" /> : <CheckCheck className="w-3.5 h-3.5 text-emerald-500" />}
+                                                                <span className={cn("text-[10px] font-black uppercase tracking-wider", m.diferencia < -0.1 ? "text-rose-600" : m.diferencia > 0.1 ? "text-amber-600" : "text-emerald-600")}>
+                                                                    {m.diferencia < -0.1 ? 'Faltante' : m.diferencia > 0.1 ? 'Sobrante' : 'Exacto'}
+                                                                </span>
+                                                            </div>
+                                                            <span className="text-[10px] font-medium text-slate-600 dark:text-slate-400 leading-tight">
+                                                                {m.diferencia < -0.1 || m.diferencia > 0.1 ? m.difHumana.titulo : "Cuadró perfecto"}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-[10px] text-slate-400">Sin datos</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 align-top min-w-[140px]">
+                                                    <div className="text-xs font-bold text-slate-700 dark:text-slate-300">{m.totalMasa.toFixed(2)} arr</div>
+                                                    {masasLista.length > 0 ? (
+                                                        <div className="mt-1.5 space-y-1">
+                                                            {masasLista.map((masa, idx) => (
+                                                                <div key={masa.id || `masa-${idx}`} className="text-[10px] leading-snug text-slate-600 dark:text-slate-400">
+                                                                    <span className="font-black text-slate-800 dark:text-slate-200">{masa.nombre?.trim() || 'Sin nombre'}</span>
+                                                                    <span className="text-slate-500"> · {Number(masa.cantidadArrobas || 0).toFixed(2)} arr</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-[10px] text-slate-500">Sin masas declaradas</div>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 align-top">
+                                                    <div className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                                                        {m.totalPanes.toLocaleString('es-CO')} und
+                                                    </div>
+                                                    <div className="text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                                                        ≈ {m.arrobasEquivalentes.toFixed(2)} arr eq
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500">
+                                                        {(p.hornadas?.length || 0)} {(p.hornadas?.length || 0) === 1 ? 'lote' : 'lotes'}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 align-top">
+                                                    {celdaMetaPanes(m.metaPanes)}
+                                                </td>
+                                                <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button type="button" onClick={() => {
+                                                            if (setEditProduccionId) {
+                                                                setEditProduccionId(p.id);
+                                                                setFormProd({ fecha: normalizarFechaYYYYMMDD(p.fecha), notas: p.notas || '' });
+                                                                setMasasPreparadas(p.masas || []);
+                                                                setHornadas(p.hornadas || []);
+                                                                toast.success('Editando auditoría');
+                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                            }
+                                                        }} className="text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 p-1.5 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
+                                                        <button type="button" onClick={() => { deleteProduccion(p.id); setProducciones(getProducciones()); toast.success('Eliminada'); }} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 p-1.5 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    };
+
+                                    const renderCard = (p: any) => {
+                                        const { totalMasa, totalPanes, arrobasEquivalentes, diferencia, hasData, difAbs, masaKg, panKg, difKg, difHumana, explHist, chequeosHist, alertaRendHist, metaPanes } = calculateMetrics(p);
 
                                         return (
-                                            <div key={p.id} className="relative overflow-hidden bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm flex flex-col">
+                                            <div
+                                                key={p.id}
+                                                role="button"
+                                                tabIndex={0}
+                                                onClick={() => setDetalleProduccionId(p.id)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        setDetalleProduccionId(p.id);
+                                                    }
+                                                }}
+                                                className="relative overflow-hidden bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm flex flex-col cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-500/40 transition-colors"
+                                                title="Clic para ver detalles"
+                                            >
                                                 {/* VEREDICTO HEADER — explicación clara en kilos y arrobas */}
                                                 {hasData && (
                                                     <div className={cn("px-4 py-3 border-b",
@@ -2493,15 +3058,48 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 <div className="p-4 flex flex-col gap-4">
                                                     {chequeosHist.length > 0 && (
                                                         <div className={cn(
-                                                            "rounded-xl border px-3 py-2 space-y-1.5",
+                                                            "rounded-xl border px-3 py-2 space-y-2",
                                                             alertaRendHist
                                                                 ? "border-rose-200 dark:border-rose-800/50 bg-rose-50/70 dark:bg-rose-950/20"
                                                                 : "border-slate-100 dark:border-white/10 bg-slate-50/80 dark:bg-white/5"
                                                         )}>
                                                             <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
                                                                 <Shield className={cn("w-3.5 h-3.5", alertaRendHist ? "text-rose-500" : "text-indigo-500")} />
-                                                                Chequeo panadero
+                                                                Panes según arroba
                                                             </p>
+                                                            {metaPanes.tieneMeta ? (
+                                                                <div className="grid grid-cols-2 gap-2">
+                                                                    <div className="rounded-lg bg-white/80 dark:bg-slate-900/50 border border-slate-100 dark:border-white/10 px-2 py-1.5">
+                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Esperado</span>
+                                                                        <span className="text-[12px] font-black text-slate-800 dark:text-slate-100">≈ {metaPanes.esperado.toLocaleString('es-CO')}</span>
+                                                                    </div>
+                                                                    <div className="rounded-lg bg-white/80 dark:bg-slate-900/50 border border-slate-100 dark:border-white/10 px-2 py-1.5">
+                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Rango</span>
+                                                                        <span className="text-[12px] font-black text-slate-800 dark:text-slate-100">{metaPanes.panesMin.toLocaleString('es-CO')}–{metaPanes.panesMax.toLocaleString('es-CO')}</span>
+                                                                    </div>
+                                                                    <div className="rounded-lg bg-white/80 dark:bg-slate-900/50 border border-slate-100 dark:border-white/10 px-2 py-1.5">
+                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Salió</span>
+                                                                        <span className="text-[12px] font-black text-emerald-600 dark:text-emerald-400">{metaPanes.real.toLocaleString('es-CO')}</span>
+                                                                    </div>
+                                                                    <div className={cn(
+                                                                        "rounded-lg border px-2 py-1.5",
+                                                                        metaPanes.estado === 'ok'
+                                                                            ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40"
+                                                                            : "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/40"
+                                                                    )}>
+                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Diferencia</span>
+                                                                        <span className={cn(
+                                                                            "text-[12px] font-black",
+                                                                            metaPanes.estado === 'ok' ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
+                                                                        )}>
+                                                                            {metaPanes.diferencia > 0 ? '+' : ''}{metaPanes.diferencia.toLocaleString('es-CO')}
+                                                                            <span className="ml-1 text-[9px] font-bold opacity-80">{metaPanes.etiqueta}</span>
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <p className="text-[10px] font-bold text-slate-500">{metaPanes.etiqueta}</p>
+                                                            )}
                                                             {chequeosHist.map((c, idx) => (
                                                                 <p key={`ch-${p.id}-${idx}`} className={cn(
                                                                     "text-[10px] font-bold leading-snug",
@@ -2511,6 +3109,12 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                         ? "text-emerald-700 dark:text-emerald-300"
                                                                         : "text-slate-600 dark:text-slate-300"
                                                                 )}>
+                                                                    <strong className={cn(
+                                                                        "px-1.5 py-0.5 rounded mr-1 inline-block uppercase tracking-wider",
+                                                                        c.estado === 'bajo' || c.estado === 'alto' ? "bg-rose-100 dark:bg-rose-900/40 text-rose-800 dark:text-rose-200" :
+                                                                        c.estado === 'ok' ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-800 dark:text-emerald-200" :
+                                                                        "bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200"
+                                                                    )}>«{c.masaNombre}»</strong> 
                                                                     {c.mensaje}
                                                                 </p>
                                                             ))}
@@ -2554,7 +3158,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                             </p>
                                                             <div className="flex flex-col gap-1.5">
                                                                 {p.hornadas.map((h: any, i: number) => {
-                                                                    const panCant = Number(h.totalPanes || (Number(h.bandejas || 0) * Number(h.panesPorBandeja || 0)));
+                                                                    const panCant = panesDeHornada(h);
                                                                     const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
                                                                     const ppa = Number(mod?.panesPorArroba) || 0;
                                                                     const arrEq = ppa > 0 && panCant > 0 ? panCant / ppa : 0;
@@ -2562,7 +3166,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                     <div key={`h-${i}`} className="flex justify-between items-center gap-2 bg-indigo-50/50 dark:bg-indigo-500/10 border border-indigo-100 dark:border-indigo-500/20 px-3 py-2 rounded-lg">
                                                                         <span className="text-[10px] font-bold text-indigo-900 dark:text-indigo-100 truncate">{h.tipoPan}</span>
                                                                         <div className="text-right shrink-0">
-                                                                            <span className="block text-[11px] font-black text-indigo-600 dark:text-indigo-400">{panCant} und</span>
+                                                                            <span className="block text-[11px] font-black text-indigo-600 dark:text-indigo-400">{panCant.toLocaleString('es-CO')} und</span>
                                                                             <span className="block text-[9px] font-bold text-slate-600 dark:text-slate-300 capitalize">
                                                                                 {arrEq > 0 ? `≈ ${arrobasEnLetras(arrEq)}` : 'sin modelo'}
                                                                             </span>
@@ -2575,10 +3179,10 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                         </div>
                                                     )}
 
-                                                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5">
+                                                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5" onClick={(e) => e.stopPropagation()}>
                                                         <p className="text-[10px] text-slate-500 italic line-clamp-1 flex-1 pr-4">{p.notas || "Sin observaciones"}</p>
                                                         <div className="flex items-center gap-1 shrink-0">
-                                                            <button onClick={() => {
+                                                            <button type="button" onClick={() => {
                                                                 if (setEditProduccionId) {
                                                                     setEditProduccionId(p.id);
                                                                     setFormProd({ fecha: normalizarFechaYYYYMMDD(p.fecha), notas: p.notas || '' });
@@ -2591,7 +3195,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 className="text-slate-400 hover:text-indigo-500 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-md">
                                                                 <Edit2 className="w-3.5 h-3.5" />
                                                             </button>
-                                                            <button onClick={() => { deleteProduccion(p.id); setProducciones(getProducciones()); toast.success('Auditoría eliminada'); }}
+                                                            <button type="button" onClick={() => { deleteProduccion(p.id); setProducciones(getProducciones()); toast.success('Auditoría eliminada'); }}
                                                                 className="text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-400 transition-colors p-1.5 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md">
                                                                 <Trash2 className="w-3.5 h-3.5" />
                                                             </button>
@@ -2606,16 +3210,27 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                     const produccionesHoy = producciones.filter(p => normalizarFechaYYYYMMDD(p.fecha) === fechaFiltro);
                                     const produccionesAnteriores = producciones.filter(p => normalizarFechaYYYYMMDD(p.fecha) !== fechaFiltro);
 
-                                    // Agrupar otros días por fecha (más reciente primero)
-                                    const gruposOtrosDias = (() => {
-                                        const map = new Map<string, typeof producciones>();
+                                    // Agrupar otros días por mes y luego por fecha
+                                    const gruposPorMes = (() => {
+                                        const map = new Map<string, Map<string, typeof producciones>>();
                                         for (const p of produccionesAnteriores) {
                                             const f = normalizarFechaYYYYMMDD(p.fecha);
-                                            const arr = map.get(f) || [];
+                                            if (!f) continue;
+                                            const mes = f.substring(0, 7); // YYYY-MM
+                                            if (!map.has(mes)) {
+                                                map.set(mes, new Map());
+                                            }
+                                            const mapMes = map.get(mes)!;
+                                            const arr = mapMes.get(f) || [];
                                             arr.push(p);
-                                            map.set(f, arr);
+                                            mapMes.set(f, arr);
                                         }
-                                        return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+                                        return [...map.entries()]
+                                            .sort((a, b) => b[0].localeCompare(a[0])) // Mes más reciente primero
+                                            .map(([mes, mapMes]) => {
+                                                const fechas = [...mapMes.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+                                                return [mes, fechas] as const;
+                                            });
                                     })();
 
                                     const tituloFechaLarga = (fecha: string) =>
@@ -2623,8 +3238,158 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
                                         });
 
+                                    // Calcular resumen de auditoría
+                                    const fechasAlertadas = (() => {
+                                        const resumenPorFecha = new Map<string, { 
+                                            masa: number; 
+                                            arrEq: number; 
+                                            panes: number; 
+                                            breakdown: Record<string, { unidades: number; arrEq: number }>; 
+                                            masasDeclaradas: Record<string, number>;
+                                        }>();
+                                        [...produccionesHoy, ...produccionesAnteriores].forEach(p => {
+                                            const f = normalizarFechaYYYYMMDD(p.fecha);
+                                            const r = resumenPorFecha.get(f) || { 
+                                                masa: 0, arrEq: 0, panes: 0, 
+                                                breakdown: {}, masasDeclaradas: {} 
+                                            };
+                                            
+                                            let masa = 0;
+                                            (p.masas || []).forEach((m: any) => {
+                                                const cant = Number(m.cantidadArrobas) || 0;
+                                                if (cant > 0) {
+                                                    masa += cant;
+                                                    r.masasDeclaradas[m.nombre || 'Masa'] = (r.masasDeclaradas[m.nombre || 'Masa'] || 0) + cant;
+                                                }
+                                            });
+
+                                            let panes = 0;
+                                            let arrEq = 0;
+                                            (p.hornadas || []).forEach((h: any) => {
+                                                const cant = panesDeHornada(h);
+                                                if (cant > 0 && h.tipoPan) {
+                                                    panes += cant;
+                                                    const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
+                                                    let hArrEq = 0;
+                                                    if (mod && Number(mod.panesPorArroba) > 0) {
+                                                        hArrEq = (cant / Number(mod.panesPorArroba));
+                                                        arrEq += hArrEq;
+                                                    }
+                                                    if (!r.breakdown[h.tipoPan]) r.breakdown[h.tipoPan] = { unidades: 0, arrEq: 0 };
+                                                    r.breakdown[h.tipoPan].unidades += cant;
+                                                    r.breakdown[h.tipoPan].arrEq += hArrEq;
+                                                }
+                                            });
+                                            
+                                            resumenPorFecha.set(f, { 
+                                                masa: r.masa + masa, 
+                                                arrEq: r.arrEq + arrEq,
+                                                panes: r.panes + panes,
+                                                breakdown: r.breakdown,
+                                                masasDeclaradas: r.masasDeclaradas
+                                            });
+                                        });
+
+                                        return [...resumenPorFecha.entries()]
+                                            .filter(([f, data]) => data.masa > 0 && Math.abs(data.arrEq - data.masa) >= 0.15)
+                                            .sort((a, b) => b[0].localeCompare(a[0]));
+                                    })();
+
                                     return (
                                         <div className="space-y-6">
+                                            {/* PANEL DE AUDITORÍA */}
+                                            {fechasAlertadas.length > 0 && (
+                                                <div className="bg-orange-50/80 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50 rounded-2xl p-4 shadow-sm mb-6">
+                                                    <div 
+                                                        className="flex items-center justify-between mb-3 cursor-pointer select-none"
+                                                        onClick={() => setShowAuditorias(!showAuditorias)}
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <BellRing className="w-5 h-5 text-orange-500 animate-pulse" />
+                                                            <h4 className="text-sm font-black text-orange-800 dark:text-orange-400">
+                                                                Auditorías Pendientes (Discrepancias)
+                                                            </h4>
+                                                            <Badge variant="secondary" className="bg-orange-200 text-orange-800 dark:bg-orange-800/40 dark:text-orange-300 ml-1">
+                                                                {fechasAlertadas.length}
+                                                            </Badge>
+                                                        </div>
+                                                        <button className="text-orange-500 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300 p-1 rounded-full hover:bg-orange-200/50 dark:hover:bg-orange-800/30 transition-colors">
+                                                            {showAuditorias ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                                        </button>
+                                                    </div>
+                                                    
+                                                    {showAuditorias && (
+                                                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                            {fechasAlertadas.map(([f, d]) => {
+                                                                const dif = d.arrEq - d.masa;
+                                                                const isFaltante = dif < -0.15;
+                                                                return (
+                                                                    <div key={`alerta-${f}`} className="flex flex-col sm:flex-row sm:items-center justify-between bg-white dark:bg-slate-900/50 p-2.5 rounded-xl border border-orange-100 dark:border-orange-800/30">
+                                                                        <div className="flex items-center gap-2 mb-1.5 sm:mb-0">
+                                                                            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 capitalize">{tituloFechaLarga(f)}</span>
+                                                                            <Badge variant="outline" className={cn("text-[9px] font-black uppercase tracking-wider", isFaltante ? "border-rose-200 text-rose-600 bg-rose-50 dark:bg-rose-950/50" : "border-amber-200 text-amber-600 bg-amber-50 dark:bg-amber-950/50")}>
+                                                                                {isFaltante ? '⚠️ PAN FALTANTE' : '🚨 MASA SIN DECLARAR (SOBRÓ PAN)'}
+                                                                            </Badge>
+                                                                        </div>
+                                                                        <div className="text-[10px] text-slate-500">
+                                                                            {d.panes.toLocaleString('es-CO')} panes (≈{d.arrEq.toFixed(2)} arr). 
+                                                                            Metida: {d.masa.toFixed(2)} arr.
+                                                                            <span className={cn("ml-1 font-bold", isFaltante ? "text-rose-500" : "text-amber-500")}>
+                                                                                {isFaltante ? 'Faltó ' : 'Sobró '}{Math.abs(dif).toFixed(2)} arr
+                                                                            </span>
+                                                                        </div>
+                                                                        
+                                                                        {/* AUDITORÍA PROFUNDA */}
+                                                                        <details className="mt-2.5 group/details sm:col-span-2 w-full">
+                                                                            <summary className="text-[10px] text-slate-500 font-medium cursor-pointer hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors list-none flex items-center gap-1 bg-slate-50 dark:bg-slate-800/50 inline-flex px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 w-fit">
+                                                                                <ChevronRight className="w-3.5 h-3.5 group-open/details:rotate-90 transition-transform" />
+                                                                                Ver Auditoría Profunda
+                                                                            </summary>
+                                                                            <div className="mt-2 pl-3 border-l-2 border-indigo-200 dark:border-indigo-800/50 space-y-3 pb-1 pt-1 animate-in fade-in slide-in-from-top-1 duration-200">
+                                                                                <div>
+                                                                                    <div className="text-[9px] uppercase font-black text-slate-400 mb-1.5 tracking-widest flex items-center gap-1">
+                                                                                        <PlusCircle className="w-3 h-3" /> Entrada (Masa)
+                                                                                    </div>
+                                                                                    {Object.entries(d.masasDeclaradas).map(([mNombre, cant]) => (
+                                                                                        <div key={mNombre} className="text-[10px] text-slate-600 dark:text-slate-400 flex justify-between w-full max-w-sm">
+                                                                                            <span>{mNombre}:</span>
+                                                                                            <span className="font-semibold text-slate-800 dark:text-slate-200">{cant.toFixed(2)} arrobas</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                    <div className="text-[10px] text-slate-600 dark:text-slate-400 flex justify-between w-full max-w-sm border-t border-slate-200 dark:border-slate-700 mt-1 pt-1">
+                                                                                        <span className="font-black">Total Entró:</span>
+                                                                                        <span className="font-black text-slate-800 dark:text-slate-200">{d.masa.toFixed(2)} arr</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                                
+                                                                                <div>
+                                                                                    <div className="text-[9px] uppercase font-black text-slate-400 mb-1.5 tracking-widest flex items-center gap-1">
+                                                                                        <MinusCircle className="w-3 h-3" /> Salida (Producción Exacta)
+                                                                                    </div>
+                                                                                    {Object.entries(d.breakdown).sort((a, b) => b[1].unidades - a[1].unidades).map(([pNombre, pData]) => (
+                                                                                        <div key={pNombre} className="text-[10px] text-slate-600 dark:text-slate-400 flex flex-col sm:flex-row sm:justify-between sm:items-center w-full max-w-sm mb-1 hover:bg-slate-50 dark:hover:bg-slate-800/30 p-1 rounded border border-transparent hover:border-slate-200 dark:hover:border-slate-700/50">
+                                                                                            <span className="truncate mr-2 font-medium mb-1 sm:mb-0 text-slate-700 dark:text-slate-300">{pNombre}</span>
+                                                                                            <span className="flex items-center gap-1.5 self-end sm:self-auto">
+                                                                                                <span className="font-bold bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-slate-800 dark:text-slate-200">{pData.unidades} und</span>
+                                                                                                <span className="text-slate-400 mx-0.5">→</span>
+                                                                                                <span className="font-bold text-indigo-600 dark:text-indigo-400">≈ {pData.arrEq.toFixed(2)} arr</span>
+                                                                                            </span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                    <div className="text-[10px] text-slate-600 dark:text-slate-400 flex justify-between items-center w-full max-w-sm border-t border-slate-300 dark:border-slate-600 mt-1.5 pt-1.5">
+                                                                                        <span className="font-black">Total Salida Equivalente:</span>
+                                                                                        <span className="font-black text-slate-800 dark:text-slate-200">≈ {d.arrEq.toFixed(2)} arr</span>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </details>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            )}
                                             {/* SECCIÓN 1: PRODUCCIÓN DEL DÍA / SELECCIONADO */}
                                             <div className="space-y-3">
                                                 <div className="flex items-center justify-between bg-indigo-50/80 dark:bg-indigo-950/40 px-3.5 py-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
@@ -2645,13 +3410,34 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                     </div>
                                                 ) : (
                                                     <div className="max-h-80 overflow-y-auto space-y-3 pr-1">
-                                                        {produccionesHoy.map(renderCard)}
+                                                        {/* VISTA ESCRITORIO (TABLA) */}
+                                                        <div className="hidden md:block w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
+                                                            <table className="w-full text-left border-collapse text-xs">
+                                                                <thead>
+                                                                    <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400">
+                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider">Fecha / Notas</th>
+                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider">Estado</th>
+                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider">Metida (Entrada)</th>
+                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider">Salida (Eq.)</th>
+                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider">Esperado vs Real</th>
+                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider text-right">Acciones</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {produccionesHoy.map(renderDesktopTableRow)}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                        {/* VISTA MÓVIL (TARJETAS) */}
+                                                        <div className="md:hidden space-y-3">
+                                                            {produccionesHoy.map(renderCard)}
+                                                        </div>
                                                     </div>
                                                 )}
                                             </div>
 
-                                            {/* SECCIÓN 2: OTROS DÍAS — agrupados por fecha */}
-                                            {gruposOtrosDias.length > 0 && (
+                                            {/* SECCIÓN 2: OTROS DÍAS — agrupados por mes y luego por fecha */}
+                                            {gruposPorMes.length > 0 && (
                                                 <div className="space-y-4 pt-4 border-t-2 border-dashed border-slate-200 dark:border-white/10">
                                                     <div className="flex items-center justify-between px-1">
                                                         <span className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
@@ -2659,27 +3445,60 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                             Historial por fecha
                                                         </span>
                                                         <Badge variant="secondary" className="text-[10px] font-bold">
-                                                            {gruposOtrosDias.length} días · {produccionesAnteriores.length} lotes
+                                                            {produccionesAnteriores.length} lotes
                                                         </Badge>
                                                     </div>
 
-                                                    <div className="max-h-[28rem] overflow-y-auto space-y-5 pr-1">
-                                                        {gruposOtrosDias.slice(0, 60).map(([fechaGrupo, lotes]) => (
-                                                            <div key={fechaGrupo} className="space-y-2.5">
-                                                                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 rounded-xl bg-slate-100/95 dark:bg-slate-900/95 border border-slate-200 dark:border-white/10 px-3 py-2 backdrop-blur-sm">
-                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5 capitalize">
-                                                                        <CalendarDays className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-                                                                        {tituloFechaLarga(fechaGrupo)}
-                                                                    </span>
-                                                                    <Badge variant="outline" className="text-[9px] font-bold shrink-0">
-                                                                        {lotes.length} {lotes.length === 1 ? 'lote' : 'lotes'}
-                                                                    </Badge>
+                                                    <div className="max-h-[32rem] overflow-y-auto space-y-8 pr-1 pb-4">
+                                                        {gruposPorMes.map(([mesStr, diasMes]) => {
+                                                            const [year, month] = mesStr.split('-');
+                                                            const mesNombre = new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
+                                                            return (
+                                                                <div key={mesStr} className="space-y-4">
+                                                                    <div className="sticky top-0 z-20 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md py-2 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
+                                                                        <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-slate-100">{mesNombre}</h3>
+                                                                        <Badge variant="outline" className="text-[9px] text-slate-500 bg-transparent border-slate-200 dark:border-white/10">{diasMes.length} {diasMes.length === 1 ? 'día' : 'días'}</Badge>
+                                                                    </div>
+                                                                    <div className="space-y-6">
+                                                                        {diasMes.map(([fechaGrupo, lotes]) => (
+                                                                            <div key={fechaGrupo} className="space-y-2.5">
+                                                                                <div className="sticky top-[35px] z-10 flex items-center justify-between gap-2 rounded-xl bg-slate-100/95 dark:bg-slate-900/95 border border-slate-200 dark:border-white/5 px-3 py-2 backdrop-blur-sm shadow-sm">
+                                                                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 flex items-center gap-1.5 capitalize">
+                                                                                        <CalendarDays className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
+                                                                                        {tituloFechaLarga(fechaGrupo)}
+                                                                                    </span>
+                                                                                    <Badge variant="outline" className="text-[9px] font-bold shrink-0 bg-white dark:bg-slate-800">
+                                                                                        {lotes.length} {lotes.length === 1 ? 'lote' : 'lotes'}
+                                                                                    </Badge>
+                                                                                </div>
+                                                                                {/* VISTA ESCRITORIO (TABLA) */}
+                                                                                <div className="hidden md:block w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 mt-3">
+                                                                                    <table className="w-full text-left border-collapse text-xs">
+                                                                                        <thead>
+                                                                                            <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400">
+                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider">Fecha / Notas</th>
+                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider">Estado</th>
+                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider">Metida (Entrada)</th>
+                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider">Salida (Eq.)</th>
+                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider">Esperado vs Real</th>
+                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider text-right">Acciones</th>
+                                                                                            </tr>
+                                                                                        </thead>
+                                                                                        <tbody>
+                                                                                            {lotes.map(renderDesktopTableRow)}
+                                                                                        </tbody>
+                                                                                    </table>
+                                                                                </div>
+                                                                                {/* VISTA MÓVIL (TARJETAS) */}
+                                                                                <div className="md:hidden space-y-2.5 mt-3">
+                                                                                    {lotes.map(renderCard)}
+                                                                                </div>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
                                                                 </div>
-                                                                <div className="space-y-2.5">
-                                                                    {lotes.map(renderCard)}
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             )}
@@ -2688,34 +3507,207 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                 })()} 
                             </CardContent>}
                         </Card>
+
+                        <Dialog open={!!detalleProduccionId} onOpenChange={(open) => { if (!open) setDetalleProduccionId(null); }}>
+                            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-2xl">
+                                {(() => {
+                                    const p = (producciones || []).find((x: { id?: string }) => x.id === detalleProduccionId) as {
+                                        id?: string;
+                                        fecha?: string;
+                                        notas?: string;
+                                        masas?: { id?: string; nombre?: string; cantidadArrobas?: number }[];
+                                        hornadas?: { tipoPan?: string; bandejas?: number; panesPorBandeja?: number; totalPanes?: number; masaId?: string }[];
+                                    } | undefined;
+                                    if (!p) {
+                                        return (
+                                            <>
+                                                <DialogHeader>
+                                                    <DialogTitle>Sin ficha</DialogTitle>
+                                                    <DialogDescription>No se encontró el registro.</DialogDescription>
+                                                </DialogHeader>
+                                            </>
+                                        );
+                                    }
+                                    const masas = p.masas || [];
+                                    const hornadasDet = p.hornadas || [];
+                                    const totalMasa = masas.reduce((s, m) => s + (Number(m.cantidadArrobas) || 0), 0);
+                                    const totalPanes = hornadasDet.reduce((s, h) => s + panesDeHornada(h), 0);
+                                    const chequeosDet = chequearRendimientoPorMasa(masas as Array<{ id: string; nombre?: string; cantidadArrobas?: number }>, hornadasDet, modelosPan);
+                                    const metaDet = resumenChequeosPanes(chequeosDet);
+                                    return (
+                                        <>
+                                            <DialogHeader>
+                                                <DialogTitle className="text-left">
+                                                    Producción · {p.fecha ? new Date(`${p.fecha}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }) : '—'}
+                                                </DialogTitle>
+                                                <DialogDescription className="text-left">
+                                                    Detalle de masas metidas, panes salidos y comparación con la meta por arroba.
+                                                </DialogDescription>
+                                            </DialogHeader>
+                                            <div className="space-y-4 text-sm">
+                                                <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 p-3 bg-emerald-50/80 dark:bg-emerald-950/20">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-1">
+                                                        Total panes que salieron
+                                                    </p>
+                                                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400">
+                                                        {totalPanes.toLocaleString('es-CO')} <span className="text-sm">und</span>
+                                                    </p>
+                                                </div>
+                                                {metaDet.tieneMeta && (
+                                                    <div className={cn(
+                                                        "rounded-xl border p-3",
+                                                        metaDet.estado === 'ok'
+                                                            ? "border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-950/20"
+                                                            : "border-rose-200 dark:border-rose-500/30 bg-rose-50/70 dark:bg-rose-950/20"
+                                                    )}>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                                                            Según arrobas · esperado vs real
+                                                        </p>
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Esperado</span>
+                                                                <span className="text-base font-black text-slate-800 dark:text-slate-100">≈ {metaDet.esperado.toLocaleString('es-CO')}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Rango</span>
+                                                                <span className="text-base font-black text-slate-800 dark:text-slate-100">{metaDet.panesMin.toLocaleString('es-CO')}–{metaDet.panesMax.toLocaleString('es-CO')}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Salió</span>
+                                                                <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{metaDet.real.toLocaleString('es-CO')}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Diferencia</span>
+                                                                <span className={cn(
+                                                                    "text-base font-black",
+                                                                    metaDet.estado === 'ok' ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
+                                                                )}>
+                                                                    {metaDet.diferencia > 0 ? '+' : ''}{metaDet.diferencia.toLocaleString('es-CO')}
+                                                                    <span className="ml-1 text-[10px] font-bold opacity-80">{metaDet.etiqueta}</span>
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                        {chequeosDet.length > 0 && (
+                                                            <ul className="mt-3 space-y-1.5 border-t border-slate-200/60 dark:border-white/10 pt-2">
+                                                                {chequeosDet.map((c, idx) => (
+                                                                    <li key={`det-ch-${idx}`} className="text-[10px] font-bold leading-snug text-slate-600 dark:text-slate-300">
+                                                                        <span className="font-black text-slate-800 dark:text-slate-100">«{c.masaNombre}»</span> · {c.mensaje}
+                                                                    </li>
+                                                                ))}
+                                                            </ul>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 bg-slate-50 dark:bg-slate-900/40">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                                                        Metida · masas ({totalMasa.toFixed(2)} arr)
+                                                    </p>
+                                                    {masas.length === 0 ? (
+                                                        <p className="text-xs text-slate-500">Sin masas declaradas</p>
+                                                    ) : (
+                                                        <ul className="space-y-2">
+                                                            {masas.map((m, i) => (
+                                                                <li key={m.id || `dm-${i}`} className="flex justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-1.5 last:border-0">
+                                                                    <span className="font-bold text-slate-800 dark:text-slate-100">{m.nombre?.trim() || 'Sin nombre'}</span>
+                                                                    <span className="font-black text-indigo-600 dark:text-indigo-400 shrink-0">
+                                                                        {Number(m.cantidadArrobas || 0).toFixed(2)} arr
+                                                                    </span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
+                                                </div>
+                                                <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 bg-slate-50 dark:bg-slate-900/40">
+                                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
+                                                        Salida · lotes ({totalPanes.toLocaleString('es-CO')} und)
+                                                    </p>
+                                                    {hornadasDet.length === 0 ? (
+                                                        <p className="text-xs text-slate-500">Sin lotes de pan</p>
+                                                    ) : (
+                                                        <ul className="space-y-2">
+                                                            {hornadasDet.map((h, i) => {
+                                                                const und = panesDeHornada(h);
+                                                                const masaOrigen = masas.find((m) => m.id && m.id === h.masaId);
+                                                                return (
+                                                                    <li key={`dh-${i}`} className="border-b border-slate-100 dark:border-white/5 pb-1.5 last:border-0">
+                                                                        <div className="flex justify-between gap-2">
+                                                                            <span className="font-bold text-slate-800 dark:text-slate-100">{h.tipoPan || 'Pan'}</span>
+                                                                            <span className="font-black text-emerald-600 dark:text-emerald-400">{und.toLocaleString('es-CO')} und</span>
+                                                                        </div>
+                                                                        <p className="text-[10px] text-slate-500 mt-0.5">
+                                                                            {Number(h.bandejas) || 0} latas × {Number(h.panesPorBandeja) || 0} panes/lata
+                                                                            {masaOrigen ? ` · masa: ${masaOrigen.nombre || 'Sin nombre'}` : ''}
+                                                                        </p>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                        </ul>
+                                                    )}
+                                                </div>
+                                                {p.notas?.trim() && (
+                                                    <div className="rounded-xl border border-amber-200/60 dark:border-amber-500/20 p-3 bg-amber-50/50 dark:bg-amber-950/20">
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400 mb-1">Notas</p>
+                                                        <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{p.notas}</p>
+                                                    </div>
+                                                )}
+                                                <div className="flex flex-wrap gap-2 pt-1">
+                                                    <Button
+                                                        type="button"
+                                                        className="rounded-xl"
+                                                        onClick={() => {
+                                                            if (setEditProduccionId && p.id) {
+                                                                setEditProduccionId(p.id);
+                                                                setFormProd({ fecha: normalizarFechaYYYYMMDD(p.fecha || ''), notas: p.notas || '' });
+                                                                setMasasPreparadas(p.masas || []);
+                                                                setHornadas(p.hornadas || []);
+                                                                setDetalleProduccionId(null);
+                                                                toast.success('Editando auditoría');
+                                                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Edit2 className="w-4 h-4 mr-2" /> Editar
+                                                    </Button>
+                                                    <Button type="button" variant="outline" className="rounded-xl" onClick={() => setDetalleProduccionId(null)}>
+                                                        Cerrar
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    );
+                                })()}
+                            </DialogContent>
+                        </Dialog>
                     </div>
 
                     {/* ── PLAN DE COMPRAS A PROVEEDORES ── */}
                     {presupuestosMinimos.length > 0 && (() => {
                         const getLimite = (item: any) => temporadaBaja && item.montoBaja !== undefined ? item.montoBaja : item.monto;
-                        const comprasSemana   = presupuestosMinimos.filter((i: any) => i.frecuencia === 'Semanal');
-                        const comprasQuincena = presupuestosMinimos.filter((i: any) => i.frecuencia === 'Quincenal');
-                        const comprasMes      = presupuestosMinimos.filter((i: any) => i.frecuencia !== 'Semanal' && i.frecuencia !== 'Quincenal');
-                        const totalSem  = comprasSemana.reduce((s: number, i: any) => s + getLimite(i), 0);
-                        const totalQuin = comprasQuincena.reduce((s: number, i: any) => s + getLimite(i), 0);
-                        const totalMes  = comprasMes.reduce((s: number, i: any) => s + getLimite(i), 0);
-                        const totalCiclo = totalSem + totalQuin + totalMes;
-                        const yaComprado = presupuestosMinimos.filter((i: any) => i.estado === 'completado').reduce((s: number, i: any) => s + getLimite(i), 0);
-                        const totalPendiente = totalCiclo - yaComprado;
+                        const limiteProveedor = presupuestosMinimos.reduce((s: number, i: any) => s + getLimite(i), 0);
                         return (
                             <Card className="rounded-3xl border border-amber-500/20 bg-amber-950/10">
-                                <CardHeader className="pb-3 border-b border-amber-500/10">
-                                    <div className="flex items-center justify-between flex-wrap gap-2">
-                                        <div>
-                                            <CardTitle className="text-base font-black flex items-center gap-2">🛒 Plan de Compras a Proveedores</CardTitle>
-                                            <CardDescription className="text-xs mt-0.5">Configurado en Presupuestos · {temporadaBaja ? '❄️ Temporada Baja' : '🔥 Temporada Alta'}</CardDescription>
+                                <CardHeader 
+                                    className="pb-3 cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors"
+                                    onClick={(e) => { e.stopPropagation(); setComprasExpanded(x => !x); }}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
+                                            <div className="p-2 bg-blue-500/10 rounded-lg">
+                                                <ShoppingCart className="w-5 h-5 text-blue-500" />
+                                            </div>
+                                            Compras y Pagos a Proveedores
+                                        </CardTitle>
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs font-black bg-blue-500 text-white px-3 py-1 rounded-full shadow-sm shadow-blue-500/20">
+                                                {formatCurrency(limiteProveedor)}
+                                            </span>
+                                            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0">
+                                                {comprasExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                            </div>
                                         </div>
-                                        <button onClick={() => setActiveTab('compras-minimas')}
-                                            className="text-[10px] font-black uppercase tracking-widest text-amber-500 hover:text-amber-400 px-3 py-1.5 rounded-xl border border-amber-500/30 hover:bg-amber-500/10 transition-all">
-                                            Gestionar →
-                                        </button>
                                     </div>
-                                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                                    {comprasExpanded && (
+                                    <div className="mt-3 grid grid-cols-3 gap-2 text-center" onClick={e => e.stopPropagation()}>
                                         <div className="rounded-xl p-2 bg-card/40 border border-white/5">
                                             <p className="text-[9px] font-black uppercase tracking-widest text-amber-400">Total Ciclo</p>
                                             <p className="text-base font-black">{formatCurrency(totalCiclo)}</p>
@@ -2729,12 +3721,14 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             <p className="text-base font-black text-rose-400">{formatCurrency(totalPendiente)}</p>
                                         </div>
                                     </div>
-                                    {totalCiclo > 0 && (
-                                        <div className="mt-2 h-2 rounded-full bg-white/5 overflow-hidden">
+                                    )}
+                                    {comprasExpanded && totalCiclo > 0 && (
+                                        <div className="mt-2 h-2 rounded-full bg-white/5 overflow-hidden" onClick={e => e.stopPropagation()}>
                                             <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${Math.min(100, (yaComprado / totalCiclo) * 100)}%` }} />
                                         </div>
                                     )}
                                 </CardHeader>
+                                {comprasExpanded && (
                                 <CardContent className="p-4 space-y-4">
                                     {[
                                         { label: '📅 Esta Semana', items: comprasSemana, total: totalSem, color: 'text-amber-400' },
@@ -2911,6 +3905,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         </div>
                                     ))}
                                 </CardContent>
+                                )}
                             </Card>
                         );
                     })()}

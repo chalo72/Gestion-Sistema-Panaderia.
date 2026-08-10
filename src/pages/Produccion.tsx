@@ -30,6 +30,7 @@ import { useLotesStock } from '@/hooks/useLotesStock';
 import { usePlanSemana } from '@/hooks/usePlanSemana';
 import { useAuditorias } from '@/hooks/useAuditorias';
 import { consultarAgente } from '@/constants/agentes';
+import { sincronizarAuditoriaDesdeProduccion, fechaLocalHoy } from '@/lib/finanzas-personales';
 import {
     Dialog,
     DialogContent,
@@ -156,8 +157,29 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 detalles,
                 analisisIA
             });
-            
-            toast.success("Auditoría guardada exitosamente");
+
+            // Misma libreta que Reportes → Historial de Producción y Auditorías
+            try {
+                sincronizarAuditoriaDesdeProduccion({
+                    fecha: fechaLocalHoy(),
+                    nombreMasa: f.nombre || 'Masa',
+                    cantidadArrobas: arrobas,
+                    panes: cortes.map((c: { modeloId?: string; cantidad?: number }) => ({
+                        tipoPan: modelosPan.find((m) => m.id === c.modeloId)?.nombre || 'Pan',
+                        totalPanes: Number(c.cantidad) || 0,
+                    })),
+                    notas: [
+                        'Sincronizado desde Producción (Distribuidor de arroba)',
+                        `Masa libre: ${masaLibreKg.toFixed(1)} kg`,
+                        analisisIA ? `IA: ${analisisIA.slice(0, 280)}` : '',
+                    ].filter(Boolean).join(' · '),
+                });
+                window.dispatchEvent(new Event('dp_producciones_changed'));
+            } catch (syncErr) {
+                console.error('Puente a historial de Reportes falló (la auditoría local sí se guardó)', syncErr);
+            }
+
+            toast.success("Auditoría guardada y enviada al historial de Reportes");
         } catch (error) {
             console.error(error);
             toast.error("Error al guardar auditoría");
@@ -535,8 +557,98 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
 
                 {/* Tab: Órdenes de Producción (Kanban) */}
                 <TabsContent value="ordenes" className="space-y-6">
-                    {/* Kanban Board */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    {/* MODO COCINA MÓVIL (KDS) */}
+                    <div className="md:hidden space-y-6">
+                        <div className="bg-indigo-600 rounded-3xl p-6 text-white shadow-lg flex items-center justify-between">
+                            <div>
+                                <h2 className="text-xl font-black uppercase tracking-widest flex items-center gap-2">
+                                    <ChefHat className="w-6 h-6" />
+                                    Modo Cocina
+                                </h2>
+                                <p className="text-indigo-200 text-xs mt-1 font-medium">Solo órdenes activas</p>
+                            </div>
+                            <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center font-black text-xl">
+                                {produccion.filter(o => o.estado !== 'completado').length}
+                            </div>
+                        </div>
+
+                        <div className="space-y-4">
+                            {produccion.filter(o => o.estado !== 'completado').map((orden) => {
+                                const producto = productos.find(p => p.id === orden.productoId);
+                                const modelo = modelosPan.find(m => m.id === orden.modeloPanId);
+                                const isEnProceso = orden.estado === 'en_proceso';
+
+                                return (
+                                    <div key={orden.id} className="bg-white dark:bg-slate-900 rounded-[2rem] p-5 shadow-lg border border-slate-100 dark:border-slate-800 relative overflow-hidden">
+                                        <div className={cn(
+                                            "absolute top-0 left-0 w-full h-2",
+                                            orden.estado === 'planeado' ? "bg-blue-400" : "bg-amber-400 animate-pulse"
+                                        )} />
+                                        
+                                        <div className="flex justify-between items-start mb-4 mt-2">
+                                            <div>
+                                                <h3 className="text-xl font-black text-slate-800 dark:text-white leading-tight">
+                                                    {modelo?.nombre || producto?.nombre || 'Producto'}
+                                                </h3>
+                                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                                    {orden.estado === 'planeado' ? 'Pendiente' : 'En Horno'} • Lote {orden.lote?.slice(-4)}
+                                                </p>
+                                            </div>
+                                            <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl px-4 py-2 text-center">
+                                                <p className="text-[10px] font-black uppercase text-slate-400 mb-0.5">Cant</p>
+                                                <p className="text-2xl font-black text-amber-600">{orden.cantidadPlaneada}</p>
+                                            </div>
+                                        </div>
+
+                                        {orden.formulacionId && (
+                                            <Button 
+                                                variant="outline" 
+                                                className="w-full mb-4 rounded-xl border-dashed h-12 text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-300"
+                                                onClick={() => setOrdenPasoAPaso(orden)}
+                                            >
+                                                <ClipboardList className="w-4 h-4 mr-2" />
+                                                Ver Receta / Pasos
+                                            </Button>
+                                        )}
+
+                                        {orden.estado === 'planeado' ? (
+                                            <Button
+                                                className="w-full h-16 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-lg uppercase tracking-widest shadow-xl shadow-indigo-500/30 active:scale-95 transition-all"
+                                                onClick={() => handleIniciarOrden(orden.id)}
+                                            >
+                                                <Flame className="w-6 h-6 mr-3" />
+                                                Iniciar Horno
+                                            </Button>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                                    <div className="h-full bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400 w-full rounded-full animate-shimmer" style={{ backgroundSize: '200% 100%' }} />
+                                                </div>
+                                                <Button
+                                                    className="w-full h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-lg uppercase tracking-widest shadow-xl shadow-emerald-500/30 active:scale-95 transition-all"
+                                                    onClick={() => handleCompletarOrden(orden)}
+                                                >
+                                                    <CheckCircle2 className="w-6 h-6 mr-3" />
+                                                    Finalizar Lote
+                                                </Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            
+                            {produccion.filter(o => o.estado !== 'completado').length === 0 && (
+                                <div className="text-center py-12 bg-white/50 dark:bg-slate-900/50 rounded-[2rem] border-2 border-dashed border-slate-200 dark:border-slate-800">
+                                    <ChefHat className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                    <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Cocina Limpia</p>
+                                    <p className="text-xs font-medium text-slate-400 mt-1">No hay órdenes pendientes</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Kanban Board (DESKTOP) */}
+                    <div className="hidden md:grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {columns.map((col) => (
                     <div key={col.estado} className="flex flex-col gap-5">
                         <div className="flex items-center justify-between px-2">

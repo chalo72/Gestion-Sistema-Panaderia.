@@ -102,6 +102,13 @@ export interface FormulacionBase {
   categoria: 'panes' | 'pasteleria' | 'tortas' | 'hojaldres' | 'galletas' | 'dulces' | 'especiales';
   ingredientes: IngredienteFormulacion[];
   rendimientoBaseKg: number;   // Kg de masa resultante por arroba (~ARROBA_KG pero puede variar)
+  /**
+   * Kg reales de masa por 1 arroba medidos en báscula (Dulce Placer).
+   * Ej.: masa de sal = 21; hojaldre = 19.32 (media arroba = 9.66 kg).
+   * Si falta, `resolverKgPorArrobaMasa` usa defaults por nombre o rendimientoBaseKg.
+   * La arroba de compras/harina sigue siendo ARROBA_KG = 12.5.
+   */
+  kgPorArrobaReal?: number;
   costoTotalArroba: number;    // Suma de costos de ingredientes
   tiempoFermentacion?: number; // Minutos
   tiempoHorneado?: number;     // Minutos
@@ -536,7 +543,7 @@ export interface DistribucionArrobasDia {
   arrobas: number;
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'exportar' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina' | 'boveda' | 'inversiones';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina' | 'boveda' | 'inversiones' | 'plan-negocio';
 
 export interface RegistroAsistencia {
   id: string;
@@ -722,6 +729,8 @@ export type Permission =
   // Producción
   | 'VER_PRODUCCION'
   | 'GESTIONAR_PRODUCCION'
+  // Reportes / Análisis Financiero (acceso específico sin abrir todo VER_FINANZAS)
+  | 'VER_REPORTES'
   // Exportación
   | 'EXPORTAR_DATOS';
 
@@ -738,7 +747,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_DASHBOARD', 'VER_ESTADISTICAS',
     'VER_INVENTARIO', 'GESTIONAR_INVENTARIO',
     'VER_RECEPCIONES', 'CREAR_RECEPCIONES',
-    'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA', 'VER_FINANZAS',
+    'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA', 'VER_FINANZAS', 'VER_REPORTES',
     'VER_PRODUCCION', 'GESTIONAR_PRODUCCION',
     'EXPORTAR_DATOS',
   ],
@@ -753,7 +762,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_DASHBOARD', 'VER_ESTADISTICAS',
     'VER_INVENTARIO', 'GESTIONAR_INVENTARIO',
     'VER_RECEPCIONES', 'CREAR_RECEPCIONES',
-    'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA', 'VER_FINANZAS',
+    'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA', 'VER_FINANZAS', 'VER_REPORTES',
     'VER_PRODUCCION', 'GESTIONAR_PRODUCCION',
     'EXPORTAR_DATOS',
   ],
@@ -774,11 +783,11 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA',
   ],
   PANADERO: [
-    'VER_PRODUCTOS',
+    // Producción + auditoría de panes (Reportes) + inventario básico
     'VER_DASHBOARD',
-    'VER_INVENTARIO', 'GESTIONAR_INVENTARIO',
     'VER_PRODUCCION', 'GESTIONAR_PRODUCCION',
-    'VER_RECEPCIONES', 'CREAR_RECEPCIONES',
+    'VER_REPORTES',
+    'VER_INVENTARIO',
   ],
   AUXILIAR: [
     'VER_PRODUCTOS',
@@ -794,8 +803,8 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, { nombre: string; descripcion: 
   ADMIN: { nombre: 'Administrador', descripcion: 'Acceso total al sistema', color: '#8b5cf6' },
   GERENTE: { nombre: 'Gerente', descripcion: 'Gestión completa excepto configuración crítica', color: '#3b82f6' },
   COMPRADOR: { nombre: 'Comprador', descripcion: 'Gestión de proveedores y costos', color: '#22c55e' },
-  VENDEDOR: { nombre: 'Vendedor', descripcion: 'Solo visualización de productos y precios', color: '#f59e0b' },
-  PANADERO: { nombre: 'Panadero', descripcion: 'Producción, inventario y recetas', color: '#d97706' },
+  VENDEDOR: { nombre: 'Vendedor', descripcion: 'Ventas, caja y consulta de precios de venta', color: '#f59e0b' },
+  PANADERO: { nombre: 'Panadero', descripcion: 'Producción, recetas, inventario y auditoría de panes', color: '#d97706' },
   AUXILIAR: { nombre: 'Auxiliar', descripcion: 'Apoyo en ventas, producción e inventario', color: '#64748b' },
 };
 
@@ -1009,6 +1018,14 @@ export interface Gasto {
     nombreArchivo: string;
     etiquetas: string[];
   };
+  facturaItems?: {
+    id: string;
+    nombre: string;
+    cantidad: number;
+    subtotal: number;
+    total: number;
+  }[];
+  esFactura?: boolean;
 }
 
 export interface ReporteFinanciero {

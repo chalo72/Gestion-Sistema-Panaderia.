@@ -28,7 +28,8 @@ import {
   CalendarCheck,
   RefreshCw,
   TrendingUp,
-  Video
+  Video,
+  Briefcase
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -58,12 +59,15 @@ interface SidebarProps {
   productos: Producto[];
   proveedores: Proveedor[];
   precios: PrecioProveedor[];
+  inventario?: any[]; // Añadido inventario
   getMejorPrecio: (productoId: string) => PrecioProveedor | null;
   getPreciosByProducto: (productoId: string) => PrecioProveedor[];
   getProveedorById: (id: string) => Proveedor | undefined;
   formatCurrency: (value: number) => string;
   isCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  isMobileMenuOpen?: boolean;
+  onMobileMenuOpenChange?: (open: boolean) => void;
 }
 
 interface MenuItem {
@@ -86,12 +90,15 @@ export function Sidebar({
   productos,
   proveedores,
   precios,
+  inventario = [],
   getMejorPrecio,
   getPreciosByProducto,
   getProveedorById,
   formatCurrency,
   isCollapsed = false,
-  onToggleCollapse
+  onToggleCollapse,
+  isMobileMenuOpen,
+  onMobileMenuOpenChange
 }: SidebarProps) {
   const { check, role } = useCan();
   const { puedeVer } = usePermisosModulos();
@@ -129,6 +136,7 @@ export function Sidebar({
     window.history.pushState({ dpView: view }, '');
     onViewChange(view);
     setOpen(false); // cerrar menú móvil al navegar
+    onMobileMenuOpenChange?.(false);
   };
 
   const allMenuGroups: MenuGroup[] = [
@@ -157,8 +165,8 @@ export function Sidebar({
       section: 'Producción',
       emoji: '🍞',
       items: [
-        { id: 'produccion', label: 'Producción de Pan',  icon: Utensils,  permission: 'VER_PRODUCTOS' },
-        { id: 'recetas',    label: 'Recetas Técnicas',   icon: ChefHat,   permission: 'VER_PRODUCTOS' },
+        { id: 'produccion', label: 'Producción de Pan',  icon: Utensils,  permission: 'VER_PRODUCCION' },
+        { id: 'recetas',    label: 'Recetas Técnicas',   icon: ChefHat,   permission: 'VER_PRODUCCION' },
         { id: 'inventario', label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
       ],
     },
@@ -175,14 +183,15 @@ export function Sidebar({
       section: 'Costos y Finanzas',
       emoji: '📊',
       items: [
-        { id: 'precios',   label: 'Historial de Costos',  icon: DollarSign, permission: 'VER_PRECIOS' },
+        { id: (role === 'VENDEDOR' || role === 'PANADERO') ? 'buscador-precios' : 'precios', label: (role === 'VENDEDOR' || role === 'PANADERO') ? 'Consultar Precios' : 'Historial de Costos', icon: DollarSign, permission: 'VER_PRECIOS' },
         { id: 'alertas',   label: 'Alertas de Costos',    icon: Bell,       permission: 'VER_ALERTAS' },
         { id: 'gastos',    label: 'Egresos y Facturas',   icon: DollarSign, permission: 'VER_FINANZAS' },
-        { id: 'reportes',  label: 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_FINANZAS' },
+        { id: 'reportes',  label: 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_REPORTES' },
         { id: 'ahorro',    label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
         { id: 'mayoristas',label: 'Ventas al Mayor',      icon: Store,      permission: 'VER_FINANZAS' },
         { id: 'boveda',    label: 'Bóveda / Tesorería',   icon: Wallet,     permission: 'VER_FINANZAS' },
         { id: 'inversiones',label: 'Inversión y Crecimiento', icon: TrendingUp, permission: 'VER_FINANZAS' },
+        { id: 'plan-negocio',label: 'Fondo Emprender (IA)', icon: Briefcase, permission: 'VER_FINANZAS' },
       ],
     },
     {
@@ -277,6 +286,7 @@ export function Sidebar({
               productos={productos}
               proveedores={proveedores}
               precios={precios}
+              inventario={inventario}
               getMejorPrecio={getMejorPrecio}
               getPreciosByProducto={getPreciosByProducto}
               getProveedorById={getProveedorById}
@@ -403,13 +413,8 @@ export function Sidebar({
 
   if (isMobile) {
     return (
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="fixed top-4 left-4 z-50 md:hidden bg-[#0f172a] text-white hover:bg-slate-700 shadow-lg rounded-xl w-10 h-10">
-            <Menu className="w-5 h-5" />
-          </Button>
-        </SheetTrigger>
-        <SheetContent side="left" className="p-0 w-72 border-r border-white/10 bg-[#0f172a] flex flex-col">
+      <Sheet open={isMobileMenuOpen} onOpenChange={onMobileMenuOpenChange}>
+        <SheetContent side="left" className="p-0 bg-[#0f172a] border-r-0 w-[280px]">
           {renderSidebarContent()}
         </SheetContent>
       </Sheet>

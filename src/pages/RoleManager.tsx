@@ -30,11 +30,13 @@ const PERMISSION_GROUPS: { name: string; permissions: Permission[]; icon?: any }
     { name: 'Operaciones de Compra',     permissions: ['VER_PREPEDIDOS','CREAR_PREPEDIDOS','EDITAR_PREPEDIDOS','ELIMINAR_PREPEDIDOS'] },
     { name: 'Inteligencia y Alertas',    permissions: ['VER_ALERTAS','GESTIONAR_ALERTAS'],                                                                   icon: ShieldAlert },
     { name: 'Suministros y Bodega',      permissions: ['VER_INVENTARIO','GESTIONAR_INVENTARIO','VER_RECEPCIONES','CREAR_RECEPCIONES'] },
+    { name: 'Producción y Auditoría',    permissions: ['VER_PRODUCCION','GESTIONAR_PRODUCCION','VER_REPORTES','VER_FINANZAS'] },
     { name: 'Administración Nexus',      permissions: ['VER_CONFIGURACION','EDITAR_CONFIGURACION','VER_USUARIOS','CREAR_USUARIOS','EDITAR_USUARIOS','ELIMINAR_USUARIOS','EXPORTAR_DATOS'], icon: Lock },
     { name: 'Métricas y Performance',   permissions: ['VER_DASHBOARD','VER_ESTADISTICAS'] },
+    { name: 'Ventas y Caja',             permissions: ['VER_VENTAS','GESTIONAR_VENTAS','ABRIR_CERRAR_CAJA'] },
 ];
 
-const ROLES_GRANULARES: UserRole[] = ['ADMIN', 'GERENTE', 'COMPRADOR', 'VENDEDOR'];
+const ROLES_GRANULARES: UserRole[] = ['ADMIN', 'GERENTE', 'COMPRADOR', 'VENDEDOR', 'PANADERO', 'AUXILIAR'];
 
 const PASS_ROLES = [
     { key: 'GERENTE',   label: '👔 Gerente' },

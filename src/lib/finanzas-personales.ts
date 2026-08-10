@@ -132,6 +132,7 @@ export function calcularProyeccionQuincena(params: {
   alcanza: boolean;
   deficit: number;
   cuotaDiariaAhorro: number;
+  totalGastosDiarios: number;
 } {
   const hoy = new Date();
   const hoyDate = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
@@ -224,8 +225,13 @@ export function calcularProyeccionQuincena(params: {
   // Cuánto hay que ahorrar diariamente para cubrir los compromisos sin sufrir
   const cuotaDiariaAhorro = diasQuincena > 0 ? (totalObligaciones / diasQuincena) : 0;
 
+  // Gastos diarios de este periodo
+  const gastosPeriodo = params.gastos.filter(g => g.fecha >= inicioCadena && g.fecha <= finCadena);
+  const totalGastosDiarios = gastosPeriodo.reduce((s, g) => s + (Number(g.monto) || 0), 0);
+
   // El saldo proyectado ahora se calcula sobre la UTILIDAD BRUTA ESPERADA
-  const saldoProyectado = utilidadBrutaEsperada - totalObligaciones;
+  // restando los compromisos fijos y los gastos diarios que ya sacamos
+  const saldoProyectado = utilidadBrutaEsperada - totalObligaciones - totalGastosDiarios;
 
   return {
     ingresosTotales: Math.round(ingresosTotales),
@@ -241,7 +247,8 @@ export function calcularProyeccionQuincena(params: {
     promedioVentaDiaria: Math.round(promedioVentaDiaria),
     alcanza: saldoProyectado >= 0,
     deficit: saldoProyectado < 0 ? Math.abs(Math.round(saldoProyectado)) : 0,
-    cuotaDiariaAhorro: Math.round(cuotaDiariaAhorro)
+    cuotaDiariaAhorro: Math.round(cuotaDiariaAhorro),
+    totalGastosDiarios: Math.round(totalGastosDiarios)
   };
 }
 
@@ -431,4 +438,35 @@ export function addProduccion(data: Omit<RegistroProduccion, 'id'>): RegistroPro
 
 export function deleteProduccion(id: string): void {
   saveProducciones(getProducciones().filter(p => p.id !== id));
+}
+
+/**
+ * Puente Producción → Auditoría de Reportes.
+ * Convierte un pique del Distribuidor de arroba en el mismo historial que ve Diagnóstico Financiero.
+ */
+export function sincronizarAuditoriaDesdeProduccion(params: {
+  fecha?: string;
+  nombreMasa: string;
+  cantidadArrobas: number;
+  panes: Array<{ tipoPan: string; totalPanes: number }>;
+  notas?: string;
+}): RegistroProduccion {
+  const masaId = generateUUID();
+  const panesValidos = (params.panes || []).filter((p) => (Number(p.totalPanes) || 0) > 0);
+  return addProduccion({
+    fecha: normalizarFechaYYYYMMDD(params.fecha),
+    masas: [{
+      id: masaId,
+      nombre: (params.nombreMasa || 'Masa').trim() || 'Masa',
+      cantidadArrobas: Math.max(0, Number(params.cantidadArrobas) || 0),
+    }],
+    hornadas: panesValidos.map((p) => ({
+      tipoPan: (p.tipoPan || 'Pan').trim() || 'Pan',
+      bandejas: 0,
+      panesPorBandeja: 0,
+      totalPanes: Math.round(Number(p.totalPanes) || 0),
+      masaId,
+    })),
+    notas: params.notas?.trim() || 'Sincronizado desde Producción (Distribuidor de arroba)',
+  });
 }
