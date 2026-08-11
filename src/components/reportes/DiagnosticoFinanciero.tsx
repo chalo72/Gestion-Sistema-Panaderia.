@@ -82,19 +82,27 @@ const ARROBAS_EN_LETRAS: OpcionMedida[] = [
     { val: 10, label: '10 arrobas' },
 ];
 
-/** Siempre intenta hablar en letra (entrada exacta o salida aproximada). */
+/** Siempre intenta hablar en letra que el dueño entienda (1 arroba, media, etc.). */
 const arrobasEnLetras = (arr: number): string => {
     const n = Number(arr);
     if (!Number.isFinite(n) || n <= 0) return '—';
-    const exacto = ARROBAS_EN_LETRAS.find((o) => Math.abs(o.val - n) < 0.015);
+    // Redondeo suave a medios/cuartos para no asustar con 1.02
+    const redondeado =
+        Math.abs(n - Math.round(n)) < 0.06
+            ? Math.round(n)
+            : Math.abs(n * 2 - Math.round(n * 2)) < 0.08
+              ? Math.round(n * 2) / 2
+              : Math.abs(n * 4 - Math.round(n * 4)) < 0.12
+                ? Math.round(n * 4) / 4
+                : n;
+    const exacto = ARROBAS_EN_LETRAS.find((o) => Math.abs(o.val - redondeado) < 0.02);
     if (exacto) return exacto.label;
     const cercano = ARROBAS_EN_LETRAS.reduce((best, o) =>
-        Math.abs(o.val - n) < Math.abs(best.val - n) ? o : best
+        Math.abs(o.val - redondeado) < Math.abs(best.val - redondeado) ? o : best
     );
-    if (Math.abs(cercano.val - n) <= 0.08) return `cerca de ${cercano.label}`;
-    const enteras = Math.floor(n + 1e-9);
-    const frac = n - enteras;
-    const libras = Math.round(n * 25); // 1 arr = 25 libras
+    if (Math.abs(cercano.val - redondeado) <= 0.1) return `cerca de ${cercano.label}`;
+    const enteras = Math.floor(redondeado + 1e-9);
+    const frac = redondeado - enteras;
     let cola = '';
     if (frac >= 0.2 && frac <= 0.3) cola = ' y cuarto';
     else if (frac >= 0.45 && frac <= 0.55) cola = ' y media';
@@ -102,10 +110,28 @@ const arrobasEnLetras = (arr: number): string => {
     if (enteras === 0 && cola === ' y media') return 'media arroba';
     if (enteras === 0 && cola === ' y cuarto') return 'un cuarto de arroba';
     if (enteras === 0 && cola === ' y tres cuartos') return 'tres cuartos de arroba';
-    if (enteras === 1 && cola) return `una arroba${cola}`;
-    if (enteras === 1 && !cola) return `1 arroba (≈ ${libras} libras)`;
+    if (enteras === 1 && cola) return `1 arroba${cola}`;
+    if (enteras === 1 && !cola) return '1 arroba';
     if (enteras > 1 && cola) return `${enteras} arrobas${cola}`;
-    return `${n.toFixed(2)} arrobas (≈ ${libras} libras)`;
+    if (enteras > 1 && !cola && Math.abs(frac) < 0.05) return `${enteras} arrobas`;
+    return `${redondeado.toFixed(2)} arrobas`;
+};
+
+/**
+ * Texto para el jefe: “1 arroba → 100 panes”.
+ * Si hay decimal raro, igual intenta decirlo en media/cuarto.
+ */
+const fraseArrobaAPanes = (masaArr: number, panesPorArroba: number): string => {
+    const ppa = Math.round(Number(panesPorArroba) || 0);
+    if (ppa <= 0) return '';
+    const arrTxt = arrobasEnLetras(masaArr);
+    if (Math.abs(masaArr - 1) < 0.08) {
+        return `Regla: 1 arroba → ≈ ${ppa.toLocaleString('es-CO')} panes`;
+    }
+    if (Math.abs(masaArr - 0.5) < 0.08) {
+        return `Regla: media arroba → ≈ ${Math.round(ppa / 2).toLocaleString('es-CO')} panes (1 arroba = ${ppa.toLocaleString('es-CO')})`;
+    }
+    return `Regla: ${arrTxt} → ≈ ${Math.round(masaArr * ppa).toLocaleString('es-CO')} panes (1 arroba = ${ppa.toLocaleString('es-CO')})`;
 };
 
 const fechaParaMostrar = (fecha: string) => {
@@ -208,6 +234,8 @@ type ChequeoRendimiento = {
     panesEsperados: number;
     panesMin: number;
     panesMax: number;
+    /** Cuántos panes “pide” el modelo por 1 arroba (para explicar al dueño). */
+    panesPorArrobaRef: number;
     estado: 'ok' | 'bajo' | 'alto' | 'sin_modelo' | 'sin_panes';
     mensaje: string;
 };
@@ -390,35 +418,54 @@ function BarraAvancePanadero({ metas }: { metas: MetaPanesEnVivo[] }) {
 const chequearRendimientoPorMasa = (
     masas: Array<{ id: string; nombre?: string; cantidadArrobas?: number }>,
     hornadasList: Array<{ masaId?: string; tipoPan?: string; totalPanes?: number; bandejas?: number; panesPorBandeja?: number }>,
-    modelos: Array<{ nombre: string; panesPorArroba?: number; mermaEstimada?: number }> | undefined
+    modelos: Array<{ nombre: string; formulacionId?: string; panesPorArroba?: number; mermaEstimada?: number }> | undefined,
+    formulaciones?: Array<{ id: string; nombre: string }>
 ): ChequeoRendimiento[] => {
     const TOL = TOL_RENDIMIENTO;
-    return (masas || [])
+    const masasValidas = (masas || []).filter((m) => (Number(m.cantidadArrobas) || 0) > 0);
+    const algunaLigada = (hornadasList || []).some((h) => h.masaId && masasValidas.some((m) => m.id === h.masaId));
+    const unaSolaMasa = masasValidas.length === 1;
+
+    return masasValidas
         .map((masa) => {
             const masaArr = Number(masa.cantidadArrobas) || 0;
-            if (masaArr <= 0) return null;
-            const hs = (hornadasList || []).filter((h) => h.masaId === masa.id);
+            const nombre = masa.nombre || 'Masa';
+
+            // 1) Preferir panes ligados a esta masa; si el lote viejo no tiene masaId, usar todos (1 masa) o ninguno
+            let hs = (hornadasList || []).filter((h) => h.masaId === masa.id);
+            if (hs.length === 0 && (!algunaLigada && unaSolaMasa)) {
+                hs = [...(hornadasList || [])];
+            }
             const panesReales = hs.reduce((s, h) => {
                 const n = panesDeHornada(h);
                 return s + (Number.isFinite(n) ? n : 0);
             }, 0);
-            const nombre = masa.nombre || 'Masa';
-            if (hs.length === 0 || panesReales <= 0) {
-                return {
-                    masaNombre: nombre,
-                    masaArr,
-                    panesReales: 0,
-                    panesEsperados: 0,
-                    panesMin: 0,
-                    panesMax: 0,
-                    estado: 'sin_panes' as const,
-                    mensaje: `Declaró ${arrobasEnLetras(masaArr)} de «${nombre}» pero aún no hay panes ligados a esa masa.`,
-                };
-            }
+
+            // 2) Modelos: tipos de hornada → formulación con mismo nombre → único modelo con ppa
             const tipos = [...new Set(hs.map((h) => h.tipoPan).filter(Boolean))] as string[];
-            const mods = tipos
+            let mods = tipos
                 .map((t) => modelos?.find((m) => m.nombre === t))
-                .filter((m): m is { nombre: string; panesPorArroba?: number; mermaEstimada?: number } => !!m && Number(m.panesPorArroba) > 0);
+                .filter((m): m is NonNullable<typeof m> => !!m && Number(m.panesPorArroba) > 0);
+
+            if (mods.length === 0 && modelos) {
+                const porNombre = modelos.filter(
+                    (m) =>
+                        Number(m.panesPorArroba) > 0 &&
+                        (m.nombre || '').toLowerCase().includes((nombre || '').toLowerCase().slice(0, 4))
+                );
+                if (porNombre.length > 0) mods = porNombre;
+            }
+            if (mods.length === 0 && formulaciones && modelos && masa.nombre) {
+                const form = formulaciones.find((f) => f.nombre === masa.nombre);
+                if (form) {
+                    mods = modelos.filter((m) => m.formulacionId === form.id && Number(m.panesPorArroba) > 0);
+                }
+            }
+            if (mods.length === 0 && modelos) {
+                const conPpa = modelos.filter((m) => Number(m.panesPorArroba) > 0);
+                if (conPpa.length === 1) mods = conPpa;
+            }
+
             if (mods.length === 0) {
                 return {
                     masaNombre: nombre,
@@ -427,42 +474,46 @@ const chequearRendimientoPorMasa = (
                     panesEsperados: 0,
                     panesMin: 0,
                     panesMax: 0,
+                    panesPorArrobaRef: 0,
                     estado: 'sin_modelo' as const,
-                    mensaje: `Hay ${panesReales} panes, pero el modelo no tiene configurado «panes por arroba». No se puede comprobar.`,
+                    mensaje: `Hay masa «${nombre}» (${arrobasEnLetras(masaArr)}) pero falta configurar en el modelo cuántos panes salen por 1 arroba.`,
                 };
             }
-            // Calcular el rendimiento promedio real basado en la mezcla exacta de panes
-            let masaEquivalenteTotal = 0;
-            let mermaMax = 0;
-            
-            tipos.forEach((t) => {
-                const mod = modelos?.find((m) => m.nombre === t);
-                const ppa = Number(mod?.panesPorArroba) || 0;
-                if (ppa <= 0) return;
-                const panesTipo = hs
-                    .filter((h) => h.tipoPan === t)
-                    .reduce((s, h) => s + panesDeHornada(h), 0);
-                
-                masaEquivalenteTotal += (panesTipo / ppa);
-                mermaMax = Math.max(mermaMax, Math.max(0, Number(mod?.mermaEstimada) || 0) / 100);
-            });
 
-            let esperado = 0;
-            if (masaEquivalenteTotal > 0) {
-                const rendimientoPromedio = panesReales / masaEquivalenteTotal;
-                esperado = masaArr * rendimientoPromedio;
-            }
-            const panesMin = Math.floor(esperado * (1 - TOL - mermaMax));
-            const panesMax = Math.ceil(esperado * (1 + TOL));
+            const ppas = mods.map((m) => Number(m.panesPorArroba));
+            const mermas = mods.map((m) => Math.max(0, Number(m.mermaEstimada) || 0) / 100);
+            const ppaMin = Math.min(...ppas);
+            const ppaMax = Math.max(...ppas);
+            const ppaMid = ppas.reduce((a, b) => a + b, 0) / ppas.length;
+            const mermaMax = Math.max(0, ...mermas);
+            const esperado = masaArr * ppaMid;
+            const panesMin = Math.floor(masaArr * ppaMin * (1 - TOL - mermaMax));
+            const panesMax = Math.ceil(masaArr * ppaMax * (1 + TOL));
             const masaLetras = arrobasEnLetras(masaArr);
+            const regla = fraseArrobaAPanes(masaArr, ppaMid);
+
+            if (panesReales <= 0) {
+                return {
+                    masaNombre: nombre,
+                    masaArr,
+                    panesReales: 0,
+                    panesEsperados: Math.round(esperado),
+                    panesMin,
+                    panesMax,
+                    panesPorArrobaRef: Math.round(ppaMid),
+                    estado: 'sin_panes' as const,
+                    mensaje: `Con ${masaLetras} de «${nombre}» deberían salir ≈ ${Math.round(esperado)} panes (rango bueno ${panesMin}–${panesMax}). ${regla}. Aún no hay panes anotados.`,
+                };
+            }
+
             let estado: ChequeoRendimiento['estado'] = 'ok';
-            let mensaje = `con ${masaLetras} deberían salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}). Salieron ${panesReales}. ✓ Calza.`;
+            let mensaje = `Con ${masaLetras} de «${nombre}» deben salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}). Salieron ${panesReales}. ✓ Calza. ${regla}.`;
             if (panesReales < panesMin) {
                 estado = 'bajo';
-                mensaje = `dijo ${masaLetras} → deberían salir al menos ~${panesMin} panes, pero solo hay ${panesReales}. Posible masa inflada o panes de menos.`;
+                mensaje = `Con ${masaLetras} deberían salir al menos ~${panesMin} panes, pero solo hay ${panesReales} (faltan ${panesMin - panesReales}). ${regla}.`;
             } else if (panesReales > panesMax) {
                 estado = 'alto';
-                mensaje = `dijo ${masaLetras} → máximo ~${panesMax} panes, pero hay ${panesReales}. Posible conteo alto o masa sin declarar.`;
+                mensaje = `Con ${masaLetras} el máximo bueno es ~${panesMax} panes, pero hay ${panesReales} (sobran ${panesReales - panesMax}). ${regla}.`;
             }
             return {
                 masaNombre: nombre,
@@ -471,6 +522,7 @@ const chequearRendimientoPorMasa = (
                 panesEsperados: Math.round(esperado),
                 panesMin,
                 panesMax,
+                panesPorArrobaRef: Math.round(ppaMid),
                 estado,
                 mensaje,
             };
@@ -478,12 +530,10 @@ const chequearRendimientoPorMasa = (
         .filter((x): x is ChequeoRendimiento => x !== null);
 };
 
-/** Resume chequeos de panes por masa: esperado según arroba, rango, real y diferencia. */
+/** Resume chequeos: muestra rango aunque falten panes (siempre que haya modelo). */
 const resumenChequeosPanes = (chequeos: ChequeoRendimiento[]) => {
-    const utiles = (chequeos || []).filter(
-        (c) => c.estado === 'ok' || c.estado === 'bajo' || c.estado === 'alto'
-    );
-    if (utiles.length === 0) {
+    const conMeta = (chequeos || []).filter((c) => (Number(c.panesEsperados) || 0) > 0 || (Number(c.panesMin) || 0) > 0);
+    if (conMeta.length === 0) {
         const haySinModelo = (chequeos || []).some((c) => c.estado === 'sin_modelo');
         const haySinPanes = (chequeos || []).some((c) => c.estado === 'sin_panes');
         return {
@@ -493,23 +543,38 @@ const resumenChequeosPanes = (chequeos: ChequeoRendimiento[]) => {
             panesMax: 0,
             real: (chequeos || []).reduce((s, c) => s + (Number(c.panesReales) || 0), 0),
             diferencia: 0,
+            panesPorArrobaRef: 0,
+            masaArrTotal: 0,
             estado: (haySinModelo ? 'sin_modelo' : haySinPanes ? 'sin_panes' : 'sin_datos') as
                 | 'sin_modelo'
                 | 'sin_panes'
                 | 'sin_datos',
-            etiqueta: haySinModelo ? 'Sin modelo' : haySinPanes ? 'Sin panes' : 'Sin meta',
+            etiqueta: haySinModelo
+                ? 'Falta panes/arroba en modelo'
+                : haySinPanes
+                  ? 'Sin panes anotados'
+                  : 'Sin meta',
+            mensajeCorto: haySinModelo
+                ? 'Configura en Recetas cuántos panes salen por 1 arroba'
+                : 'Sin datos para calcular el rango',
         };
     }
-    const esperado = utiles.reduce((s, c) => s + (Number(c.panesEsperados) || 0), 0);
-    const panesMin = utiles.reduce((s, c) => s + (Number(c.panesMin) || 0), 0);
-    const panesMax = utiles.reduce((s, c) => s + (Number(c.panesMax) || 0), 0);
-    const real = utiles.reduce((s, c) => s + (Number(c.panesReales) || 0), 0);
+    const esperado = conMeta.reduce((s, c) => s + (Number(c.panesEsperados) || 0), 0);
+    const panesMin = conMeta.reduce((s, c) => s + (Number(c.panesMin) || 0), 0);
+    const panesMax = conMeta.reduce((s, c) => s + (Number(c.panesMax) || 0), 0);
+    const real = conMeta.reduce((s, c) => s + (Number(c.panesReales) || 0), 0);
+    const masaArrTotal = conMeta.reduce((s, c) => s + (Number(c.masaArr) || 0), 0);
+    const ppaRefs = conMeta.map((c) => Number(c.panesPorArrobaRef) || 0).filter((n) => n > 0);
+    const panesPorArrobaRef =
+        ppaRefs.length > 0 ? Math.round(ppaRefs.reduce((a, b) => a + b, 0) / ppaRefs.length) : 0;
     const diferencia = real - esperado;
-    const estado = utiles.some((c) => c.estado === 'bajo')
-        ? ('bajo' as const)
-        : utiles.some((c) => c.estado === 'alto')
-          ? ('alto' as const)
-          : ('ok' as const);
+    const estado = conMeta.every((c) => c.estado === 'sin_panes')
+        ? ('sin_panes' as const)
+        : conMeta.some((c) => c.estado === 'bajo')
+          ? ('bajo' as const)
+          : conMeta.some((c) => c.estado === 'alto')
+            ? ('alto' as const)
+            : ('ok' as const);
     return {
         tieneMeta: true as const,
         esperado,
@@ -517,8 +582,18 @@ const resumenChequeosPanes = (chequeos: ChequeoRendimiento[]) => {
         panesMax,
         real,
         diferencia,
+        panesPorArrobaRef,
+        masaArrTotal,
         estado,
-        etiqueta: estado === 'ok' ? 'En rango' : estado === 'bajo' ? 'Bajo meta' : 'Sobre meta',
+        etiqueta:
+            estado === 'ok'
+                ? 'En rango'
+                : estado === 'bajo'
+                  ? 'Bajo meta'
+                  : estado === 'alto'
+                    ? 'Sobre meta'
+                    : 'Meta lista',
+        mensajeCorto: fraseArrobaAPanes(masaArrTotal || 1, panesPorArrobaRef),
     };
 };
 
@@ -2617,7 +2692,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 const explLive = explicarComparacionMasaPan(
                                                     masaKgLive, panKgLive, totalMasaRegistrada, arrobasEquivalentes, diferencia
                                                 );
-                                                const chequeosLive = chequearRendimientoPorMasa(masasPreparadas || [], hornadas || [], modelosPan);
+                                                const chequeosLive = chequearRendimientoPorMasa(masasPreparadas || [], hornadas || [], modelosPan, formulaciones);
                                                 const hayAlertaRendimiento = chequeosLive.some((c) => c.estado === 'bajo' || c.estado === 'alto');
 
                                                 return (
@@ -2814,7 +2889,27 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                             {historialExpanded && <CardContent className="p-4 sm:p-5">
                                 {(() => {
                                     const calculateMetrics = (p: any) => {
-                                        const totalMasa = (p.masas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0), 0);
+                                        let masasSrc: Array<{ id: string; nombre?: string; cantidadArrobas?: number }> = Array.isArray(p.masas)
+                                            ? p.masas.map((m: { id?: string; nombre?: string; cantidadArrobas?: number }, i: number) => ({
+                                                id: m.id || `masa-${i}`,
+                                                nombre: m.nombre,
+                                                cantidadArrobas: Number(m.cantidadArrobas) || 0,
+                                            }))
+                                            : [];
+                                        // Lotes viejos sin arreglo `masas`
+                                        if (masasSrc.length === 0) {
+                                            const legado: Array<[string, string, number]> = [
+                                                ['leg-dulce', 'Masa Dulce', Number(p.masaDulce) || 0],
+                                                ['leg-hojal', 'Hojaldrado', Number(p.masaHojaldrado) || 0],
+                                                ['leg-torta', 'Batido Torta', Number(p.masaBatidoTorta) || 0],
+                                                ['leg-galle', 'Batido Galleta', Number(p.masaBatidoGalleta) || 0],
+                                            ];
+                                            masasSrc = legado
+                                                .filter(([, , arr]) => arr > 0)
+                                                .map(([id, nombre, cantidadArrobas]) => ({ id, nombre, cantidadArrobas }));
+                                        }
+
+                                        const totalMasa = masasSrc.reduce((s, m) => s + (Number(m.cantidadArrobas) || 0), 0);
                                         const totalPanes = (p.hornadas || []).reduce(
                                             (s: number, h: any) => s + panesDeHornada(h),
                                             0
@@ -2833,7 +2928,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         const diferencia = arrobasEquivalentes - totalMasa;
                                         const hasData = totalMasa > 0 || arrobasEquivalentes > 0 || totalPanes > 0;
                                         const difAbs = Math.abs(diferencia);
-                                        const masaKg = (p.masas || []).reduce((s: number, m: any) => s + (Number(m.cantidadArrobas) || 0) * resolverKgPorArrobaMasa({ nombre: m.nombre }), 0);
+                                        const masaKg = masasSrc.reduce((s, m) => s + (Number(m.cantidadArrobas) || 0) * resolverKgPorArrobaMasa({ nombre: m.nombre }), 0);
                                         let panKg = 0;
                                         (p.hornadas || []).forEach((h: any) => {
                                             const panCant = panesDeHornada(h);
@@ -2841,7 +2936,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
                                                 if (mod && Number(mod.panesPorArroba) > 0) {
                                                     const arr = panCant / Number(mod.panesPorArroba);
-                                                    const masaOrig = (p.masas || []).find((m: any) => m.id === h.masaId);
+                                                    const masaOrig = masasSrc.find((m) => m.id === h.masaId);
                                                     panKg += arr * resolverKgPorArrobaMasa({ nombre: masaOrig?.nombre || '' });
                                                 }
                                             }
@@ -2849,20 +2944,60 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         const difKg = Math.abs(masaKg - panKg);
                                         const difHumana = describirDifArrobas(difAbs, difKg);
                                         const explHist = explicarComparacionMasaPan(masaKg, panKg, totalMasa, arrobasEquivalentes, diferencia);
-                                        const chequeosHist = chequearRendimientoPorMasa(p.masas || [], p.hornadas || [], modelosPan);
+                                        let chequeosHist = chequearRendimientoPorMasa(masasSrc, p.hornadas || [], modelosPan, formulaciones);
+                                        // Fallback lote: masa total × panes/arroba de los tipos de pan salidos
+                                        if (chequeosHist.every((c) => !c.panesEsperados) && totalMasa > 0) {
+                                            const tipos = [...new Set((p.hornadas || []).map((h: { tipoPan?: string }) => h.tipoPan).filter(Boolean))] as string[];
+                                            let mods = tipos
+                                                .map((t) => modelosPan?.find((m: { nombre: string }) => m.nombre === t))
+                                                .filter((m: { panesPorArroba?: number } | undefined): m is { nombre: string; panesPorArroba?: number; mermaEstimada?: number } => !!m && Number(m.panesPorArroba) > 0);
+                                            if (mods.length === 0 && modelosPan) {
+                                                mods = modelosPan.filter((m: { panesPorArroba?: number }) => Number(m.panesPorArroba) > 0).slice(0, 3);
+                                            }
+                                            if (mods.length > 0) {
+                                                const ppas = mods.map((m) => Number(m.panesPorArroba));
+                                                const ppaMid = ppas.reduce((a, b) => a + b, 0) / ppas.length;
+                                                const ppaMin = Math.min(...ppas);
+                                                const ppaMax = Math.max(...ppas);
+                                                const esperado = totalMasa * ppaMid;
+                                                const panesMin = Math.floor(totalMasa * ppaMin * (1 - TOL_RENDIMIENTO));
+                                                const panesMax = Math.ceil(totalMasa * ppaMax * (1 + TOL_RENDIMIENTO));
+                                                const estado = totalPanes <= 0
+                                                    ? 'sin_panes' as const
+                                                    : totalPanes < panesMin
+                                                      ? 'bajo' as const
+                                                      : totalPanes > panesMax
+                                                        ? 'alto' as const
+                                                        : 'ok' as const;
+                                                chequeosHist = [{
+                                                    masaNombre: 'Lote del día',
+                                                    masaArr: totalMasa,
+                                                    panesReales: totalPanes,
+                                                    panesEsperados: Math.round(esperado),
+                                                    panesMin,
+                                                    panesMax,
+                                                    panesPorArrobaRef: Math.round(ppaMid),
+                                                    estado,
+                                                    mensaje: `Con ${arrobasEnLetras(totalMasa)} deben salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}). ${fraseArrobaAPanes(totalMasa, ppaMid)}.`,
+                                                }];
+                                            }
+                                        }
                                         const alertaRendHist = chequeosHist.some((c) => c.estado === 'bajo' || c.estado === 'alto');
                                         const metaPanes = resumenChequeosPanes(chequeosHist);
-                                        return { totalMasa, totalPanes, arrobasEquivalentes, diferencia, hasData, difAbs, masaKg, panKg, difKg, difHumana, explHist, chequeosHist, alertaRendHist, metaPanes };
+                                        return { totalMasa, totalPanes, arrobasEquivalentes, diferencia, hasData, difAbs, masaKg, panKg, difKg, difHumana, explHist, chequeosHist, alertaRendHist, metaPanes, masasSrc };
                                     };
 
                                     const celdaMetaPanes = (meta: ReturnType<typeof resumenChequeosPanes>) => {
                                         if (!meta.tieneMeta) {
                                             return (
-                                                <div className="text-[10px] text-slate-400 font-bold">
+                                                <div className="text-[10px] text-amber-700 dark:text-amber-300 font-bold max-w-[160px] leading-snug">
                                                     {meta.etiqueta}
+                                                    <span className="block text-slate-500 mt-0.5 font-medium normal-case">
+                                                        {meta.mensajeCorto}
+                                                    </span>
                                                     {meta.real > 0 && (
                                                         <span className="block text-slate-500 mt-0.5">
-                                                            Real: {meta.real.toLocaleString('es-CO')}
+                                                            Salió: {meta.real.toLocaleString('es-CO')} panes
                                                         </span>
                                                     )}
                                                 </div>
@@ -2870,29 +3005,45 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         }
                                         const diffTxt =
                                             meta.diferencia === 0
-                                                ? '0'
+                                                ? 'igual'
                                                 : meta.diferencia > 0
-                                                  ? `+${meta.diferencia.toLocaleString('es-CO')}`
-                                                  : meta.diferencia.toLocaleString('es-CO');
+                                                  ? `sobran ${meta.diferencia.toLocaleString('es-CO')}`
+                                                  : `faltan ${Math.abs(meta.diferencia).toLocaleString('es-CO')}`;
+                                        const okColor = meta.estado === 'ok' || meta.estado === 'sin_panes';
                                         return (
-                                            <div className="space-y-1 min-w-[120px]">
-                                                <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
-                                                    Esperado ≈ <span className="font-black text-slate-800 dark:text-slate-100">{meta.esperado.toLocaleString('es-CO')}</span>
-                                                </div>
-                                                <div className="text-[10px] font-bold text-slate-500">
-                                                    Rango {meta.panesMin.toLocaleString('es-CO')}–{meta.panesMax.toLocaleString('es-CO')}
-                                                </div>
-                                                <div className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">
-                                                    Salió {meta.real.toLocaleString('es-CO')}
+                                            <div className="space-y-1.5 min-w-[168px] max-w-[220px]">
+                                                {meta.masaArrTotal > 0 && (
+                                                    <div className="text-[10px] font-black text-indigo-700 dark:text-indigo-300 capitalize leading-snug">
+                                                        Con {arrobasEnLetras(meta.masaArrTotal)}
+                                                    </div>
+                                                )}
+                                                {meta.panesPorArrobaRef > 0 && (
+                                                    <div className="text-[9px] font-bold text-slate-500 dark:text-slate-400 leading-snug">
+                                                        1 arroba → ≈ {meta.panesPorArrobaRef.toLocaleString('es-CO')} panes
+                                                        {Math.abs(meta.masaArrTotal - 0.5) < 0.08 && (
+                                                            <span className="block">media arroba → ≈ {Math.round(meta.panesPorArrobaRef / 2).toLocaleString('es-CO')}</span>
+                                                        )}
+                                                    </div>
+                                                )}
+                                                <div className="rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-white/10 px-2 py-1.5 space-y-0.5">
+                                                    <div className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                                        Deben salir ≈ <span className="font-black text-slate-900 dark:text-white">{meta.esperado.toLocaleString('es-CO')}</span>
+                                                    </div>
+                                                    <div className="text-[11px] font-black text-indigo-600 dark:text-indigo-400">
+                                                        Rango bueno: {meta.panesMin.toLocaleString('es-CO')} – {meta.panesMax.toLocaleString('es-CO')}
+                                                    </div>
+                                                    <div className="text-[11px] font-black text-emerald-600 dark:text-emerald-400">
+                                                        Salió: {meta.real.toLocaleString('es-CO')}
+                                                    </div>
                                                 </div>
                                                 <div className={cn(
-                                                    "inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded",
-                                                    meta.estado === 'ok'
+                                                    "inline-flex items-center text-[10px] font-black px-1.5 py-0.5 rounded",
+                                                    okColor
                                                         ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
                                                         : "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300"
                                                 )}>
-                                                    Diff {diffTxt}
-                                                    <span className="normal-case tracking-normal font-bold opacity-80">· {meta.etiqueta}</span>
+                                                    {meta.estado === 'sin_panes' ? 'Meta según arroba' : diffTxt}
+                                                    <span className="ml-1 font-bold opacity-80">· {meta.etiqueta}</span>
                                                 </div>
                                             </div>
                                         );
@@ -2900,7 +3051,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                                     const renderDesktopTableRow = (p: any) => {
                                         const m = calculateMetrics(p);
-                                        const masasLista = (p.masas || []) as { id?: string; nombre?: string; cantidadArrobas?: number }[];
+                                        const masasLista = (m.masasSrc || p.masas || []) as { id?: string; nombre?: string; cantidadArrobas?: number }[];
                                         return (
                                             <tr
                                                 key={p.id}
@@ -2941,13 +3092,18 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 align-top min-w-[140px]">
-                                                    <div className="text-xs font-bold text-slate-700 dark:text-slate-300">{m.totalMasa.toFixed(2)} arr</div>
+                                                    <div className="text-xs font-black text-slate-800 dark:text-slate-100 capitalize">
+                                                        {arrobasEnLetras(m.totalMasa)}
+                                                    </div>
+                                                    <div className="text-[10px] font-bold text-slate-500">{m.totalMasa.toFixed(2)} arr (número)</div>
                                                     {masasLista.length > 0 ? (
                                                         <div className="mt-1.5 space-y-1">
                                                             {masasLista.map((masa, idx) => (
                                                                 <div key={masa.id || `masa-${idx}`} className="text-[10px] leading-snug text-slate-600 dark:text-slate-400">
                                                                     <span className="font-black text-slate-800 dark:text-slate-200">{masa.nombre?.trim() || 'Sin nombre'}</span>
-                                                                    <span className="text-slate-500"> · {Number(masa.cantidadArrobas || 0).toFixed(2)} arr</span>
+                                                                    <span className="block text-indigo-600 dark:text-indigo-400 font-bold capitalize">
+                                                                        {arrobasEnLetras(Number(masa.cantidadArrobas || 0))}
+                                                                    </span>
                                                                 </div>
                                                             ))}
                                                         </div>
@@ -3065,17 +3221,31 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                         )}>
                                                             <p className="text-[9px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
                                                                 <Shield className={cn("w-3.5 h-3.5", alertaRendHist ? "text-rose-500" : "text-indigo-500")} />
-                                                                Panes según arroba
+                                                                Panes según arroba (para entender fácil)
                                                             </p>
                                                             {metaPanes.tieneMeta ? (
-                                                                <div className="grid grid-cols-2 gap-2">
+                                                                <div className="space-y-2">
+                                                                    {metaPanes.masaArrTotal > 0 && (
+                                                                        <p className="text-[11px] font-black text-indigo-700 dark:text-indigo-300 capitalize">
+                                                                            Con {arrobasEnLetras(metaPanes.masaArrTotal)}
+                                                                        </p>
+                                                                    )}
+                                                                    {metaPanes.panesPorArrobaRef > 0 && (
+                                                                        <p className="text-[10px] font-bold text-slate-600 dark:text-slate-300">
+                                                                            1 arroba → ≈ {metaPanes.panesPorArrobaRef.toLocaleString('es-CO')} panes
+                                                                            {Math.abs(metaPanes.masaArrTotal - 0.5) < 0.08
+                                                                                ? ` · media arroba → ≈ ${Math.round(metaPanes.panesPorArrobaRef / 2).toLocaleString('es-CO')}`
+                                                                                : ''}
+                                                                        </p>
+                                                                    )}
+                                                                    <div className="grid grid-cols-2 gap-2">
                                                                     <div className="rounded-lg bg-white/80 dark:bg-slate-900/50 border border-slate-100 dark:border-white/10 px-2 py-1.5">
-                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Esperado</span>
+                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Deben salir</span>
                                                                         <span className="text-[12px] font-black text-slate-800 dark:text-slate-100">≈ {metaPanes.esperado.toLocaleString('es-CO')}</span>
                                                                     </div>
-                                                                    <div className="rounded-lg bg-white/80 dark:bg-slate-900/50 border border-slate-100 dark:border-white/10 px-2 py-1.5">
-                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Rango</span>
-                                                                        <span className="text-[12px] font-black text-slate-800 dark:text-slate-100">{metaPanes.panesMin.toLocaleString('es-CO')}–{metaPanes.panesMax.toLocaleString('es-CO')}</span>
+                                                                    <div className="rounded-lg bg-white/80 dark:bg-slate-900/50 border border-indigo-100 dark:border-indigo-500/20 px-2 py-1.5">
+                                                                        <span className="block text-[8px] font-black uppercase tracking-wider text-indigo-500">Rango bueno</span>
+                                                                        <span className="text-[12px] font-black text-indigo-700 dark:text-indigo-300">{metaPanes.panesMin.toLocaleString('es-CO')}–{metaPanes.panesMax.toLocaleString('es-CO')}</span>
                                                                     </div>
                                                                     <div className="rounded-lg bg-white/80 dark:bg-slate-900/50 border border-slate-100 dark:border-white/10 px-2 py-1.5">
                                                                         <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Salió</span>
@@ -3083,22 +3253,28 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                     </div>
                                                                     <div className={cn(
                                                                         "rounded-lg border px-2 py-1.5",
-                                                                        metaPanes.estado === 'ok'
+                                                                        metaPanes.estado === 'ok' || metaPanes.estado === 'sin_panes'
                                                                             ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800/40"
                                                                             : "bg-rose-50 dark:bg-rose-950/30 border-rose-200 dark:border-rose-800/40"
                                                                     )}>
                                                                         <span className="block text-[8px] font-black uppercase tracking-wider text-slate-400">Diferencia</span>
                                                                         <span className={cn(
                                                                             "text-[12px] font-black",
-                                                                            metaPanes.estado === 'ok' ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
+                                                                            metaPanes.estado === 'ok' || metaPanes.estado === 'sin_panes' ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
                                                                         )}>
-                                                                            {metaPanes.diferencia > 0 ? '+' : ''}{metaPanes.diferencia.toLocaleString('es-CO')}
-                                                                            <span className="ml-1 text-[9px] font-bold opacity-80">{metaPanes.etiqueta}</span>
+                                                                            {metaPanes.estado === 'sin_panes'
+                                                                                ? 'Sin salida'
+                                                                                : metaPanes.diferencia === 0
+                                                                                  ? 'Igual'
+                                                                                  : metaPanes.diferencia > 0
+                                                                                    ? `Sobran ${metaPanes.diferencia.toLocaleString('es-CO')}`
+                                                                                    : `Faltan ${Math.abs(metaPanes.diferencia).toLocaleString('es-CO')}`}
                                                                         </span>
+                                                                    </div>
                                                                     </div>
                                                                 </div>
                                                             ) : (
-                                                                <p className="text-[10px] font-bold text-slate-500">{metaPanes.etiqueta}</p>
+                                                                <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300">{metaPanes.etiqueta}. {metaPanes.mensajeCorto}</p>
                                                             )}
                                                             {chequeosHist.map((c, idx) => (
                                                                 <p key={`ch-${p.id}-${idx}`} className={cn(
@@ -3419,7 +3595,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                         <th className="px-4 py-2 font-black uppercase tracking-wider">Estado</th>
                                                                         <th className="px-4 py-2 font-black uppercase tracking-wider">Metida (Entrada)</th>
                                                                         <th className="px-4 py-2 font-black uppercase tracking-wider">Salida (Eq.)</th>
-                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider">Esperado vs Real</th>
+                                                                        <th className="px-4 py-2 font-black uppercase tracking-wider">Rango panes (arroba)</th>
                                                                         <th className="px-4 py-2 font-black uppercase tracking-wider text-right">Acciones</th>
                                                                     </tr>
                                                                 </thead>
@@ -3480,7 +3656,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                                                 <th className="px-4 py-2 font-black uppercase tracking-wider">Estado</th>
                                                                                                 <th className="px-4 py-2 font-black uppercase tracking-wider">Metida (Entrada)</th>
                                                                                                 <th className="px-4 py-2 font-black uppercase tracking-wider">Salida (Eq.)</th>
-                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider">Esperado vs Real</th>
+                                                                                                <th className="px-4 py-2 font-black uppercase tracking-wider">Rango panes (arroba)</th>
                                                                                                 <th className="px-4 py-2 font-black uppercase tracking-wider text-right">Acciones</th>
                                                                                             </tr>
                                                                                         </thead>
@@ -3528,11 +3704,40 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                             </>
                                         );
                                     }
-                                    const masas = p.masas || [];
+                                    const masas = (p.masas || []).map((m, i) => ({
+                                        id: m.id || `dm-${i}`,
+                                        nombre: m.nombre,
+                                        cantidadArrobas: Number(m.cantidadArrobas) || 0,
+                                    }));
                                     const hornadasDet = p.hornadas || [];
                                     const totalMasa = masas.reduce((s, m) => s + (Number(m.cantidadArrobas) || 0), 0);
                                     const totalPanes = hornadasDet.reduce((s, h) => s + panesDeHornada(h), 0);
-                                    const chequeosDet = chequearRendimientoPorMasa(masas as Array<{ id: string; nombre?: string; cantidadArrobas?: number }>, hornadasDet, modelosPan);
+                                    let chequeosDet = chequearRendimientoPorMasa(masas, hornadasDet, modelosPan, formulaciones);
+                                    if (chequeosDet.every((c) => !c.panesEsperados) && totalMasa > 0 && modelosPan) {
+                                        const conPpa = (modelosPan as Array<{ panesPorArroba?: number; nombre: string; mermaEstimada?: number }>).filter(
+                                            (m) => Number(m.panesPorArroba) > 0
+                                        );
+                                        if (conPpa.length > 0) {
+                                            const ppas = conPpa.map((m) => Number(m.panesPorArroba));
+                                            const ppaMid = ppas.reduce((a, b) => a + b, 0) / Math.min(ppas.length, 3);
+                                            const ppaMin = Math.min(...ppas.slice(0, 3));
+                                            const ppaMax = Math.max(...ppas.slice(0, 3));
+                                            const esperado = totalMasa * ppaMid;
+                                            const panesMin = Math.floor(totalMasa * ppaMin * (1 - TOL_RENDIMIENTO));
+                                            const panesMax = Math.ceil(totalMasa * ppaMax * (1 + TOL_RENDIMIENTO));
+                                            chequeosDet = [{
+                                                masaNombre: 'Lote',
+                                                masaArr: totalMasa,
+                                                panesReales: totalPanes,
+                                                panesEsperados: Math.round(esperado),
+                                                panesMin,
+                                                panesMax,
+                                                panesPorArrobaRef: Math.round(ppaMid),
+                                                estado: totalPanes <= 0 ? 'sin_panes' : totalPanes < panesMin ? 'bajo' : totalPanes > panesMax ? 'alto' : 'ok',
+                                                mensaje: `Con ${arrobasEnLetras(totalMasa)} deben salir ≈ ${Math.round(esperado)} panes (rango ${panesMin}–${panesMax}).`,
+                                            }];
+                                        }
+                                    }
                                     const metaDet = resumenChequeosPanes(chequeosDet);
                                     return (
                                         <>
@@ -3541,7 +3746,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                     Producción · {p.fecha ? new Date(`${p.fecha}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' }) : '—'}
                                                 </DialogTitle>
                                                 <DialogDescription className="text-left">
-                                                    Detalle de masas metidas, panes salidos y comparación con la meta por arroba.
+                                                    Masas en lenguaje claro (1 arroba, media…) y cuántos panes debían salir.
                                                 </DialogDescription>
                                             </DialogHeader>
                                             <div className="space-y-4 text-sm">
@@ -3556,21 +3761,34 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 {metaDet.tieneMeta && (
                                                     <div className={cn(
                                                         "rounded-xl border p-3",
-                                                        metaDet.estado === 'ok'
+                                                        metaDet.estado === 'ok' || metaDet.estado === 'sin_panes'
                                                             ? "border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/70 dark:bg-indigo-950/20"
                                                             : "border-rose-200 dark:border-rose-500/30 bg-rose-50/70 dark:bg-rose-950/20"
                                                     )}>
                                                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
-                                                            Según arrobas · esperado vs real
+                                                            Según arrobas · rango vs real
                                                         </p>
+                                                        {metaDet.masaArrTotal > 0 && (
+                                                            <p className="text-sm font-black text-indigo-700 dark:text-indigo-300 capitalize mb-1">
+                                                                Con {arrobasEnLetras(metaDet.masaArrTotal)}
+                                                            </p>
+                                                        )}
+                                                        {metaDet.panesPorArrobaRef > 0 && (
+                                                            <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-2">
+                                                                1 arroba → ≈ {metaDet.panesPorArrobaRef.toLocaleString('es-CO')} panes
+                                                                {Math.abs(metaDet.masaArrTotal - 0.5) < 0.08
+                                                                    ? ` · media arroba → ≈ ${Math.round(metaDet.panesPorArrobaRef / 2).toLocaleString('es-CO')}`
+                                                                    : ''}
+                                                            </p>
+                                                        )}
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <div>
-                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Esperado</span>
+                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Deben salir</span>
                                                                 <span className="text-base font-black text-slate-800 dark:text-slate-100">≈ {metaDet.esperado.toLocaleString('es-CO')}</span>
                                                             </div>
                                                             <div>
-                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Rango</span>
-                                                                <span className="text-base font-black text-slate-800 dark:text-slate-100">{metaDet.panesMin.toLocaleString('es-CO')}–{metaDet.panesMax.toLocaleString('es-CO')}</span>
+                                                                <span className="block text-[9px] font-bold text-slate-400 uppercase">Rango bueno</span>
+                                                                <span className="text-base font-black text-indigo-700 dark:text-indigo-300">{metaDet.panesMin.toLocaleString('es-CO')}–{metaDet.panesMax.toLocaleString('es-CO')}</span>
                                                             </div>
                                                             <div>
                                                                 <span className="block text-[9px] font-bold text-slate-400 uppercase">Salió</span>
@@ -3580,10 +3798,15 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                                 <span className="block text-[9px] font-bold text-slate-400 uppercase">Diferencia</span>
                                                                 <span className={cn(
                                                                     "text-base font-black",
-                                                                    metaDet.estado === 'ok' ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
+                                                                    metaDet.estado === 'ok' || metaDet.estado === 'sin_panes' ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
                                                                 )}>
-                                                                    {metaDet.diferencia > 0 ? '+' : ''}{metaDet.diferencia.toLocaleString('es-CO')}
-                                                                    <span className="ml-1 text-[10px] font-bold opacity-80">{metaDet.etiqueta}</span>
+                                                                    {metaDet.estado === 'sin_panes'
+                                                                        ? 'Sin salida'
+                                                                        : metaDet.diferencia === 0
+                                                                          ? 'Igual'
+                                                                          : metaDet.diferencia > 0
+                                                                            ? `Sobran ${metaDet.diferencia.toLocaleString('es-CO')}`
+                                                                            : `Faltan ${Math.abs(metaDet.diferencia).toLocaleString('es-CO')}`}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -3600,7 +3823,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                 )}
                                                 <div className="rounded-xl border border-slate-200 dark:border-white/10 p-3 bg-slate-50 dark:bg-slate-900/40">
                                                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-2">
-                                                        Metida · masas ({totalMasa.toFixed(2)} arr)
+                                                        Metida · masas ({arrobasEnLetras(totalMasa)})
                                                     </p>
                                                     {masas.length === 0 ? (
                                                         <p className="text-xs text-slate-500">Sin masas declaradas</p>
@@ -3609,8 +3832,9 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                                             {masas.map((m, i) => (
                                                                 <li key={m.id || `dm-${i}`} className="flex justify-between gap-3 border-b border-slate-100 dark:border-white/5 pb-1.5 last:border-0">
                                                                     <span className="font-bold text-slate-800 dark:text-slate-100">{m.nombre?.trim() || 'Sin nombre'}</span>
-                                                                    <span className="font-black text-indigo-600 dark:text-indigo-400 shrink-0">
-                                                                        {Number(m.cantidadArrobas || 0).toFixed(2)} arr
+                                                                    <span className="font-black text-indigo-600 dark:text-indigo-400 shrink-0 capitalize text-right">
+                                                                        {arrobasEnLetras(Number(m.cantidadArrobas || 0))}
+                                                                        <span className="block text-[9px] font-bold text-slate-400">{Number(m.cantidadArrobas || 0).toFixed(2)} arr</span>
                                                                     </span>
                                                                 </li>
                                                             ))}
