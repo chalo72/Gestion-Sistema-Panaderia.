@@ -48,6 +48,8 @@ import {
     CalendarRange,
     List,
     Wallet,
+    ChevronDown,
+    ShoppingCart,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -67,21 +69,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { usePredictiveStock } from '@/hooks/usePredictiveStock';
 import { ArqueoCajas } from '@/components/reportes/ArqueoCajas';
-import { useAuth } from '@/contexts/AuthContext';
-import {
-    getCompromisos, saveCompromisos, addCompromiso, deleteCompromiso, updateCompromiso,
-    getVentasDiarias, addVentaDiaria, deleteVentaDiaria,
-    calcularProyeccionQuincena, generarConsejo,
-    getProducciones, addProduccion, deleteProduccion
-} from '@/lib/finanzas-personales';
-import { getBovedas, addBoveda, addMovimientoBoveda } from '@/lib/boveda-store';
-import type { HornadaDia, RegistroProduccion, MasaPreparadaDia } from '@/lib/finanzas-personales';
-import { getConfigSeguridad } from '@/lib/security-agent';
-import type { VentaDiaria } from '@/types';
-import { consultarAgente } from '@/constants/agentes';
-import type { AgenteId } from '@/constants/agentes';
 import { Bot, Sparkles, Loader2 } from 'lucide-react';
 
 interface ReportesProps {
@@ -93,7 +81,6 @@ interface ReportesProps {
     productos?: Producto[];
     categorias?: Categoria[];
     proveedores?: any[];
-    precios?: any[];
     precios?: any[];
     formulaciones?: any[];
     modelosPan?: any[];
@@ -111,15 +98,120 @@ import { useReportesData } from '@/hooks/useReportesData';
 import { GraficosEstadisticos } from '@/components/reportes/GraficosEstadisticos';
 import { DiagnosticoFinanciero } from '@/components/reportes/DiagnosticoFinanciero';
 import { TablaFlujoCaja } from '@/components/reportes/TablaFlujoCaja';
+import {
+    buscarProveedorIdPorNombre,
+    catalogoProductosProveedor as buildCatalogoProv,
+    mapComprasRealesALineasOC,
+    normalizarNombreProv,
+    resolverProveedorPresupuesto,
+} from '@/lib/presupuesto-catalogo';
+import { guardarHintOrdenDesdePresupuesto } from '@/lib/whatsapp-alerts';
 
 export default function Reportes(props: ReportesProps) {
     const reportesData = useReportesData(props);
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData } = reportesData;
     const { formatCurrency, ventas, gastos, productos, categorias, proveedores, precios, cajaActiva, onAddRecepcion, onConfirmarRecepcion } = props;
 
+    const esLibretaHorno = role === 'PANADERO';
+
+    useEffect(() => {
+        if (esLibretaHorno) setActiveTab('quincena');
+    }, [esLibretaHorno, setActiveTab]);
+
     // Control de compra real en tab Presupuestos
-    const [expandedPresId, setExpandedPresId] = useState<string | null>(null);
-    const [presLinea, setPresLinea] = useState({ producto: '', cantidad: '', montoReal: '' });
+    /** Varias pestañas de proveedor abiertas a la vez (acordeón) */
+    const [expandedPresIds, setExpandedPresIds] = useState<Set<string>>(() => new Set());
+    const [presLinea, setPresLinea] = useState({
+        producto: '',
+        cantidad: '',
+        montoReal: '',
+        precioUnitario: 0,
+    });
+    /** Id del presupuesto cuyo catálogo de productos está abierto */
+    const [presCatalogoOpen, setPresCatalogoOpen] = useState<string | null>(null);
+
+    const togglePresupuesto = (id: string) => {
+        setExpandedPresIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+        setPresLinea({ producto: '', cantidad: '', montoReal: '', precioUnitario: 0 });
+        setPresCatalogoOpen(null);
+    };
+
+    // Repara presupuestos viejos (ej. «postobon») sin proveedorId enlazado al catálogo
+    useEffect(() => {
+        if (!proveedores?.length) return;
+        setPresupuestosMinimos((prev) => {
+            let changed = false;
+            const updated = prev.map((item: { proveedor?: string; proveedorId?: string }) => {
+                if (item.proveedorId) return item;
+                const id = buscarProveedorIdPorNombre(item.proveedor || '', proveedores);
+                if (!id) return item;
+                changed = true;
+                return { ...item, proveedorId: id };
+            });
+            if (!changed) return prev;
+            localStorage.setItem('dp_compras_minimas', JSON.stringify(updated));
+            return updated;
+        });
+    }, [proveedores, setPresupuestosMinimos]);
+
+    const catalogoProductosProveedor = (nombrePresupuesto: string, proveedorId?: string | null) =>
+        buildCatalogoProv(nombrePresupuesto, proveedores, productos, precios, proveedorId);
+
+    const seleccionarProductoPresupuesto = (nombre: string, precioUnitario: number) => {
+        const cant = Number(presLinea.cantidad) > 0 ? Number(presLinea.cantidad) : 1;
+        const total = Math.round(precioUnitario * cant * 100) / 100;
+        setPresLinea({
+            producto: nombre,
+            cantidad: String(cant),
+            montoReal: String(total),
+            precioUnitario,
+        });
+        setPresCatalogoOpen(null);
+    };
+
+    /** Atajo: presupuesto → Órdenes de Compra (mismo proveedor + líneas + tope). */
+    const lanzarOrdenDesdePresupuesto = (item: {
+        id: string;
+        proveedor: string;
+        proveedorId?: string;
+        comprasReales?: { producto?: string; cantidad?: number; montoReal?: number }[];
+        nota?: string;
+    }, tope: number) => {
+        const prov = resolverProveedorPresupuesto(item.proveedor, proveedores, item.proveedorId);
+        if (!prov) {
+            toast.error(`No encontré «${item.proveedor}» en Proveedores. Edita el nombre o créalo en el catálogo.`);
+            return;
+        }
+        if (!props.onNavigateTo) {
+            toast.error('No se pudo abrir Órdenes de Compra');
+            return;
+        }
+        const { lineas, omitidas } = mapComprasRealesALineasOC(
+            item.comprasReales,
+            item.proveedor,
+            proveedores,
+            productos,
+            precios,
+            prov.id
+        );
+        guardarHintOrdenDesdePresupuesto({
+            proveedorId: prov.id,
+            presupuestoId: item.id,
+            presupuestoMaximo: Math.max(0, Number(tope) || 0),
+            lineas,
+            notaOrigen: `Desde presupuesto ${prov.nombre}${item.nota ? ` — ${item.nota}` : ''}`,
+        });
+        if (omitidas > 0) {
+            toast.message(`${omitidas} línea(s) no estaban en el catálogo y no se copiaron`);
+        }
+        toast.success(`Abriendo orden de ${prov.nombre}…`);
+        props.onNavigateTo('prepedidos');
+    };
     
     // Control de Ingreso Rapido a Inventario
     const [recepcionModal, setRecepcionModal] = useState<any | null>(null);
@@ -185,7 +277,11 @@ export default function Reportes(props: ReportesProps) {
             
             toast.success('¡Inventario actualizado y Gasto registrado exitosamente!');
             setRecepcionModal(null);
-            setExpandedPresId(null);
+            setExpandedPresIds((prev) => {
+                const next = new Set(prev);
+                if (recepcionModal?.id) next.delete(recepcionModal.id);
+                return next;
+            });
         } catch (error: any) {
             console.error(error);
             toast.error(error.message || 'Error al procesar la recepción');
@@ -208,7 +304,8 @@ export default function Reportes(props: ReportesProps) {
             fechaCompra: new Date().toISOString().slice(0, 10),
         } : l);
         savePresCompras(updated);
-        setPresLinea({ producto: '', cantidad: '', montoReal: '' });
+        setPresLinea({ producto: '', cantidad: '', montoReal: '', precioUnitario: 0 });
+        setPresCatalogoOpen(null);
     };
     const removePresLinea = (itemId: string, lineaId: string) => {
         const updated = presupuestosMinimos.map((l: any) => l.id === itemId ? {
@@ -218,22 +315,31 @@ export default function Reportes(props: ReportesProps) {
     };
 
     return (
-        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+        <div className="min-h-full flex flex-col gap-5 p-4 pb-[80px] sm:pb-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
                 <div className="flex items-center gap-4">
                     <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
                         <BarChart3 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-black text-slate-900 dark:text-white">Análisis Financiero</h2>
+                        <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                            {esLibretaHorno ? 'Libreta del Horno' : 'Análisis Financiero'}
+                        </h2>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                            {new Date().toLocaleString('es-ES', { month: 'long', year: 'numeric' })} · Tiempo real
-                            {proyeccion && proyeccion > 0 && (
-                                <span className="ml-2 text-indigo-400">· Proyección mes: {formatCurrency(proyeccion)}</span>
-                            )}
+                            {esLibretaHorno
+                                ? 'Masas, panes y rango por arroba'
+                                : (
+                                    <>
+                                        {new Date().toLocaleString('es-ES', { month: 'long', year: 'numeric' })} · Tiempo real
+                                        {proyeccion && proyeccion > 0 && (
+                                            <span className="ml-2 text-indigo-400">· Proyección mes: {formatCurrency(proyeccion)}</span>
+                                        )}
+                                    </>
+                                )}
                         </p>
                     </div>
                 </div>
+                {!esLibretaHorno && (
                 <div className="flex flex-wrap gap-2">
                     <Badge
                         variant="outline"
@@ -286,8 +392,11 @@ export default function Reportes(props: ReportesProps) {
                         CSV Rentabilidad
                     </Badge>
                 </div>
+                )}
             </header>
 
+            {!esLibretaHorno && (
+            <>
             {/* ── PULSO FINANCIERO ── Banner siempre visible */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[
@@ -343,9 +452,13 @@ export default function Reportes(props: ReportesProps) {
                     <span className="text-[9px] text-slate-400 font-bold">Saludable</span>
                 </div>
             </div>
+            </>
+            )}
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-14 p-1 mb-6 flex items-center justify-start gap-1 overflow-x-auto no-scrollbar w-full">
+                    {!esLibretaHorno && (
+                    <>
                     <TabsTrigger value="resumen" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
                         <Activity className="w-4 h-4 mr-2" />
                         Resumen
@@ -358,15 +471,19 @@ export default function Reportes(props: ReportesProps) {
                         <Layers className="w-4 h-4 mr-2" />
                         Por Categoría
                     </TabsTrigger>
+                    </>
+                    )}
                     <TabsTrigger value="quincena" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-2">
                         <CalendarCheck className="w-4 h-4" />
-                        Mi Quincena
-                        {totalCompromisosActivos > 0 && (
+                        {esLibretaHorno ? 'Panes y masas' : 'Mi Quincena'}
+                        {!esLibretaHorno && totalCompromisosActivos > 0 && (
                             <span className="text-[9px] font-black bg-violet-500/20 text-violet-600 dark:text-violet-400 px-1.5 py-0.5 rounded-full">
                                 {compromisos.filter(c => c.activo).length}
                             </span>
                         )}
                     </TabsTrigger>
+                    {!esLibretaHorno && (
+                    <>
                     <TabsTrigger value="compras-minimas" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-amber-600 data-[state=active]:text-white gap-2">
                         <ShoppingBag className="w-4 h-4" />
                         Presupuestos
@@ -388,6 +505,8 @@ export default function Reportes(props: ReportesProps) {
                             </span>
                         )}
                     </TabsTrigger>
+                    </>
+                    )}
                 </TabsList>
 
                 {/* ══════════════════════════════════════════════════
@@ -571,7 +690,23 @@ export default function Reportes(props: ReportesProps) {
                 {/* ══════════════════════════════════════════════════
                     TAB 4: MI QUINCENA
                 ══════════════════════════════════════════════════ */}
-                <DiagnosticoFinanciero data={{...reportesData, formatCurrency, ventas, gastos, formulaciones: props.formulaciones, modelosPan: props.modelosPan, onNavigateTo: props.onNavigateTo, addGasto: props.addGasto}} />
+                <DiagnosticoFinanciero
+                    modoLibretaHorno={esLibretaHorno}
+                    data={{
+                    ...reportesData,
+                    formatCurrency,
+                    ventas,
+                    gastos,
+                    formulaciones: props.formulaciones,
+                    modelosPan: props.modelosPan,
+                    onNavigateTo: props.onNavigateTo,
+                    addGasto: props.addGasto,
+                    proveedores: props.proveedores ?? [],
+                    productos: props.productos ?? [],
+                    precios: props.precios ?? [],
+                    cajaActiva: props.cajaActiva,
+                    sesionesCaja: props.sesionesCaja ?? [],
+                }} />
 
                 {/* ══════════════════════════════════════════════════
                     TAB: PRESUPUESTOS (COMPRAS)
@@ -738,10 +873,13 @@ export default function Reportes(props: ReportesProps) {
                                                     return;
                                                 }
 
-                                                // Match IDs for advanced syncing
-                                                const provLower = prov.toLowerCase();
-                                                const proveedorId = proveedores?.find(p => p.nombre.toLowerCase() === provLower)?.id;
-                                                const productoId = productos?.find(p => p.tipo === 'ingrediente' && p.nombre.toLowerCase() === provLower)?.id;
+                                                // Empareja IDs aunque falten acentos (postobon ≈ Postobón)
+                                                const proveedorId = buscarProveedorIdPorNombre(prov, proveedores);
+                                                const productoId = productos?.find(
+                                                    (p) =>
+                                                        p.tipo === 'ingrediente' &&
+                                                        normalizarNombreProv(p.nombre) === normalizarNombreProv(prov)
+                                                )?.id;
 
                                                 if (editCompraId) {
                                                     const updated = presupuestosMinimos.map((l: any) => l.id === editCompraId ? {
@@ -828,7 +966,7 @@ export default function Reportes(props: ReportesProps) {
                                                     const lineas: any[] = item.comprasReales || [];
                                                     const totalReal = lineas.reduce((s: number, r: any) => s + (r.montoReal || 0), 0);
                                                     const pctUsado = limiteActual > 0 ? Math.min(110, (totalReal / limiteActual) * 100) : 0;
-                                                    const isOpen = expandedPresId === item.id;
+                                                    const isOpen = expandedPresIds.has(item.id);
                                                     // Historial del mismo proveedor en otras entradas
                                                     const historial: { producto: string, cantidad: number, montoReal: number }[] = [];
                                                     presupuestosMinimos.forEach((l: any) => {
@@ -845,9 +983,14 @@ export default function Reportes(props: ReportesProps) {
                                                     const pctConForm = limiteActual > 0 ? Math.min(110, (totalConForm / limiteActual) * 100) : 0;
                                                     return (
                                                         <div key={item.id} className={cn("rounded-2xl border overflow-hidden transition-all", item.estado === 'completado' ? "border-emerald-500/30 bg-emerald-950/10" : temporadaBaja ? "border-cyan-500/20 bg-cyan-950/10" : "border-white/5 bg-card/20")}>
-                                                            {/* FILA PRINCIPAL */}
-                                                            <div className="flex items-center gap-3 p-3 flex-wrap">
-                                                                <div className="flex-1 min-w-0">
+                                                            {/* CABECERA: toca para abrir/cerrar · flecha en la esquina */}
+                                                            <div className="relative flex items-start gap-2 p-3 pr-12">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => togglePresupuesto(item.id)}
+                                                                    className="flex-1 min-w-0 text-left"
+                                                                    aria-expanded={isOpen}
+                                                                >
                                                                     <div className="flex items-center gap-2 flex-wrap">
                                                                         <span className="text-sm font-black text-foreground truncate">{item.proveedor}</span>
                                                                         <span className={cn("text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full", item.frecuencia === 'Semanal' ? "bg-amber-500/20 text-amber-400" : item.frecuencia === 'Quincenal' ? "bg-violet-500/20 text-violet-400" : "bg-blue-500/20 text-blue-400")}>{item.frecuencia}</span>
@@ -858,9 +1001,9 @@ export default function Reportes(props: ReportesProps) {
                                                                         </p>
                                                                     )}
                                                                     {item.nota && <p className="text-[10px] text-muted-foreground mt-0.5 truncate">"{item.nota}"</p>}
-                                                                </div>
-                                                                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                                                                    <div className="text-right">
+                                                                </button>
+                                                                <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end pt-0.5">
+                                                                    <div className="text-right mr-1">
                                                                         {temporadaBaja && item.montoBaja !== undefined && item.montoBaja < item.monto && (
                                                                             <span className="text-[10px] line-through text-muted-foreground block">{formatCurrency(item.monto)}</span>
                                                                         )}
@@ -868,23 +1011,48 @@ export default function Reportes(props: ReportesProps) {
                                                                         {lineas.length > 0 && <p className="text-[9px] font-black text-emerald-400">Gastado: {formatCurrency(totalReal)}</p>}
                                                                     </div>
                                                                     <button
-                                                                        onClick={() => { setExpandedPresId(isOpen ? null : item.id); setPresLinea({ producto: '', cantidad: '', montoReal: '' }); }}
-                                                                        className={cn("text-[9px] font-black uppercase px-2.5 py-1.5 rounded-lg border transition-all",
-                                                                            isOpen ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-indigo-500/10 text-indigo-400 border-indigo-500/20 hover:bg-indigo-500/20")}
-                                                                    >{isOpen ? '▲ Cerrar' : '📦 Registrar'}</button>
-                                                                    <button
+                                                                        type="button"
                                                                         onClick={() => savePresCompras(presupuestosMinimos.map((l: any) => l.id === item.id ? { ...l, estado: l.estado === 'completado' ? 'pendiente' : 'completado' } : l))}
-                                                                        className={cn("text-[9px] font-bold px-2.5 py-1.5 rounded-lg uppercase border transition-all",
+                                                                        className={cn("text-[9px] font-bold px-2 py-1.5 rounded-lg uppercase border transition-all",
                                                                             item.estado === 'completado' ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-rose-500/20 hover:text-rose-400 hover:border-rose-500/30" : "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-emerald-500/20 hover:text-emerald-400 hover:border-emerald-500/30")}
                                                                     >{item.estado === 'completado' ? '✓ Comprado' : '⏳ Pendiente'}</button>
-                                                                    <button className="text-indigo-400 hover:text-indigo-300 text-[9px] font-bold uppercase tracking-wider"
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-indigo-400 hover:text-indigo-300 text-[9px] font-bold uppercase tracking-wider px-1"
                                                                         onClick={() => { setEditCompraId(item.id); (document.getElementById('compra_proveedor') as HTMLInputElement).value = item.proveedor; (document.getElementById('compra_monto') as HTMLInputElement).value = item.monto.toString(); (document.getElementById('compra_baja') as HTMLInputElement).value = item.montoBaja ? item.montoBaja.toString() : ''; (document.getElementById('compra_frecuencia') as HTMLSelectElement).value = item.frecuencia; (document.getElementById('compra_dia_pedido') as HTMLSelectElement).value = item.diaPedido || ''; (document.getElementById('compra_dia_pago') as HTMLSelectElement).value = item.diaPago || ''; (document.getElementById('compra_nota') as HTMLInputElement).value = item.nota || ''; document.getElementById('compra_proveedor')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); toast.info('Modificando presupuesto...'); }}
                                                                     >Editar</button>
-                                                                    <button className="text-rose-500 hover:text-rose-400 p-1"
-                                                                        onClick={() => savePresCompras(presupuestosMinimos.filter((l: any) => l.id !== item.id))}>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-rose-500 hover:text-rose-400 p-1"
+                                                                        onClick={() => savePresCompras(presupuestosMinimos.filter((l: any) => l.id !== item.id))}
+                                                                    >
                                                                         <Trash2 className="w-3.5 h-3.5" />
                                                                     </button>
                                                                 </div>
+                                                                {/* Flecha esquina: abrir / cerrar (bien visible) */}
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => togglePresupuesto(item.id)}
+                                                                    aria-label={isOpen ? 'Cerrar detalle' : 'Abrir detalle'}
+                                                                    aria-expanded={isOpen}
+                                                                    title={isOpen ? 'Cerrar' : 'Abrir'}
+                                                                    className={cn(
+                                                                        'absolute top-1.5 right-1.5 z-10 min-w-[2.75rem] h-11 px-1.5 rounded-xl border-2 flex flex-col items-center justify-center gap-0 shadow-sm transition-all',
+                                                                        isOpen
+                                                                            ? 'bg-amber-500 text-white border-amber-600'
+                                                                            : 'bg-indigo-600 text-white border-indigo-700 hover:bg-indigo-500'
+                                                                    )}
+                                                                >
+                                                                    <ChevronDown
+                                                                        className={cn(
+                                                                            'w-5 h-5 transition-transform duration-300',
+                                                                            isOpen && 'rotate-180'
+                                                                        )}
+                                                                    />
+                                                                    <span className="text-[8px] font-black uppercase leading-none">
+                                                                        {isOpen ? 'Cerrar' : 'Abrir'}
+                                                                    </span>
+                                                                </button>
                                                             </div>
                                                             {/* BARRA DE PROGRESO */}
                                                             {lineas.length > 0 && (
@@ -948,7 +1116,18 @@ export default function Reportes(props: ReportesProps) {
                                                                             <div className="flex flex-wrap gap-1.5">
                                                                                 {historial.map((hp, idx) => (
                                                                                     <button key={idx}
-                                                                                        onClick={() => setPresLinea({ producto: hp.producto, cantidad: String(hp.cantidad || ''), montoReal: String(hp.montoReal || '') })}
+                                                                                        onClick={() => {
+                                                                                            const cant = Number(hp.cantidad) || 1;
+                                                                                            const total = Number(hp.montoReal) || 0;
+                                                                                            const unit = cant > 0 ? Math.round((total / cant) * 100) / 100 : total;
+                                                                                            const delCat = catalogoProductosProveedor(item.proveedor, item.proveedorId).find(
+                                                                                                (c) => normalizarNombreProv(c.nombre) === normalizarNombreProv(hp.producto)
+                                                                                            );
+                                                                                            seleccionarProductoPresupuesto(
+                                                                                                delCat?.nombre || hp.producto,
+                                                                                                delCat?.precioUnitario || unit
+                                                                                            );
+                                                                                        }}
                                                                                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-violet-100 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20 hover:bg-violet-200 dark:hover:bg-violet-500/25 transition-all">
                                                                                         <span className="text-[11px] font-bold text-violet-700 dark:text-violet-300">{hp.producto}</span>
                                                                                         {hp.montoReal > 0 && <span className="text-[9px] text-violet-500/70 dark:text-violet-400/70 font-black">{formatCurrency(hp.montoReal)}</span>}
@@ -971,54 +1150,159 @@ export default function Reportes(props: ReportesProps) {
                                                                             ))}
                                                                         </div>
                                                                     )}
-                                                                    {/* FORMULARIO */}
+                                                                    {/* FORMULARIO — catálogo filtrado por proveedor (lista siempre visible) */}
                                                                     <div className="space-y-2">
-                                                                        <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">+ Agregar producto</p>
-                                                                        <div className="grid grid-cols-3 gap-1.5">
-                                                                            <input placeholder="Producto (ej: Gaseosa 2L)" value={presLinea.producto} onChange={e => {
-                                                                                const val = e.target.value;
-                                                                                const currentProv = proveedores?.find(prov => prov.nombre.toLowerCase().replace(/[\s-]/g, '') === item.proveedor.toLowerCase().replace(/[\s-]/g, ''));
-                                                                                const prod = productos?.find(p => p.nombre.toLowerCase().trim() === val.toLowerCase().trim());
-                                                                                let newMonto = presLinea.montoReal;
-                                                                                let newCant = presLinea.cantidad;
-                                                                                if (prod) {
-                                                                                    newCant = newCant || '1';
-                                                                                    let calcPrecio = prod.precioCompra || prod.costoCalculado || 0;
-                                                                                    if (currentProv && precios) {
-                                                                                        const precioObj = precios.find(precio => precio.productoId === prod.id && precio.proveedorId === currentProv.id);
-                                                                                        if (precioObj && precioObj.precioCosto > 0) calcPrecio = precioObj.precioCosto;
-                                                                                    }
-                                                                                    if (calcPrecio > 0) newMonto = String(calcPrecio * Number(newCant));
+                                                                        {(() => {
+                                                                            const catalogo = catalogoProductosProveedor(item.proveedor, item.proveedorId);
+                                                                            const provResuelto = resolverProveedorPresupuesto(
+                                                                                item.proveedor,
+                                                                                proveedores,
+                                                                                item.proveedorId
+                                                                            );
+                                                                            const q = normalizarNombreProv(presLinea.producto);
+                                                                            const sugeridos = catalogo.filter(
+                                                                                (c) => !q || normalizarNombreProv(c.nombre).includes(q)
+                                                                            );
+                                                                            return (
+                                                                        <div className="space-y-2">
+                                                                            <div className="flex items-center justify-between gap-2">
+                                                                                <p className="text-[9px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400">
+                                                                                    + Elegir producto de {provResuelto?.nombre || item.proveedor}
+                                                                                </p>
+                                                                                <span className="text-[9px] font-bold text-muted-foreground tabular-nums">
+                                                                                    {catalogo.length} en catálogo
+                                                                                </span>
+                                                                            </div>
+
+                                                                            {/* Selector visible: no depende de foco ni de caché de autocomplete */}
+                                                                            <select
+                                                                                value=""
+                                                                                onChange={(e) => {
+                                                                                    const id = e.target.value;
+                                                                                    const c = catalogo.find((x) => x.id === id);
+                                                                                    if (c) seleccionarProductoPresupuesto(c.nombre, c.precioUnitario);
+                                                                                }}
+                                                                                className="w-full h-10 rounded-xl border-2 border-indigo-400/60 bg-indigo-50 dark:bg-indigo-950/40 px-3 text-xs font-bold text-foreground focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                                                            >
+                                                                                <option value="">
+                                                                                    {catalogo.length > 0
+                                                                                        ? `▼ Toca aquí: productos de ${provResuelto?.nombre || item.proveedor}`
+                                                                                        : provResuelto
+                                                                                          ? `Sin precios de ${provResuelto.nombre} en el catálogo`
+                                                                                          : `No encontré «${item.proveedor}» en Proveedores`}
+                                                                                </option>
+                                                                                {catalogo.map((c) => (
+                                                                                    <option key={c.id} value={c.id}>
+                                                                                        {c.nombre} — {formatCurrency(c.precioUnitario)}
+                                                                                    </option>
+                                                                                ))}
+                                                                            </select>
+
+                                                                            {!provResuelto && (
+                                                                                <p className="text-[10px] font-bold text-amber-600">
+                                                                                    El presupuesto se llama «{item.proveedor}» pero no hay un proveedor igual en el catálogo. Edítalo con el nombre exacto (ej. Postobón) o escribe a mano.
+                                                                                </p>
+                                                                            )}
+                                                                            {provResuelto && catalogo.length === 0 && (
+                                                                                <p className="text-[10px] font-bold text-amber-600">
+                                                                                    Hay proveedor «{provResuelto.nombre}», pero no tiene precios cargados. Ve a Precios y carga productos de ese proveedor.
+                                                                                </p>
+                                                                            )}
+
+                                                                            <div className="grid grid-cols-3 gap-1.5">
+                                                                            <div className="relative col-span-3 sm:col-span-1">
+                                                                                <input
+                                                                                    placeholder="O busca por nombre…"
+                                                                                    value={presLinea.producto}
+                                                                                    onFocus={() => setPresCatalogoOpen(item.id)}
+                                                                                    onBlur={() => {
+                                                                                        window.setTimeout(() => setPresCatalogoOpen(null), 180);
+                                                                                    }}
+                                                                                    onChange={(e) => {
+                                                                                        const val = e.target.value;
+                                                                                        setPresCatalogoOpen(item.id);
+                                                                                        const match = catalogo.find(
+                                                                                            (c) => normalizarNombreProv(c.nombre) === normalizarNombreProv(val)
+                                                                                        );
+                                                                                        if (match) {
+                                                                                            seleccionarProductoPresupuesto(match.nombre, match.precioUnitario);
+                                                                                            return;
+                                                                                        }
+                                                                                        setPresLinea((p) => ({
+                                                                                            ...p,
+                                                                                            producto: val,
+                                                                                            precioUnitario: 0,
+                                                                                        }));
+                                                                                    }}
+                                                                                    className="w-full h-9 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground"
+                                                                                />
+                                                                                {presCatalogoOpen === item.id && sugeridos.length > 0 && (
+                                                                                    <div
+                                                                                        className="absolute z-30 left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg"
+                                                                                        onMouseDown={(e) => e.preventDefault()}
+                                                                                    >
+                                                                                        {sugeridos.slice(0, 12).map((c) => (
+                                                                                            <button
+                                                                                                key={c.id}
+                                                                                                type="button"
+                                                                                                onClick={() => seleccionarProductoPresupuesto(c.nombre, c.precioUnitario)}
+                                                                                                className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-indigo-50 dark:hover:bg-indigo-950/40 border-b border-slate-100 dark:border-slate-800 last:border-0"
+                                                                                            >
+                                                                                                <span className="text-xs font-bold text-foreground truncate">{c.nombre}</span>
+                                                                                                <span className="text-[10px] font-black text-emerald-600 shrink-0 tabular-nums">
+                                                                                                    {formatCurrency(c.precioUnitario)}
+                                                                                                </span>
+                                                                                            </button>
+                                                                                        ))}
+                                                                                    </div>
+                                                                                )}
+                                                                            </div>
+                                                                            <input
+                                                                                placeholder="Cantidad"
+                                                                                type="number"
+                                                                                min="0"
+                                                                                value={presLinea.cantidad}
+                                                                                onChange={(e) => {
+                                                                                    const val = e.target.value;
+                                                                                    const cant = Number(val) || 0;
+                                                                                    const unit = Number(presLinea.precioUnitario) || 0;
+                                                                                    const newMonto =
+                                                                                        unit > 0
+                                                                                            ? String(Math.round(unit * cant * 100) / 100)
+                                                                                            : presLinea.montoReal;
+                                                                                    setPresLinea((p) => ({
+                                                                                        ...p,
+                                                                                        cantidad: val,
+                                                                                        montoReal: newMonto,
+                                                                                    }));
+                                                                                }}
+                                                                                className="h-9 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground"
+                                                                            />
+                                                                            <input
+                                                                                placeholder="$ Monto real"
+                                                                                type="number"
+                                                                                min="0"
+                                                                                value={presLinea.montoReal}
+                                                                                onChange={(e) =>
+                                                                                    setPresLinea((p) => ({
+                                                                                        ...p,
+                                                                                        montoReal: e.target.value,
+                                                                                    }))
                                                                                 }
-                                                                                setPresLinea(p => ({ ...p, producto: val, cantidad: newCant, montoReal: newMonto }));
-                                                                            }} list={`cat-prod-${item.id}`}
-                                                                                className="col-span-3 sm:col-span-1 h-8 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground" />
-                                                                            <datalist id={`cat-prod-${item.id}`}>
-                                                                                {productos?.filter(p => {
-                                                                                    const currentProv = proveedores?.find(prov => prov.nombre.toLowerCase().replace(/[\s-]/g, '') === item.proveedor.toLowerCase().replace(/[\s-]/g, ''));
-                                                                                    if (!currentProv || !precios) return true;
-                                                                                    return precios.some(precio => precio.productoId === p.id && precio.proveedorId === currentProv.id);
-                                                                                }).map(p => <option key={p.id} value={p.nombre}>{p.tipo}</option>)}
-                                                                            </datalist>
-                                                                            <input placeholder="Cantidad" type="number" value={presLinea.cantidad} onChange={e => {
-                                                                                const val = e.target.value;
-                                                                                const currentProv = proveedores?.find(prov => prov.nombre.toLowerCase().replace(/[\s-]/g, '') === item.proveedor.toLowerCase().replace(/[\s-]/g, ''));
-                                                                                const prod = productos?.find(p => p.nombre.toLowerCase().trim() === presLinea.producto.toLowerCase().trim());
-                                                                                let newMonto = presLinea.montoReal;
-                                                                                if (prod) {
-                                                                                    let calcPrecio = prod.precioCompra || prod.costoCalculado || 0;
-                                                                                    if (currentProv && precios) {
-                                                                                        const precioObj = precios.find(precio => precio.productoId === prod.id && precio.proveedorId === currentProv.id);
-                                                                                        if (precioObj && precioObj.precioCosto > 0) calcPrecio = precioObj.precioCosto;
-                                                                                    }
-                                                                                    if (calcPrecio > 0) newMonto = String(calcPrecio * (Number(val) || 0));
-                                                                                }
-                                                                                setPresLinea(p => ({ ...p, cantidad: val, montoReal: newMonto }));
-                                                                            }}
-                                                                                className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground" />
-                                                                            <input placeholder="$ Monto real" type="number" value={presLinea.montoReal} onChange={e => setPresLinea(p => ({ ...p, montoReal: e.target.value }))}
-                                                                                className="h-8 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground" />
+                                                                                className="h-9 rounded-lg border border-input bg-background px-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-indigo-500 text-foreground placeholder:text-muted-foreground"
+                                                                            />
+                                                                            {presLinea.precioUnitario > 0 && (
+                                                                                <p className="col-span-3 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                                                                    Precio catálogo: {formatCurrency(presLinea.precioUnitario)} c/u
+                                                                                    {Number(presLinea.cantidad) > 1
+                                                                                        ? ` × ${presLinea.cantidad} = ${formatCurrency(Number(presLinea.montoReal) || 0)}`
+                                                                                        : ''}
+                                                                                </p>
+                                                                            )}
+                                                                            </div>
                                                                         </div>
+                                                                            );
+                                                                        })()}
                                                                         {Number(presLinea.montoReal) > 0 && restante < 0 && (
                                                                             <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-rose-100 dark:bg-rose-500/10 border border-rose-300 dark:border-rose-500/30">
                                                                                 <AlertTriangle className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400 shrink-0" />
@@ -1031,6 +1315,14 @@ export default function Reportes(props: ReportesProps) {
                                                                         <button onClick={() => addPresLinea(item.id)} disabled={!presLinea.producto.trim()}
                                                                             className="w-full h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1">
                                                                             <Plus className="w-3 h-3" /> Agregar línea
+                                                                        </button>
+
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => lanzarOrdenDesdePresupuesto(item, limiteActual)}
+                                                                            className="w-full h-9 mt-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-1.5"
+                                                                        >
+                                                                            <ShoppingCart className="w-3.5 h-3.5" /> Hacer orden de compra
                                                                         </button>
 
                                                                         {lineas.length > 0 && (

@@ -837,6 +837,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                         formatCurrency={formatCurrency}
                         onLanzarPlan={handleLanzarPlan}
                         onGuardarComoPlantilla={guardarComoPlantillaSemanal}
+                        onGuardarAuditoria={handleGuardarAuditoria}
                         ventas={ventas}
                         planesDiarios={planesDiarios}
                         addPlanDiario={addPlanDiario}

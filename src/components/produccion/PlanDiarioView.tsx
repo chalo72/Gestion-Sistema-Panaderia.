@@ -48,6 +48,15 @@ interface PlanDiarioViewProps {
   formatCurrency: (value: number) => string;
   onLanzarPlan?: (planItems: any[]) => void;
   onGuardarComoPlantilla?: (items: any[]) => void;
+  /** Guarda auditoría del Distribuidor (pique) → Historial / Reportes */
+  onGuardarAuditoria?: (
+    cortes: { modeloId: string; cantidad: number; pesoCrudoTotal: number; porcentajeArroba: number }[],
+    formId: string,
+    arrobas: number,
+    masaTotalKg: number,
+    masaConsumidaKg: number,
+    masaLibreKg: number
+  ) => void;
   ventas?: any[];
   planesDiarios?: any[];
   addPlanDiario?: (data: any) => Promise<any>;
@@ -73,6 +82,7 @@ export function PlanDiarioView({
   formatCurrency,
   onLanzarPlan,
   onGuardarComoPlantilla,
+  onGuardarAuditoria,
   ventas = [],
   planesDiarios = [],
   addPlanDiario,
@@ -509,6 +519,7 @@ export function PlanDiarioView({
               modelos={modelos}
               ventas={ventas || []}
               onAñadirAlPlan={handleAñadirDesdeSimulador}
+              onGuardarAuditoria={onGuardarAuditoria}
             />
           </div>
         </DialogContent>

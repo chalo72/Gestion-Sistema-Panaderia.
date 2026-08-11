@@ -15,8 +15,9 @@ export const VISTA_PERMISO: Partial<Record<ViewType, Permission>> = {
   caja: 'ABRIR_CERRAR_CAJA',
   clientes: 'VER_USUARIOS',
   creditos: 'VER_FINANZAS',
-  produccion: 'VER_PRODUCTOS',
-  recetas: 'VER_PRODUCTOS',
+  produccion: 'VER_PRODUCCION',
+  // Alineado al menú (Sidebar): el panadero entra con VER_PRODUCCION, no VER_PRODUCTOS
+  recetas: 'VER_PRODUCCION',
   inventario: 'VER_INVENTARIO',
   proveedores: 'VER_PROVEEDORES',
   prepedidos: 'VER_PREPEDIDOS',
@@ -24,7 +25,7 @@ export const VISTA_PERMISO: Partial<Record<ViewType, Permission>> = {
   precios: 'VER_PRECIOS',
   alertas: 'VER_ALERTAS',
   gastos: 'VER_FINANZAS',
-  reportes: 'VER_FINANZAS',
+  reportes: 'VER_REPORTES',
   ahorro: 'VER_FINANZAS',
   mayoristas: 'VER_FINANZAS',
   boveda: 'VER_FINANZAS',
@@ -39,6 +40,7 @@ export const VISTA_PERMISO: Partial<Record<ViewType, Permission>> = {
   roles: 'VER_USUARIOS',
   seguridad: 'VER_FINANZAS',
   configuracion: 'VER_CONFIGURACION',
+  'plan-negocio': 'VER_FINANZAS',
 };
 
 export type VistaGuardOpts = {

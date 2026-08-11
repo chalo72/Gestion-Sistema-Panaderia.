@@ -597,7 +597,7 @@ const resumenChequeosPanes = (chequeos: ChequeoRendimiento[]) => {
     };
 };
 
-export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any, addMovimientoBoveda: any }) {
+export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHorno = false }: { data: any, addMovimientoBoveda?: any, modoLibretaHorno?: boolean }) {
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto, updateGasto, deleteGasto, proveedores, productos, precios, cajaActiva, sesionesCaja } = data;
     const [editGastoId, setEditGastoId] = useState<string | null>(null);
     const [editGastoData, setEditGastoData] = useState<any>(null);
@@ -610,7 +610,11 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
     // Estados para hacer colapsables las demás tarjetas principales
     const [estadoExpanded, setEstadoExpanded] = useState(false);
     const [semaforoExpanded, setSemaforoExpanded] = useState(false);
-    const [produccionExpanded, setProduccionExpanded] = useState(false);
+    const [produccionExpanded, setProduccionExpanded] = useState(!!modoLibretaHorno);
+
+    useEffect(() => {
+        if (modoLibretaHorno) setProduccionExpanded(true);
+    }, [modoLibretaHorno]);
     const [comprasExpanded, setComprasExpanded] = useState(false);
     const [saldoRealExpanded, setSaldoRealExpanded] = useState(false);
     const [showAuditorias, setShowAuditorias] = useState(true);
@@ -795,7 +799,21 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
 
                 return (
                     <>
-                    
+                    {modoLibretaHorno && (
+                        <div className="rounded-2xl border-2 border-amber-500/30 bg-amber-500/5 px-4 py-3 space-y-1">
+                            <p className="text-sm font-black text-amber-900 dark:text-amber-100 uppercase tracking-widest">
+                                Libreta del Horno
+                            </p>
+                            <p className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                                Aquí solo registras masas y panes, y ves el rango esperado (ej. 1 arroba → ≈ 100 panes).
+                                No se muestran ventas, gastos ni compromisos del dueño.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* ── ZONA FINANCIERA (oculta al panadero) ── */}
+                    {!modoLibretaHorno && (
+                    <>
                     {/* ── ZONA 1: ENCABEZADO INTELIGENTE ── */}
                     <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-card/60 px-4 py-3 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
                         {/* Selector período */}
@@ -2235,6 +2253,9 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                             )}
                         </Card>
 
+                    </>
+                    )}
+
                         {/* ── Auditoría de Producción ─────────────────────────────── */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-xl overflow-hidden">
                             <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500" />
@@ -2247,7 +2268,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda }: { data: any
                                         <div className="p-2 bg-rose-500/10 rounded-lg">
                                             <ChefHat className="w-5 h-5 text-rose-500" />
                                         </div>
-                                        Auditoría de Producción
+                                        {modoLibretaHorno ? 'Registro de panes y masas' : 'Auditoría de Producción'}
                                     </CardTitle>
                                     <div 
                                         className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0 sm:hidden"

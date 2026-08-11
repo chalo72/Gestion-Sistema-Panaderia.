@@ -186,7 +186,7 @@ export function Sidebar({
         { id: (role === 'VENDEDOR' || role === 'PANADERO') ? 'buscador-precios' : 'precios', label: (role === 'VENDEDOR' || role === 'PANADERO') ? 'Consultar Precios' : 'Historial de Costos', icon: DollarSign, permission: 'VER_PRECIOS' },
         { id: 'alertas',   label: 'Alertas de Costos',    icon: Bell,       permission: 'VER_ALERTAS' },
         { id: 'gastos',    label: 'Egresos y Facturas',   icon: DollarSign, permission: 'VER_FINANZAS' },
-        { id: 'reportes',  label: 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_REPORTES' },
+        { id: 'reportes',  label: role === 'PANADERO' ? 'Libreta del Horno' : 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_REPORTES' },
         { id: 'ahorro',    label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
         { id: 'mayoristas',label: 'Ventas al Mayor',      icon: Store,      permission: 'VER_FINANZAS' },
         { id: 'boveda',    label: 'Bóveda / Tesorería',   icon: Wallet,     permission: 'VER_FINANZAS' },
@@ -219,12 +219,16 @@ export function Sidebar({
   ];
 
   // Filtrar por permisos — omitir secciones vacías
+  // Panadero: sin Agentes IA ni cámaras (no son trabajo del horno)
   const menuGroups = allMenuGroups
     .map(g => ({
       ...g,
-      items: g.items.filter(i =>
-        check(i.permission as any) && puedeVer(role ?? '', i.id)
-      )
+      items: g.items.filter(i => {
+        if (role === 'PANADERO' && (i.id === 'agentes-ia' || i.id === 'videovigilancia' || i.id === 'comunicaciones')) {
+          return false;
+        }
+        return check(i.permission as any) && puedeVer(role ?? '', i.id);
+      })
     }))
     .filter(g => g.items.length > 0);
 
