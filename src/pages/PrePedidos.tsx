@@ -1,6 +1,10 @@
 import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect } from 'react';
-import { leerYLimpiarHintNavegacion } from '@/lib/whatsapp-alerts';
+import {
+  leerYLimpiarHintNavegacion,
+  leerYLimpiarHintOrdenPresupuesto,
+  type HintOrdenDesdePresupuesto,
+} from '@/lib/whatsapp-alerts';
 import {
   Plus,
   Minus,
@@ -154,14 +158,85 @@ export default function PrePedidos({
   // Para ver detalles en historial
   const [verDetallePedido, setVerDetallePedido] = useState<PrePedido | null>(null);
 
-  // Leer hint de navegación desde Proveedores → auto-seleccionar proveedor
+  /** Aplica puente Presupuesto → OC: abre proveedor, tope y líneas. */
+  const aplicarHintDesdePresupuesto = async (hint: HintOrdenDesdePresupuesto) => {
+    const proveedorId = hint.proveedorId;
+    setActiveProveedorId(proveedorId);
+    setShowProveedorPanel(true);
+    setShowSupplierGrid(false);
+
+    const prov = getProveedorById(proveedorId);
+    const tope =
+      typeof hint.presupuestoMaximo === 'number' && hint.presupuestoMaximo > 0
+        ? hint.presupuestoMaximo
+        : 1000000;
+    const notas = hint.notaOrigen || 'Desde presupuesto';
+
+    let borrador = prepedidos.find((p) => p.proveedorId === proveedorId && p.estado === 'borrador');
+    if (!borrador) {
+      try {
+        borrador = await onAddPrePedido({
+          nombre: `Pedido: ${prov?.nombre || 'Proveedor'}`,
+          proveedorId,
+          items: [],
+          total: 0,
+          presupuestoMaximo: tope,
+          estado: 'borrador',
+          notas,
+          fechaCreacion: new Date().toISOString(),
+          fechaActualizacion: new Date().toISOString(),
+        });
+      } catch {
+        toast.error('No se pudo crear la orden desde el presupuesto');
+        return;
+      }
+    } else {
+      onUpdatePrePedido(borrador.id, {
+        presupuestoMaximo: tope,
+        notas: borrador.notas ? `${borrador.notas} | ${notas}` : notas,
+      });
+    }
+
+    const lineas = hint.lineas || [];
+    for (const linea of lineas) {
+      if (!linea.productoId) continue;
+      const existente = borrador.items.find((i) => i.productoId === linea.productoId);
+      const cant = Math.max(1, Number(linea.cantidad) || 1);
+      if (existente) {
+        onUpdateItemCantidad(borrador.id, existente.id, existente.cantidad + cant);
+      } else {
+        onAddItem(borrador.id, {
+          productoId: linea.productoId,
+          proveedorId,
+          cantidad: cant,
+          precioUnitario: Number(linea.precioUnitario) || 0,
+        });
+      }
+    }
+
+    setSelectedPrePedido(borrador);
+    toast.success(
+      lineas.length > 0
+        ? `Orden de ${prov?.nombre || 'proveedor'} lista — puedes ajustar el tope o las cantidades`
+        : `Orden de ${prov?.nombre || 'proveedor'} abierta — agrega productos del catálogo`
+    );
+  };
+
+  // Hint simple (Proveedores) o payload completo (Presupuesto → OC)
   useEffect(() => {
+    const desdePresupuesto = leerYLimpiarHintOrdenPresupuesto();
+    if (desdePresupuesto?.proveedorId) {
+      void aplicarHintDesdePresupuesto(desdePresupuesto);
+      return;
+    }
     const provId = leerYLimpiarHintNavegacion();
     if (provId) {
       setActiveProveedorId(provId);
       setShowProveedorPanel(true);
       setShowSupplierGrid(false);
     }
+    // Solo al montar (puente de navegación)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Proveedores filtrados por búsqueda
@@ -953,6 +1028,46 @@ export default function PrePedidos({
 
           {/* FOOTER DEL TICKET */}
           <div className="p-5 lg:p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] z-20">
+            {activeDraft && (
+              <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">
+                    Tope presupuesto (ajustable)
+                  </label>
+                  {Number(activeDraft.presupuestoMaximo) > 0 && (
+                    <span
+                      className={cn(
+                        'text-[10px] font-black tabular-nums',
+                        (activeDraft.total || 0) > activeDraft.presupuestoMaximo
+                          ? 'text-rose-500'
+                          : 'text-emerald-600'
+                      )}
+                    >
+                      {(activeDraft.total || 0) > activeDraft.presupuestoMaximo
+                        ? `Te pasas ${formatCurrency((activeDraft.total || 0) - activeDraft.presupuestoMaximo)}`
+                        : `Quedan ${formatCurrency(activeDraft.presupuestoMaximo - (activeDraft.total || 0))}`}
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="number"
+                  min={0}
+                  step={1000}
+                  value={activeDraft.presupuestoMaximo || ''}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    onUpdatePrePedido(activeDraft.id, {
+                      presupuestoMaximo: Number.isFinite(val) && val >= 0 ? val : 0,
+                    });
+                  }}
+                  className="h-9 text-sm font-bold rounded-lg border-amber-500/40"
+                  placeholder="Ej: 500000"
+                />
+                <p className="text-[9px] text-muted-foreground font-medium">
+                  Viene del presupuesto; cámbialo si te conviene. El presupuesto original se edita en Reportes.
+                </p>
+              </div>
+            )}
             <div className="flex justify-between items-center mb-5">
               <span className="text-xs font-black uppercase tracking-widest text-slate-400">Total</span>
               <span className="text-3xl font-black text-[#1a1c2e] dark:text-white tabular-nums tracking-tighter">

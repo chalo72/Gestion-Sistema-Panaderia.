@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
     Plus, ChefHat, Clock, CheckCircle2, Flame, ClipboardList, Package, FlaskConical, Croissant,
     Calculator, ShoppingCart, ArrowRight, CalendarDays, CalendarRange, ClipboardCheck, TrendingDown,
-    ArrowDownUp, SunMedium, Layers3, Settings2, Trash2, Edit2, Save, X, CheckCheck, AlertCircle, PieChart
+    ArrowDownUp, SunMedium, Layers3, Settings2, Trash2, Edit2, Save, X, CheckCheck, AlertCircle, PieChart, Download
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,6 +19,8 @@ import { ModelosPanView } from '@/components/produccion/ModelosPanView';
 import { CalculadoraRendimiento } from '@/components/produccion/CalculadoraRendimiento';
 import { GeneradorPedidoInsumos } from '@/components/produccion/GeneradorPedidoInsumos';
 import { PlanDiarioView } from '@/components/produccion/PlanDiarioView';
+import { HistorialLibretaHorno } from '@/components/produccion/historial-libreta-horno';
+import { LibretaHornoForm } from '@/components/produccion/libreta-horno-form';
 import { PlanSemanaView } from '@/components/produccion/PlanSemanaView';
 import { ControlCalidadModal } from '@/components/produccion/ControlCalidadModal';
 import { MermasDashboard } from '@/components/produccion/MermasDashboard';
@@ -44,6 +46,8 @@ import type {
     FormulacionBase, ModeloPan, Proveedor, TipoLata, CapacidadLata,
     PlanSemanaItem, PlanSemana, Venta
 } from '@/types';
+import { descargarPdfFormulacion } from '@/lib/ficha-tecnica-pdf';
+import { calcularCostoLineaInsumo, precioPorKg } from '@/lib/costo-insumo';
 
 interface ProduccionProps {
     produccion: OrdenProduccion[];
@@ -169,7 +173,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                         totalPanes: Number(c.cantidad) || 0,
                     })),
                     notas: [
-                        'Sincronizado desde Producción (Distribuidor de arroba)',
+                        'Sincronizado desde Libreta del Horno (Producción)',
                         `Masa libre: ${masaLibreKg.toFixed(1)} kg`,
                         analisisIA ? `IA: ${analisisIA.slice(0, 280)}` : '',
                     ].filter(Boolean).join(' · '),
@@ -179,10 +183,10 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 console.error('Puente a historial de Reportes falló (la auditoría local sí se guardó)', syncErr);
             }
 
-            toast.success("Auditoría guardada y enviada al historial de Reportes");
+            toast.success('✅ Guardado en Libreta del Horno (también en historial de panes)');
         } catch (error) {
             console.error(error);
-            toast.error("Error al guardar auditoría");
+            toast.error("Error al guardar en la libreta");
         } finally {
             setIsGeneratingIA(false);
         }
@@ -441,11 +445,11 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                         <div className="w-12 h-12 kpi-violet rounded-2xl flex items-center justify-center shadow-lg shadow-violet-500/20 rotate-3">
                             <ChefHat className="w-7 h-7 text-white" />
                         </div>
-                        Centro de Producción
+                        Libreta del Horno
                     </h1>
                     <p className="text-muted-foreground font-medium flex items-center gap-2 pl-1">
                         <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-                        Gestión artesanal de lotes, formulaciones y materias primas
+                        Anota masas y panes del día · fácil para panadero y ayudante
                     </p>
                 </div>
                 {activeTab === 'ordenes' && (
@@ -459,58 +463,73 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 )}
             </div>
     
-            {/* Flujo diario: 4 pasos */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 border-y border-slate-200 dark:border-slate-800/50 py-6 bg-slate-50/20 dark:bg-slate-900/10 -mx-2 px-4 rounded-3xl mb-4">
-                {[
-                    { step: '01', title: 'PLAN DIARIO', desc: 'Arma el plan de masas y productos.', icon: CalendarDays, color: 'text-indigo-500', bg: 'bg-indigo-500/10', tab: 'plan-diario' },
-                    { step: '02', title: 'TURNO (KANBAN)', desc: 'Lanza las órdenes y asigna responsables.', icon: SunMedium, color: 'text-amber-500', bg: 'bg-amber-500/10', tab: 'turno' },
-                    { step: '03', title: 'HORNEAR', desc: 'Seguí el kanban y finalizá cada lote.', icon: Flame, color: 'text-orange-500', bg: 'bg-orange-500/10', tab: 'ordenes' },
-                    { step: '04', title: 'ROTACIÓN', desc: 'Evalúa la salida de panes en el mostrador.', icon: ArrowDownUp, color: 'text-blue-500', bg: 'bg-blue-500/10', tab: 'rotacion' },
-                ].map((item, idx) => (
-                    <button
-                        key={idx}
-                        onClick={() => setActiveTab(item.tab)}
-                        className="flex items-start gap-3 group text-left hover:opacity-100 transition-opacity"
-                    >
-                        <div className="flex flex-col items-center shrink-0">
-                            <span className="text-[9px] font-black text-slate-300 dark:text-slate-700 tracking-tighter mb-1.5">{item.step}</span>
-                            <div className={cn("w-11 h-11 rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-all duration-300 border border-white dark:border-slate-800", item.bg, item.color)}>
-                                <item.icon className="w-5 h-5" />
+            {/* Misma forma que Historial de Panes (Reportes) */}
+            <div className="rounded-3xl border-2 border-amber-500/25 bg-amber-500/5 p-4 sm:p-5 mb-4 space-y-3">
+                <p className="text-[11px] font-black uppercase tracking-widest text-amber-800 dark:text-amber-200">
+                    Cómo anotar (igual que Historial de Panes)
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {[
+                        { step: '1', title: 'MASAS', desc: 'Arrobas y tipo de masa del día.', tab: 'plan-diario', color: 'bg-indigo-600' },
+                        { step: '2', title: 'PANES', desc: 'Cuántos panes salieron por hornada.', tab: 'plan-diario', color: 'bg-emerald-600', highlight: true },
+                        { step: '3', title: 'GUARDAR', desc: 'Queda en la misma libreta del historial.', tab: 'plan-diario', color: 'bg-amber-600' },
+                    ].map((item) => (
+                        <button
+                            key={item.step}
+                            type="button"
+                            onClick={() => setActiveTab(item.tab)}
+                            className={cn(
+                                'text-left rounded-2xl border bg-white dark:bg-slate-900 p-4 transition-all hover:scale-[1.02] active:scale-[0.99]',
+                                item.highlight
+                                    ? 'border-emerald-400 shadow-md shadow-emerald-500/15 ring-2 ring-emerald-500/20'
+                                    : 'border-slate-200 dark:border-slate-800'
+                            )}
+                        >
+                            <div className="flex items-center gap-3 mb-2">
+                                <span className={cn('w-9 h-9 rounded-xl text-white font-black flex items-center justify-center text-sm', item.color)}>
+                                    {item.step}
+                                </span>
+                                <span className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-slate-100">{item.title}</span>
                             </div>
-                        </div>
-                        <div className="space-y-0.5 pt-4">
-                            <h4 className="text-[10px] font-black uppercase tracking-[0.15em] text-foreground/90">{item.title}</h4>
-                            <p className="text-[10px] text-muted-foreground font-medium leading-relaxed">{item.desc}</p>
-                        </div>
-                    </button>
-                ))}
+                            <p className="text-xs font-medium text-slate-500 dark:text-slate-400 leading-snug">{item.desc}</p>
+                        </button>
+                    ))}
+                </div>
             </div>
 
             {/* Tabs de Navegación */}
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="bg-muted/40 p-1.5 rounded-2xl flex items-center justify-start gap-1 w-full max-w-5xl mx-auto overflow-x-auto no-scrollbar min-h-[52px]">
-                    {/* ── Flujo operativo diario ── */}
-                    <TabsTrigger value="plan-diario" className="rounded-xl data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
-                        <PieChart className="w-4 h-4" />
-                        <span className="hidden sm:inline font-black text-[11px]">Planificación</span>
+                    {/* ── Flujo principal (lo que usa el horno) ── */}
+                    <TabsTrigger value="plan-diario" className="rounded-xl data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <ChefHat className="w-4 h-4" />
+                        <span className="font-black text-[11px]">Libreta</span>
                     </TabsTrigger>
-                    <TabsTrigger value="turno" className="rounded-xl data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
-                        <SunMedium className="w-4 h-4" />
-                        <span className="hidden sm:inline font-black text-[11px]">Turno</span>
+                    <TabsTrigger value="historial-panes" className="rounded-xl data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <ClipboardList className="w-4 h-4" />
+                        <span className="font-black text-[11px]">Historial</span>
                     </TabsTrigger>
                     <TabsTrigger value="ordenes" className="rounded-xl data-[state=active]:bg-orange-500 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
-                        <ClipboardList className="w-4 h-4" />
-                        <span className="hidden sm:inline font-black text-[11px]">Órdenes</span>
+                        <Flame className="w-4 h-4" />
+                        <span className="font-black text-[11px]">Hornear</span>
+                    </TabsTrigger>
+                    <TabsTrigger value="plan-avanzado" className="rounded-xl data-[state=active]:bg-indigo-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <CalendarDays className="w-4 h-4" />
+                        <span className="font-black text-[11px]">Plan día</span>
+                    </TabsTrigger>
+
+                    {/* Separador */}
+                    <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 rounded-full mx-1 self-center shrink-0" aria-hidden />
+
+                    {/* ── Más herramientas (dueño / avanzado) ── */}
+                    <TabsTrigger value="turno" className="rounded-xl data-[state=active]:bg-amber-500 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
+                        <SunMedium className="w-4 h-4" />
+                        <span className="hidden sm:inline text-[11px]">Turno</span>
                     </TabsTrigger>
                     <TabsTrigger value="balance-ventas" className="rounded-xl data-[state=active]:bg-blue-600 data-[state=active]:text-white data-[state=active]:shadow gap-1.5">
                         <ShoppingCart className="w-4 h-4" />
-                        <span className="hidden sm:inline font-black text-[11px]">Ventas</span>
+                        <span className="hidden sm:inline text-[11px]">Ventas</span>
                     </TabsTrigger>
-
-                    {/* Separador visual */}
-                    <span className="w-px h-6 bg-slate-200 dark:bg-slate-700 rounded-full mx-1 self-center shrink-0" aria-hidden />
-
-                    {/* ── Configuración y herramientas ── */}
                     <TabsTrigger value="formulaciones" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <FlaskConical className="w-4 h-4" />
                         <span className="hidden sm:inline text-[11px]">Recetas</span>
@@ -536,7 +555,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                     </TabsTrigger>
                     <TabsTrigger value="calculadora" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <Calculator className="w-4 h-4" />
-                        <span className="hidden sm:inline text-[11px]">Calculadora</span>
+                        <span className="hidden sm:inline text-[11px]">Calc</span>
                     </TabsTrigger>
                     <TabsTrigger value="guias" className="rounded-xl data-[state=active]:bg-white dark:data-[state=active]:bg-slate-800 data-[state=active]:shadow gap-1.5">
                         <Package className="w-4 h-4" />
@@ -827,6 +846,33 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 </TabsContent>
 
                 <TabsContent value="plan-diario" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <LibretaHornoForm
+                        ventas={ventas}
+                        productos={productos}
+                        proveedores={proveedores}
+                        formulaciones={formulaciones}
+                        modelosPan={modelosPan}
+                        formatCurrency={formatCurrency}
+                        categorias={configuracion?.categorias}
+                        onNavigateTo={onNavigateTo}
+                    />
+                </TabsContent>
+
+                <TabsContent value="historial-panes" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <div className="max-w-3xl mx-auto space-y-4">
+                        <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3">
+                            <p className="text-sm font-black text-emerald-900 dark:text-emerald-100">
+                                Historial de panes = misma libreta que en Reportes
+                            </p>
+                            <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80 mt-1 font-medium">
+                                Lo que anotas en Libreta (arriba) o en Reportes sale aquí. Una sola libreta.
+                            </p>
+                        </div>
+                        <HistorialLibretaHorno limite={40} />
+                    </div>
+                </TabsContent>
+
+                <TabsContent value="plan-avanzado" className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                     <PlanDiarioView
                         productos={productos}
                         formulaciones={formulaciones}
@@ -919,8 +965,39 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                             </div>
                                         ))}
                                     </div>
-                                    <Button className="w-full mt-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 border-none rounded-xl text-[10px] font-black uppercase tracking-widest">
-                                        Imprimir Ficha Técnica
+                                    <Button
+                                        type="button"
+                                        className="w-full mt-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-900 dark:text-slate-100 border-none rounded-xl text-[10px] font-black uppercase tracking-widest gap-2"
+                                        onClick={() => {
+                                            const form = formulaciones.find((x) => x.id === guia.id);
+                                            if (!form) {
+                                                toast.error('No se encontró la fórmula de esta ficha.');
+                                                return;
+                                            }
+                                            const ings = (form.ingredientes || []).map((ing) => {
+                                                const mp = getMejorPrecio(ing.productoId);
+                                                const ref = mp
+                                                    ? { precioCosto: mp.precioCosto, cantidadEmbalaje: mp.cantidadEmbalaje }
+                                                    : null;
+                                                const cu = precioPorKg(ref, getProductoById(ing.productoId)?.costoBase || 0);
+                                                const total = calcularCostoLineaInsumo({
+                                                    cantidad: ing.cantidadPorArroba || 0,
+                                                    unidad: ing.unidad || 'kg',
+                                                    mejorPrecio: ref,
+                                                    costoBase: getProductoById(ing.productoId)?.costoBase || 0,
+                                                });
+                                                return { ...ing, costoUnitario: cu, costoTotalArroba: total };
+                                            });
+                                            const costoTotalArroba = ings.reduce((s, i) => s + (i.costoTotalArroba || 0), 0);
+                                            void descargarPdfFormulacion(
+                                                { ...form, ingredientes: ings, costoTotalArroba },
+                                                (id) => getProductoById(id)?.nombre || id,
+                                                formatCurrency
+                                            );
+                                        }}
+                                    >
+                                        <Download className="w-3.5 h-3.5" />
+                                        Descargar Ficha Técnica
                                     </Button>
                                 </CardContent>
                             </Card>
@@ -1122,7 +1199,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                         </div>
                                                         <div className="min-w-0">
                                                             <p className="font-black text-slate-800 dark:text-white truncate">{f.nombre}</p>
-                                                            <p className="text-[10px] text-slate-400 capitalize">{f.categoria} · {f.ingredientes.length} insumos</p>
+                                                            <p className="text-[10px] text-slate-400 capitalize">{f.categoria} · {(f.ingredientes || []).length} insumos</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-2xl px-4 py-3">
@@ -1171,7 +1248,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                         </div>
                                                         <div className="min-w-0">
                                                             <p className="font-black text-slate-800 dark:text-white truncate">{f.nombre}</p>
-                                                            <p className="text-[10px] text-slate-400 capitalize">{f.categoria} · {f.ingredientes.length} insumos</p>
+                                                            <p className="text-[10px] text-slate-400 capitalize">{f.categoria} · {(f.ingredientes || []).length} insumos</p>
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 rounded-2xl px-4 py-3">

@@ -21,6 +21,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { VendedoraQuickPicker, VendedoraMesaModal, type VendedoraOption } from '@/components/ventas/VendedoraQuickPicker';
 import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +30,11 @@ import { cn } from '@/lib/utils';
 import { registrarLogActividad, getDeudores, marcarDeudorRecuperado, registrarIncidente } from '@/lib/security-agent';
 
 import { safeNumber, safeString } from '@/lib/safe-utils';
+import {
+    esProductoBusquedaVenta,
+    deduplicarPorNombre,
+    buscarProductosVenta,
+} from '@/lib/busqueda-productos';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -41,6 +47,8 @@ import { MuroPedidos } from '@/components/ventas/MuroPedidos';
 import { AperturaCajaModal } from '@/components/ventas/AperturaCajaModal';
 import { CierreCajaModal } from '@/components/ventas/CierreCajaModal';
 import { CajaMovimientosModal } from '@/components/ventas/CajaMovimientosModal';
+import { TraspasoMesaModal } from '@/components/ventas/TraspasoMesaModal';
+import { ChecklistVitrinaModal } from '@/components/ventas/ChecklistVitrinaModal';
 
 import type {
     Producto,
@@ -149,6 +157,9 @@ export function Ventas(props: VentasProps) {
     const [lastVenta, setLastVenta] = useState<Venta | null>(null);
     const [descuento, setDescuento] = useState(0);
 
+    const [showTraspasoMesa, setShowTraspasoMesa] = useState(false);
+    const [mesaATraspasar, setMesaATraspasar] = useState<Mesa | null>(null);
+
     const handleSetDescuento = (newDesc: number) => {
         // No permitir descuento negativo ni mayor al carrito
         const tope = safeNumber(totalCart);
@@ -175,6 +186,7 @@ export function Ventas(props: VentasProps) {
     const [showAperturaModal, setShowAperturaModal] = useState(false);
     const [showCierreModal, setShowCierreModal] = useState(false);
     const [movimientoCaja, setMovimientoCaja] = useState<{ tipo: 'entrada' | 'salida' } | null>(null);
+    const [showChecklistVitrina, setShowChecklistVitrina] = useState(false);
 
     // Reacciona a triggers del header global (botones Entrada/Salida/Cerrar Caja)
     useEffect(() => {
@@ -200,8 +212,6 @@ export function Ventas(props: VentasProps) {
             registrarLogActividad(usuario.id, usuario.nombre || 'Vendedor', 'Ventas', 'abrir_pos', 'Ingreso a terminal POS');
         }
     }, [usuario]);
-
-    // (El useEffect de deudor se movió más abajo para evitar TDZ error 'G')
 
     // ==========================================
     // SISTEMA DE PESTAÑAS MÚLTIPLES (PERSISTENTE)
@@ -361,41 +371,21 @@ export function Ventas(props: VentasProps) {
     // FILTRO DE PRODUCTOS
     // ==========================================
     const productosVenta = useMemo(() => {
-        const normBusqueda = (s: string | undefined) => (s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        const searchNormalized = normBusqueda(searchTerm);
+        const categoriaNorm = (s: string) => safeString(s).toLowerCase().trim();
+        const enCategoria = (p: Producto) =>
+            !selectedCategory ||
+            categoriaNorm(p.categoria) === selectedCategory.toLowerCase().trim();
 
-        const filtered = productos.filter(p => {
-            const matchesSearch = normBusqueda(p.nombre).includes(searchNormalized);
+        const catalogo = productos.filter((p) => esProductoBusquedaVenta(p) && enCategoria(p));
 
-            // 🔥 Filtro de Seguridad: Ocultar si pertenece a categoría de Insumos
-            const categoriaLower = safeString(p.categoria).toLowerCase().trim();
-            const isNotInsumo = !categoriaLower.startsWith('ins:') &&
-                               !categoriaLower.startsWith('insumos');
+        if (searchTerm.trim().length > 0) {
+            // POS: permite PVP 0 para poder corregir/cobrar; ranking inteligente
+            return buscarProductosVenta(catalogo, searchTerm, { limite: 50, incluirSinPrecio: true });
+        }
 
-            // Comparación insensible a mayúsculas y espacios para evitar invisibilidad por variaciones de nombre
-            const matchesCategory = !selectedCategory ||
-                categoriaLower === selectedCategory.toLowerCase().trim();
-
-            const precio = safeNumber(p.precioVenta);
-            // Mostrar cualquier producto que no sea insumo/ingrediente. Excluir explícitamente tipo='ingrediente'
-            const isVentaType = p.tipo !== 'ingrediente';
-            return matchesSearch && matchesCategory && precio >= 0 && isNotInsumo && isVentaType;
-        });
-
-        // Cuando varios proveedores venden el mismo producto, mostrar solo el de mayor rentabilidad
-        const norm = (n: string) => n.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
-        const mejores = new Map<string, Producto>();
-        filtered.forEach(p => {
-            const key = norm(p.nombre);
-            const prev = mejores.get(key);
-            if (!prev) { mejores.set(key, p); return; }
-            const costo = p.costoBase || 0;
-            const costoPrev = prev.costoBase || 0;
-            const margen = costo > 0 ? (p.precioVenta - costo) / costo : -1;
-            const margenPrev = costoPrev > 0 ? (prev.precioVenta - costoPrev) / costoPrev : -1;
-            if (margen > margenPrev) mejores.set(key, p);
-        });
-        return Array.from(mejores.values()).sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+        return deduplicarPorNombre(catalogo).sort((a, b) =>
+            (a.nombre || '').localeCompare(b.nombre || '')
+        );
     }, [productos, searchTerm, selectedCategory]);
 
     const totalCart = useMemo(() => {
@@ -415,6 +405,10 @@ export function Ventas(props: VentasProps) {
     // ACCIONES DEL CARRITO
     // ==========================================
     const addToCart = (producto: Producto) => {
+        // Micro-interacción: vibración táctil
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+            navigator.vibrate(50);
+        }
         if (!cajaActiva) {
             toast.error('Debe abrir caja antes de realizar ventas');
             setShowAperturaModal(true);
@@ -832,8 +826,161 @@ export function Ventas(props: VentasProps) {
         }
     };
 
+    const handleTraspasarMesa = () => {
+        const mesa = mesas.find(m => `mesa-${m.id}` === activeTabId);
+        if (mesa) {
+            setMesaATraspasar(mesa);
+            setShowTraspasoMesa(true);
+        }
+    };
+
+    const confirmTraspasoMesa = async (mesa: Mesa, nuevaVendedora: any) => {
+        try {
+            await onUpdateMesa({
+                ...mesa,
+                abiertaPor: nuevaVendedora.nombre,
+                abiertaPorId: nuevaVendedora.id
+            });
+            setShowTraspasoMesa(false);
+            setMesaATraspasar(null);
+            toast.success(`Mesa transferida a ${nuevaVendedora.nombre}`);
+        } catch (e) {
+            toast.error('Error al transferir la mesa');
+        }
+    };
+
     // Encontrar la pestaña activa para pasarle info al CartDetail
     const activeTab = tabs.find(t => t.id === activeTabId);
+
+    // Render del panel derecho (Carrito), reutilizable para desktop y móvil
+    const renderCartPanel = () => (
+        <>
+            {/* Hermes Copiloto Panel de Dictado y Sugerencias */}
+            <div className="bg-indigo-50 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900/30 p-3 flex flex-col gap-2 shrink-0">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Mic className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-pulse" />
+                        <span className="text-xs font-black uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Hermes Copiloto</span>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setHermesAudioText('');
+                            setShowHermesMic(true);
+                        }}
+                        className="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
+                    >
+                        Dictar Orden
+                    </button>
+                </div>
+
+                {/* Sugerencias pendientes de agregar */}
+                {hermesSuggestions.length > 0 && (
+                    <div className="bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 shadow-sm space-y-2">
+                        <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
+                            <span className="text-[10px] font-black uppercase text-indigo-600">Borrador de Hermes:</span>
+                            <button onClick={() => setHermesSuggestions([])} className="text-[9px] font-bold text-slate-400 hover:text-red-500 uppercase">Limpiar</button>
+                        </div>
+                        <div className="space-y-1 max-h-[100px] overflow-y-auto pr-1">
+                            {hermesSuggestions.map((item, idx) => (
+                                <div key={idx} className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
+                                    <span>{item.producto.nombre}</span>
+                                    <span>x{item.cantidad}</span>
+                                </div>
+                            ))}
+                        </div>
+                        <button
+                            onClick={() => {
+                                hermesSuggestions.forEach(item => {
+                                    addToCart(item.producto);
+                                    updateQuantity(item.producto.id, item.cantidad);
+                                });
+                                setHermesSuggestions([]);
+                                toast.success('Productos sugeridos agregados al carrito');
+                            }}
+                            className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all"
+                        >
+                            Agregar todo al carrito
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Alerta de Deudor Pendiente */}
+            {activeDeudorAlert && (
+                <div className="bg-red-50 dark:bg-red-955/20 border-b border-red-200 dark:border-red-900/30 p-3 flex flex-col gap-2 shrink-0 animate-pulse">
+                    <div className="flex items-center gap-2">
+                        <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400" />
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-red-900 dark:text-red-200">DEUDOR EN LISTA NEGRA</p>
+                            <p className="text-xs font-bold text-slate-700 dark:text-slate-300">El cliente {activeDeudorAlert.clienteNombre} tiene una deuda registrada.</p>
+                        </div>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-xl p-3 shadow-sm text-xs font-bold text-slate-700 dark:text-slate-300 space-y-1.5">
+                        <p><span className="text-slate-400 uppercase text-[9px] block font-black">Descripción física:</span> {activeDeudorAlert.descripcionFisica}</p>
+                        <p><span className="text-slate-400 uppercase text-[9px] block font-black">Monto de la deuda:</span> {formatCurrency(activeDeudorAlert.montoDeuda)}</p>
+                        {activeDeudorAlert.fotoCctv && (
+                            <div className="mt-1.5 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 aspect-video relative bg-black">
+                                <img src={activeDeudorAlert.fotoCctv} className="w-full h-full object-cover" alt="Evidencia de fuga" />
+                                <span className="absolute bottom-1 right-1 bg-black/70 px-1.5 py-0.5 rounded text-[8px] text-white">EVIDENCIA CCTV</span>
+                            </div>
+                        )}
+                        <div className="flex gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 mt-1.5">
+                            <button
+                                onClick={() => {
+                                    const adHocItem: Producto = {
+                                        id: `deuda-${activeDeudorAlert.id}`,
+                                        nombre: `Saldo Pendiente (${activeDeudorAlert.clienteNombre})`,
+                                        precioVenta: activeDeudorAlert.montoDeuda,
+                                        categoria: 'Otros',
+                                        tipo: 'elaborado',
+                                        activo: true,
+                                        margenUtilidad: 0
+                                    };
+                                    addToCart(adHocItem);
+                                    marcarDeudorRecuperado(activeDeudorAlert.id);
+                                    setActiveDeudorAlert(null);
+                                    toast.success('Saldo adeudado agregado al carrito de cobro');
+                                }}
+                                className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all"
+                            >
+                                Cobrar saldo adeudado
+                            </button>
+                            <button
+                                onClick={() => setActiveDeudorAlert(null)}
+                                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500 rounded-lg text-[10px] font-black uppercase"
+                            >
+                                Ignorar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <CartDetail
+                cart={cart}
+                onUpdateQuantity={updateQuantity}
+                onRemoveFromCart={removeFromCart}
+                onClearCart={clearCart}
+                onProcessPayment={handleProcessPayment}
+                formatCurrency={formatCurrency}
+                cajaActiva={cajaActiva}
+                usuario={usuario}
+                cliente={cliente}
+                setCliente={setCliente}
+                clientesNombres={Array.from(new Set([
+                    ...(masterClientes || []).map(c => c.nombre),
+                    ...(props.creditosClientes || []).map((c: any) => c.clienteNombre),
+                ])).filter(Boolean)}
+                activeTabLabel={activeTab?.label}
+                activeTabTipo={activeTab?.tipo}
+                onLiberarMesa={handleLiberarMesa}
+                onTraspasarMesa={handleTraspasarMesa}
+                descuento={descuento}
+                setDescuento={handleSetDescuento}
+                rolUsuario={usuario?.rol}
+            />
+        </>
+    );
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
@@ -859,6 +1006,7 @@ export function Ventas(props: VentasProps) {
                     vendedoras={vendedorasDisponibles}
                     vendedoraActivaId={vendedoraActiva?.id ?? null}
                     onSelectVendedora={setVendedoraActiva}
+                    onShowChecklistVitrina={() => setShowChecklistVitrina(true)}
                 />
                 {/* ── Selector Rápido de Vendedora — solo desktop (en móvil está en el panel) ── */}
                 {vendedorasDisponibles.length >= 1 && (
@@ -874,11 +1022,11 @@ export function Ventas(props: VentasProps) {
                 )}
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3 pb-[68px] lg:pb-3">
+            <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3 pb-[140px] lg:pb-3">
                 {/* Panel izquierdo: Catálogo o Mesas — pantalla completa en móvil */}
                 <div className={cn(
                     "flex-1 flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden",
-                    showMobileCart ? "hidden lg:flex" : "flex"
+                    "flex"
                 )} style={{ minHeight: '0' }}>
                     {viewMode === 'pos' ? (
                         <ProductCatalog
@@ -909,139 +1057,21 @@ export function Ventas(props: VentasProps) {
                     )}
                 </div>
 
-                {/* Panel derecho: Carrito — pantalla completa en móvil cuando showMobileCart */}
-                <div className={cn(
-                    "w-full lg:w-[440px] xl:w-[480px] shrink-0 flex-col min-h-0 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-black/50 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden transition-all duration-300",
-                    showMobileCart ? "flex" : "hidden lg:flex"
-                )} style={{ minHeight: '0' }}>
-                    {/* Hermes Copiloto Panel de Dictado y Sugerencias */}
-                    <div className="bg-indigo-50 dark:bg-indigo-950/20 border-b border-indigo-100 dark:border-indigo-900/30 p-3 flex flex-col gap-2 shrink-0">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                                <Mic className="w-4 h-4 text-indigo-600 dark:text-indigo-400 animate-pulse" />
-                                <span className="text-xs font-black uppercase tracking-widest text-indigo-900 dark:text-indigo-200">Hermes Copiloto</span>
-                            </div>
-                            <button
-                                onClick={() => {
-                                    setHermesAudioText('');
-                                    setShowHermesMic(true);
-                                }}
-                                className="h-7 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all active:scale-95"
-                            >
-                                Dictar Orden
-                            </button>
-                        </div>
-
-                        {/* Sugerencias pendientes de agregar */}
-                        {hermesSuggestions.length > 0 && (
-                            <div className="bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl p-3 shadow-sm space-y-2">
-                                <div className="flex justify-between items-center border-b border-slate-100 dark:border-slate-800 pb-1.5">
-                                    <span className="text-[10px] font-black uppercase text-indigo-600">Borrador de Hermes:</span>
-                                    <button onClick={() => setHermesSuggestions([])} className="text-[9px] font-bold text-slate-400 hover:text-red-500 uppercase">Limpiar</button>
-                                </div>
-                                <div className="space-y-1 max-h-[100px] overflow-y-auto pr-1">
-                                    {hermesSuggestions.map((item, idx) => (
-                                        <div key={idx} className="flex justify-between text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            <span>{item.producto.nombre}</span>
-                                            <span>x{item.cantidad}</span>
-                                        </div>
-                                    ))}
-                                </div>
-                                <button
-                                    onClick={() => {
-                                        hermesSuggestions.forEach(item => {
-                                            addToCart(item.producto);
-                                            updateQuantity(item.producto.id, item.cantidad);
-                                        });
-                                        setHermesSuggestions([]);
-                                        toast.success('Productos sugeridos agregados al carrito');
-                                    }}
-                                    className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all"
-                                >
-                                    Agregar todo al carrito
-                                </button>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Alerta de Deudor Pendiente */}
-                    {activeDeudorAlert && (
-                        <div className="bg-red-50 dark:bg-red-955/20 border-b border-red-200 dark:border-red-900/30 p-3 flex flex-col gap-2 shrink-0 animate-pulse">
-                            <div className="flex items-center gap-2">
-                                <ShieldAlert className="w-5 h-5 text-red-600 dark:text-red-400" />
-                                <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-red-900 dark:text-red-200">DEUDOR EN LISTA NEGRA</p>
-                                    <p className="text-xs font-bold text-slate-700 dark:text-slate-300">El cliente {activeDeudorAlert.clienteNombre} tiene una deuda registrada.</p>
-                                </div>
-                            </div>
-                            <div className="bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-xl p-3 shadow-sm text-xs font-bold text-slate-700 dark:text-slate-300 space-y-1.5">
-                                <p><span className="text-slate-400 uppercase text-[9px] block font-black">Descripción física:</span> {activeDeudorAlert.descripcionFisica}</p>
-                                <p><span className="text-slate-400 uppercase text-[9px] block font-black">Monto de la deuda:</span> {formatCurrency(activeDeudorAlert.montoDeuda)}</p>
-                                {activeDeudorAlert.fotoCctv && (
-                                    <div className="mt-1.5 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 aspect-video relative bg-black">
-                                        <img src={activeDeudorAlert.fotoCctv} className="w-full h-full object-cover" alt="Evidencia de fuga" />
-                                        <span className="absolute bottom-1 right-1 bg-black/70 px-1.5 py-0.5 rounded text-[8px] text-white">EVIDENCIA CCTV</span>
-                                    </div>
-                                )}
-                                <div className="flex gap-2 pt-1.5 border-t border-slate-100 dark:border-slate-800 mt-1.5">
-                                    <button
-                                        onClick={() => {
-                                            const adHocItem: Producto = {
-                                                id: `deuda-${activeDeudorAlert.id}`,
-                                                nombre: `Saldo Pendiente (${activeDeudorAlert.clienteNombre})`,
-                                                precioVenta: activeDeudorAlert.montoDeuda,
-                                                categoria: 'Otros',
-                                                tipo: 'elaborado',
-                                                activo: true,
-                                                margenUtilidad: 0
-                                            };
-                                            addToCart(adHocItem);
-                                            marcarDeudorRecuperado(activeDeudorAlert.id);
-                                            setActiveDeudorAlert(null);
-                                            toast.success('Saldo adeudado agregado al carrito de cobro');
-                                        }}
-                                        className="flex-1 py-2 bg-red-600 hover:bg-red-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all"
-                                    >
-                                        Cobrar saldo adeudado
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveDeudorAlert(null)}
-                                        className="px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-750 text-slate-500 rounded-lg text-[10px] font-black uppercase"
-                                    >
-                                        Ignorar
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    <CartDetail
-                        cart={cart}
-                        onUpdateQuantity={updateQuantity}
-                        onRemoveFromCart={removeFromCart}
-                        onClearCart={clearCart}
-                        onProcessPayment={handleProcessPayment}
-                        formatCurrency={formatCurrency}
-                        cajaActiva={cajaActiva}
-                        usuario={usuario}
-                        cliente={cliente}
-                        setCliente={setCliente}
-                        clientesNombres={Array.from(new Set([
-                            ...(masterClientes || []).map(c => c.nombre),
-                            ...(props.creditosClientes || []).map((c: any) => c.clienteNombre),
-                        ])).filter(Boolean)}
-                        activeTabLabel={activeTab?.label}
-                        activeTabTipo={activeTab?.tipo}
-                        onLiberarMesa={handleLiberarMesa}
-                        descuento={descuento}
-                        setDescuento={handleSetDescuento}
-                        rolUsuario={usuario?.rol}
-                    />
+                {/* Panel derecho: Carrito — Desktop */}
+                <div className="hidden lg:flex w-[440px] xl:w-[480px] shrink-0 flex-col min-h-0 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-black/50 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden transition-all duration-300" style={{ minHeight: '0' }}>
+                    {renderCartPanel()}
                 </div>
+
+                {/* Mobile Sheet Cart */}
+                <Sheet open={showMobileCart} onOpenChange={setShowMobileCart}>
+                    <SheetContent side="bottom" className="h-[85vh] p-0 pb-[80px] flex flex-col bg-slate-50 dark:bg-slate-950 border-t-0 rounded-t-3xl border-x-0 outline-none z-[60]">
+                        {renderCartPanel()}
+                    </SheetContent>
+                </Sheet>
             </div>
 
             {/* ── Navegación móvil: floating pill ── */}
-            <div className="lg:hidden fixed bottom-4 left-4 right-4 rounded-3xl overflow-hidden flex border border-slate-200/60 dark:border-slate-700/60 shadow-2xl shadow-indigo-900/10 dark:shadow-black/50 bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}>
+            <div className="lg:hidden fixed bottom-[88px] left-4 right-4 rounded-3xl overflow-hidden flex border-2 border-indigo-500 shadow-[0_8px_30px_rgb(0,0,0,0.3)] bg-white dark:bg-slate-900 z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}>
                 {/* Catálogo */}
                 <button
                     onClick={() => setShowMobileCart(false)}
@@ -1417,13 +1447,16 @@ export function Ventas(props: VentasProps) {
                 }}
             />
 
-            {/* Modal de Apertura de Caja — CRÍTICO: faltaba renderizarse */}
+            <ChecklistVitrinaModal 
+                isOpen={showChecklistVitrina}
+                onClose={() => setShowChecklistVitrina(false)}
+            />
+
+            {/* Modal de Apertura de Caja */}
             <AperturaCajaModal
                 isOpen={showAperturaModal}
                 onClose={() => setShowAperturaModal(false)}
                 onAbrir={async (montoApertura: number) => {
-                    // App cablea onAbrirCaja(monto) → abrirCaja(userId, monto).
-                    // Antes se pasaba (usuarioId, monto) y el userId caía como monto → NaN.
                     await onAbrirCaja(montoApertura);
                     setShowAperturaModal(false);
                 }}
@@ -1445,7 +1478,7 @@ export function Ventas(props: VentasProps) {
                     <div className="grid grid-cols-2 gap-4 mb-8">
                         {categorias.map(cat => {
                             const hoy = new Date().toISOString().split('T')[0];
-                            const ventasHoy = ventas.filter(v => v.fecha.startsWith(hoy));
+                            const ventasHoy = ventas.filter(v => (v.fecha || '').startsWith(hoy));
                             const totalCat = ventasHoy.reduce((acc, v) => {
                                 return acc + v.items.reduce((accI, item) => {
                                     const prod = productos.find(p => p.id === item.productoId);
@@ -1472,7 +1505,7 @@ export function Ventas(props: VentasProps) {
                         <div>
                             <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-60 mb-1">Total Ventas Bruto</p>
                             <p className="text-4xl font-black tabular-nums">
-                                {formatCurrency(ventas.filter(v => v.fecha.startsWith(new Date().toISOString().split('T')[0])).reduce((acc, v) => acc + v.total, 0))}
+                                {formatCurrency(ventas.filter(v => (v.fecha || '').startsWith(new Date().toISOString().split('T')[0])).reduce((acc, v) => acc + v.total, 0))}
                             </p>
                         </div>
                         <Button onClick={() => setShowDailyReport(false)} className="h-14 px-8 rounded-2xl bg-white/20 dark:bg-black/10 hover:bg-white/30 dark:hover:bg-black/20 text-white dark:text-black font-black uppercase text-xs tracking-widest border border-white/10 dark:border-black/5">Cerrar</Button>
@@ -1540,6 +1573,14 @@ export function Ventas(props: VentasProps) {
                     </div>
                 </DialogContent>
             </Dialog>
+            {/* Modal de Traspaso de Mesa */}
+            <TraspasoMesaModal
+                open={showTraspasoMesa}
+                onOpenChange={setShowTraspasoMesa}
+                mesaActual={mesaATraspasar}
+                vendedoras={vendedorasDisponibles}
+                onConfirmTransfer={confirmTraspasoMesa}
+            />
         </div>
     );
 }

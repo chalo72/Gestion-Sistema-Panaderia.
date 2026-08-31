@@ -104,7 +104,7 @@ export const construirDecisionesDirector = (params: {
       id: 'quincena-deficit',
       prioridad: 'urgente',
       titulo: 'La quincena no alcanza sola',
-      detalle: `Faltan unos ${params.formatCurrency(params.deficit)} para cubrir lo comprometido. Revisa ventas, gastos o pagos en Reportes → Mi Quincena.`,
+      detalle: `Faltan unos ${params.formatCurrency(params.deficit)} para cubrir lo comprometido. Revisa ventas, gastos o pagos en Reportes → Gestión Integral Operativa.`,
       accionLabel: 'Cómo revisar',
       accion: params.avisarReportes,
     });
@@ -285,7 +285,7 @@ export function ManoDerechaDirector({
         onViewInventario,
         onViewAlertas,
         avisarReportes: () =>
-          toast.info('Abre el menú → Reportes → Mi Quincena para ver números honestos.'),
+          toast.info('Abre el menú → Reportes → Gestión Integral Operativa para ver números honestos.'),
       }),
     [
       itemsBajoStock,
@@ -488,8 +488,8 @@ export function ManoDerechaDirector({
           { label: 'Alertas', onClick: onViewAlertas },
           { label: 'Recepciones', onClick: onViewRecepciones },
           {
-            label: 'Mi Quincena',
-            onClick: () => toast.info('Abre el menú → Reportes → Mi Quincena.'),
+            label: 'Gestión Integral Operativa',
+            onClick: () => toast.info('Abre el menú → Reportes → Gestión Integral Operativa.'),
           },
         ].map((a) => (
           <button

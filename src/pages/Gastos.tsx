@@ -6,6 +6,7 @@ import { ExpenseKPIs }      from '@/components/gastos/ExpenseKPIs';
 import { ExpenseList }      from '@/components/gastos/ExpenseList';
 import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
 import { QuickEntryBar }    from '@/components/gastos/QuickEntryBar';
+import { TurboExpenseManager } from '@/components/gastos/TurboExpenseManager';
 
 import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion } from '@/types';
 import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo } from '@/lib/ocr-service';
@@ -72,7 +73,7 @@ const formVacio = (): FormGasto => ({
     descripcion: '',
     monto: 0,
     categoria: 'Otros',
-    fecha: new Date().toISOString().split('T')[0],
+    fecha: new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
     metodoPago: 'efectivo',
     esIngreso: false,
     bovedaId: '',
@@ -88,6 +89,7 @@ export default function Gastos({
     usuario,
 }: GastosProps) {
     // ── Estado UI ─────────────────────────────────────────────────────────────
+    const [usarModoTurbo,    setUsarModoTurbo]    = useState(true);
     const [searchTerm,       setSearchTerm]       = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
     const [isOnline,         setIsOnline]         = useState(navigator.onLine);
@@ -128,11 +130,14 @@ export default function Gastos({
     // ── Filtrado ──────────────────────────────────────────────────────────────
     const registrosFiltrados = useMemo(() => {
         return todosLosRegistros.filter(r => {
-            const matchSearch = r.descripcion.toLowerCase().includes(searchTerm.toLowerCase());
+            const searchLower = searchTerm.toLowerCase();
+            const provName = r.proveedorId ? proveedores.find(p => p.id === r.proveedorId)?.nombre?.toLowerCase() || '' : '';
+            const itemsName = r.facturaItems ? r.facturaItems.map(i => i.nombre.toLowerCase()).join(' ') : '';
+            const matchSearch = r.descripcion.toLowerCase().includes(searchLower) || provName.includes(searchLower) || itemsName.includes(searchLower);
             const matchCat    = !selectedCategory || r.categoria === selectedCategory;
             return matchSearch && matchCat;
         }).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-    }, [todosLosRegistros, searchTerm, selectedCategory]);
+    }, [todosLosRegistros, searchTerm, selectedCategory, proveedores]);
 
     // ── Stats del mes ─────────────────────────────────────────────────────────
     const stats = useMemo(() => {
@@ -177,6 +182,16 @@ export default function Gastos({
     // ── Guardar (nuevo o edición) ─────────────────────────────────────────────
     const handleSave = async () => {
         const data = scanResult || formData;
+        
+        // Reconstruir descripción si se editó como producto individual
+        if (!data.esIngreso && !(data.facturaItems?.length) && data.productoLibre) {
+            let finalDesc = data.productoLibre.trim();
+            if (data.cantidad && data.cantidad > 1) {
+                finalDesc = data.cantidad + 'x ' + finalDesc;
+            }
+            data.descripcion = finalDesc;
+        }
+
         if (!data.descripcion?.trim() || !data.monto || data.monto <= 0) {
             toast.error('Ingresa la descripción y un monto válido');
             return;
@@ -198,7 +213,7 @@ export default function Gastos({
                         descripcion: data.descripcion!,
                         monto: data.monto!,
                         categoria: (data.categoria as GastoCategoria) || 'Venta',
-                        fecha: data.fecha || new Date().toISOString().split('T')[0],
+                        fecha: data.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
                         metodoPago: (data.metodoPago as MetodoPago) || 'efectivo',
                         usuarioId: usuario.id,
                         estado: 'pagado' as const,
@@ -224,6 +239,7 @@ export default function Gastos({
                 // Egresos: van a la base de datos real
                 if (editingId) {
                     await onUpdateGasto(editingId, {
+                        ...data,
                         descripcion: data.descripcion!,
                         monto: data.monto!,
                         categoria: (data.categoria as GastoCategoria) || 'Otros',
@@ -233,6 +249,8 @@ export default function Gastos({
                     });
                 } else {
                     await onAddGasto({
+
+                        ...data,
                         descripcion: data.descripcion!,
                         monto: data.monto!,
                         categoria: (data.categoria as GastoCategoria) || 'Otros',
@@ -283,14 +301,15 @@ export default function Gastos({
     };
 
     // ── Entrada rápida (QuickEntryBar) ────────────────────────────────────────
-    const handleQuickSave = async (data: { descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean }) => {
+    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string , origenTipo?: string, cajaId?: string, bovedaId?: string }) => {
+        const fechaElegida = data.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
         if (data.esIngreso) {
             const nuevo = {
                 id: `ing_${Date.now()}`,
                 descripcion: data.descripcion,
                 monto: data.monto,
                 categoria: data.categoria,
-                fecha: new Date().toISOString().split('T')[0],
+                fecha: fechaElegida,
                 metodoPago: data.metodoPago,
                 usuarioId: usuario.id,
                 estado: 'pagado' as const,
@@ -305,10 +324,14 @@ export default function Gastos({
                 descripcion: data.descripcion,
                 monto: data.monto,
                 categoria: data.categoria,
-                fecha: new Date().toISOString().split('T')[0],
+                fecha: fechaElegida,
                 metodoPago: data.metodoPago,
                 usuarioId: usuario.id,
                 estado: 'pagado',
+                proveedorId: data.proveedorId,
+                cajaId: data.cajaId,
+                bovedaId: data.bovedaId,
+                origenTipo: data.origenTipo,
             });
             toast.success('Gasto rápido guardado ✓');
         }
@@ -347,7 +370,7 @@ export default function Gastos({
                 descripcion: descripcion || '',
                 monto: resultado.total || 0,
                 categoria,
-                fecha: resultado.fechaFactura || new Date().toISOString().split('T')[0],
+                fecha: resultado.fechaFactura || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
                 proveedorId: proveedorMatch?.id,
                 metodoPago: 'efectivo',
                 esIngreso: false,
@@ -374,6 +397,28 @@ export default function Gastos({
                 formatCurrency={formatCurrency}
                 isOnline={isOnline}
             />
+
+            <div className="flex justify-end mb-2">
+                <button
+                    onClick={() => setUsarModoTurbo(!usarModoTurbo)}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm px-4 py-2 rounded-full font-black text-[10px] uppercase tracking-widest transition-all flex items-center gap-2"
+                >
+                    {usarModoTurbo ? 'Volver al Clásico' : 'Probar Modo Turbo 🚀'}
+                </button>
+            </div>
+
+            {usarModoTurbo ? (
+                <TurboExpenseManager 
+                  esInline={true}
+                  onSave={handleQuickSave} 
+                  proveedores={proveedores} 
+                  gastosList={gastos} 
+                  onDeleteGasto={handleDelete} 
+                  onEditGasto={handleEditGasto} 
+                />
+            ) : (
+                <QuickEntryBar onSave={handleQuickSave} />
+            )}
 
             {/* Ingresos extras viven solo en este aparato */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
@@ -459,7 +504,7 @@ export default function Gastos({
                                     descripcion: `Salario quincena${c.persona ? ` — ${c.persona}` : ''}`,
                                     monto: c.monto,
                                     categoria: 'Nómina' as GastoCategoria,
-                                    fecha: new Date().toISOString().split('T')[0],
+                                    fecha: new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
                                     metodoPago: 'efectivo',
                                     esIngreso: false,
                                 });
@@ -509,8 +554,10 @@ export default function Gastos({
                 proveedores={proveedores}
                 bovedas={bovedas}
             />
-
-            <QuickEntryBar onSave={handleQuickSave} />
         </div>
     );
 }
+
+
+
+

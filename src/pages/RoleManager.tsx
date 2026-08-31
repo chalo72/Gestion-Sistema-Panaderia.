@@ -9,6 +9,7 @@ import {
     guardarPermisos, MODULOS_CONFIGURABLES, ROLES_CONFIGURABLES,
     cargarPermisos, type PermisosModulos
 } from '@/hooks/usePermisosModulos';
+import { DATOS_SENSIBLES, PERMISSION_LABEL_ES } from '@/lib/datos-sensibles';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -46,7 +47,7 @@ const PASS_ROLES = [
     { key: 'AUXILIAR',  label: '🔧 Auxiliar' },
 ];
 
-type TabId = 'acciones' | 'modulos' | 'claves';
+type TabId = 'acciones' | 'modulos' | 'sensibles' | 'claves';
 
 interface RoleManagerProps {
     publicAppUrl?: string;
@@ -144,9 +145,10 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
     };
 
     const TABS: { id: TabId; label: string; icon: any }[] = [
-        { id: 'acciones', label: 'Permisos de Acciones', icon: ShieldCheck },
-        { id: 'modulos',  label: 'Visibilidad de Módulos', icon: Shield },
-        { id: 'claves',   label: 'Claves y Accesos',     icon: KeyRound },
+        { id: 'acciones',  label: 'Permisos de Acciones', icon: ShieldCheck },
+        { id: 'modulos',   label: 'Visibilidad de Módulos', icon: Shield },
+        { id: 'sensibles', label: 'Datos Sensibles', icon: EyeOff },
+        { id: 'claves',    label: 'Claves y Accesos',     icon: KeyRound },
     ];
 
     return (
@@ -257,7 +259,7 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
                                                         <div className="flex items-center gap-3">
                                                             <ChevronRight className="w-3 h-3 text-indigo-500 opacity-0 group-hover/row:opacity-100 -translate-x-2 group-hover/row:translate-x-0 transition-all" />
                                                             <span className="font-bold text-[13px] text-foreground/80 uppercase tracking-tight">
-                                                                {permission.replace(/_/g, ' ').toLowerCase()}
+                                                                {PERMISSION_LABEL_ES[permission] ?? permission.replace(/_/g, ' ').toLowerCase()}
                                                             </span>
                                                         </div>
                                                     </td>
@@ -399,6 +401,96 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
                         >
                             <Shield className="w-4 h-4" /> Guardar permisos
                         </button>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ══════════════════════════════════════════════════════════════
+                TAB — DATOS SENSIBLES (tú eliges qué ve cada rol)
+            ══════════════════════════════════════════════════════════════ */}
+            {activeTab === 'sensibles' && (
+                <Card className="border-none shadow-xl bg-gradient-to-br from-amber-500/5 to-card dark:from-amber-950/20 dark:to-card overflow-hidden">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-amber-800 dark:text-amber-200">
+                            <EyeOff className="w-5 h-5 text-amber-600" />
+                            Datos sensibles por rol
+                        </CardTitle>
+                        <CardDescription className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                            Tú decides qué números ve cada persona. Si apagas un interruptor, esa información queda oculta
+                            (costos, utilidades, totales de ventas, quincena…). ADMIN siempre ve todo.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs font-bold text-amber-900/80 dark:text-amber-100/80">
+                            Tip: para Panadero y Vendedor conviene dejar <span className="underline">apagados</span> costos,
+                            márgenes, totales y finanzas profundas. Solo enciende lo que realmente necesitan.
+                        </div>
+
+                        <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-800">
+                            <table className="w-full text-left border-collapse min-w-[720px]">
+                                <thead>
+                                    <tr className="bg-slate-50 dark:bg-slate-900/60">
+                                        <th className="px-4 py-4 text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                            ¿Qué pueden ver?
+                                        </th>
+                                        {ROLES_GRANULARES.filter(r => r !== 'ADMIN').map(role => (
+                                            <th key={role} className="px-3 py-4 text-center">
+                                                <Badge
+                                                    className="px-3 py-1 rounded-full text-[9px] font-black uppercase border-none"
+                                                    style={{ backgroundColor: ROLE_DESCRIPTIONS[role].color, color: 'white' }}
+                                                >
+                                                    {ROLE_DESCRIPTIONS[role].nombre}
+                                                </Badge>
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {DATOS_SENSIBLES.map(sw => (
+                                        <tr key={sw.id} className="hover:bg-amber-500/5 transition-colors">
+                                            <td className="px-4 py-4 align-top">
+                                                <p className="text-sm font-black text-slate-800 dark:text-slate-100">{sw.label}</p>
+                                                <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-1 max-w-sm leading-snug">
+                                                    {sw.ayuda}
+                                                </p>
+                                                {sw.tipOff && (
+                                                    <p className="text-[10px] font-bold text-amber-700/80 dark:text-amber-400/80 mt-1.5">
+                                                        {sw.tipOff}
+                                                    </p>
+                                                )}
+                                            </td>
+                                            {ROLES_GRANULARES.filter(r => r !== 'ADMIN').map(role => {
+                                                const on = rolePermissions[role]?.includes(sw.permission) ?? false;
+                                                return (
+                                                    <td key={`${role}-${sw.id}`} className="px-3 py-4 text-center align-middle">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleTogglePermission(role, sw.permission)}
+                                                            className={cn(
+                                                                'inline-flex items-center gap-1.5 h-9 px-3 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border',
+                                                                on
+                                                                    ? 'bg-emerald-500 text-white border-emerald-600 shadow-md shadow-emerald-500/25'
+                                                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                                                            )}
+                                                            title={on ? 'Encendido — clic para ocultar' : 'Apagado — clic para mostrar'}
+                                                        >
+                                                            {on ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                                            {on ? 'Sí' : 'No'}
+                                                        </button>
+                                                    </td>
+                                                );
+                                            })}
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <p className="text-[11px] text-muted-foreground font-medium flex items-start gap-2">
+                            <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                            Los cambios se guardan al instante (igual que en Permisos de Acciones). Si un rol ya tenía permisos
+                            viejos guardados, usa estos interruptores para dejarlos como tú quieres.
+                        </p>
                     </CardContent>
                 </Card>
             )}

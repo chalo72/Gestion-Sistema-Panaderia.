@@ -61,7 +61,9 @@ export function Precios({
   getProveedorById,
   formatCurrency,
 }: PreciosProps) {
-  const { check } = useCan();
+  const { check, isAdmin } = useCan();
+  const canVerCosto = isAdmin || check('VER_PRECIO_COSTO');
+  const canVerMargen = isAdmin || check('VER_MARGEN');
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPrecio, setEditingPrecio] = useState<PrecioProveedor | null>(null);
@@ -165,6 +167,21 @@ export function Precios({
     });
   };
 
+  if (!canVerCosto) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 px-6 text-center space-y-3">
+        <div className="w-14 h-14 rounded-2xl bg-amber-500/10 flex items-center justify-center">
+          <DollarSign className="w-7 h-7 text-amber-600" />
+        </div>
+        <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">Costos ocultos para tu rol</h2>
+        <p className="text-sm font-medium text-slate-500 max-w-md">
+          El administrador no habilitó «Ver costos de productos» para ti.
+          Si necesitas consultar solo el precio de venta, usa Consultar Precios.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-ag-fade-in p-2 md:p-6 bg-slate-50/50 dark:bg-black/20 rounded-[3rem]">
       <PrecioHeader
@@ -228,7 +245,9 @@ export function Precios({
                       <TableHead className="text-white font-black uppercase text-[10px] tracking-widest h-16">Aliado Comercial</TableHead>
                       <TableHead className="text-white font-black uppercase text-[10px] tracking-widest h-16">Costo de Entrada</TableHead>
                       <TableHead className="text-white font-black uppercase text-[10px] tracking-widest h-16">PVP Mercado</TableHead>
+                      {canVerMargen && (
                       <TableHead className="text-white font-black uppercase text-[10px] tracking-widest h-16">Rendimiento</TableHead>
+                      )}
                       <TableHead className="text-white font-black uppercase text-[10px] tracking-widest h-16 text-right pr-8">Operaciones</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -271,6 +290,7 @@ export function Precios({
                           <TableCell>
                             <span className="font-black text-lg tabular-nums tracking-tighter text-emerald-600">{formatCurrency(product.precioVenta)}</span>
                           </TableCell>
+                          {canVerMargen && (
                           <TableCell>
                             <div className={cn(
                               "flex items-center gap-1.5 font-black text-xs",
@@ -280,6 +300,7 @@ export function Precios({
                               {markup.toFixed(1)}%
                             </div>
                           </TableCell>
+                          )}
                           <TableCell className="text-right pr-8">
                             <div className="flex items-center justify-end gap-2 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
                               <Button variant="ghost" size="icon" className="h-10 w-10 rounded-xl hover:bg-blue-50 text-blue-600" onClick={() => handleEdit(precio)}>

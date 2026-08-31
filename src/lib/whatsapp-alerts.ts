@@ -134,6 +134,25 @@ export async function enviarAlertaPreventistaPorWhatsApp(
 
 // ─── Hint de navegación ──────────────────────────────────────────────────────
 
+const NAV_HINT_PRESUPUESTO_KEY = 'dulceplacer_nav_prepedido_desde_presupuesto';
+
+/** Línea lista para copiar a una orden de compra. */
+export type LineaHintPresupuesto = {
+  productoId: string;
+  cantidad: number;
+  precioUnitario: number;
+  nombre: string;
+};
+
+/** Payload presupuesto → Órdenes de Compra (sincronización). */
+export type HintOrdenDesdePresupuesto = {
+  proveedorId: string;
+  presupuestoId?: string;
+  presupuestoMaximo?: number;
+  lineas?: LineaHintPresupuesto[];
+  notaOrigen?: string;
+};
+
 export function guardarHintNavegacion(proveedorId: string) {
   localStorage.setItem(NAV_HINT_KEY, proveedorId);
 }
@@ -142,4 +161,31 @@ export function leerYLimpiarHintNavegacion(): string | null {
   const hint = localStorage.getItem(NAV_HINT_KEY);
   if (hint) localStorage.removeItem(NAV_HINT_KEY);
   return hint;
+}
+
+/** Guarda el puente Presupuesto → Orden de Compra (proveedor + tope + líneas). */
+export function guardarHintOrdenDesdePresupuesto(payload: HintOrdenDesdePresupuesto) {
+  localStorage.setItem(NAV_HINT_PRESUPUESTO_KEY, JSON.stringify(payload));
+  // También deja el hint simple por compatibilidad (abre el mismo proveedor)
+  localStorage.setItem(NAV_HINT_KEY, payload.proveedorId);
+}
+
+/** Lee y borra el payload de sincronización desde presupuesto. */
+export function leerYLimpiarHintOrdenPresupuesto(): HintOrdenDesdePresupuesto | null {
+  try {
+    const raw = localStorage.getItem(NAV_HINT_PRESUPUESTO_KEY);
+    if (!raw) return null;
+    localStorage.removeItem(NAV_HINT_PRESUPUESTO_KEY);
+    // Evita que el hint simple reabra el mismo proveedor en la siguiente visita
+    localStorage.removeItem(NAV_HINT_KEY);
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const obj = parsed as Record<string, unknown>;
+    if (typeof obj.proveedorId !== 'string' || !obj.proveedorId) return null;
+    return parsed as HintOrdenDesdePresupuesto;
+  } catch {
+    localStorage.removeItem(NAV_HINT_PRESUPUESTO_KEY);
+    localStorage.removeItem(NAV_HINT_KEY);
+    return null;
+  }
 }

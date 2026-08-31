@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { db } from '@/lib/database';
 import type { Producto, InventarioItem, PrecioProveedor, Receta, Venta } from '@/types';
+
+/** Carga database en caliente — evita ciclo con lazy(Reportes). */
+const getDb = async () => {
+  const mod = await import('@/lib/database');
+  return mod.db;
+};
 
 export interface SugerenciaPedido {
   productoId: string;
@@ -23,6 +28,7 @@ export function usePredictiveStock() {
   const generarSugerencias = useCallback(async (proveedorId?: string) => {
     setLoading(true);
     try {
+      const db = await getDb();
       // 1. Obtener datos
       const [productos, preciosProveedor, movimientosRaw, inventarioRaw, ventasRaw, recetasRaw] = await Promise.all([
         db.getAllProductos(),

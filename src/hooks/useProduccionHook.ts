@@ -61,14 +61,35 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
         // 2. Fusión inteligente
         const mergeData = (idb: any[], backup: any, local: any[], cloud: any[], defaults: any[]) => {
            const map = new Map<string, any>();
-           // Agregar de menor a mayor prioridad para que los últimos sobreescriban
-           if (defaults && defaults.length) defaults.forEach(d => map.set(d.id, d));
-           if (backup && backup.length) backup.forEach((d: any) => map.set(d.id, d));
-           if (local && local.length) local.forEach(d => map.set(d.id, d));
-           if (idb && idb.length) idb.forEach(d => map.set(d.id, d));
-           if (cloud && cloud.length) cloud.forEach(d => { if (typeof d === 'object') map.set(d.id, d); });
            
-           // Limpieza profunda
+           const procesarArr = (arr: any[]) => {
+             if (!arr || !arr.length) return;
+             arr.forEach(d => {
+               if (typeof d !== 'object' || !d.id) return;
+               const existente = map.get(d.id);
+               if (!existente) {
+                 map.set(d.id, d);
+               } else {
+                 // Si ambos tienen fecha, gana el más reciente
+                 if (d.fechaActualizacion && existente.fechaActualizacion) {
+                   if (new Date(d.fechaActualizacion) > new Date(existente.fechaActualizacion)) {
+                     map.set(d.id, d);
+                   }
+                 } else {
+                   // Fallback a sobreescritura simple si no hay fechas
+                   map.set(d.id, d);
+                 }
+               }
+             });
+           };
+
+           // El orden base (del más débil al más fuerte)
+           procesarArr(defaults);
+           procesarArr(cloud);
+           procesarArr(backup);
+           procesarArr(local);
+           procesarArr(idb);
+           
            return Array.from(map.values()).filter(d => d && typeof d === 'object' && d.id && d.nombre);
         };
 
@@ -370,3 +391,4 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     }
   };
 }
+

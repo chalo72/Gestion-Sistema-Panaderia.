@@ -64,4 +64,34 @@ describe('mergePrecioLocalGana', () => {
     expect(merged.precioCosto).toBe(1000);
     expect(merged.cantidadEmbalaje).toBe(12.5);
   });
+
+  it('si la nube es más nueva por timestamp, esa versión manda (aparatos al día)', () => {
+    const local = {
+      id: '1',
+      nombre: 'Viejo',
+      updatedAt: '2026-08-01T10:00:00.000Z',
+    };
+    const cloud = {
+      id: '1',
+      nombre: 'Nuevo desde Admin',
+      updatedAt: '2026-08-03T12:00:00.000Z',
+    };
+    const merged = mergeHydrateItem('productos', local, cloud);
+    expect(merged.nombre).toBe('Nuevo desde Admin');
+  });
+
+  it('si local es más nuevo, LOCAL GANA el nombre', () => {
+    const local = {
+      id: '1',
+      nombre: 'Editado en POS',
+      updatedAt: '2026-08-03T15:00:00.000Z',
+    };
+    const cloud = {
+      id: '1',
+      nombre: 'Viejo nube',
+      updatedAt: '2026-08-03T10:00:00.000Z',
+    };
+    const merged = mergeHydrateItem('productos', local, cloud);
+    expect(merged.nombre).toBe('Editado en POS');
+  });
 });

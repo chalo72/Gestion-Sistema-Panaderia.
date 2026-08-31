@@ -32,6 +32,8 @@ const MOTIVOS: MotivoDef[] = [
   { id: 'amogañado', label: 'Con moho',   emoji: '🍄', desc: 'Manchas verdes, blancas o negras', color: 'text-green-700',  bg: 'bg-green-50 border-green-200',    responsableDefault: 'vendedora' },
   { id: 'deforme',   label: 'Deformes',   emoji: '💔', desc: 'Rotos, aplastados o mal formados',  color: 'text-rose-600',   bg: 'bg-rose-50 border-rose-200',      responsableDefault: 'panadero' },
   { id: 'crudo',     label: 'Crudos',     emoji: '❄️', desc: 'Sin cocción completa por dentro',   color: 'text-blue-600',   bg: 'bg-blue-50 border-blue-200',      responsableDefault: 'panadero' },
+  { id: 'mala_rotacion', label: 'Mala Rotación', emoji: '🕰️', desc: 'Pan viejo dejado atrás',   color: 'text-purple-600',   bg: 'bg-purple-50 border-purple-200',      responsableDefault: 'vendedora' },
+  { id: 'sobreproduccion', label: 'Sobró mucho', emoji: '📈', desc: 'Se hizo mucho, poca venta',   color: 'text-pink-600',   bg: 'bg-pink-50 border-pink-200',      responsableDefault: 'panadero' },
   { id: 'otro',      label: 'Otros',      emoji: '📦', desc: 'Otro defecto no clasificado',       color: 'text-slate-600',  bg: 'bg-slate-50 border-slate-200',    responsableDefault: 'panaderia' },
 ];
 
@@ -78,6 +80,8 @@ export function ControlCalidadModal({
       amogañado: { cantidad: 0, responsable: 'vendedora',  nombreResponsable: '' },
       deforme:   { cantidad: 0, responsable: 'panadero',   nombreResponsable: '' },
       crudo:     { cantidad: 0, responsable: 'panadero',   nombreResponsable: '' },
+      mala_rotacion: { cantidad: 0, responsable: 'vendedora', nombreResponsable: '' },
+      sobreproduccion: { cantidad: 0, responsable: 'panadero', nombreResponsable: '' },
       otro:      { cantidad: 0, responsable: 'panaderia',  nombreResponsable: '' },
     };
     if (inspeccionExistente) {

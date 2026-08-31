@@ -113,7 +113,6 @@ const updateSW = registerSW({
 // Exponer para diagnóstico (ej: window.__updateSW(true) desde consola)
 (window as any).__updateSW = updateSW;
 
-console.log("⚙️ main.tsx: Inicializando app...");
 import { db } from '@/lib/database'; // Nueva importación
 
 async function bootstrap() {
@@ -124,16 +123,12 @@ async function bootstrap() {
   }
 
   try {
-    console.log("⚙️ main.tsx: Solicitando persistencia de almacenamiento...");
     if (navigator.storage && navigator.storage.persist) {
       const isPersisted = await navigator.storage.persist();
-      console.log(`💾 Persistencia de almacenamiento: ${isPersisted ? 'CONCEDIDA' : 'DENEGADA'}`);
     }
 
-    console.log("⚙️ main.tsx: Inicializando Base de Datos local...");
     await db.init();
     
-    console.log("⚙️ main.tsx: Iniciando montaje de React...");
     createRoot(rootElement).render(
       <StrictMode>
         <ErrorBoundary>
@@ -145,7 +140,6 @@ async function bootstrap() {
         </ErrorBoundary>
       </StrictMode>,
     );
-    console.log("✅ main.tsx: Renderizado inicial ejecutado exitosamente");
   } catch (err) {
     console.error("❌ CRITICAL: Falló el inicio de la app:", err);
     document.body.innerHTML = '<div style="color:red;padding:2rem;text-align:center;"><h2>⚠️ Error Crítico de Inicio</h2><p>La base de datos local no pudo iniciar. Por favor, recarga la página.</p></div>';

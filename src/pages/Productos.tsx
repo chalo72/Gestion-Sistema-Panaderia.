@@ -66,6 +66,9 @@ export default function Productos({
     const [isBeverageAssistantOpen, setIsBeverageAssistantOpen] = useState(false);
     const [isAvatarConfiguratorOpen, setIsAvatarConfiguratorOpen] = useState(false);
     const { check } = useCan();
+    const canVerCosto = check('VER_PRECIO_COSTO');
+    const canVerMargen = check('VER_MARGEN');
+    const canVerPVP = check('VER_PRECIO_VENTA');
     const [addingPrecioForProducto, setAddingPrecioForProducto] = useState<string | null>(null);
     const [selectedProveedorId, setSelectedProveedorId] = useState('');
     const [precioCosto, setPrecioCosto] = useState('');
@@ -116,9 +119,10 @@ export default function Productos({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!formData.nombre || !formData.categoria) { toast.error('Nombre y categoría son obligatorios'); return; }
-        let precioVenta = parseFloat(formData.precioVenta) || 0;
-        const margen = parseFloat(formData.margenUtilidad) || 30;
-        const costo = parseFloat(formData.precioCosto) || 0;
+        const parseSafe = (val: any) => parseFloat(String(val).replace(/\./g, '').replace(',', '.')) || 0;
+        let precioVenta = parseSafe(formData.precioVenta);
+        const margen = parseSafe(formData.margenUtilidad) || 30;
+        const costo = parseSafe(formData.precioCosto);
         if (costo > 0 && precioVenta === 0) precioVenta = Math.round(costo * (1 + margen / 100) / 100) * 100;
         // Redondear siempre al múltiplo de 100 más cercano (moneda COP)
         if (precioVenta > 0) precioVenta = Math.round(precioVenta / 100) * 100;
@@ -135,7 +139,7 @@ export default function Productos({
             imagen: formData.imagen, 
             tipo: formData.tipo || 'elaborado', 
             unidadMedida: formData.unidadMedida || 'unidad', 
-            ...(costo > 0 && { costoBase: costo }),
+            costoBase: costo,
             stockActual: stockActualNum,
             stockMinimo: stockMinimoNum,
             descuentoMayorista: formData.descuentoMayorista === '' ? undefined : parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0
@@ -146,11 +150,11 @@ export default function Productos({
         try {
             if (editingProducto) {
                 await onUpdateProducto(editingProducto.id, data);
-                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: editingProducto.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
+                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: editingProducto.id, proveedorId: formData.proveedorId, precioCosto: costo, notas: formData.notasPrecio });
                 toast.success('✅ Producto actualizado correctamente');
             } else {
                 const np = await onAddProducto(data);
-                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: np.id, proveedorId: formData.proveedorId, precioCosto: parseFloat(formData.precioCosto), notas: formData.notasPrecio });
+                if (formData.proveedorId && formData.precioCosto) await onAddOrUpdatePrecio({ productoId: np.id, proveedorId: formData.proveedorId, precioCosto: costo, notas: formData.notasPrecio });
                 toast.success('✅ Producto creado correctamente');
             }
             setIsDialogOpen(false); resetForm();
@@ -184,7 +188,10 @@ export default function Productos({
     const handleEdit = (producto: Producto) => {
         try {
             setEditingProducto(producto);
-            const mp = getMejorPrecio(producto.id);
+            // Obtener el precio configurado. Preferimos el último precio actualizado si hay varios, para reflejar ediciones recientes.
+            const preciosDelProd = _precios.filter(p => p.productoId === producto.id);
+            const mp = preciosDelProd.length > 0 ? preciosDelProd.sort((a, b) => new Date(b.fechaActualizacion || 0).getTime() - new Date(a.fechaActualizacion || 0).getTime())[0] : null;
+            
             const itemInv = inventario.find(i => i.productoId === producto.id);
 
             // Normalizar categoría: buscar coincidencia exacta primero, luego insensible a mayúsculas
@@ -369,9 +376,9 @@ export default function Productos({
                                     <th className="px-5 py-4">Producto</th>
                                     <th className="px-5 py-4">Tipo</th>
                                     <th className="px-5 py-4">Categoría</th>
-                                    <th className="px-5 py-4">Costo</th>
-                                    <th className="px-5 py-4">Precio Venta</th>
-                                    <th className="px-5 py-4">Margen</th>
+                                    {canVerCosto && <th className="px-5 py-4">Costo</th>}
+                                    {canVerPVP && <th className="px-5 py-4">Precio Venta</th>}
+                                    {canVerMargen && <th className="px-5 py-4">Margen</th>}
                                     <th className="px-5 py-4 text-center">Acciones</th>
                                 </tr>
                             </thead>
@@ -415,9 +422,15 @@ export default function Productos({
                                                     </span>
                                                 </td>
                                                 <td className="px-5 py-4"><span className="text-sm font-bold px-3 py-1.5 rounded-lg" style={{ backgroundColor: `${cc}15`, color: cc }}>{producto.categoria}</span></td>
+                                                {canVerCosto && (
                                                 <td className="px-5 py-4 text-base">{cb > 0 ? <span className="font-bold text-slate-900 dark:text-white">{formatCurrency(cb)}</span> : <span className="text-slate-300">—</span>}</td>
+                                                )}
+                                                {canVerPVP && (
                                                 <td className="px-5 py-4 text-base font-bold text-emerald-600">{pv > 0 ? formatCurrency(pv) : <span className="text-slate-300">—</span>}</td>
+                                                )}
+                                                {canVerMargen && (
                                                 <td className="px-5 py-4">{cb > 0 ? <span className={cn("text-sm font-bold px-2.5 py-1 rounded-full", ut >= 30 ? "bg-emerald-50 text-emerald-600" : ut >= 15 ? "bg-amber-50 text-amber-600" : "bg-red-50 text-red-600")}>{ut.toFixed(1)}%</span> : <span className="text-slate-300">—</span>}</td>
+                                                )}
                                                 <td className="px-5 py-4">
                                                     <div className="flex items-center justify-center gap-1">
                                                         <button onClick={e => { e.stopPropagation(); handleEdit(producto); }} className="p-2.5 text-slate-400 hover:text-primary rounded-lg hover:bg-slate-100 transition-colors"><Edit2 className="w-4 h-4" /></button>

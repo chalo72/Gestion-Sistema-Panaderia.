@@ -148,6 +148,7 @@ export function Sidebar({
         { id: 'comunicaciones',  label: 'Equipo & Checklist',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia',      label: 'Mando Superior (IA)', icon: Shield,          permission: 'VER_DASHBOARD' },
         { id: 'videovigilancia', label: 'Videovigilancia',     icon: Video,           permission: 'VER_DASHBOARD' },
+        { id: 'cctv',            label: 'Auditoría Digital',   icon: Shield,          permission: 'VER_DASHBOARD' },
       ],
     },
     {
@@ -165,7 +166,7 @@ export function Sidebar({
       section: 'Producción',
       emoji: '🍞',
       items: [
-        { id: 'produccion', label: 'Producción de Pan',  icon: Utensils,  permission: 'VER_PRODUCCION' },
+        { id: 'produccion', label: role === 'PANADERO' ? 'Libreta del Horno' : 'Producción / Libreta',  icon: Utensils,  permission: 'VER_PRODUCCION' },
         { id: 'recetas',    label: 'Recetas Técnicas',   icon: ChefHat,   permission: 'VER_PRODUCCION' },
         { id: 'inventario', label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
       ],
@@ -186,7 +187,7 @@ export function Sidebar({
         { id: (role === 'VENDEDOR' || role === 'PANADERO') ? 'buscador-precios' : 'precios', label: (role === 'VENDEDOR' || role === 'PANADERO') ? 'Consultar Precios' : 'Historial de Costos', icon: DollarSign, permission: 'VER_PRECIOS' },
         { id: 'alertas',   label: 'Alertas de Costos',    icon: Bell,       permission: 'VER_ALERTAS' },
         { id: 'gastos',    label: 'Egresos y Facturas',   icon: DollarSign, permission: 'VER_FINANZAS' },
-        { id: 'reportes',  label: role === 'PANADERO' ? 'Libreta del Horno' : 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_REPORTES' },
+        { id: 'reportes',  label: role === 'PANADERO' ? 'Historial de Panes' : 'Análisis Financiero',  icon: BarChart3,  permission: 'VER_REPORTES' },
         { id: 'ahorro',    label: 'Mis Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
         { id: 'mayoristas',label: 'Ventas al Mayor',      icon: Store,      permission: 'VER_FINANZAS' },
         { id: 'boveda',    label: 'Bóveda / Tesorería',   icon: Wallet,     permission: 'VER_FINANZAS' },
@@ -224,7 +225,7 @@ export function Sidebar({
     .map(g => ({
       ...g,
       items: g.items.filter(i => {
-        if (role === 'PANADERO' && (i.id === 'agentes-ia' || i.id === 'videovigilancia' || i.id === 'comunicaciones')) {
+        if (role === 'PANADERO' && (i.id === 'agentes-ia' || i.id === 'videovigilancia' || i.id === 'cctv' || i.id === 'comunicaciones')) {
           return false;
         }
         return check(i.permission as any) && puedeVer(role ?? '', i.id);

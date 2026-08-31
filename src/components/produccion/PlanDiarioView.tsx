@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { DistribuidorArroba } from './DistribuidorArroba';
 import { IaAnalysisModal } from './IaAnalysisModal';
+import { HistorialLibretaHorno } from './historial-libreta-horno';
 import {
   Select,
   SelectContent,
@@ -460,16 +461,22 @@ export function PlanDiarioView({
       <div className="flex justify-between items-center print:hidden">
         <div>
           <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <CalendarDays className="w-6 h-6 text-indigo-500" />
-            Plan de Producción Diario
+            <CalendarDays className="w-6 h-6 text-amber-500" />
+            Libreta del Horno — Plan del día
           </h2>
-          <p className="text-muted-foreground">Planifica las arrobas a procesar y obtén latas y horneadas exactas.</p>
+          <p className="text-muted-foreground text-sm font-medium">
+            1) Anota masas y panes · 2) Guarda en la libreta · 3) Si quieres, lanza a hornear
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button onClick={handleAddItem} className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-black text-[12px] h-12 px-6 uppercase tracking-wider shadow-lg shadow-emerald-500/25 order-first sm:order-none">
+            <Plus className="w-5 h-5" />
+            Anotar en Libreta
+          </Button>
           {items.length > 0 && (
             <Button onClick={() => setIsIaModalOpen(true)} variant="outline" className="gap-2 rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-900/30 font-black tracking-widest text-[10px]">
               <BrainCircuit className="w-4 h-4" />
-              ✨ Análisis de IA
+              Análisis de IA
             </Button>
           )}
           {items.length > 0 && onGuardarComoPlantilla && (
@@ -479,7 +486,7 @@ export function PlanDiarioView({
               className="gap-2 rounded-xl border-violet-300 text-violet-700 hover:bg-violet-50 dark:border-violet-700 dark:text-violet-400 dark:hover:bg-violet-900/20 font-black uppercase tracking-widest text-[10px]"
             >
               <CalendarRange className="w-4 h-4" />
-              Guardar como plantilla semanal
+              Plantilla semanal
             </Button>
           )}
           {items.length > 0 && onLanzarPlan && (
@@ -493,18 +500,14 @@ export function PlanDiarioView({
                   console.error(e);
                 }
               }}
-              className="gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase tracking-widest text-[10px] shadow-lg shadow-emerald-500/20 animate-pulse"
+              className="gap-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-black uppercase tracking-widest text-[10px] shadow-lg shadow-orange-500/20"
             >
-              🚀 Lanzar a Producción
+              🔥 Lanzar a Hornear
             </Button>
           )}
-          <Button onClick={handlePrint} variant="outline" className="gap-2 rounded-xl border-indigo-200 text-indigo-700 hover:bg-indigo-50">
+          <Button onClick={handlePrint} variant="outline" className="gap-2 rounded-xl border-slate-200 text-slate-600 hover:bg-slate-50">
             <Printer className="w-4 h-4" />
-            Imprimir
-          </Button>
-            <Button onClick={handleAddItem} className="gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 font-black text-[11px] h-10 px-6 uppercase tracking-wider shadow-lg shadow-indigo-500/20">
-            <Plus className="w-4 h-4" />
-            Registrar Producción
+            Imprimir / PDF
           </Button>
         </div>
       </div>
@@ -590,7 +593,7 @@ export function PlanDiarioView({
         <div className="lg:col-span-2 space-y-4">
           <Card className="rounded-2xl border-none shadow-lg">
             <CardHeader className="bg-muted/30 border-b border-border/50 pb-4 print:bg-transparent print:border-b-2">
-              <CardTitle className="text-lg">Masas a procesar</CardTitle>
+              <CardTitle className="text-lg">Masas del día</CardTitle>
               <CardDescription className="flex items-center gap-4 text-xs mt-1">
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -1074,11 +1077,46 @@ export function PlanDiarioView({
                                       <SelectContent>
                                         {modelos.filter(m => m.formulacionId === formulacionId && m.activo).map(m => (
                                           <SelectItem key={m.id} value={m.id}>
-                                            {m.nombre} ({m.piezasPorLata || 12} pz/lata)
+                                            <div className="flex items-center justify-between w-full">
+                                              <span>{m.nombre} ({m.piezasPorLata || 12} pz/lata)</span>
+                                              {m.velocidadVenta && (
+                                                <Badge variant="outline" className={cn(
+                                                  "ml-2 text-[9px] px-1 py-0 uppercase",
+                                                  m.velocidadVenta === 'estrella' ? "text-amber-600 border-amber-200" :
+                                                  m.velocidadVenta === 'alta' ? "text-emerald-600 border-emerald-200" :
+                                                  m.velocidadVenta === 'media' ? "text-yellow-700 border-yellow-200" :
+                                                  m.velocidadVenta === 'baja' ? "text-rose-600 border-rose-200" :
+                                                  "text-purple-600 border-purple-200"
+                                                )}>
+                                                  {m.velocidadVenta === 'estrella' ? '⭐' : m.velocidadVenta === 'baja' ? '🔴' : ''} {m.velocidadVenta}
+                                                </Badge>
+                                              )}
+                                            </div>
                                           </SelectItem>
                                         ))}
                                       </SelectContent>
                                     </Select>
+                                    {(() => {
+                                      const mod = modelos.find(m => m.id === item.modeloId);
+                                      if (!mod?.velocidadVenta) return null;
+                                      
+                                      const warningInfo = {
+                                        estrella: { icon: '🔥', text: 'Estrella: ¡Hacer más, se agota rápido!', color: 'text-amber-600 bg-amber-50 border-amber-200' },
+                                        alta: { icon: '🟢', text: 'Alta rotación: Buena cantidad', color: 'text-emerald-700 bg-emerald-50 border-emerald-200' },
+                                        media: { icon: '🟡', text: 'Media: Ojo, no exagerar', color: 'text-yellow-700 bg-yellow-50 border-yellow-200' },
+                                        baja: { icon: '🔴', text: 'Baja: Cuidado, hacer poco o bajo pedido', color: 'text-rose-700 bg-rose-50 border-rose-200' },
+                                        nuevo: { icon: '🟣', text: 'Nuevo: En prueba, rotar bien', color: 'text-purple-700 bg-purple-50 border-purple-200' }
+                                      }[mod.velocidadVenta];
+
+                                      if (!warningInfo) return null;
+
+                                      return (
+                                        <div className={cn("mt-1 px-2 py-0.5 rounded-md border text-[10px] font-bold flex items-center gap-1", warningInfo.color)}>
+                                          <span>{warningInfo.icon}</span>
+                                          {warningInfo.text}
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
 
                                   {/* Resultados editables (Derecha) */}
@@ -1217,7 +1255,13 @@ export function PlanDiarioView({
               )}
             </CardContent>
           </Card>
+
         </div>
+      </div>
+
+      {/* A ancho completo: misma libreta que Reportes (más visible en celular) */}
+      <div className="mt-8">
+        <HistorialLibretaHorno limite={21} />
       </div>
 
       {/* Historial de Planes Guardados */}

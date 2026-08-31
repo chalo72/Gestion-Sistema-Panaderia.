@@ -33,7 +33,7 @@ export function TablaFlujoCaja({ data }: { data: any }) {
                             {
                                 label: 'Compromisos fijos activos',
                                 val: totalCompromisosActivos,
-                                sub: `${compromisos.filter(c=>c.activo).length} registrados · Fuente: tab Mi Quincena`,
+                                sub: `${compromisos.filter(c=>c.activo).length} registrados · Fuente: tab Gestión Integral Operativa`,
                                 color: 'text-violet-500',
                                 border: 'border-violet-200 dark:border-violet-800',
                                 empty: totalCompromisosActivos === 0,
@@ -76,7 +76,7 @@ export function TablaFlujoCaja({ data }: { data: any }) {
                             <div>
                                 <p className="text-sm font-black text-amber-400">Completa tus datos para ver el tablero real</p>
                                 <ul className="text-[11px] text-muted-foreground mt-1 space-y-0.5 list-disc ml-4">
-                                    {totalCompromisosActivos === 0 && <li>Ve a <strong>Mi Quincena</strong> y registra tus compromisos fijos (arriendo, servicios, préstamos, salarios)</li>}
+                                    {totalCompromisosActivos === 0 && <li>Ve a <strong>Gestión Integral Operativa</strong> y registra tus compromisos fijos (arriendo, servicios, préstamos, salarios)</li>}
                                     {promedioInsumos === 0 && <li>Registra gastos de <strong>Materia Prima</strong> en el módulo Finanzas para que el promedio de insumos sea real</li>}
                                     {reporteActual.totalVentas === 0 && <li>Las ventas del mes aún no se han registrado en el POS</li>}
                                 </ul>

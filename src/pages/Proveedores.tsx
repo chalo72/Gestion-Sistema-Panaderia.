@@ -40,6 +40,7 @@ import {
   RotateCcw,
   Loader2,
   Check,
+  CalendarDays,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,10 +49,22 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/compone
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { descargarInformePdf } from '@/lib/informe-pdf';
 import type { Producto, Proveedor, PrecioProveedor, ProductoTipo, Categoria } from '@/types';
 import { ProveedorForm, type ProductoCatalogo } from '@/components/proveedores/ProveedorForm';
 import { AnalisisInteligente, getScheduleAlerta } from '@/components/proveedores/AnalisisInteligente';
 import { ComparadorPrecios } from '@/components/prepedidos/ComparadorPrecios';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
 
 /* ── Tipos para la vista ── */
 type TipoEmbalaje =
@@ -96,6 +109,113 @@ function ProveedorAvatar({ proveedor, size = 'md' }: { proveedor: Proveedor; siz
     <div className={cn(cls, 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center font-black border-2 border-white/10 shadow-xl')}>
       {proveedor.nombre.charAt(0).toUpperCase()}
     </div>
+  );
+}
+
+function HistorialPrecioModal({ 
+  open, 
+  onClose, 
+  productoId, 
+  proveedorId, 
+  nombreProducto 
+}: { 
+  open: boolean; 
+  onClose: () => void; 
+  productoId: string; 
+  proveedorId: string; 
+  nombreProducto: string; 
+}) {
+  const [historial, setHistorial] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open && productoId) {
+      setLoading(true);
+      db.getAllHistorial().then(data => {
+        const filtered = data
+          .filter((d: any) => d.productoId === productoId && d.proveedorId === proveedorId)
+          .sort((a: any, b: any) => new Date(a.fechaCambio).getTime() - new Date(b.fechaCambio).getTime());
+        setHistorial(filtered);
+        setLoading(false);
+      }).catch(() => setLoading(false));
+    }
+  }, [open, productoId, proveedorId]);
+
+  return (
+    <Dialog open={open} onOpenChange={(val) => !val && onClose()}>
+      <DialogContent className="max-w-2xl rounded-[2rem] border-none shadow-2xl bg-white dark:bg-slate-950 p-6 sm:p-8">
+        <DialogTitle className="flex items-center gap-3 text-xl font-black uppercase tracking-tight text-slate-800 dark:text-white">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
+            <TrendingUp className="w-5 h-5 text-indigo-500" />
+          </div>
+          <div>
+            Historial de Costo: <span className="text-indigo-600">{nombreProducto}</span>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-0.5">
+              Variación del costo de compra a través del tiempo
+            </p>
+          </div>
+        </DialogTitle>
+        <DialogDescription className="sr-only">Variación del costo de compra a través del tiempo</DialogDescription>
+        
+        <div className="mt-8 h-[300px] w-full bg-slate-50/50 dark:bg-slate-900/20 rounded-2xl p-4 border border-slate-100 dark:border-slate-800/50">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center h-full gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Cargando datos...</p>
+            </div>
+          ) : historial.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
+              <div className="w-16 h-16 rounded-full bg-slate-100 dark:bg-slate-800/50 flex items-center justify-center">
+                <BarChart3 className="w-8 h-8 opacity-40" />
+              </div>
+              <p className="font-bold text-sm">No hay suficientes datos históricos</p>
+              <p className="text-[10px] uppercase tracking-widest opacity-60 max-w-[250px] text-center">Registra variaciones de precio en las facturas para ver la gráfica</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={historial} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" strokeOpacity={0.5} />
+                <XAxis 
+                  dataKey="fechaCambio" 
+                  tickFormatter={(val) => format(new Date(val), "d MMM", { locale: es })}
+                  tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 800 }}
+                  axisLine={false}
+                  tickLine={false}
+                  dy={10}
+                  minTickGap={20}
+                />
+                <YAxis 
+                  tickFormatter={(val) => `$${val.toLocaleString()}`}
+                  tick={{ fontSize: 10, fill: '#94a3b8', fontWeight: 800 }}
+                  axisLine={false}
+                  tickLine={false}
+                  dx={-10}
+                />
+                <RechartsTooltip 
+                  labelFormatter={(val) => format(new Date(val), "EEEE d 'de' MMMM, yyyy", { locale: es })}
+                  formatter={(value: any) => [`$${Number(value).toLocaleString()}`, 'Costo Unitario']}
+                  contentStyle={{ borderRadius: '1rem', border: '1px solid #e2e8f0', boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)', fontWeight: 'bold' }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="precioNuevo" 
+                  stroke="#4f46e5" 
+                  strokeWidth={4} 
+                  dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#4f46e5' }} 
+                  activeDot={{ r: 6, fill: '#4f46e5', stroke: '#c7d2fe', strokeWidth: 4 }} 
+                  animationDuration={1000}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+        <div className="flex justify-end mt-6">
+          <Button onClick={onClose} variant="ghost" className="rounded-xl font-bold px-6 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700">
+            Cerrar
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -181,6 +301,9 @@ export function Proveedores({
   const [deleteTarget, setDeleteTarget] = useState<Proveedor | null>(null);
 
   const [selectedProvId, setSelectedProvId] = useState<string | null>(null);
+
+  /* ─── Modal Historial de Precios ─── */
+  const [historialModalInfo, setHistorialModalInfo] = useState<{ open: boolean; productoId: string; proveedorId: string; nombreProducto: string } | null>(null);
 
   /* ─── Estado catálogo de productos para el componente Form ─── */
   const [catalogoParaForm, setCatalogoParaForm] = useState<ProductoCatalogo[]>([]);
@@ -682,6 +805,50 @@ export function Proveedores({
 
   const confirmarEliminar = (prov: Proveedor) => setDeleteTarget(prov);
 
+  const descargarCatalogoPdf = (prov: Proveedor) => {
+    const insumos = getInsumosValidos(prov.id).sort((a, b) => {
+      const nombreA = getProductoById(a.productoId)?.nombre || '';
+      const nombreB = getProductoById(b.productoId)?.nombre || '';
+      return nombreA.localeCompare(nombreB);
+    });
+    if (insumos.length === 0) {
+      toast.error('Este proveedor no tiene productos en el catálogo');
+      return;
+    }
+    void descargarInformePdf({
+      titulo: `Catálogo · ${prov.nombre}`,
+      kpis: [{ label: 'Productos', value: String(insumos.length) }],
+      secciones: [
+        {
+          encabezados: ['Producto', 'Empaque', 'Costo', 'Margen', 'P. venta'],
+          filas: insumos.map((precio) => {
+            const prodItem = getProductoById(precio.productoId);
+            const nombre = prodItem?.nombre || 'Producto';
+            const categoria = prodItem?.categoria || '';
+            const destino = precio.destino || (prodItem?.tipo === 'ingrediente' ? 'Insumo' : 'Venta');
+            const cantidadEmbalaje = precio.cantidadEmbalaje || 1;
+            const tipoEmbalaje = precio.tipoEmbalaje || 'unidad';
+            const precioCosto = Number(precio.precioCosto) || 0;
+            const margenVenta = prodItem?.margenUtilidad || 0;
+            const costoReal = cantidadEmbalaje > 1 ? precioCosto / cantidadEmbalaje : precioCosto;
+            const precioVentaGuardado = prodItem?.precioVenta || 0;
+            const precioVenta = precioVentaGuardado > 0
+              ? precioVentaGuardado
+              : (costoReal > 0 && margenVenta > 0 ? Math.round(costoReal * (1 + margenVenta / 100)) : 0);
+            return [
+              `${nombre} (${categoria} · ${destino})`,
+              `${tipoEmbalaje} × ${cantidadEmbalaje}`,
+              formatCurrency(precioCosto),
+              `${Number(margenVenta).toFixed(1)}%`,
+              precioVenta > 0 ? formatCurrency(precioVenta) : '—',
+            ];
+          }),
+        },
+      ],
+    });
+  };
+
+
   const ejecutarEliminar = () => {
     if (!deleteTarget) return;
     onDeleteProveedor(deleteTarget.id);
@@ -760,11 +927,27 @@ export function Proveedores({
             CSV
           </Button>
           <Button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigateView', { detail: 'gastos' }))}
+            className="h-10 px-4 bg-emerald-100 hover:bg-emerald-200 text-emerald-700 shadow-none border-none rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
+            title="Ir a Añadir Factura / Gastos"
+          >
+            <FileText className="w-4 h-4" />
+            Gastos
+          </Button>
+          <Button
+            onClick={() => window.dispatchEvent(new CustomEvent('navigateView', { detail: 'nomina' }))}
+            className="h-10 px-4 bg-amber-100 hover:bg-amber-200 text-amber-700 shadow-none border-none rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
+            title="Ir a Pago de Nómina / Quincena"
+          >
+            <CalendarDays className="w-4 h-4" />
+            Quincena
+          </Button>
+          <Button
             onClick={() => setActiveView('comparador')}
             className="h-10 px-4 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 shadow-none border-none rounded-xl gap-1.5 font-black uppercase tracking-widest text-xs shrink-0"
           >
             <TrendingDown className="w-4 h-4" />
-            Comparar Precios
+            Comparar
           </Button>
           <Button
             onClick={repararDatosGlobal}
@@ -1118,6 +1301,10 @@ export function Proveedores({
                             className="h-9 px-4 flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black transition-colors">
                             <Edit2 className="w-3.5 h-3.5" /> Editar
                           </button>
+                          <button onClick={() => descargarCatalogoPdf(prov)}
+                            className="h-9 px-4 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-colors">
+                            <Download className="w-3.5 h-3.5" /> Descargar catálogo
+                          </button>
                           <button onClick={() => confirmarEliminar(prov)}
                             className="h-9 px-4 flex items-center gap-1.5 text-rose-400 hover:text-white hover:bg-rose-600 border border-rose-200 dark:border-rose-800 rounded-xl text-xs font-black transition-colors">
                             <Trash2 className="w-3.5 h-3.5" /> Eliminar
@@ -1253,7 +1440,7 @@ export function Proveedores({
                                           )}
                                         </td>
                                         <td className="px-4 py-4 text-center font-black text-[10px] text-emerald-600">
-                                          {margenVenta}%
+                                          {Number(margenVenta).toFixed(1)}%
                                         </td>
                                         <td className="px-4 py-4 text-right">
                                           {precioVenta > 0
@@ -1269,6 +1456,21 @@ export function Proveedores({
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                           <div className="flex items-center justify-center gap-1">
+                                            <button
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                setHistorialModalInfo({
+                                                  open: true,
+                                                  productoId: precio.productoId,
+                                                  proveedorId: prov.id,
+                                                  nombreProducto: nombre
+                                                });
+                                              }}
+                                              className="w-9 h-9 rounded-xl text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center justify-center transition-all bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 border"
+                                              title="Ver Historial de Costos"
+                                            >
+                                              <TrendingUp className="w-4 h-4" />
+                                            </button>
                                             <button
                                               onClick={() => {
                                                 if (window.confirm(`¿Eliminar "${nombre}" del catálogo de ${prov.nombre}?`)) {
@@ -1649,6 +1851,17 @@ export function Proveedores({
       </Dialog>
 
       {/* Dialog de detalle eliminado — todo se muestra inline en el acordeón */}
+      
+      {/* ── DIALOG: Historial de Precio ── */}
+      {historialModalInfo && (
+        <HistorialPrecioModal
+          open={historialModalInfo.open}
+          onClose={() => setHistorialModalInfo(null)}
+          productoId={historialModalInfo.productoId}
+          proveedorId={historialModalInfo.proveedorId}
+          nombreProducto={historialModalInfo.nombreProducto}
+        />
+      )}
     </div>
   );
 }

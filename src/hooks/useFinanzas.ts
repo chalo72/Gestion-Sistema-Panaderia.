@@ -46,9 +46,25 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
     setGastos(prev => prev.filter(g => g.id !== id));
   }, []);
 
+  // Refrescar lista cuando otro módulo anula/edita gastos (Mi Quincena, etc.)
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const detail = (e as CustomEvent<{ table?: string }>).detail;
+      if (detail?.table !== 'gastos') return;
+      try {
+        const list = await db.getAllGastos();
+        setGastos(list as Gasto[]);
+      } catch (err) {
+        console.warn('[useFinanzas] No se pudo refrescar gastos:', err);
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
+  }, []);
+
   const generarReporte = useCallback((periodo: string, ventas: Venta[]) => {
-    const gastosPeriodo = gastos.filter(g => g.fecha.startsWith(periodo));
-    const ventasPeriodo = ventas.filter(v => v.fecha.startsWith(periodo));
+    const gastosPeriodo = gastos.filter(g => (g.fecha || '').startsWith(periodo));
+    const ventasPeriodo = ventas.filter(v => (v.fecha || '').startsWith(periodo));
 
     const totalVentas = ventasPeriodo.reduce((s, v) => s + v.total, 0);
     const totalGastos = gastosPeriodo.reduce((s, g) => s + g.monto, 0);

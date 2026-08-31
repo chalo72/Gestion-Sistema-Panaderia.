@@ -36,7 +36,8 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { ModeloPan, FormulacionBase } from '@/types';
-import { ARROBA_KG, ARROBA_GR } from '@/types';
+import { ARROBA_KG } from '@/types';
+import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
 
 interface ModelosPanViewProps {
   modelos: ModeloPan[];
@@ -73,12 +74,14 @@ export function ModelosPanView({
     [formulaciones, formulacionId]
   );
 
-  // Panes por arroba (considerando merma)
+  // Panes por arroba (usando el peso real de la masa, no los 12.5 kg de harina)
   const panesPorArroba = useMemo(() => {
     if (!pesoUnitarioGr) return 0;
-    const masaUtilGr = ARROBA_GR * (1 - (mermaEstimada / 100));
+    // kgRealMasa: 21 kg para sal, 19.32 kg para hojaldre, 20.33 kg para dulce (pendiente)
+    const kgRealMasa = resolverKgPorArrobaMasa(formulacionSeleccionada);
+    const masaUtilGr = kgRealMasa * 1000 * (1 - (mermaEstimada / 100));
     return Math.floor(masaUtilGr / pesoUnitarioGr);
-  }, [pesoUnitarioGr, mermaEstimada]);
+  }, [pesoUnitarioGr, mermaEstimada, formulacionSeleccionada]);
 
   // Costo unitario
   const costoUnitario = useMemo(() => {
@@ -248,9 +251,23 @@ export function ModelosPanView({
                       <Croissant className="w-4 h-4 text-pink-500" />
                       {modelo.nombre}
                     </CardTitle>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {formulacion?.nombre || 'Sin formulación'}
-                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-muted-foreground">
+                        {formulacion?.nombre || 'Sin formulación'}
+                      </p>
+                      {modelo.velocidadVenta && (
+                        <Badge variant="outline" className={cn(
+                          "text-[9px] px-1.5 py-0 uppercase tracking-widest font-black border-2",
+                          modelo.velocidadVenta === 'estrella' ? "border-amber-200 text-amber-600 bg-amber-50" :
+                          modelo.velocidadVenta === 'alta' ? "border-emerald-200 text-emerald-600 bg-emerald-50" :
+                          modelo.velocidadVenta === 'media' ? "border-yellow-200 text-yellow-700 bg-yellow-50" :
+                          modelo.velocidadVenta === 'baja' ? "border-rose-200 text-rose-600 bg-rose-50" :
+                          "border-purple-200 text-purple-600 bg-purple-50"
+                        )}>
+                          {modelo.velocidadVenta}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" size="icon" onClick={() => handleOpenEdit(modelo)} className="h-7 w-7 text-muted-foreground hover:text-pink-600">

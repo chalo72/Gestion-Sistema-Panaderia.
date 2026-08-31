@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Plus, Package, ArrowLeft, Edit2, X, Save } from 'lucide-react';
+import { Search, Plus, Package, ArrowLeft, Edit2, X, Save, Zap } from 'lucide-react';
+import { CalculadoraRapida } from './CalculadoraRapida';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -34,6 +35,7 @@ export function ProductCatalog({
     const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
     const [editForm, setEditForm] = useState({ nombre: '', precioVenta: 0, descripcion: '', stock: 0 });
     const [multiplier, setMultiplier] = useState(1);
+    const [modoHoraPico, setModoHoraPico] = useState(false);
 
     const handleAddToCart = (producto: Producto) => {
         for (let i = 0; i < multiplier; i++) onAddToCart(producto);
@@ -161,6 +163,17 @@ export function ProductCatalog({
                             </button>
                         )}
                     </div>
+                    {/* Toggle Hora Pico */}
+                    <button
+                        onClick={() => setModoHoraPico(!modoHoraPico)}
+                        title="Modo Hora Pico (Teclado Relámpago)"
+                        className={cn(
+                            "shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-90",
+                            modoHoraPico ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-amber-500"
+                        )}
+                    >
+                        <Zap className="w-5 h-5" />
+                    </button>
                     {/* Botón producto ad-hoc */}
                     {onOpenAdHoc && (
                         <button
@@ -189,7 +202,26 @@ export function ProductCatalog({
             </div>
 
             {/* Contenido con SCROLL */}
-            <div className="flex-1 min-h-0 overflow-y-auto p-4">
+            {modoHoraPico ? (
+                <div className="flex-1 min-h-0">
+                    <CalculadoraRapida
+                        onAddMonto={(monto) => {
+                            const adHocItem: Producto = {
+                                id: `rapida-${Date.now()}`,
+                                nombre: `Venta Rápida`,
+                                precioVenta: monto,
+                                categoria: 'Otros',
+                                tipo: 'elaborado',
+                                activo: true,
+                                margenUtilidad: 0
+                            };
+                            onAddToCart(adHocItem);
+                        }}
+                        formatCurrency={formatCurrency}
+                    />
+                </div>
+            ) : (
+                <div className="flex-1 min-h-0 overflow-y-auto p-4">
 
                 {isSearching ? (
                     productos.length === 0 ? (
@@ -198,11 +230,10 @@ export function ProductCatalog({
                             <p className="text-sm font-bold text-slate-400">No se encontró "{searchTerm}"</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {productos.map(producto => (
-                                <ProductCard key={producto.id} producto={producto} inventario={inventario}
+                                <FastSearchCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
-                                    onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
                                     cantidadEnCarrito={cart?.find(i => i.producto.id === producto.id)?.cantidad ?? 0} />
                             ))}
                         </div>
@@ -254,7 +285,8 @@ export function ProductCatalog({
                         </div>
                     )
                 )}
-            </div>
+                </div>
+            )}
 
             {/* Modal de Edición Rápida */}
             <Dialog open={!!editingProduct} onOpenChange={(open) => !open && setEditingProduct(null)}>
@@ -390,6 +422,90 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                             <Plus className="w-2.5 h-2.5" />
                         </div>
                     )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/* Tarjeta de Búsqueda Rápida Gigante para Resultados Profesionales */
+function FastSearchCard({ producto, inventario, categorias, onAddToCart, formatCurrency, cantidadEnCarrito }: {
+    producto: Producto; inventario: InventarioItem[]; categorias: Categoria[];
+    onAddToCart: (p: Producto) => void; formatCurrency: (v: number) => string;
+    cantidadEnCarrito?: number;
+}) {
+    const itemInv = inventario.find(i => i.productoId === producto.id);
+    const stock = itemInv?.stockActual || 0;
+    const categoria = categorias.find(c => c.nombre === producto.categoria);
+    const catColor = categoria?.color || '#3b82f6';
+    const enCarrito = (cantidadEnCarrito ?? 0) > 0;
+
+    return (
+        <div
+            onClick={() => onAddToCart(producto)}
+            className={cn(
+                "group relative bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border-2 flex items-center justify-between gap-4 cursor-pointer transition-all active:scale-[0.98]",
+                enCarrito
+                    ? "border-emerald-400 dark:border-emerald-600 bg-emerald-50/50 dark:bg-emerald-900/10 shadow-lg shadow-emerald-500/20"
+                    : "border-slate-100 dark:border-slate-800 hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-md"
+            )}
+        >
+            <div className="flex items-center gap-4 min-w-0 flex-1">
+                {/* Imagen o Placeholder */}
+                {producto.imagen ? (
+                    <img 
+                      src={producto.imagen} 
+                      alt={producto.nombre} 
+                      className="w-16 h-16 rounded-2xl object-cover shrink-0 shadow-sm border border-slate-100 dark:border-slate-800"
+                      onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    />
+                ) : (
+                    <div 
+                        className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0 shadow-sm"
+                        style={{ backgroundColor: `${catColor}15`, color: catColor }}
+                    >
+                        <Package className="w-8 h-8" />
+                    </div>
+                )}
+                
+                <div className="min-w-0 flex-1">
+                    <p className="text-lg md:text-xl font-black tracking-tight text-slate-800 dark:text-white truncate">
+                        {producto.nombre}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] font-bold uppercase tracking-wider rounded-md truncate max-w-[120px]">
+                            {producto.categoria || 'Sin Categoría'}
+                        </span>
+                        {stock > 0 ? (
+                            <span className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 text-[10px] font-bold uppercase tracking-wider rounded-md">
+                                Hay {stock}
+                            </span>
+                        ) : (
+                            <span className="px-2 py-0.5 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 text-[10px] font-bold uppercase tracking-wider rounded-md">
+                                Agotado
+                            </span>
+                        )}
+                        {enCarrito && (
+                            <span className="px-2 py-0.5 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-wider rounded-md">
+                                En Carrito ({cantidadEnCarrito})
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* PRECIO GIGANTE */}
+            <div className="shrink-0 text-right pl-2 border-l border-slate-100 dark:border-slate-800">
+                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-0.5">PVP</p>
+                <p className="text-2xl md:text-3xl font-black tabular-nums text-emerald-600 dark:text-emerald-400 tracking-tighter">
+                    {formatCurrency(producto.precioVenta)}
+                </p>
+            </div>
+
+            {/* Overlay Plus */}
+            <div className="absolute inset-0 bg-emerald-600/5 opacity-0 group-hover:opacity-100 transition-opacity rounded-3xl pointer-events-none flex items-center justify-center">
+                <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center shadow-xl scale-50 group-hover:scale-100 transition-transform">
+                    <Plus className="w-5 h-5 text-white" />
                 </div>
             </div>
         </div>

@@ -183,8 +183,8 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
             <ClipboardCheck className="w-6 h-6" />
           </div>
           <div>
-            <CardTitle className="text-xl">Registro de Producción / Auditoría</CardTitle>
-            <CardDescription>Registra exactamente la cantidad de masa procesada y cómo se distribuyó.</CardDescription>
+            <CardTitle className="text-xl">Anotar en Libreta del Horno</CardTitle>
+            <CardDescription>Elige la masa, las arrobas y cuántos panes salieron. Se guarda en el historial.</CardDescription>
           </div>
         </div>
       </CardHeader>
@@ -423,29 +423,29 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
             
             {/* Submit */}
             <div className="pt-4 flex flex-col sm:flex-row justify-end gap-3">
-              {onGuardarAuditoria && (
-                <Button 
-                  onClick={handleAuditar} 
-                  disabled={pesoUtilizadoGr === 0}
-                  variant="outline"
-                  className={cn(
-                    "h-14 px-8 rounded-2xl font-black text-lg transition-all border-2 border-violet-500 text-violet-600 hover:bg-violet-50",
-                    estaSobregirado ? "opacity-50 pointer-events-none" : "shadow-lg shadow-violet-500/10"
-                  )}
-                >
-                  <Wand2 className="w-5 h-5 mr-2 text-violet-500" /> Auditar Producción
-                </Button>
-              )}
               {onAñadirAlPlan && (
                 <Button 
                   onClick={handleConfirmar} 
                   disabled={pesoUtilizadoGr === 0 || estaSobregirado}
+                  variant="outline"
                   className={cn(
-                    "h-14 px-8 rounded-2xl font-black text-lg transition-all text-white border-b-4",
-                    estaSobregirado ? "bg-slate-300 border-slate-400 opacity-50 pointer-events-none" : "bg-indigo-500 hover:bg-indigo-600 hover:-translate-y-1 border-indigo-700 shadow-lg shadow-indigo-500/25"
+                    "h-14 px-8 rounded-2xl font-black text-base transition-all border-2",
+                    estaSobregirado ? "opacity-50 pointer-events-none" : "border-indigo-300 text-indigo-700 hover:bg-indigo-50"
                   )}
                 >
-                  Guardar Producción <ArrowRight className="w-5 h-5 ml-2" />
+                  Sumar al plan del día <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              )}
+              {onGuardarAuditoria && (
+                <Button 
+                  onClick={handleAuditar} 
+                  disabled={pesoUtilizadoGr === 0}
+                  className={cn(
+                    "h-14 px-8 rounded-2xl font-black text-lg transition-all text-white border-b-4",
+                    estaSobregirado ? "bg-slate-300 border-slate-400 opacity-50 pointer-events-none" : "bg-emerald-600 hover:bg-emerald-700 border-emerald-800 shadow-lg shadow-emerald-500/25"
+                  )}
+                >
+                  <Wand2 className="w-5 h-5 mr-2" /> Guardar en Libreta
                 </Button>
               )}
             </div>

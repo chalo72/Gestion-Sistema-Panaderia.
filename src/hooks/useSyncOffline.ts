@@ -17,10 +17,8 @@ export function useSyncOffline() {
           mode: 'no-cors'
         });
         setIsServerAvailable(true);
-        console.log('✅ Servidor disponible');
       } catch (error) {
         setIsServerAvailable(false);
-        console.log('❌ Servidor no disponible - Modo offline');
       }
     };
 

@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  BrainCircuit, Mic, Terminal, Zap, Shield, Eye, Code2, Cpu,
-  Loader2, CheckCircle2, AlertTriangle, Activity, RefreshCw,
-  TrendingUp, Package, DollarSign, Users, ChevronRight, X, GitMerge, Trash2
+  BrainCircuit, Mic, Zap, Shield, Eye, Cpu,
+  Loader2, CheckCircle2, AlertTriangle, Activity,
+  TrendingUp, Package, DollarSign, X, GitMerge, Trash2, Target, Utensils, ShoppingCart, MessageSquare, Truck, Users, Building, ClipboardList, Server
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,15 +22,26 @@ import { getIncidentes, getLogsActividad } from '@/lib/security-agent';
 import { db } from '@/lib/database';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { AsistenteVirtual } from '@/components/agentes/AsistenteVirtual';
+import {
+  cargarDatosCasas,
+  contextoGerente,
+  contextoParaAgente,
+  esTareaSensible,
+  capturarMemoriaDesdeRespuestaInventario,
+  notificarTelemetriaOpcional,
+  type DatosCasas,
+} from '@/lib/agentes-casas';
 
-type EstadoAgente = 'idle' | 'working' | 'done' | 'error';
-type PanelDerecho = 'bitacora' | 'vigia' | 'arquitech' | 'protocolos' | null;
+type EstadoAgente = 'idle' | 'working' | 'done' | 'error' | 'blocked';
+type PanelDerecho = 'bitacora' | 'vigia' | 'arquitech' | 'protocolos' | 'clientbot' | null;
 
 interface TareaAgente {
   agente: AgenteId;
   tarea: string;
   respuesta?: string;
   estado: EstadoAgente;
+  requiereAprobacion?: boolean;
 }
 
 interface SesionIA {
@@ -42,38 +53,53 @@ interface SesionIA {
   timestamp: Date;
 }
 
+type PlanPendiente = {
+  sesionId: number;
+  plan: { agente: AgenteId; tarea: string }[];
+  datos: DatosCasas;
+  sensibles: { agente: AgenteId; tarea: string }[];
+};
+
 // Acciones rápidas conectadas al sistema real
 const ACCIONES_RAPIDAS = [
   { label: 'Consejo Élite (Reporte 360)', icon: BrainCircuit, color: 'text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10', prompt: 'Activa a tus agentes principales (Producción, Ventas, Inventario, Contable y Marketing). Necesito un análisis completo de 360 grados del estado actual de la panadería.' },
-  { label: 'Revisar Caja del Día', icon: DollarSign, color: 'text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10', prompt: 'Revisa el estado de la caja de hoy y dame un resumen financiero ejecutivo del día.' },
-  { label: 'Stock Crítico', icon: Package, color: 'text-orange-400 border-orange-500/30 hover:bg-orange-500/10', prompt: 'Revisa el inventario y dime qué insumos están en nivel crítico o por agotarse.' },
-  { label: 'Plan Marketing', icon: TrendingUp, color: 'text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10', prompt: 'Crea un plan de marketing para esta semana basado en los productos de la panadería Dulce Placer.' },
+  { label: 'Revisar Caja del Día', icon: DollarSign, color: 'text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10', prompt: 'Delega SOLO al agente contable (Banco Interno). Con su casa (caja): ¿caja abierta?, ventas, gastos, métodos de pago y 3 acciones si algo no cuadra.' },
+  { label: 'Stock Crítico', icon: Package, color: 'text-orange-400 border-orange-500/30 hover:bg-orange-500/10', prompt: 'Delega SOLO al agente inventario. Usa stock + memoria de faltantes previos. Lista críticos, pedido corto y 3 acciones. Números en nombres (40*30) son texto.' },
+  { label: 'Horno / Producción', icon: Utensils, color: 'text-amber-200 border-amber-500/30 hover:bg-amber-500/10', prompt: 'Delega SOLO al agente produccion (Jefe de Horno). Con órdenes abiertas, formulaciones e insumos críticos: prioridad de horneado, riesgos y 3 acciones concretas.' },
+  { label: 'Ventas del Día', icon: ShoppingCart, color: 'text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10', prompt: 'Delega SOLO al agente ventas. Con tickets de hoy, ticket promedio, métodos de pago y top productos: ESTADO, TOP, PAGO y 3 ACCIONES para vender más en mostrador. No inventes cifras.' },
+  { label: 'Hermes / Comanda', icon: MessageSquare, color: 'text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10', prompt: 'Delega SOLO al agente hermes. Usa el top de productos del día como referencia y explícame cómo armar una comanda rápida por voz (ejemplo: dos pan de bono y una gaseosa). Formato ÍTEMS / NOTA / SIGUIENTE.' },
+  { label: 'Compras / OC', icon: Truck, color: 'text-violet-400 border-violet-500/30 hover:bg-violet-500/10', prompt: 'Delega SOLO al agente logistica. Con proveedores, órdenes de compra abiertas, recepciones y faltantes: ESTADO, PRIORIDAD, PROVEEDOR sugerido y 3 ACCIONES (abrir Pre-Pedidos / crear OC / recibir). Pedidos grandes ≥$500.000 requieren mi confirmación.' },
+  { label: 'Cartera Clientes', icon: Users, color: 'text-pink-400 border-pink-500/30 hover:bg-pink-500/10', prompt: 'Delega SOLO al agente clientes. Con el maestro de clientes: ESTADO, DESTACADOS y 3 ACCIONES de fidelización. Si hay fiados, remite a créditos sin inventar saldos.' },
+  { label: 'Fiados / Deudas', icon: Building, color: 'text-blue-400 border-blue-500/30 hover:bg-blue-500/10', prompt: 'Delega SOLO al agente creditos. Con fiados activos: saldo pendiente, top deudores, vencidos y 3 ACCIONES de cobro. No inventes deudas. Borrar/anular requiere mi confirmación.' },
+  { label: 'Nómina / Equipo', icon: ClipboardList, color: 'text-sky-400 border-sky-500/30 hover:bg-sky-500/10', prompt: 'Delega SOLO al agente nomina. Con trabajadores activos, roles, adelantos y nóminas recientes: ESTADO, EQUIPO, ADELANTOS y 3 ACCIONES. No inventes salarios. Cambios sensibles requieren mi confirmación.' },
+  { label: 'Márgenes / Precios', icon: TrendingUp, color: 'text-rose-400 border-rose-500/30 hover:bg-rose-500/10', prompt: 'Delega SOLO al agente pico-claw. Con ventas/gastos del día y productos con markup < 15%: ESTADO, ALERTA y 3 ACCIONES. Usa markup (venta-costo)/costo. No inventes precios.' },
+  { label: 'Salud Sistema', icon: Server, color: 'text-teal-400 border-teal-500/30 hover:bg-teal-500/10', prompt: 'Delega SOLO al agente open-claw. Con el resumen de sistema (online/offline, conteos, caja): ESTADO, RIESGO y 3 ACCIONES. Recuerda LOCAL SIEMPRE GANA, tombstones y que lo crítico es /api/agente.' },
+  { label: 'Debate Márgenes', icon: TrendingUp, color: 'text-fuchsia-400 border-fuchsia-500/30 hover:bg-fuchsia-500/10', prompt: '__DEBATE_MARGENES__' },
+  { label: 'Misión Larga (Meta)', icon: Target, color: 'text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10', prompt: '/meta (Goal Loop): Auditar toda la contabilidad del mes y proponer estrategias de ahorro. Ejecuta subtareas con los especialistas y repórtame cuando hayas logrado el objetivo completo.' },
 ];
 
-// Escuadrón Élite visible en sidebar (con descripción de para qué sirven)
-const ESCUADRON_ELITE = [
-  { id: 'gerente', descripcion: 'Orquestador de Operaciones' },
-  { id: 'pico-claw', descripcion: 'Auditor Financiero e Inventarios' },
-  { id: 'auto-claw', descripcion: 'Ingeniero de Base de Datos' },
-  { id: 'hermes', descripcion: 'Auditor de Caja Fuerte' },
-  { id: 'odysseus', descripcion: 'Centinela Ojo Biónico' },
-  { id: 'chef-bot', descripcion: 'Supervisor de Producción' },
-  { id: 'market-ai', descripcion: 'Analista de Ventas y Demanda' },
-  { id: 'pay-master', descripcion: 'Auditor de Nómina y RRHH' },
-  { id: 'arqui-tech', descripcion: 'Ingeniero de Rendimiento y Red' },
-  { id: 'invest-bot', descripcion: 'Analista de Inversión' },
-  { id: 'bank-bot', descripcion: 'Auditor de Banco Interno' },
-  { id: 'logis-bot', descripcion: 'Control de Logística' },
-  { id: 'qa-bot', descripcion: 'Control de Calidad' },
-  { id: 'maint-bot', descripcion: 'Mantenimiento y Equipos' },
-  { id: 'client-bot', descripcion: 'Atención a Clientes' },
-  { id: 'eco-bot', descripcion: 'Sostenibilidad' },
-  { id: 'growth-bot', descripcion: 'Estratega de Expansión' },
-  { id: 'credit-bot', descripcion: 'Riesgo y Crédito' },
-  { id: 'idea-bot', descripcion: 'Lluvia de Ideas e Innovación' },
-  { id: 'legal-bot', descripcion: 'Asesor Legal' },
-  { id: 'tax-bot', descripcion: 'Revisor Fiscal' },
-  { id: 'sales-bot', descripcion: 'Impulso de Ventas' }
+/**
+ * Escuadrón Élite — IDs reales de AgenteId (antes había ids inventados
+ * como chef-bot/bank-bot que no existían y el menú los ocultaba).
+ * Orden = ruta paso a paso por casa de la panadería.
+ */
+const ESCUADRON_ELITE: { id: AgenteId; descripcion: string; casa: string }[] = [
+  { id: 'gerente', descripcion: 'Orquestador de Operaciones', casa: 'Centro de Mando' },
+  { id: 'odysseus', descripcion: 'Centinela CCTV', casa: 'Videovigilancia' },
+  { id: 'contable', descripcion: 'Auditor de Caja y Banco Interno', casa: 'Caja / Bóveda' },
+  { id: 'inventario', descripcion: 'Control de stocks y faltantes', casa: 'Inventario' },
+  { id: 'produccion', descripcion: 'Horno, hornadas y recetas', casa: 'Producción' },
+  { id: 'ventas', descripcion: 'Ventas POS y B2B', casa: 'Ventas' },
+  { id: 'hermes', descripcion: 'Comandas por voz y POS rápido', casa: 'Ventas / Voz' },
+  { id: 'pico-claw', descripcion: 'Márgenes y fugas de dinero', casa: 'Precios / Márgenes' },
+  { id: 'logistica', descripcion: 'Compras, rutas y proveedores', casa: 'Compras' },
+  { id: 'clientes', descripcion: 'Fidelización y PQR', casa: 'Clientes' },
+  { id: 'creditos', descripcion: 'Fiados y cobro a deudores', casa: 'Créditos' },
+  { id: 'nomina', descripcion: 'Personal y turnos', casa: 'Nómina' },
+  { id: 'open-claw', descripcion: 'Datos, sync y backups', casa: 'Sistemas' },
+  { id: 'auto-claw', descripcion: 'Automatización y escala', casa: 'Sistemas' },
+  { id: 'vigia-app', descripcion: 'Uso de módulos de la app', casa: 'Sistema' },
+  { id: 'arqui-tech', descripcion: 'Salud de código y UI', casa: 'Sistema' },
 ];
 
 export default function AgentesIA() {
@@ -142,10 +168,16 @@ export default function AgentesIA() {
   const [agenteSeleccionado, setAgenteSeleccionado] = useState<AgenteId | null>(null);
   const [panelDerecho, setPanelDerecho] = useState<PanelDerecho>(null);
   const [showNodosModal, setShowNodosModal] = useState(false);
+  const [aprobacionPendiente, setAprobacionPendiente] = useState<PlanPendiente | null>(null);
   const sesionIdRef = useRef(0);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const datosCasasRef = useRef<DatosCasas | null>(null);
 
   const { hallazgos, isVigilando } = useCentinela();
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [sesiones, textoGerente]);
 
   // ── Voice Recording (Web Speech API) ──
   const [isRecording, setIsRecording] = useState(false);
@@ -189,123 +221,415 @@ export default function AgentesIA() {
     recognition.start();
   };
 
-  // ── Contexto Real del Sistema ──
-  const cargarContexto = useCallback(async (): Promise<string> => {
-    try {
-      const [ventas, inventario, sesionCaja] = await Promise.all([
-        db.getAllVentas().catch(() => []),
-        db.getAllInventario().catch(() => []),
-        db.getSesionCajaActiva().catch(() => null),
-      ]);
-      const hoy = new Date().toDateString();
-      const ventasHoy = ventas.filter((v: any) => new Date(v.fecha || v.createdAt).toDateString() === hoy);
-      const totalHoy = ventasHoy.reduce((sum: number, v: any) => sum + (v.total || 0), 0);
-      const stockCritico = inventario.filter((i: any) => (i.cantidad || 0) < (i.stockMinimo || 5)).length;
-      return `[CONTEXTO REAL: Ventas hoy: ${ventasHoy.length} transacciones, Total: $${totalHoy.toLocaleString('es-CO')} COP. Items con stock crítico: ${stockCritico}. Caja activa: ${sesionCaja ? 'SÍ' : 'NO'}.]`;
-    } catch { return ''; }
+  const ejecutarTareasPlan = useCallback(async (
+    id: number,
+    planItems: { agente: AgenteId; tarea: string }[],
+    datos: DatosCasas,
+    omitirSensiblesSinAprobar = true,
+    marcarCompletado = true
+  ) => {
+    for (const { agente, tarea } of planItems) {
+      if (omitirSensiblesSinAprobar && esTareaSensible(agente, tarea)) {
+        setSesiones((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  tareas: s.tareas.map((t) =>
+                    t.agente === agente && t.tarea === tarea
+                      ? {
+                          ...t,
+                          estado: 'blocked' as EstadoAgente,
+                          requiereAprobacion: true,
+                          respuesta: '⏸ Esperando confirmación del Director (acción sensible).',
+                        }
+                      : t
+                  ),
+                }
+              : s
+          )
+        );
+        continue;
+      }
+
+      setSesiones((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? {
+                ...s,
+                tareas: s.tareas.map((t) =>
+                  t.agente === agente && t.tarea === tarea ? { ...t, estado: 'working' as EstadoAgente } : t
+                ),
+              }
+            : s
+        )
+      );
+
+      window.dispatchEvent(
+        new CustomEvent('nexus-task', { detail: { agente, tarea, estado: 'working' } })
+      );
+
+      try {
+        let agentResponse = '';
+        const ctxCasa = contextoParaAgente(agente, datos);
+        await llamarAgente(
+          agente,
+          tarea,
+          (chunk) => {
+            agentResponse += chunk;
+            setSesiones((prev) =>
+              prev.map((s) =>
+                s.id === id
+                  ? {
+                      ...s,
+                      tareas: s.tareas.map((t) =>
+                        t.agente === agente && t.tarea === tarea
+                          ? { ...t, respuesta: agentResponse }
+                          : t
+                      ),
+                    }
+                  : s
+              )
+            );
+          },
+          undefined,
+          ctxCasa
+        );
+
+        if (agente === 'inventario') {
+          capturarMemoriaDesdeRespuestaInventario(agentResponse);
+        }
+
+        setSesiones((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  tareas: s.tareas.map((t) =>
+                    t.agente === agente && t.tarea === tarea
+                      ? { ...t, estado: 'done' as EstadoAgente, respuesta: agentResponse }
+                      : t
+                  ),
+                }
+              : s
+          )
+        );
+
+        window.dispatchEvent(
+          new CustomEvent('nexus-task', {
+            detail: { agente, tarea, estado: 'done', respuesta: 'Completado con éxito' },
+          })
+        );
+      } catch {
+        setSesiones((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  tareas: s.tareas.map((t) =>
+                    t.agente === agente && t.tarea === tarea
+                      ? {
+                          ...t,
+                          estado: 'error' as EstadoAgente,
+                          respuesta: 'Error al procesar la tarea.',
+                        }
+                      : t
+                  ),
+                }
+              : s
+          )
+        );
+        window.dispatchEvent(
+          new CustomEvent('nexus-task', {
+            detail: { agente, tarea, estado: 'error', respuesta: 'Error al procesar' },
+          })
+        );
+      }
+    }
+
+    if (marcarCompletado) {
+      setSesiones((prev) => prev.map((s) => (s.id === id ? { ...s, completado: true } : s)));
+    }
   }, []);
 
-  // ── Ejecutar Comando con NEXUS-VOLT ──
+  /** Debate corto: Pico-Claw → Contable → Gerente resume (sin localhost). */
+  const ejecutarDebateMargenes = async () => {
+    if (ejecutando) return;
+    const id = ++sesionIdRef.current;
+    const comandoFinal = 'Debate márgenes: Pico-Claw alerta → Contable responde con caja → Gerente resume';
+    setEjecutando(true);
+    setTextoGerente('Iniciando debate corto…');
+    setSesiones((prev) => [
+      ...prev,
+      {
+        id,
+        comando: comandoFinal,
+        analisisGerente: 'Debate corto en 3 rondas (Pico-Claw → Contable → NEXUS-VOLT).',
+        tareas: [
+          { agente: 'pico-claw', tarea: 'Alertar márgenes / fugas', estado: 'idle' },
+          { agente: 'contable', tarea: 'Responder con caja del día', estado: 'idle' },
+          { agente: 'gerente', tarea: 'Resumir al Director', estado: 'idle' },
+        ],
+        completado: false,
+        timestamp: new Date(),
+      },
+    ]);
+
+    try {
+      const datos = await cargarDatosCasas(db);
+      datosCasasRef.current = datos;
+
+      const updateTarea = (agente: AgenteId, patch: Partial<TareaAgente>) => {
+        setSesiones((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? {
+                  ...s,
+                  tareas: s.tareas.map((t) => (t.agente === agente ? { ...t, ...patch } : t)),
+                }
+              : s
+          )
+        );
+      };
+
+      updateTarea('pico-claw', { estado: 'working' });
+      let pico = '';
+      await llamarAgente(
+        'pico-claw',
+        'Con el contexto de márgenes: ¿hay señal de margen bajo o fuga de dinero hoy? Responde en 4–6 líneas, sin proponer borrar nada.',
+        (c) => {
+          pico += c;
+          updateTarea('pico-claw', { respuesta: pico });
+          setTextoGerente(`Pico-Claw: ${pico.slice(0, 120)}…`);
+        },
+        undefined,
+        contextoParaAgente('pico-claw', datos)
+      );
+      updateTarea('pico-claw', { estado: 'done', respuesta: pico });
+
+      updateTarea('contable', { estado: 'working' });
+      let cont = '';
+      await llamarAgente(
+        'contable',
+        `Pico-Claw dice:\n${pico}\n\nResponde SOLO con la caja del día (abierta/cerrada, ventas, gastos, métodos). ¿La alerta de márgenes se sostiene con el dinero real de hoy? 4–6 líneas.`,
+        (c) => {
+          cont += c;
+          updateTarea('contable', { respuesta: cont });
+          setTextoGerente(`Contable: ${cont.slice(0, 120)}…`);
+        },
+        undefined,
+        contextoParaAgente('contable', datos)
+      );
+      updateTarea('contable', { estado: 'done', respuesta: cont });
+
+      updateTarea('gerente', { estado: 'working' });
+      let resume = '';
+      await llamarAgente(
+        'gerente',
+        `Resume para el Director en chat natural (sin JSON si puedes; si usas JSON pon el resumen en respuesta_natural). Debate:\nPICO-CLAW:\n${pico}\n\nCONTABLE:\n${cont}\n\nDa 3 acciones concretas y claras.`,
+        (c) => {
+          resume += c;
+          updateTarea('gerente', { respuesta: resume });
+          setTextoGerente(resume.slice(0, 200));
+        },
+        undefined,
+        contextoGerente(datos)
+      );
+      updateTarea('gerente', { estado: 'done', respuesta: resume });
+
+      let analisis = resume;
+      try {
+        const match = resume.match(/\{[\s\S]*\}/);
+        if (match) {
+          const parsed = JSON.parse(match[0]) as { respuesta_natural?: string };
+          if (parsed.respuesta_natural) analisis = parsed.respuesta_natural;
+        }
+      } catch {
+        /* texto libre ok */
+      }
+
+      setSesiones((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, analisisGerente: analisis, completado: true } : s))
+      );
+      toast.success('Debate de márgenes listo');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error en debate';
+      toast.error(msg);
+      setSesiones((prev) => prev.map((s) => (s.id === id ? { ...s, completado: true } : s)));
+    } finally {
+      setEjecutando(false);
+      setTextoGerente('');
+    }
+  };
+
+  const confirmarAprobacion = async (aceptar: boolean) => {
+    const pendiente = aprobacionPendiente;
+    if (!pendiente) return;
+    setAprobacionPendiente(null);
+
+    if (!aceptar) {
+      setSesiones((prev) =>
+        prev.map((s) =>
+          s.id === pendiente.sesionId
+            ? {
+                ...s,
+                completado: true,
+                tareas: s.tareas.map((t) =>
+                  t.requiereAprobacion || t.estado === 'blocked'
+                    ? {
+                        ...t,
+                        estado: 'error' as EstadoAgente,
+                        respuesta: '❌ El Director rechazó esta acción sensible.',
+                      }
+                    : t
+                ),
+              }
+            : s
+        )
+      );
+      toast.message('Acciones sensibles canceladas');
+      setEjecutando(false);
+      return;
+    }
+
+    setEjecutando(true);
+    try {
+      // Las tareas seguras ya se ejecutaron al detectar la pausa; solo corremos las sensibles.
+      await ejecutarTareasPlan(pendiente.sesionId, pendiente.sensibles, pendiente.datos, false);
+      toast.success('✅ Operación aprobada y completada');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error';
+      toast.error(msg);
+    } finally {
+      setEjecutando(false);
+    }
+  };
+
+  // ── Ejecutar Comando con NEXUS-VOLT (solo /api/agente) ──
   const ejecutarComando = async (comandoOverride?: string) => {
     const comandoFinal = (comandoOverride || comando).trim();
     if (!comandoFinal || ejecutando) return;
+
+    if (comandoFinal === '__DEBATE_MARGENES__') {
+      await ejecutarDebateMargenes();
+      return;
+    }
 
     const id = ++sesionIdRef.current;
     setComando('');
     setEjecutando(true);
     setTextoGerente('');
 
-    const nuevaSesion: SesionIA = { id, comando: comandoFinal, tareas: [], completado: false, timestamp: new Date() };
-    setSesiones(prev => [...prev, nuevaSesion]); // Agregamos al final para orden natural de chat
+    const nuevaSesion: SesionIA = {
+      id,
+      comando: comandoFinal,
+      tareas: [],
+      completado: false,
+      timestamp: new Date(),
+    };
+    setSesiones((prev) => [...prev, nuevaSesion]);
 
     try {
-      // Cargar contexto real antes de enviar
-      const contexto = await cargarContexto();
-      const mensajeCompleto = contexto ? `[INFO DE SISTEMA: ${contexto}]\nNOTA: Si el Director solo está saludando o haciendo una pregunta casual, IGNORA la info de sistema y respóndele natural sin inventar tareas.\n\nDirector: ${comandoFinal}` : comandoFinal;
+      const datos = await cargarDatosCasas(db);
+      datosCasasRef.current = datos;
+      const contexto = contextoGerente(datos);
+      // Telemetría opcional (VITE_NEXUS_TELEMETRY_URL). Lo crítico es solo /api/agente.
+      notificarTelemetriaOpcional(comandoFinal, contexto);
 
-      let plan: { respuesta_natural: string; plan: { agente: AgenteId; tarea: string }[] };
-      
-      // 1. Notificar a Nexus Server en segundo plano (Telemetría)
-        fetch('http://localhost:9000/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mensaje: comandoFinal, contexto })
-        }).catch(() => {}); // No bloqueamos si falla
+      const mensajeCompleto = `[INFO DE SISTEMA: ${contexto}]\nNOTA: Si el Director solo saluda, responde natural sin inventar tareas. Al delegar, respeta el grafo por casa (contable=caja, inventario=stock, odysseus=cámaras, produccion=horno).\n\nDirector: ${comandoFinal}`;
 
-        // 2. Generación real de la IA con el modelo avanzado local
-        let respuestaGerente = '';
-        await llamarAgente('gerente', mensajeCompleto, chunk => {
+      let plan: {
+        respuesta_natural?: string;
+        analisis?: string;
+        plan: { agente: AgenteId; tarea: string }[];
+      };
+
+      let respuestaGerente = '';
+      await llamarAgente(
+        'gerente',
+        mensajeCompleto,
+        (chunk) => {
           respuestaGerente += chunk;
           let display = respuestaGerente;
-          const matchAnalisis = display.match(/"analisis"\s*:\s*"([^"]*)/) || display.match(/"respuesta_natural"\s*:\s*"([^"]*)/);
+          const matchAnalisis =
+            display.match(/"analisis"\s*:\s*"([^"]*)/) ||
+            display.match(/"respuesta_natural"\s*:\s*"([^"]*)/);
           const matchRazonamiento = display.match(/"razonamiento"\s*:\s*"([^"]*)/);
           if (matchAnalisis) {
             display = matchAnalisis[1];
           } else if (matchRazonamiento) {
             display = `💭 ${matchRazonamiento[1]}`;
           } else if (display.trim().startsWith('{')) {
-            display = "Escribiendo...";
+            display = 'Escribiendo...';
           }
           setTextoGerente(display.replace(/\\n/g, '\n'));
-        });
+        },
+        undefined,
+        contexto
+      );
 
-        try {
-          const match = respuestaGerente.match(/\{[\s\S]*\}/);
-          if (match) {
-            plan = JSON.parse(match[0]);
-          } else {
-            throw new Error("No JSON found");
-          }
-        } catch {
-          setSesiones(prev => prev.map(s => s.id === id ? {
-            ...s,
-            analisisGerente: respuestaGerente,
-            tareas: [],
-            completado: true
-          } : s));
-          setEjecutando(false);
-          setTextoGerente('');
-          return;
+      try {
+        const match = respuestaGerente.match(/\{[\s\S]*\}/);
+        if (match) {
+          plan = JSON.parse(match[0]);
+        } else {
+          throw new Error('No JSON found');
         }
-
-      setSesiones(prev => prev.map(s => s.id === id ? { ...s, analisisGerente: plan.respuesta_natural || plan.analisis, tareas: plan.plan.map(p => ({ agente: p.agente, tarea: p.tarea, estado: 'idle' as EstadoAgente })) } : s));
-
-      for (let i = 0; i < (plan.plan || []).length; i++) {
-        const { agente, tarea } = plan.plan[i];
-        
-        setSesiones(prev => prev.map(s => s.id === id ? { ...s, tareas: s.tareas.map(t => t.agente === agente ? { ...t, estado: 'working' } : t) } : s));
-
-        // Disparamos evento para que la Bitácora se encargue de mostrar esta tarea
-        window.dispatchEvent(new CustomEvent('nexus-task', { 
-          detail: { agente, tarea, estado: 'working' } 
-        }));
-        
-        try {
-          let agentResponse = '';
-          await llamarAgente(agente, tarea, (chunk) => {
-            agentResponse += chunk;
-            // Opcional: Actualizar en tiempo real el texto del sub-agente
-            setSesiones(prev => prev.map(s => s.id === id ? { ...s, tareas: s.tareas.map(t => t.agente === agente ? { ...t, respuesta: agentResponse } : t) } : s));
-          });
-          
-          setSesiones(prev => prev.map(s => s.id === id ? { ...s, tareas: s.tareas.map(t => t.agente === agente ? { ...t, estado: 'done', respuesta: agentResponse } : t) } : s));
-          
-          window.dispatchEvent(new CustomEvent('nexus-task', { 
-            detail: { agente, tarea, estado: 'done', respuesta: 'Completado con éxito' } 
-          }));
-        } catch {
-          setSesiones(prev => prev.map(s => s.id === id ? { ...s, tareas: s.tareas.map(t => t.agente === agente ? { ...t, estado: 'error', respuesta: 'Error al procesar la tarea.' } : t) } : s));
-          
-          window.dispatchEvent(new CustomEvent('nexus-task', { 
-            detail: { agente, tarea, estado: 'error', respuesta: 'Error al procesar' } 
-          }));
-        }
+      } catch {
+        setSesiones((prev) =>
+          prev.map((s) =>
+            s.id === id
+              ? { ...s, analisisGerente: respuestaGerente, tareas: [], completado: true }
+              : s
+          )
+        );
+        return;
       }
 
-      setSesiones(prev => prev.map(s => s.id === id ? { ...s, completado: true } : s));
+      const planItems = plan.plan || [];
+      const sensibles = planItems.filter((p) => esTareaSensible(p.agente, p.tarea));
+
+      setSesiones((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? {
+                ...s,
+                analisisGerente: plan.respuesta_natural || plan.analisis,
+                tareas: planItems.map((p) => ({
+                  agente: p.agente,
+                  tarea: p.tarea,
+                  estado: (esTareaSensible(p.agente, p.tarea) ? 'blocked' : 'idle') as EstadoAgente,
+                  requiereAprobacion: esTareaSensible(p.agente, p.tarea),
+                })),
+              }
+            : s
+        )
+      );
+
+      if (sensibles.length > 0) {
+        setAprobacionPendiente({
+          sesionId: id,
+          plan: planItems,
+          datos,
+          sensibles,
+        });
+        toast.message('Hay acciones sensibles: confirma o rechaza abajo');
+        // Ejecuta solo las no sensibles mientras espera
+        const seguras = planItems.filter((p) => !esTareaSensible(p.agente, p.tarea));
+        if (seguras.length > 0) {
+          // No marcar completado: faltan las sensibles por aprobar
+          await ejecutarTareasPlan(id, seguras, datos, false, false);
+        }
+        setEjecutando(false);
+        setTextoGerente('');
+        return;
+      }
+
+      await ejecutarTareasPlan(id, planItems, datos, false, true);
       toast.success('✅ Operación completada');
-    } catch (err: any) {
-      toast.error(`Error: ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error';
+      toast.error(`Error: ${msg}`);
     } finally {
       setEjecutando(false);
       setTextoGerente('');
@@ -362,6 +686,7 @@ export default function AgentesIA() {
           <button onClick={() => setPanelDerecho(p => p === 'vigia' ? null : 'vigia')} className={cn('p-2.5 rounded-xl transition-all', panelDerecho === 'vigia' ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'text-slate-500 hover:text-slate-300 border border-transparent')} title="VIGÍA-APP"><Eye className="w-4 h-4" /></button>
           <button onClick={() => setPanelDerecho(p => p === 'arquitech' ? null : 'arquitech')} className={cn('p-2.5 rounded-xl transition-all', panelDerecho === 'arquitech' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'text-slate-500 hover:text-slate-300 border border-transparent')} title="ARQUI-TECH"><Cpu className="w-4 h-4" /></button>
           <button onClick={() => setPanelDerecho(p => p === 'protocolos' ? null : 'protocolos')} className={cn('p-2.5 rounded-xl transition-all', panelDerecho === 'protocolos' ? 'bg-[#DAA520]/20 text-[#DAA520] border border-[#DAA520]/30' : 'text-slate-500 hover:text-slate-300 border border-transparent')} title="Protocolos"><Shield className="w-4 h-4" /></button>
+          <button onClick={() => setPanelDerecho(p => p === 'clientbot' ? null : 'clientbot')} className={cn('p-2.5 rounded-xl transition-all', panelDerecho === 'clientbot' ? 'bg-sky-500/20 text-sky-400 border border-sky-500/30' : 'text-slate-500 hover:text-slate-300 border border-transparent')} title="Asistente de Pedidos (ClientBot)"><span className="text-sm">🤖</span></button>
           <button onClick={() => setShowNodosModal(true)} className="p-2.5 rounded-xl text-slate-500 hover:text-slate-300 ml-1 border border-transparent" title="Constructor de Workflows"><GitMerge className="w-4 h-4" /></button>
         </div>
       </header>
@@ -377,14 +702,15 @@ export default function AgentesIA() {
             <div className="p-3 pb-2">
               <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1 mb-3 mt-2 whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity">⚡ Escuadrón Élite</p>
               <div className="space-y-1.5">
-                {ESCUADRON_ELITE.map(({ id, descripcion }) => {
-                  const cfg = AGENTES[id as AgenteId];
+                {ESCUADRON_ELITE.map(({ id, descripcion, casa }) => {
+                  const cfg = AGENTES[id];
                   if (!cfg) return null;
                   return (
                     <button
                       key={id}
-                      onClick={() => setAgenteSeleccionado(id as AgenteId)}
+                      onClick={() => setAgenteSeleccionado(id)}
                       className="w-full p-2 rounded-2xl hover:bg-white/5 border border-transparent hover:border-white/10 cursor-pointer flex items-center gap-3.5 transition-all text-left"
+                      title={casa}
                     >
                       <div className={cn("p-2.5 rounded-xl shrink-0 flex items-center justify-center", cfg.bg)}>
                         <cfg.icon className={cn("w-5 h-5", cfg.color)} />
@@ -392,6 +718,7 @@ export default function AgentesIA() {
                       <div className="flex-1 min-w-0 opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 w-48">
                         <p className="text-xs font-black uppercase text-white truncate leading-none mb-1.5">{cfg.nombre}</p>
                         <p className="text-[9px] text-slate-400 truncate leading-tight">{descripcion}</p>
+                        <p className="text-[8px] text-slate-600 truncate leading-tight mt-0.5 uppercase tracking-wider">{casa}</p>
                       </div>
                     </button>
                   );
@@ -528,6 +855,7 @@ export default function AgentesIA() {
                                       {tarea.estado === 'working' && <Loader2 className="w-4 h-4 animate-spin text-slate-400 ml-auto" />}
                                       {tarea.estado === 'done' && <CheckCircle2 className="w-4 h-4 text-emerald-400 ml-auto" />}
                                       {tarea.estado === 'error' && <AlertTriangle className="w-4 h-4 text-red-400 ml-auto" />}
+                                      {tarea.estado === 'blocked' && <AlertTriangle className="w-4 h-4 text-amber-400 ml-auto" />}
                                     </div>
                                     <div className="text-sm text-slate-200">
                                       {tarea.respuesta ? (
@@ -566,10 +894,36 @@ export default function AgentesIA() {
             <div ref={chatEndRef} className="h-4" />
           </div>
 
-          {/* Efecto de autoscroll al enviar comando */}
-          {useEffect(() => {
-            chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-          }, [sesiones, textoGerente])}
+          {/* Aprobación humana (acciones sensibles) */}
+          {aprobacionPendiente && (
+            <div className="shrink-0 mx-4 sm:mx-8 mb-3 p-4 rounded-2xl border border-amber-500/40 bg-amber-500/10 backdrop-blur-md z-30">
+              <p className="text-sm font-bold text-amber-200 mb-2">
+                El agente propone algo delicado. ¿Confirmas, Director?
+              </p>
+              <ul className="text-xs text-slate-300 space-y-1 mb-3 list-disc pl-5">
+                {aprobacionPendiente.sensibles.map((s, i) => (
+                  <li key={i}>
+                    <span className="text-amber-300 font-black uppercase">{s.agente}</span>: {s.tarea}
+                  </li>
+                ))}
+              </ul>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => void confirmarAprobacion(true)}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold"
+                >
+                  Sí, autorizo
+                </Button>
+                <Button
+                  onClick={() => void confirmarAprobacion(false)}
+                  variant="outline"
+                  className="border-red-500/40 text-red-300 hover:bg-red-500/10"
+                >
+                  No, cancelar
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Input */}
           <div className="shrink-0 px-4 sm:px-8 py-5 bg-slate-950/90 backdrop-blur-xl border-t border-white/10 shadow-[0_-10px_40px_rgba(0,0,0,0.5)] z-20 relative">
@@ -630,6 +984,19 @@ export default function AgentesIA() {
               {panelDerecho === 'vigia' && <div className="p-4"><VigiApp /></div>}
               {panelDerecho === 'arquitech' && <div className="p-4"><ArquiTech /></div>}
               {panelDerecho === 'protocolos' && <div className="p-4"><ProtocolosArsenal /></div>}
+              {panelDerecho === 'clientbot' && <div className="h-full"><AsistenteVirtual onClose={() => setPanelDerecho(null)} onSaveOrder={async (order) => {
+                 try {
+                   await db.addVenta({
+                     productos: [{ id: 'auto', nombre: order.productoSeleccionado, cantidad: order.cantidad, precioUnitario: order.total! / order.cantidad! }],
+                     total: order.total,
+                     metodoPago: 'efectivo',
+                     descuento: 0
+                   });
+                   toast.success('Pedido insertado en DB (Ventas) correctamente.');
+                 } catch (e) {
+                   toast.error('Error guardando pedido: ' + e);
+                 }
+              }} /></div>}
             </div>
           </div>
         )}

@@ -6,7 +6,7 @@ import {
     UtensilsCrossed, Save, AlertCircle, Thermometer, Timer, Gauge, Clock,
     Scale, TrendingUp, Info, History as HistoryIcon, Camera, X, ArrowUp,
     ArrowDown, ListOrdered, Filter, Calculator, ChevronDown, ChevronUp,
-    Package, Wheat, Percent, Tag, PieChart, Layers3, Check, Wrench, RefreshCw
+    Package, Wheat, Percent, Tag, PieChart, Layers3, Check, Wrench, RefreshCw, Download
 } from 'lucide-react';
 import { HistorialAuditoriasModal } from '@/components/produccion/HistorialAuditoriasModal';
 import { DistribuidorArroba } from '@/components/produccion/DistribuidorArroba';
@@ -32,9 +32,22 @@ import type {
     MixItemProduccion, TipoLata
 } from '@/types';
 import { ARROBA_KG } from '@/types';
+import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
+import {
+    calcularCostoLineaInsumo,
+    esCostoInsumoSospechoso,
+    factorUnidadAKg,
+    precioPorKg,
+} from '@/lib/costo-insumo';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import {
+    descargarPdfReceta,
+    descargarPdfCatalogoRecetas,
+    descargarPdfFormulacion,
+    descargarPdfCatalogoFormulaciones,
+} from '@/lib/ficha-tecnica-pdf';
 
 // ─── Tipo local para pasos de elaboración ────────────────────────────────────
 interface PasoElaboracion {
@@ -69,15 +82,9 @@ async function comprimirImagen(file: File): Promise<string> {
     });
 }
 
-// gr → 0.001 (el precio de proveedores es $/kg), ml → 0.001 ($/l), lb → 0.5, und → 0.05, el resto directo
+// gr → 0.001 (precio proveedores en $/kg), ml → 0.001, lb panadera → 0.5
 function factorUnidad(unidad: string): number {
-    const u = (unidad || 'kg').toLowerCase();
-    if (u === 'gr') return 0.001;
-    if (u === 'ml') return 0.001;
-    if (u === 'lb') return 0.5; // Libra panadera (500g)
-    if (u === 'und' || u === 'unidades') return 0.05; // Promedio de 50g por unidad (ej. huevos)
-    if (u === 'oz') return 0.0283;
-    return 1;
+    return factorUnidadAKg(unidad);
 }
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -414,7 +421,7 @@ const Recetas: React.FC<RecetasProps> = ({
         setIsRecetaOpen(true);
     };
     const openEditReceta = (r: Receta) => {
-        setEditingReceta(r); setSelectedProductoId(r.productoId); setRecipeIngredients(r.ingredientes);
+        setEditingReceta(r); setSelectedProductoId(r.productoId); setRecipeIngredients(r.ingredientes || []);
         setPorciones(r.porcionesResultantes); setPasos(parsePasos(r.instrucciones));
         setTemperatura(r.temperaturaHorno); setTHorneado(r.tiempoHorneado);
         setTFermentacion(r.tiempoFermentacion); setDificultad(r.dificultad || 'medio');
@@ -423,8 +430,14 @@ const Recetas: React.FC<RecetasProps> = ({
 
     const calcularCostoIng = (productoId: string, cantidad: number, unidad: string) => {
         const mp = getMejorPrecio(productoId);
-        const cu = mp ? (mp.precioCosto / (mp.cantidadEmbalaje || 1)) : (getProductoById(productoId)?.costoBase || 0);
-        return cu * cantidad * factorUnidad(unidad);
+        return calcularCostoLineaInsumo({
+            cantidad,
+            unidad,
+            mejorPrecio: mp
+                ? { precioCosto: mp.precioCosto, cantidadEmbalaje: mp.cantidadEmbalaje }
+                : null,
+            costoBase: getProductoById(productoId)?.costoBase || 0,
+        });
     };
 
     const handleIngChange = (id: string, field: keyof IngredienteReceta, value: any) =>
@@ -483,9 +496,29 @@ const Recetas: React.FC<RecetasProps> = ({
         setFCategoriasInsumosF([]); setIsFormulacionOpen(true);
     };
 
+    const recalcularIngredientesFormulacion = (
+        ings: IngredienteFormulacion[]
+    ): IngredienteFormulacion[] =>
+        ings.map((ing) => {
+            const mp = getMejorPrecio(ing.productoId);
+            const ref = mp
+                ? { precioCosto: mp.precioCosto, cantidadEmbalaje: mp.cantidadEmbalaje }
+                : null;
+            const cu = precioPorKg(ref, getProductoById(ing.productoId)?.costoBase || 0);
+            const total = calcularCostoLineaInsumo({
+                cantidad: ing.cantidadPorArroba || 0,
+                unidad: ing.unidad || 'kg',
+                mejorPrecio: ref,
+                costoBase: getProductoById(ing.productoId)?.costoBase || 0,
+            });
+            return { ...ing, costoUnitario: cu, costoTotalArroba: total };
+        });
+
     const openEditFormulacion = (f: FormulacionBase) => {
         setEditingFormulacion(f); setFNombre(f.nombre); setFDescripcion(f.descripcion || '');
-        setFCategoria(f.categoria as CatFormulacion); setFIngredientes(f.ingredientes);
+        setFCategoria(f.categoria as CatFormulacion);
+        // Recalcula al abrir: corrige costos viejos mal digitados (ej. harina en millones)
+        setFIngredientes(recalcularIngredientesFormulacion(f.ingredientes || []));
         setFTemperatura(f.temperaturaHorno); setFHorneado(f.tiempoHorneado);
         setFFermentacion(f.tiempoFermentacion); setFInstrucciones(f.instrucciones || '');
         setFCategoriasInsumosF([]); setIsFormulacionOpen(true);
@@ -505,9 +538,19 @@ const Recetas: React.FC<RecetasProps> = ({
             const u = { ...ing, [field]: value };
             if (['productoId', 'cantidadPorArroba', 'unidad'].includes(field)) {
                 const mp = getMejorPrecio(u.productoId as string);
-                const cu = mp ? (mp.precioCosto / (mp.cantidadEmbalaje || 1)) : (getProductoById(u.productoId as string)?.costoBase || 0);
+                const cu = precioPorKg(
+                    mp ? { precioCosto: mp.precioCosto, cantidadEmbalaje: mp.cantidadEmbalaje } : null,
+                    getProductoById(u.productoId as string)?.costoBase || 0
+                );
                 u.costoUnitario = cu;
-                u.costoTotalArroba = cu * (u.cantidadPorArroba || 0) * factorUnidad(u.unidad || 'kg');
+                u.costoTotalArroba = calcularCostoLineaInsumo({
+                    cantidad: u.cantidadPorArroba || 0,
+                    unidad: u.unidad || 'kg',
+                    mejorPrecio: mp
+                        ? { precioCosto: mp.precioCosto, cantidadEmbalaje: mp.cantidadEmbalaje }
+                        : null,
+                    costoBase: getProductoById(u.productoId as string)?.costoBase || 0,
+                });
             }
             return u;
         }));
@@ -523,13 +566,28 @@ const Recetas: React.FC<RecetasProps> = ({
     const saveFormulacion = async () => {
         if (!fNombre.trim()) { toast.error('Escribe el nombre de la fórmula'); return; }
         if (fIngredientes.length === 0) { toast.error('Agrega al menos un ingrediente'); return; }
-        const total = totalFormulacion();
-        const rendimiento = rendimientoMasa();
+        const ingsOk = recalcularIngredientesFormulacion(fIngredientes as IngredienteFormulacion[]);
+        const sospechosos = ingsOk.filter((i) => esCostoInsumoSospechoso(i.costoTotalArroba));
+        if (sospechosos.length > 0) {
+            const nombres = sospechosos
+                .map((i) => getProductoById(i.productoId)?.nombre || i.productoId)
+                .join(', ');
+            toast.error(
+                `Costo imposible en: ${nombres}. Revisa precio del proveedor (bulto ÷ kg) y unidad (lb/kg).`
+            );
+            setFIngredientes(ingsOk);
+            return;
+        }
+        const total = ingsOk.reduce((s, i) => s + (i.costoTotalArroba || 0), 0);
+        const rendimiento = ingsOk.reduce(
+            (s, i) => s + (i.cantidadPorArroba || 0) * factorUnidad(i.unidad || 'kg'),
+            0
+        );
         const f: FormulacionBase = {
             id: editingFormulacion?.id || generateUUID(),
             nombre: fNombre.trim(), descripcion: fDescripcion,
             categoria: fCategoria,
-            ingredientes: fIngredientes as IngredienteFormulacion[],
+            ingredientes: ingsOk,
             rendimientoBaseKg: rendimiento,
             costoTotalArroba: total,
             tiempoFermentacion: fFermentacion, tiempoHorneado: fHorneado,
@@ -546,6 +604,42 @@ const Recetas: React.FC<RecetasProps> = ({
             }
             setIsFormulacionOpen(false);
         } catch { toast.error('Error al guardar la fórmula'); }
+    };
+
+    /** Corrige en lote costos viejos (ej. harina a $95M) usando precios actuales del ERP. */
+    const recalcularTodasLasFormulas = async () => {
+        if (formulaciones.length === 0) {
+            toast.message('No hay fórmulas para recalcular');
+            return;
+        }
+        let ok = 0;
+        let alertas = 0;
+        try {
+            for (const f of formulaciones) {
+                const ingsOk = recalcularIngredientesFormulacion(f.ingredientes || []);
+                if (ingsOk.some((i) => esCostoInsumoSospechoso(i.costoTotalArroba))) alertas += 1;
+                const total = ingsOk.reduce((s, i) => s + (i.costoTotalArroba || 0), 0);
+                const rendimiento = ingsOk.reduce(
+                    (s, i) => s + (i.cantidadPorArroba || 0) * factorUnidad(i.unidad || 'kg'),
+                    0
+                );
+                await updateFormulacion(f.id, {
+                    ...f,
+                    ingredientes: ingsOk,
+                    costoTotalArroba: total,
+                    rendimientoBaseKg: rendimiento || f.rendimientoBaseKg,
+                    fechaActualizacion: new Date().toISOString(),
+                });
+                ok += 1;
+            }
+            toast.success(
+                alertas > 0
+                    ? `Recalculadas ${ok} fórmulas. ${alertas} aún tienen costos sospechosos: revisa precios de proveedor.`
+                    : `Recalculadas ${ok} fórmulas con precios actuales del ERP.`
+            );
+        } catch {
+            toast.error('No se pudieron recalcular todas las fórmulas');
+        }
     };
 
     // ── Distribución por arroba ───────────────────────────────────────────
@@ -639,10 +733,11 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
 
     const calcPanesPorArroba = (pesoGr: number, merma: number, formulacionId?: string) => {
         if (pesoGr <= 0) return 0;
+        // Kg reales por arroba de ESA masa (sal 21, hojaldre 19.32…), no la arroba de harina 12.5
         let masaNetaKg = ARROBA_KG;
         if (formulacionId) {
             const f = formulaciones.find(x => x.id === formulacionId);
-            if (f) masaNetaKg = f.rendimientoBaseKg;
+            if (f) masaNetaKg = resolverKgPorArrobaMasa(f);
         }
         return Math.floor((masaNetaKg * 1000 * (1 - merma / 100)) / pesoGr);
     };
@@ -685,9 +780,10 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
         const form = formulaciones.find(f => f.id === mFormulacionId);
         let costoUnit = 0;
         let panesPorArr = 0;
-        if (form && form.rendimientoBaseKg > 0) {
+        if (form && resolverKgPorArrobaMasa(form) > 0) {
             panesPorArr = calcPanesPorArroba(mPeso, mMerma, mFormulacionId);
-            const costoPorGramo = form.costoTotalArroba / (form.rendimientoBaseKg * 1000);
+            const masaKgReal = resolverKgPorArrobaMasa(form);
+            const costoPorGramo = form.costoTotalArroba / (masaKgReal * 1000);
             const costoMasaUnidad = (mPeso / (1 - (mMerma / 100))) * costoPorGramo;
             
             const costoInsumosAdicionales = mIngredientes.reduce((sum, ing) => sum + (ing.costo || 0), 0);
@@ -792,6 +888,51 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                         }
                         {reparando ? 'Reparando…' : 'Reparar insumos'}
                     </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 px-5 rounded-2xl border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shrink-0"
+                        title="Descarga PDF con el resumen de todas las fichas técnicas"
+                        onClick={() => {
+                            void descargarPdfCatalogoRecetas(recetas, getProductoById, formatCurrency);
+                        }}
+                    >
+                        <Download className="w-4 h-4" /> Catálogo PDF
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 px-5 rounded-2xl border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shrink-0"
+                        title="Descarga PDF resumen de fórmulas maestras"
+                        onClick={() => {
+                            const conCostos = formulaciones.map((f) => {
+                                const ings = recalcularIngredientesFormulacion(f.ingredientes || []);
+                                return {
+                                    ...f,
+                                    ingredientes: ings,
+                                    costoTotalArroba: ings.reduce((s, i) => s + (i.costoTotalArroba || 0), 0),
+                                };
+                            });
+                            void descargarPdfCatalogoFormulaciones(
+                                conCostos,
+                                (id) => getProductoById(id)?.nombre || id,
+                                formatCurrency
+                            );
+                        }}
+                    >
+                        <Download className="w-4 h-4" /> Fórmulas PDF
+                    </Button>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 px-5 rounded-2xl border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-800 font-black uppercase text-[10px] tracking-widest flex items-center gap-2 shrink-0"
+                        title="Recalcula costos de todas las fórmulas con precios actuales (corrige errores como harina a $95M)"
+                        onClick={() => {
+                            void recalcularTodasLasFormulas();
+                        }}
+                    >
+                        <RefreshCw className="w-4 h-4" /> Recalcular costos
+                    </Button>
                 </div>
             </div>
 
@@ -823,9 +964,27 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                 <p className="text-xs text-slate-500">{producto.categoria}</p>
                                             </div>
                                         </div>
-                                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex gap-1">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                title="Descargar ficha técnica PDF"
+                                                onClick={() => {
+                                                    void descargarPdfReceta(
+                                                        receta,
+                                                        producto,
+                                                        (id) => getProductoById(id)?.nombre || id,
+                                                        formatCurrency
+                                                    );
+                                                }}
+                                                className="h-8 w-8 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                                            >
+                                                <Download className="w-4 h-4" />
+                                            </Button>
+                                            <div className="flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                             <Button variant="ghost" size="icon" onClick={() => openEditReceta(receta)} className="h-8 w-8 rounded-lg text-slate-400 hover:text-blue-600"><Edit2 className="w-4 h-4" /></Button>
                                             <Button variant="ghost" size="icon" onClick={() => { if (confirm('¿Eliminar esta receta?')) { deleteReceta(receta.id); toast.success('Eliminada'); } }} className="h-8 w-8 rounded-lg text-slate-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></Button>
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4 mb-4">
@@ -843,7 +1002,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                         {ps.some(p => p.imagenBase64) && <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full"><Camera className="w-3 h-3" /> con fotos</span>}
                                     </div>
                                     <div className="space-y-2 border-t border-slate-100 dark:border-slate-800/50 pt-3">
-                                        <div className="flex justify-between text-[11px]"><span className="text-slate-500 uppercase font-black tracking-widest">Insumos:</span><span className="font-black text-slate-900 dark:text-white">{receta.ingredientes.length} tipos</span></div>
+                                        <div className="flex justify-between text-[11px]"><span className="text-slate-500 uppercase font-black tracking-widest">Insumos:</span><span className="font-black text-slate-900 dark:text-white">{(receta.ingredientes || []).length} tipos</span></div>
                                         <div className="flex justify-between text-[11px]"><span className="text-slate-500 uppercase font-black tracking-widest">Produce:</span><span className="font-black text-slate-900 dark:text-white">{receta.porcionesResultantes} unidades</span></div>
                                         <div className="flex justify-between items-center text-[11px]">
                                             <span className="text-slate-500 uppercase font-black tracking-widest">Margen:</span>
@@ -1075,11 +1234,15 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                 <div className="hidden md:flex items-center gap-4 text-sm">
                                                     <div className="text-center">
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Insumos</p>
-                                                        <p className="font-black text-slate-800 dark:text-white">{f.ingredientes.length}</p>
+                                                        <p className="font-black text-slate-800 dark:text-white">{(f.ingredientes || []).length}</p>
                                                     </div>
                                                     <div className="text-center">
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Costo/arroba</p>
                                                         <p className="font-black text-indigo-600">{formatCurrency(f.costoTotalArroba)}</p>
+                                                        {esCostoInsumoSospechoso(f.costoTotalArroba) ||
+                                                        (f.ingredientes || []).some((i) => esCostoInsumoSospechoso(i.costoTotalArroba)) ? (
+                                                            <p className="text-[9px] font-black text-rose-600 uppercase mt-0.5">¡Revisar costo!</p>
+                                                        ) : null}
                                                     </div>
                                                     <div className="text-center">
                                                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Modelos</p>
@@ -1087,6 +1250,23 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-1">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        title="Descargar ficha técnica PDF"
+                                                        onClick={() => {
+                                                            const ings = recalcularIngredientesFormulacion(f.ingredientes || []);
+                                                            const total = ings.reduce((s, i) => s + (i.costoTotalArroba || 0), 0);
+                                                            void descargarPdfFormulacion(
+                                                                { ...f, ingredientes: ings, costoTotalArroba: total },
+                                                                (id) => getProductoById(id)?.nombre || id,
+                                                                formatCurrency
+                                                            );
+                                                        }}
+                                                        className="h-9 w-9 rounded-xl text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"
+                                                    >
+                                                        <Download className="w-4 h-4" />
+                                                    </Button>
                                                     <Button variant="ghost" size="icon" onClick={() => openDistribucion(f)} title="Distribución por arroba (latas)" className={cn("h-9 w-9 rounded-xl", f.mixProduccion?.length ? "text-emerald-500 hover:bg-emerald-50 hover:text-emerald-600" : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50")}><PieChart className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => openEditFormulacion(f)} className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl"><Edit2 className="w-4 h-4" /></Button>
                                                     <Button variant="ghost" size="icon" onClick={() => deleteFormulacionHandler(f.id)} className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl"><Trash2 className="w-4 h-4" /></Button>
@@ -1200,7 +1380,9 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                         <Input type="number" min={0.5} step={0.5} value={calcArrobas}
                                             onChange={e => setCalcArrobas(Math.max(0.5, Number(e.target.value)))}
                                             className="rounded-2xl h-12 bg-slate-50 dark:bg-slate-800 border-slate-200 font-black text-lg" />
-                                        <div className="text-sm font-black text-slate-500 shrink-0">= {(calcArrobas * ARROBA_KG).toFixed(1)} kg</div>
+                                        <div className="text-sm font-black text-slate-500 shrink-0">
+                                            = {(calcArrobas * (calcFormulacion?.rendimientoBaseKg || ARROBA_KG)).toFixed(1)} kg masa
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1213,7 +1395,7 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                             <Wheat className="w-3.5 h-3.5 text-amber-500" /> Ingredientes necesarios ({calcArrobas} arroba{calcArrobas !== 1 ? 's' : ''})
                                         </h4>
                                         <div className="space-y-2">
-                                            {calcFormulacion.ingredientes.map(ing => {
+                                            {(calcFormulacion.ingredientes || []).map(ing => {
                                                 const prod = getProductoById(ing.productoId);
                                                 const cantTotal = ing.cantidadPorArroba * calcArrobas;
                                                 const unidadMostrar = ing.unidad;

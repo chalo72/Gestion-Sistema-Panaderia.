@@ -30,7 +30,6 @@ export function VisualSentinel() {
         if (window.location.pathname.includes('/login')) return;
         
         setIsObserving(true);
-        console.log("🦅 [Eagle Eyes] PICO-CLAW está observando...");
 
         try {
             // Carga dinámica para no romper la app si falta la librería

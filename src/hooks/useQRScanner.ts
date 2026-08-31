@@ -41,7 +41,6 @@ export function useQRScanner({ onScan, onError, enabled = true }: UseQRScannerPr
       scanner.render(
         (decodedText: string) => {
           // Código detectado
-          console.log(`✅ Código leído: ${decodedText}`);
           onScan(decodedText);
           toast.success(`✓ Código: ${decodedText}`);
         },

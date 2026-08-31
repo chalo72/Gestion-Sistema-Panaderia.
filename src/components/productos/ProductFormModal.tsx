@@ -799,7 +799,7 @@ export function ProductFormModal({
                         </Button>
                         <Button
                             type="submit"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || !formData.nombre?.trim() || !formData.categoria}
                             className={cn(
                                 "h-12 flex-[2] text-white rounded-xl text-sm font-black shadow-lg transition-all",
                                 tipoActual === 'elaborado'

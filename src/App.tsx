@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
+import { startAuditoriaSession } from '@/lib/auditoria-rrweb';
 import {
   LogOut,
   Sun,
@@ -8,6 +9,7 @@ import {
   Database,
   ArrowUpCircle,
   ArrowDownCircle,
+  Bell,
 } from 'lucide-react';
 
 import { usePriceControl } from '@/hooks/usePriceControl';
@@ -22,6 +24,7 @@ import { Button } from '@/components/ui/button';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineMonitor } from '@/components/common/OfflineMonitor';
+import { BottomNavBar } from '@/components/layout/BottomNavBar';
 import type { ViewType } from '@/types';
 
 // Carga inmediata — pantallas críticas del flujo de entrada
@@ -49,11 +52,29 @@ const Mayoristas         = lazy(() => import('@/pages/Mayoristas'));
 const Ahorros            = lazy(() => import('@/pages/Ahorros'));
 const PrePedidos         = lazy(() => import('@/pages/PrePedidos'));
 const Recepciones        = lazy(() => import('@/pages/Recepciones'));
+const PlanNegocio        = lazy(() => import('@/pages/PlanNegocio').then(m => ({ default: m.PlanNegocio })));
 
 // Carga Inmediata — Módulos principales del negocio (Navegación instantánea a costo de un inicio un poco más pesado)
 const Productos = lazy(() => import('@/pages/Productos'));
 const Ventas = lazy(() => import('@/pages/Ventas').then(m => ({ default: m.Ventas })));
-const Inventario = lazy(() => import('@/pages/Inventario'));
+const Inventario = lazy(() =>
+  import('@/pages/Inventario')
+    .then((m) => {
+      const Comp = m.default ?? m.Inventario;
+      if (!Comp) {
+        throw new Error('Inventario: export default no disponible (posible caché PWA). Recarga la app.');
+      }
+      return { default: Comp };
+    })
+    .catch(async (err) => {
+      console.warn('[Inventario] Reintento de carga tras fallo:', err);
+      // Segundo intento: limpia el fallo momentáneo por ciclo de módulos / SW
+      const m = await import('@/pages/Inventario');
+      const Comp = m.default ?? m.Inventario;
+      if (!Comp) throw err;
+      return { default: Comp };
+    })
+);
 const Produccion = lazy(() => import('@/pages/Produccion').then(m => ({ default: m.Produccion })));
 const Recetas = lazy(() => import('@/pages/Recetas'));
 const ControlCaja = lazy(() => import('@/pages/ControlCaja').then(m => ({ default: m.ControlCaja })));
@@ -64,6 +85,8 @@ const Proveedores = lazy(() => import('@/pages/Proveedores'));
 const Reportes = lazy(() => import('@/pages/Reportes'));
 const Precios = lazy(() => import('@/pages/Precios'));
 const Clientes = lazy(() => import('@/pages/Clientes'));
+const BuscadorPrecios = lazy(() => import('@/pages/BuscadorPrecios'));
+const CCTVDigital = lazy(() => import('@/pages/CCTVDigital').then(m => ({ default: m.CCTVDigital })));
 
 // Fallback de carga entre páginas
 const PageLoader = () => (
@@ -73,7 +96,13 @@ const PageLoader = () => (
 );
 
 const App = () => {
+  useEffect(() => {
+    // Iniciar el Ojo Fantasma (Auditoría rrweb) en segundo plano
+    startAuditoriaSession();
+  }, []);
+
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isStockAlertOpen, setIsStockAlertOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const { usuario: user, logout, isLoading: isAuthLoading } = useAuth();
   const { check, isAdmin, role } = useCan();
@@ -194,6 +223,7 @@ const App = () => {
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [cajaActionTrigger, setCajaActionTrigger] = useState<{ tipo: 'entrada' | 'salida' | 'cierre'; ts: number } | null>(null);
 
 
@@ -214,12 +244,32 @@ const App = () => {
     return () => window.removeEventListener('beforeunload', handler);
   }, [isSyncing]);
 
+  // Global navigation listener para componentes internos sin prop drilling
+  useEffect(() => {
+    const handleNavigate = (e: CustomEvent<ViewType>) => {
+      if (e.detail) setCurrentView(e.detail);
+    };
+    window.addEventListener('navigateView', handleNavigate as EventListener);
+    return () => window.removeEventListener('navigateView', handleNavigate as EventListener);
+  }, []);
+
+  // Vista de aterrizaje según el rol del usuario
+  const getVistaInicial = (rol: string | null | undefined): ViewType => {
+    switch (rol) {
+      case 'PANADERO':  return 'produccion';
+      case 'VENDEDOR':  return 'ventas';
+      case 'COMPRADOR': return 'recepciones';
+      case 'AUXILIAR':  return 'ventas';
+      default:          return 'dashboard';
+    }
+  };
+
   // Efecto para redirigir si no hay usuario
   useEffect(() => {
     if (!isAuthLoading && !user && currentView !== 'login') {
       setCurrentView('login');
     } else if (!isAuthLoading && user && currentView === 'login') {
-      setCurrentView('dashboard');
+      setCurrentView(getVistaInicial(user.rol));
     }
   }, [user, isAuthLoading, currentView]);
 
@@ -242,7 +292,7 @@ const App = () => {
   const renderView = () => {
     // Si hay usuario activo pero la vista es login → redirigir inmediatamente al dashboard
     if (user && currentView === 'login') return null;
-    if (!user && currentView !== 'login') return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
+    if (!user && currentView !== 'login') return <Login onLoginSuccess={() => {}} />;
 
     // Candado de vista (mismo criterio que el menú). ADMIN siempre pasa.
     if (
@@ -595,6 +645,9 @@ const App = () => {
               ventas={ventas}
               sesionesCaja={sesionesCaja}
               gastos={gastos}
+              addGasto={addGasto}
+              updateGasto={updateGasto}
+              deleteGasto={deleteGasto}
             productos={productos}
             proveedores={proveedores}
             precios={precios}
@@ -632,6 +685,16 @@ const App = () => {
         return <Boveda />;
       case 'inversiones':
         return <Inversiones />;
+      case 'plan-negocio':
+        return (
+          <PlanNegocio 
+            ventas={ventas}
+            gastos={gastos}
+            productos={productos}
+            trabajadores={trabajadores}
+            formatCurrency={formatCurrency}
+          />
+        );
       case 'precios':
         return (
           <Precios 
@@ -657,6 +720,13 @@ const App = () => {
             onAddProveedor={addProveedor}
             onAddCategoria={addCategoria}
             onAddOrUpdatePrecio={addOrUpdatePrecio}
+            formatCurrency={formatCurrency}
+          />
+        );
+      case 'buscador-precios':
+        return (
+          <BuscadorPrecios
+            productos={productos}
             formatCurrency={formatCurrency}
           />
         );
@@ -760,6 +830,8 @@ const App = () => {
         return <AgentesIA />;
       case 'videovigilancia':
         return <Videovigilancia />;
+      case 'cctv':
+        return <CCTVDigital />;
       case 'clientes':
         return <Clientes
           clientesExternos={clientes}
@@ -772,7 +844,7 @@ const App = () => {
       case 'seguridad':
         return <Seguridad userRole={user?.rol} ventas={ventas} />;
       case 'login':
-        return <Login onLoginSuccess={() => setCurrentView('dashboard')} />;
+        return <Login onLoginSuccess={() => {}} />;
       default:
         return (
           <Dashboard 
@@ -797,6 +869,10 @@ const App = () => {
     }
   };
 
+  const stockBajoItems = (inventario || []).filter(
+    (i: any) => i.stockMinimo !== undefined && i.stockActual <= i.stockMinimo
+  );
+
   return (
     <div className={`min-h-screen ${theme === 'dark' ? 'dark bg-slate-950' : 'bg-slate-50'}`}>
       <OfflineMonitor />
@@ -808,19 +884,35 @@ const App = () => {
           productos={productos}
           proveedores={proveedores}
           precios={precios}
+          inventario={inventario as any}
           getMejorPrecio={getMejorPrecio}
           getPreciosByProducto={getPreciosByProducto}
           getProveedorById={getProveedorById}
           formatCurrency={formatCurrency}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          isMobileMenuOpen={isMobileMenuOpen}
+          onMobileMenuOpenChange={setIsMobileMenuOpen}
+        />
+      )}
+
+      {/* Barra Inferior para Móviles */}
+      {user && (
+        <BottomNavBar
+          currentView={currentView}
+          onViewChange={setCurrentView}
+          alertasNoLeidas={alertas.filter(a => !a.leida).length}
+          onOpenMenu={() => setIsMobileMenuOpen(true)}
         />
       )}
 
       <main className={cn(
         "transition-all duration-300",
+        // En móvil no hay padding left, el sidebar está oculto y hay un BottomNavBar
         user ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-64") : "pl-0",
-        currentView === 'ventas' ? 'h-screen overflow-hidden' : ''
+        // En ventas y móvil dejamos padding bottom para el BottomNavBar
+        "pb-[72px] md:pb-0",
+        currentView === 'ventas' ? 'h-[calc(100vh-72px)] md:h-screen overflow-hidden' : ''
       )}>
         {/* Header Superior (Solo si hay usuario) */}
         {user && (
@@ -866,6 +958,36 @@ const App = () => {
                    </button>
                  </div>
                )}
+               {/* Alertas Inteligentes de Stock */}
+               <div className="relative">
+                 <button
+                    onClick={() => {
+                      if (stockBajoItems.length > 0) {
+                        toast.error(`⚠️ ALERTA DE STOCK: ${stockBajoItems.length} insumos en déficit crítico`, {
+                          description: 'Entra a la Oficina para revisar qué debes comprar de inmediato.',
+                          action: {
+                            label: 'Ir a Oficina',
+                            onClick: () => setCurrentView('oficina')
+                          },
+                        });
+                      } else {
+                        toast.success('Stock Saludable', {
+                          description: 'No hay productos por debajo del stock mínimo.'
+                        });
+                      }
+                    }}
+                    className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors relative"
+                 >
+                    <Bell className="w-5 h-5" />
+                    {stockBajoItems.length > 0 && (
+                      <span className="absolute top-1.5 right-1.5 flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500 border-2 border-white dark:border-slate-900"></span>
+                      </span>
+                    )}
+                 </button>
+               </div>
+
                {/* Modo Oscuro */}
                <button
                   onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

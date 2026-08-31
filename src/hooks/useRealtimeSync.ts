@@ -11,9 +11,9 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
-import { originalDbMethods, supabaseDB } from '@/lib/supabase-sync-bridge';
+import { originalDbMethods, supabaseDB, flushSyncOutbox } from '@/lib/supabase-sync-bridge';
 import { db, localAdapter } from '@/lib/database';
-import { mergePrecioLocalGana } from '@/lib/sync-merge-local-gana';
+import { mergeHydrateItem, mergePrecioLocalGana } from '@/lib/sync-merge-local-gana';
 
 const _sdb = new SupabaseDatabase();
 
@@ -140,6 +140,12 @@ const HANDLERS: Record<string, Handler> = {
     writeToLocal:    (d) => orig('updateCliente', db.updateCliente.bind(db))(d),
     deleteFromLocal: (id) => orig('deleteCliente', db.deleteCliente.bind(db))(id),
   },
+  nominas: {
+    localTableName:  'nominas',
+    getFromSupabase: () => _sdb.getAllNominas(),
+    writeToLocal:    (d) => orig('addNomina', db.addNomina.bind(db))(d),
+    deleteFromLocal: async () => {},
+  },
   configuracion: {
     localTableName:  'configuracion',
     getFromSupabase: () => _sdb.getAllConfiguraciones(),
@@ -177,6 +183,7 @@ export const TABLE_LABELS: Record<string, string> = {
   mesas:                  'Mesas',
   pedidos_activos:        'Pedidos Activos',
   clientes:               'Clientes',
+  nominas:                'Nóminas',
   configuracion:          'Configuración',
 };
 
@@ -231,7 +238,17 @@ export function useRealtimeSync() {
         // Obtener el registro completo y mapeado desde Supabase
         const allItems = await handler.getFromSupabase();
         const item = allItems.find((i: any) => i.id === recordId);
-        if (item) await handler.writeToLocal(item);
+        if (item) {
+          const local = await localAdapter
+            .getDocument<{ id: string }>(handler.localTableName, recordId)
+            .catch(() => null);
+          const merged = mergeHydrateItem(
+            handler.localTableName,
+            local ?? undefined,
+            item
+          );
+          await handler.writeToLocal(merged);
+        }
       }
 
       setPendingChanges(prev => {
@@ -249,7 +266,6 @@ export function useRealtimeSync() {
         detail: { table, eventType, id: recordId },
       }));
 
-      console.log(`📡 [NexusSync] ${table} ${eventType} ${recordId} recibido de otro dispositivo.`);
     } catch (err) {
       console.error(`❌ [NexusSync] Error en ${table}:`, err);
     } finally {
@@ -260,6 +276,13 @@ export function useRealtimeSync() {
   // Sincronización manual — solo cuando el usuario lo pide
   const syncNow = useCallback(async () => {
     syncNowIds.current.clear();
+
+    // Primero vaciar cola de fallos previos (offline / errores de red)
+    try {
+      await flushSyncOutbox();
+    } catch (e) {
+      console.warn('⚠️ [syncNow] Outbox flush falló:', e);
+    }
 
     // Push: sube datos locales clave a Supabase
     // Para productos y proveedores: push inteligente con comparación de timestamps.
@@ -369,7 +392,6 @@ export function useRealtimeSync() {
       if (errCount > 0) {
         console.warn(`⚠️ [syncNow] ${tableName}: ${errCount} fallos, ${okCount} OK. Error:`, lastErr?.message ?? lastErr);
       } else {
-        console.log(`✅ [syncNow] ${tableName}: ${okCount} items subidos`);
       }
     }));
 
@@ -452,9 +474,20 @@ export function useRealtimeSync() {
             // Sin timestamps confiables → actualizar (push ya subió local a Supabase)
             return true;
           });
-      for (const item of nuevos)        await handler.writeToLocal(item).catch(() => {});
-      for (const item of actualizados)  await handler.writeToLocal(item).catch(() => {});
-      
+      const writeMerged = async (item: any) => {
+        const local = await localAdapter
+          .getDocument<{ id: string }>(handler.localTableName, item.id)
+          .catch(() => null);
+        const merged = mergeHydrateItem(
+          handler.localTableName,
+          local ?? undefined,
+          item
+        );
+        await handler.writeToLocal(merged);
+      };
+      for (const item of nuevos) await writeMerged(item).catch(() => {});
+      for (const item of actualizados) await writeMerged(item).catch(() => {});
+
       const restaurar = supabaseItems.filter((remote: any) => {
         if (!remote.id || !tombstoneSet.has(remote.id)) return false;
         const remoteTs = new Date(
@@ -499,14 +532,11 @@ export function useRealtimeSync() {
           window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
             detail: { table: 'configuracion', eventType: 'MANUAL', id: 'main' },
           }));
-          console.log('✅ [syncNow] configuracion: actualizada desde Supabase');
         } else if (configLocal) {
           await _sdb.saveConfiguracion({ ...configLocal, id: 'main' }).catch(() => {});
-          console.log('✅ [syncNow] configuracion: subida a Supabase');
         }
       } else if (configLocal) {
         await _sdb.saveConfiguracion({ ...configLocal, id: 'main' }).catch(() => {});
-        console.log('✅ [syncNow] configuracion: subida a Supabase (primera vez)');
       }
     } catch (e) {
       console.warn('⚠️ [syncNow] configuracion: error en sync', e);
@@ -527,7 +557,6 @@ export function useRealtimeSync() {
         window.dispatchEvent(new CustomEvent('nexus-realtime-change', {
           detail: { table: 'nominas', eventType: 'MANUAL', id: 'manual' },
         }));
-        console.log(`✅ [syncNow] nominas: ${nuevasNominas.length} nuevas descargadas`);
       }
     } catch (e) {
       console.warn('⚠️ [syncNow] nominas: error en sync', e);
@@ -554,7 +583,6 @@ export function useRealtimeSync() {
             return best;
           }, list[0]);
 
-          console.log(`[Deduplicate Clients] Múltiples clientes para "${canonical.nombre}". Canónico: ${canonical.id}`);
           
           for (const duplicate of list) {
             if (duplicate.id === canonical.id) continue;
@@ -593,14 +621,27 @@ export function useRealtimeSync() {
 
     // PURGAR PRODUCTOS BASURA DE SUPABASE Y LOCAL
     try {
-      const { data: supaProds } = await supabase.from('productos').select('*');
-      if (supaProds && supaProds.length > 0) {
-        const garbage = supaProds.filter((p: any) => {
-          const name = (p.nombre || '').toLowerCase();
+      const [ supaRes, localProds ] = await Promise.all([
+        supabase.from('productos').select('*').catch(() => ({ data: [] })),
+        db.getAllProductos().catch(() => [])
+      ]);
+      const supaProds = supaRes?.data || [];
+      
+      const allProds = [...supaProds, ...localProds];
+      const uniqueProdsMap = new Map();
+      allProds.forEach((p: any) => { if (p && p.id) uniqueProdsMap.set(p.id, p); });
+      const uniqueProds = Array.from(uniqueProdsMap.values());
+
+      if (uniqueProds.length > 0) {
+        const garbage = uniqueProds.filter((p: any) => {
+          const name = (p.nombre || '').trim().toLowerCase();
           const unit = (p.unidad || '').toLowerCase();
           const cat = (p.categoria || '').toLowerCase();
           
-          return cat === 'electrónica' || cat === 'electronica' ||
+          return name === '' ||
+                 name === 'undefined' ||
+                 name === 'null' ||
+                 cat === 'electrónica' || cat === 'electronica' ||
                  name.includes('timiden') ||
                  unit.includes('4 x e x z x x') ||
                  name.includes('e n d r n t e l l') ||
@@ -608,14 +649,18 @@ export function useRealtimeSync() {
         });
 
         if (garbage.length > 0) {
-          console.log(`[Clean Garbage Products] Eliminando ${garbage.length} productos basura de la nube...`);
+          // Chunk the IDs just in case there are too many for a single Supabase query
           const garbageIds = garbage.map((g: any) => g.id);
-          // 1. Eliminar precios
-          await supabase.from('precios').delete().in('producto_id', garbageIds).catch(() => {});
-          // 2. Eliminar inventario
-          await supabase.from('inventario').delete().in('producto_id', garbageIds).catch(() => {});
-          // 3. Eliminar productos de Supabase
-          await supabase.from('productos').delete().in('id', garbageIds).catch(() => {});
+          const chunkSize = 100;
+          for (let i = 0; i < garbageIds.length; i += chunkSize) {
+            const chunk = garbageIds.slice(i, i + chunkSize);
+            // 1. Eliminar precios
+            await supabase.from('precios').delete().in('producto_id', chunk).catch(() => {});
+            // 2. Eliminar inventario
+            await supabase.from('inventario').delete().in('producto_id', chunk).catch(() => {});
+            // 3. Eliminar productos de Supabase
+            await supabase.from('productos').delete().in('id', chunk).catch(() => {});
+          }
           
           // 4. Eliminar localmente y registrar en tombstone
           for (const id of garbageIds) {
@@ -652,7 +697,6 @@ export function useRealtimeSync() {
           if (status === 'SUBSCRIBED') {
             count++;
             if (count >= tables.length) setSyncConnected(true);
-            console.log(`✅ [NexusSync] Escuchando '${table}'`);
           }
         }),
     );
@@ -674,7 +718,6 @@ export function useRealtimeSync() {
       } else if (document.visibilityState === 'visible') {
         const ausencia = Date.now() - hiddenAt;
         if (hiddenAt > 0 && ausencia > 30_000) {
-          console.log(`📱 [NexusSync] App volvió a primer plano (${Math.round(ausencia / 1000)}s) — sincronizando...`);
           syncNow().catch(() => {});
         }
       }

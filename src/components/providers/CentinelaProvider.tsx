@@ -7,6 +7,8 @@ import { useAutoUpdate } from '@/hooks/useAutoUpdate';
 import { applySyncPatch } from '@/lib/supabase-sync-bridge';
 import { initDeviceId } from '@/lib/deviceId';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
+import { contarPendientesOutbox } from '@/lib/sync-outbox';
+import { toast } from 'sonner';
 
 interface CentinelaContextType {
   misionesActivas: DBMisionAgent[];
@@ -144,7 +146,35 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       new Promise<void>(resolve => setTimeout(resolve, 25000)),
     ]);
     setIsSyncingManual(false);
+    const pending = contarPendientesOutbox();
+    if (pending > 0) {
+      toast.message(`Sync listo · ${pending} cambio(s) aún pendientes de nube`);
+    } else {
+      toast.success('Sincronizado con la nube');
+    }
   }, [syncNow]);
+
+  // Avisos de cola nube (online/visibility sync ya viven en useRealtimeSync + flushOutbox)
+  useEffect(() => {
+    const onOnline = () => toast.message('Internet de vuelta — sincronizando…');
+    const onSyncStatus = (e: Event) => {
+      const detail = (e as CustomEvent<{ kind: string; message: string; pendingCount: number }>).detail;
+      if (!detail?.message) return;
+      if (detail.kind === 'error') toast.error(detail.message);
+      else if (detail.kind === 'flushed' && detail.pendingCount === 0) toast.success(detail.message);
+      else if (detail.kind === 'pending' && detail.pendingCount > 0) {
+        if (detail.pendingCount === 1 || detail.pendingCount % 5 === 0) {
+          toast.message(detail.message);
+        }
+      }
+    };
+    window.addEventListener('online', onOnline);
+    window.addEventListener('dp-sync-status', onSyncStatus as EventListener);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('dp-sync-status', onSyncStatus as EventListener);
+    };
+  }, []);
 
   useEffect(() => {
     const cargarDatos = async () => {
@@ -205,7 +235,6 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         for (const mision of misionesBase) {
           await db.saveAgenteMision(mision);
         }
-        console.log('[Centinela] ✅ Misiones autónomas sembradas:', misionesBase.length);
         setMisionesActivas(misionesBase);
       }
     };
@@ -233,7 +262,6 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   const ejecutarMision = async (mision: DBMisionAgent) => {
-    console.log('[Centinela] 🤖 Ejecutando mision:', mision.agenteId, '-', mision.misionExplicita.substring(0, 40));
     try {
       await db.saveAgenteMision({ ...mision, estado: 'ejecutando' });
       const ahora = new Date().toISOString();
@@ -255,7 +283,6 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         detalle: respuesta.trim() || 'Ciclo completado sin novedades.',
         nivel,
       });
-      console.log('[Centinela] ✅ Bitácora actualizada por', mision.agenteId);
 
       // ── Registrar hallazgo si el agente detectó algo relevante ──
       if (nivel !== 'info') {

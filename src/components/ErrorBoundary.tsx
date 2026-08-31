@@ -27,14 +27,31 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Error atrapado por ErrorBoundary en', this.props.moduleName, ':', error, errorInfo);
     
     // Auto-recargar silenciosamente si es un error de chunk (PWA cache inválido tras update)
-    if (error.name === 'ChunkLoadError' || error.message.includes('Failed to fetch dynamically imported module')) {
-      window.location.reload();
+    const msg = error.message || '';
+    const isChunkError =
+      error.name === 'ChunkLoadError' ||
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes("reading 'default'") ||
+      msg.includes('posible caché PWA');
+
+    if (isChunkError) {
+      // Evita bucle infinito de recarga
+      const key = 'dp_chunk_reload_once';
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        window.location.reload();
+      }
     }
   }
 
   public render() {
     if (this.state.hasError) {
-      const isChunkError = this.state.error?.name === 'ChunkLoadError' || this.state.error?.message?.includes('Failed to fetch dynamically imported module');
+      const msg = this.state.error?.message || '';
+      const isChunkError =
+        this.state.error?.name === 'ChunkLoadError' ||
+        msg.includes('Failed to fetch dynamically imported module') ||
+        msg.includes("reading 'default'") ||
+        msg.includes('posible caché PWA');
       
       return (
         <div className="p-6 flex items-center justify-center min-h-[400px]">
@@ -52,7 +69,9 @@ export class ErrorBoundary extends Component<Props, State> {
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                Puedes intentar recargar este módulo o volver al menú principal. Tu información en otras secciones sigue estando segura.
+                {isChunkError
+                  ? 'Esto suele pasar después de un actualización. Pulsa recargar (o Ctrl+F5) para cargar la versión nueva.'
+                  : 'Puedes intentar recargar este módulo o volver al menú principal. Tu información en otras secciones sigue estando segura.'}
               </p>
               <div className="bg-slate-100 dark:bg-slate-900 p-3 rounded-md text-xs font-mono overflow-auto max-h-32 text-red-500">
                 {this.state.error?.message}
@@ -60,6 +79,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <Button 
                 onClick={() => {
                   if (isChunkError) {
+                    sessionStorage.removeItem('dp_chunk_reload_once');
                     window.location.reload();
                   } else {
                     this.setState({ hasError: false, error: null });

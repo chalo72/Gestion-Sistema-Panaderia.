@@ -3,13 +3,10 @@
  * Separado de types/index.ts para reducir el bundle de tipos
  */
 import type { Usuario, Categoria, ProductoTipo } from '@/types';
+import { USUARIOS_LOGIN_OFICIALES } from '@/lib/usuarios-login-oficiales';
 
-// Usuarios base del sistema — solo los estrictamente necesarios
-// Los usuarios del negocio se crean desde la página de Usuarios y se sincronizan con Firebase
-export const USUARIOS_PRUEBA: Usuario[] = [
-  { id: 'owner-local-id', email: 'Chalo8321@gmail.com', nombre: 'Chalo', apellido: 'Admin Dulce Placer', rol: 'ADMIN', activo: true, createdAt: new Date().toISOString() },
-  { id: 'dilia-vendedor-id', email: 'dilia@dulceplacer.com', nombre: 'Dilia', apellido: 'Dulce Placer', rol: 'VENDEDOR', activo: true, password: 'dilia2026', createdAt: new Date().toISOString() },
-];
+// Usuarios base del sistema (login oficial). El resto se crea desde Usuarios o se inactiva.
+export const USUARIOS_PRUEBA: Usuario[] = [...USUARIOS_LOGIN_OFICIALES];
 
 // Emails de usuarios de prueba genéricos que deben eliminarse (SOLO los claramente falsos)
 export const EMAILS_USUARIOS_LEGACY = [
@@ -108,9 +105,10 @@ export const DATOS_EJEMPLO = {
     {
       id: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f51',
       nombre: 'Masa de Sal Mixta',
-      descripcion: 'Fórmula básica equilibrada para panes de sal tradicionales.',
+      descripcion: 'Fórmula básica equilibrada para panes de sal tradicionales. Báscula: 1 arroba = 21 kg.',
       categoria: 'panes',
-      rendimientoBaseKg: 18.5,
+      rendimientoBaseKg: 21,
+      kgPorArrobaReal: 21,
       costoTotalArroba: 68500,
       tiempoHorneado: 25,
       activo: true,
@@ -123,9 +121,10 @@ export const DATOS_EJEMPLO = {
     {
       id: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f52',
       nombre: 'Masa de Dulce Especial',
-      descripcion: 'Alta hidratación y azúcar para panes dulces y trenzas.',
+      descripcion: 'Alta hidratación y azúcar para panes dulces y trenzas. Báscula: 1 arroba = 20.33 kg.',
       categoria: 'panes',
-      rendimientoBaseKg: 22.0,
+      rendimientoBaseKg: 20.33,
+      kgPorArrobaReal: 20.33,
       costoTotalArroba: 92400,
       tiempoHorneado: 20,
       activo: true,
@@ -137,9 +136,10 @@ export const DATOS_EJEMPLO = {
     {
       id: '7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f53',
       nombre: 'Masa de Hojaldre Mixta',
-      descripcion: 'Masa para empaste con alto contenido graso.',
+      descripcion: 'Masa para empaste con alto contenido graso. Báscula: media arroba = 9.66 kg → 1 arroba = 19.32 kg.',
       categoria: 'hojaldres',
-      rendimientoBaseKg: 24.0,
+      rendimientoBaseKg: 19.32,
+      kgPorArrobaReal: 19.32,
       costoTotalArroba: 115000,
       tiempoHorneado: 35,
       activo: true,

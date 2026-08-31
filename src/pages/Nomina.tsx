@@ -201,6 +201,7 @@ export default function Nomina({
   const [loanSaving, setLoanSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<CreditoTrabajador | null>(null);
   const [selectedNomina, setSelectedNomina] = useState<NominaQuincenal | null>(null);
+  const [expandedWorker, setExpandedWorker] = useState<string | null>(null);
 
   // ── Estado acuerdo de confidencialidad ────────────────────────────────
   const [acTrabId, setAcTrabId]       = useState('');
@@ -772,9 +773,12 @@ export default function Nomina({
               const estaPageada = nominaExistente?.estado === 'pagada';
 
               return (
-                <div key={item.trabajadorId} className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden">
-                  <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                    <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center font-black text-violet-700 dark:text-violet-300 text-lg shrink-0">
+                <div key={item.trabajadorId} className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm overflow-hidden border border-transparent hover:border-gray-200 dark:hover:border-gray-700 transition-colors">
+                  <div 
+                    onClick={() => setExpandedWorker(prev => prev === item.trabajadorId ? null : item.trabajadorId)}
+                    className="flex items-center gap-3 px-4 py-3 cursor-pointer group"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center font-black text-violet-700 dark:text-violet-300 text-lg shrink-0 transition-transform group-hover:scale-105">
                       {item.trabajadorNombre.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -785,13 +789,19 @@ export default function Nomina({
                         {' · '}Sal. {formatCurrency(item.salarioBase)}
                       </p>
                     </div>
-                    <div className="text-right shrink-0">
+                    <div className="text-right shrink-0 pr-2">
                       <p className="text-[10px] text-gray-400 uppercase tracking-wide">A pagar</p>
                       <p className="font-black text-emerald-600 dark:text-emerald-400 text-base">{formatCurrency(item.valorNeto)}</p>
                     </div>
+                    <div className="shrink-0 text-gray-400 group-hover:text-violet-500 transition-colors">
+                      {expandedWorker === item.trabajadorId ? <ChevronLeft className="w-5 h-5 -rotate-90 transition-transform" /> : <ChevronLeft className="w-5 h-5 -rotate-180 transition-transform" />}
+                    </div>
                   </div>
-                  <div className="px-4 py-3 space-y-2">
-                    <div className="flex items-center justify-between text-sm">
+                  
+                  {/* Detalle desplegable */}
+                  {expandedWorker === item.trabajadorId && (
+                    <div className="px-4 py-4 space-y-3 border-t border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-800/20">
+                      <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-500 dark:text-gray-400">Valor bruto (quincena)</span>
                       <span className="font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(item.valorBruto)}</span>
                     </div>
@@ -849,7 +859,8 @@ export default function Nomina({
                       <span className="text-sm text-gray-700 dark:text-gray-200">Neto a pagar</span>
                       <span className="text-emerald-600 dark:text-emerald-400 text-base">{formatCurrency(item.valorNeto)}</span>
                     </div>
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })}

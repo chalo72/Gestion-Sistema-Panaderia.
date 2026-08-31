@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ShoppingCart, Users, Minus, Plus, Trash2, CreditCard, DollarSign, Banknote, Zap, X, Tag } from 'lucide-react';
+import { ShoppingCart, Users, Minus, Plus, Trash2, CreditCard, DollarSign, Banknote, Zap, X, Tag, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,7 @@ interface CartDetailProps {
     activeTabLabel?: string;
     activeTabTipo?: 'venta-rapida' | 'mesa';
     onLiberarMesa?: () => void;
+    onTraspasarMesa?: () => void;
     descuento?: number;
     setDescuento?: (v: number) => void;
     rolUsuario?: string;
@@ -30,7 +31,7 @@ export function CartDetail({
     cart, onUpdateQuantity, onRemoveFromCart, onClearCart,
     onProcessPayment, formatCurrency, cajaActiva, usuario, cliente, setCliente,
     clientesNombres = [],
-    activeTabLabel, activeTabTipo, onLiberarMesa,
+    activeTabLabel, activeTabTipo, onLiberarMesa, onTraspasarMesa,
     descuento = 0, setDescuento, rolUsuario,
 }: CartDetailProps) {
 
@@ -92,9 +93,20 @@ export function CartDetail({
                             )}
                         </div>
                     ) : (
-                        <div className="flex items-center gap-2 w-full">
-                            <Users className="w-3 h-3 text-blue-400" />
-                            <p className="text-[10px] font-bold text-white uppercase truncate">{tabLabel}</p>
+                        <div className="flex items-center justify-between w-full">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                                <Users className="w-3 h-3 text-blue-400 shrink-0" />
+                                <p className="text-[10px] font-bold text-white uppercase truncate">{tabLabel}</p>
+                            </div>
+                            {onTraspasarMesa && (
+                                <button
+                                    onClick={onTraspasarMesa}
+                                    className="shrink-0 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded transition-colors text-[9px] font-bold flex items-center gap-1"
+                                    title="Traspasar Mesa"
+                                >
+                                    <UserCircle className="w-3 h-3" /> Traspasar
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>

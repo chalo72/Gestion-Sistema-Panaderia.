@@ -9,7 +9,6 @@ export class PocketBaseAdapter implements DatabaseAdapter {
   }
 
   async init() {
-    console.log("🐻 [PocketBase]: Inicializado en", this.url);
   }
 
   async getCollection<T>(name: string): Promise<T[]> {

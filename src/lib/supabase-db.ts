@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { AgenteId } from '@/types/agente-id';
 import type {
     IDatabase,
     DBProducto,
@@ -13,7 +14,6 @@ import type {
     DBHistorialPrecio,
     DBVenta,
     DBCajaSesion,
-    AgenteId,
     DBAgenteConfig,
     DBMisionAgent,
     DBHallazgoAgente
@@ -782,21 +782,32 @@ export class SupabaseDatabase implements IDatabase {
     async getAllGastos(): Promise<any[]> {
         const { data, error } = await supabase.from('gastos').select('*');
         if (error) return [];
-        return data.map(g => ({
-            id: g.id,
-            descripcion: g.descripcion,
-            monto: g.monto,
-            categoria: g.categoria,
-            fecha: g.fecha,
-            proveedorId: g.proveedor_id,
-            comprobanteUrl: g.comprobante_url,
-            metodoPago: g.metodo_pago,
-            usuarioId: g.usuario_id,
-            cajaId: g.caja_id,
-            metadata: g.metadata
-        }));
+        return data.map(g => {
+            const meta = g.metadata || {};
+            return {
+                ...meta,
+                id: g.id,
+                descripcion: g.descripcion,
+                monto: g.monto,
+                categoria: g.categoria,
+                fecha: g.fecha,
+                proveedorId: g.proveedor_id,
+                comprobanteUrl: g.comprobante_url,
+                metodoPago: g.metodo_pago,
+                usuarioId: g.usuario_id,
+                cajaId: g.caja_id,
+                metadata: meta
+            };
+        });
     }
     async addGasto(gasto: any): Promise<void> {
+        const {
+            id, descripcion, monto, categoria, fecha, proveedorId,
+            comprobanteUrl, metodoPago, usuarioId, cajaId, metadata,
+            proveedor_id, comprobante_url, metodo_pago, usuario_id, caja_id, // ignore db keys if present
+            ...rest
+        } = gasto;
+        
         await supabase.from('gastos').upsert({
             id: gasto.id,
             descripcion: gasto.descripcion,
@@ -808,7 +819,10 @@ export class SupabaseDatabase implements IDatabase {
             metodo_pago: gasto.metodoPago,
             usuario_id: gasto.usuarioId,
             caja_id: gasto.cajaId,
-            metadata: gasto.metadata
+            metadata: {
+                ...(metadata || {}),
+                ...rest
+            }
         });
     }
     async updateGasto(gasto: any): Promise<void> {

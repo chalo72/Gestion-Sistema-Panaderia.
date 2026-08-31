@@ -8,7 +8,9 @@ import type { InspeccionCalidad, ResponsableRechazo } from '@/types';
 
 const MOTIVO_LABEL: Record<string, string> = {
   quemado: '🔥 Quemados', amogañado: '🍄 Con moho',
-  deforme: '💔 Deformes', crudo: '❄️ Crudos', otro: '📦 Otros',
+  deforme: '💔 Deformes', crudo: '❄️ Crudos',
+  mala_rotacion: '🕰️ Mala Rotación', sobreproduccion: '📈 Sobró Mucho',
+  otro: '📦 Otros',
 };
 const RESP_CONFIG = {
   panadero:  { label: 'Panadero/Obrero', icon: User,        color: 'text-amber-700', bg: 'bg-amber-50 border-amber-200', badge: 'border-amber-300 text-amber-700 bg-amber-50' },

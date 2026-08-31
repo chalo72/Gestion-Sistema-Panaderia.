@@ -21,6 +21,7 @@ import { ARROBA_KG } from '@/types';
 import { toast } from 'sonner';
 
 import { safeNumber } from '@/lib/safe-utils';
+import { calcularCostoLineaInsumo, precioPorKg } from '@/lib/costo-insumo';
 import { useFinanzas } from './useFinanzas';
 import { useProduccionHook } from './useProduccionHook';
 import { useVentas } from './useVentas';
@@ -252,7 +253,6 @@ export function usePriceControl() {
 
       // 2. Renderizado instantáneo si hay datos locales
       if (hasLocalData) {
-        console.log('🚀 [Nexus-Speed] Renderizado instantáneo activado.');
         await applyData(configData, productosDB, proveedoresDB, preciosDB);
         setLoaded(true);
       }
@@ -260,7 +260,6 @@ export function usePriceControl() {
       // 3. Gestión de Sincronización Remota
       if (isOnline) {
         const performSync = async () => {
-          console.log('📡 [Nexus] Sincronizando catálogo con la nube...');
           if (!hasLocalData) toast.info('Sincronizando con Dulce Placer...');
           
           try {
@@ -318,7 +317,6 @@ export function usePriceControl() {
       const yaSetupLS = localStorage.getItem('dulceplacer_setup_done');
       const yaSetupIDB = await db.getBackup('dulceplacer_setup_done');
       if (yaSetupLS === 'true' || yaSetupIDB === true) {
-        console.log('🛡️ [Guard] autoSeedData bloqueado: setup ya completado (doble verificación).');
         return;
       }
       const [productosEnDB, provsEnDB, ventasEnDB, recepcionesEnDB, tombsProductos, tombsProveedores, tombsPrecios] = await Promise.all([
@@ -437,7 +435,6 @@ export function usePriceControl() {
       // MIGRACIÓN: Vincular Créditos Huérfanos a Clientes (CRM)
       const creditosHuerfanos = creditosClientes.filter((c: any) => !c.clienteId);
       if (creditosHuerfanos.length > 0) {
-        console.log(`[Nexus] Migrando ${creditosHuerfanos.length} créditos a clientes permanentes...`);
         let clientesActualizados = [...clientesData] as Cliente[];
         const creditosActualizados = [...creditosClientes] as CreditoCliente[];
         
@@ -722,7 +719,7 @@ export function usePriceControl() {
     cantidadEmbalaje?: number;
   }) => {
     const { id, productoId, proveedorId, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
-    const precioCosto = Math.round(safeNumber(data.precioCosto) / 100) * 100;
+    const precioCosto = safeNumber(data.precioCosto);
     
     // 🔥 CORRECCIÓN: Evitar sobrescribir otras presentaciones del mismo producto
     const allPrecios = await db.getAllPrecios();
@@ -1041,12 +1038,8 @@ export function usePriceControl() {
       const monedaCode = configuracion.moneda || 'COP';
       const monedaConfig = MONEDAS.find(m => m.code === monedaCode) || MONEDAS[0];
       
-      // Ajuste para COP (Pesos Colombianos): Redondear al 100 más cercano
-      // (estándar colombiano — evita precios con centenas incompletas como $1.810 o $3.120)
-      if (monedaConfig.code === 'COP') {
-        numValue = Math.round(numValue / 100) * 100;
-      }
-
+      // Los precios de venta ya se redondean al guardar.
+      // No redondear aquí para permitir ver costos exactos.
       return new Intl.NumberFormat(monedaConfig.locale, {
         style: 'currency',
         currency: monedaConfig.code,
@@ -1087,30 +1080,38 @@ export function usePriceControl() {
     return precios.find(p => p.productoId === productoId && p.proveedorId === proveedorId);
   }, [precios]);
 
-  // Lógica de cálculo de Costo por Receta (Inspiración ERP - Escandallos)
+  // Costo por porción: precio unitario real (bulto ÷ embalaje) × cantidad en kg/lb/gr
   const getCostoReceta = useCallback((productoId: string) => {
     const receta = recetas.find(r => r.productoId === productoId);
     if (!receta) {
-      // Si no tiene receta, devolver el costo base manual o el mejor precio si es ingrediente
       const producto = productos.find(p => p.id === productoId);
       if (producto?.tipo === 'ingrediente') {
         const mejorPrecio = getMejorPrecio(productoId);
-        return mejorPrecio ? mejorPrecio.precioCosto : (producto.costoBase || 0);
+        return precioPorKg(
+          mejorPrecio
+            ? { precioCosto: mejorPrecio.precioCosto, cantidadEmbalaje: mejorPrecio.cantidadEmbalaje }
+            : null,
+          producto.costoBase || 0
+        );
       }
       return producto?.costoBase || 0;
     }
 
-    const costoTotal = receta.ingredientes.reduce((sum: number, ing: any) => {
+    const ings = Array.isArray(receta.ingredientes) ? receta.ingredientes : [];
+    const costoTotal = ings.reduce((sum, ing) => {
       const mejorPrecio = getMejorPrecio(ing.productoId);
-      // Si no hay precio de proveedor, usar el costo base manual del ingrediente
-      let costoUnitario = 0;
-      if (mejorPrecio) {
-        costoUnitario = mejorPrecio.precioCosto;
-      } else {
-        const prodIng = productos.find(p => p.id === ing.productoId);
-        costoUnitario = prodIng?.costoBase || 0;
-      }
-      return sum + (costoUnitario * ing.cantidad);
+      const prodIng = productos.find(p => p.id === ing.productoId);
+      return (
+        sum +
+        calcularCostoLineaInsumo({
+          cantidad: Number(ing.cantidad) || 0,
+          unidad: ing.unidad || 'gr',
+          mejorPrecio: mejorPrecio
+            ? { precioCosto: mejorPrecio.precioCosto, cantidadEmbalaje: mejorPrecio.cantidadEmbalaje }
+            : null,
+          costoBase: prodIng?.costoBase || 0,
+        })
+      );
     }, 0);
 
     return receta.porcionesResultantes > 0 ? costoTotal / receta.porcionesResultantes : costoTotal;
@@ -1151,7 +1152,6 @@ export function usePriceControl() {
       });
 
       if (huboCambio) {
-        console.log("♻️ [Nexus-Volt] Sincronizando costos base detectados...");
         setProductos(nuevosProductos);
         // Persistir individualmente para evitar re-escritura masiva lenta
         for (const p of nuevosProductos.filter((_, i) => nuevosProductos[i] !== productos[i])) {
@@ -1186,13 +1186,17 @@ export function usePriceControl() {
         if (!pedidosPorProveedor[proveedorId]) {
           pedidosPorProveedor[proveedorId] = [];
         }
+        const precioUnitario = precioPorKg(
+          { precioCosto: mejorPrecio.precioCosto, cantidadEmbalaje: mejorPrecio.cantidadEmbalaje },
+          producto.costoBase || 0
+        );
         pedidosPorProveedor[proveedorId].push({
           id: generateUUID(),
           productoId: item.productoId,
           proveedorId: proveedorId,
           cantidad: cantidadNecesaria,
-          precioUnitario: mejorPrecio.precioCosto,
-          subtotal: cantidadNecesaria * mejorPrecio.precioCosto
+          precioUnitario,
+          subtotal: Math.round(cantidadNecesaria * precioUnitario * 100) / 100,
         });
       } else {
         console.warn(`Producto ${producto.nombre} no tiene proveedores registrados.`);
@@ -1247,18 +1251,25 @@ export function usePriceControl() {
 
   // CÁLCULO MEMOIZADO DE ESTADÍSTICAS (MAX PERFORMANCE)
   const estadisticas = useMemo(() => {
-    console.log('📊 Optimizando Estadísticas...');
     const totalProductos = productos.length;
     const totalProveedores = proveedores.length;
     const alertasNoLeidasCount = alertas.filter(a => !a.leida).length;
     const totalPrePedidos = prepedidos.length;
     const prePedidosConfirmados = prepedidos.filter(p => p.estado === 'confirmado').length;
 
-    // Calcular utilidad promedio con optimización de búsqueda
+    // Utilidad con costo UNITARIO (bulto ÷ embalaje), no precio del pack
     const mejorPrecioCache = new Map<string, number>();
     productos.forEach(p => {
       const best = getMejorPrecio(p.id);
-      if (best) mejorPrecioCache.set(p.id, best.precioCosto);
+      if (best) {
+        mejorPrecioCache.set(
+          p.id,
+          precioPorKg(
+            { precioCosto: best.precioCosto, cantidadEmbalaje: best.cantidadEmbalaje },
+            p.costoBase || 0
+          )
+        );
+      }
     });
 
     const productosConPrecio = productos.filter(p => p.precioVenta > 0 && mejorPrecioCache.has(p.id));

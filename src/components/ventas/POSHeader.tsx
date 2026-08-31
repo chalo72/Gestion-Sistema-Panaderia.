@@ -29,13 +29,14 @@ interface POSHeaderProps {
     vendedoraActivaId?: string | null;
     onSelectVendedora?: (v: VendedoraOption | null) => void;
     onShowBalanceProduccion?: () => void;
+    onShowChecklistVitrina?: () => void;
 }
 
 export function POSHeader({
     viewMode, setViewMode,
     tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida,
     cajaActiva, onCerrarCaja, onMovimientoEntrada, onMovimientoSalida,
-    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowBalanceProduccion,
+    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowBalanceProduccion, onShowChecklistVitrina
 }: POSHeaderProps) {
     const [panelOpen, setPanelOpen] = useState(false);
 
@@ -110,6 +111,12 @@ export function POSHeader({
                                 <span className="text-[10px] font-black uppercase tracking-tight">Balance</span>
                             </button>
                         )}
+                        {onShowChecklistVitrina && (
+                            <button onClick={onShowChecklistVitrina} className="h-8 px-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 transition-all flex items-center gap-1.5 shrink-0" title="Checklist de Rotación de Vitrina">
+                                <span className="text-[12px]">📝</span>
+                                <span className="text-[10px] font-black uppercase tracking-tight">Vitrina</span>
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>
@@ -169,6 +176,16 @@ export function POSHeader({
                             title="Balance Producción"
                         >
                             <span className="text-[18px]">📈</span>
+                        </button>
+                    )}
+                    {/* Checklist */}
+                    {onShowChecklistVitrina && (
+                        <button
+                            onClick={onShowChecklistVitrina}
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            title="Checklist Rotación Vitrina"
+                        >
+                            <span className="text-[18px]">📝</span>
                         </button>
                     )}
                 </div>

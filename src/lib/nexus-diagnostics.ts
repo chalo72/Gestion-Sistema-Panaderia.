@@ -17,15 +17,12 @@ export const NexusDiagnostics = {
     try {
       // 1. Verificar IndexedDB
       const productos = await db.getAllProductos();
-      console.log(`✅ [LOCAL]: IndexedDB operativo. ${productos.length} productos encontrados.`);
 
       // 2. Verificar Snapshots
       const snapshots = backupService.getAllSnapshots();
-      console.log(`✅ [BACKUP]: Sistema de Snapshots operativo. ${snapshots.length}/5 estados guardados.`);
 
       // 3. Verificar Sincronización (si existe)
       const isOnline = navigator.onLine;
-      console.log(`📡 [NETWORK]: Estado de conexión: ${isOnline ? 'ONLINE' : 'OFFLINE'}`);
 
       console.groupEnd();
       return true;
@@ -41,7 +38,6 @@ export const NexusDiagnostics = {
    */
   expose() {
     (window as any).NexusDebug = this;
-    console.log('🛠️ [NEXUS]: Herramientas de diagnóstico expuestas en window.NexusDebug');
   },
 
   /**
@@ -58,7 +54,6 @@ export const NexusDiagnostics = {
         body: JSON.stringify({ args: { type, content: data } })
       });
       if (!response.ok) throw new Error('Nexus Bridge inalcanzable');
-      console.log('🌌 [NEXUS CORE]: Telemetría enviada con éxito');
     } catch (e) {
       console.warn('⚠️ [NEXUS CORE]: Servidor Nexus desconectado o en reposo.');
     }

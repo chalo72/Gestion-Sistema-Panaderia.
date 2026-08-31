@@ -1,6 +1,6 @@
 import { generateUUID } from '@/lib/safe-utils';
 import React, { useState } from 'react';
-import { Users, Clock, ChefHat, Plus, Edit2, Trash2, Save, X, Unlock } from 'lucide-react';
+import { Users, Clock, ChefHat, Plus, Edit2, Trash2, Save, X, Unlock, UserCircle } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -81,23 +81,33 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
         <div className="flex flex-col h-full min-h-0 overflow-hidden">
             {/* Header */}
             <div className="p-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
-                            <ChefHat className="w-5 h-5 text-primary" /> Mesas del Local
-                        </h2>
-                        <p className="text-sm text-slate-400 mt-0.5">Toca una mesa para abrir pedido</p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                                <ChefHat className="w-5 h-5 text-primary" /> Mesas del Local
+                            </h2>
+                            <p className="text-sm text-slate-400 mt-0.5">Toca una mesa para abrir pedido</p>
+                        </div>
+                        <div className="sm:hidden">
+                            {onAddMesa && (
+                                <Button onClick={openCreateModal}
+                                    className="h-10 px-4 rounded-xl bg-primary hover:bg-orange-600 text-white font-bold text-sm shadow-md">
+                                    <Plus className="w-4 h-4 mr-1" /> Mesa
+                                </Button>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-bold text-sm">
+                    <div className="flex items-center gap-3 overflow-x-auto pb-1 scrollbar-hide">
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg font-bold text-sm shrink-0">
                             <div className="w-2 h-2 rounded-full bg-emerald-500" /> {mesasDisponibles} Libres
                         </span>
-                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg font-bold text-sm">
+                        <span className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg font-bold text-sm shrink-0">
                             <div className="w-2 h-2 rounded-full bg-blue-500" /> {mesasOcupadas} Ocupadas
                         </span>
                         {onAddMesa && (
                             <Button onClick={openCreateModal}
-                                className="h-10 px-4 rounded-xl bg-primary hover:bg-orange-600 text-white font-bold text-sm">
+                                className="hidden sm:flex h-10 px-4 rounded-xl bg-primary hover:bg-orange-600 text-white font-bold text-sm shrink-0">
                                 <Plus className="w-4 h-4 mr-1" /> Nueva Mesa
                             </Button>
                         )}
@@ -189,7 +199,10 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                                             </div>
                                         )}
                                         {mesa.abiertaPor && (
-                                            <p className="text-[10px] text-blue-500 truncate">👤 {mesa.abiertaPor}</p>
+                                            <div className="flex items-center gap-1.5 mt-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-2 py-1 rounded-md border border-indigo-100 dark:border-indigo-800/50">
+                                                <UserCircle className="w-3.5 h-3.5 shrink-0" />
+                                                <span className="text-[10px] font-bold truncate tracking-tight">{mesa.abiertaPor}</span>
+                                            </div>
                                         )}
                                         {pedido.cliente && (
                                             <span className="text-[10px] font-semibold text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded inline-block truncate max-w-full">

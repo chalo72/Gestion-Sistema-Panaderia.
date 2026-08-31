@@ -18,7 +18,6 @@ export function AgentMissionDispatcher() {
         const initMisiones = async () => {
             const existentes = await db.getAgenteMisiones('pico-claw');
             if (existentes.length === 0) {
-                console.log("🦅 [Dispatcher] Inicializando misiones primordiales para PICO-CLAW...");
                 
                 // Misión 1: Auditoría Financiera
                 await db.saveAgenteMision({
@@ -85,7 +84,6 @@ export function AgentMissionDispatcher() {
     };
 
     const ejecutarMision = async (mision: DBMisionAgent) => {
-        console.log(`🦅 [Dispatcher] Ejecutando misión: ${mision.misionExplicita} para ${mision.agenteId}`);
         
         try {
             await db.saveAgenteMision({ ...mision, estado: 'ejecutando' });
@@ -189,7 +187,6 @@ export function AgentMissionDispatcher() {
                                     toast.info(`Reporte Validado: ${nuevoHallazgo.titulo}`);
                                 }
                             } else {
-                                console.log(`🦅 [Judgment Day] Hallazgo descartado por baja fidelidad: ${hallazgoData.titulo}`);
                             }
                         }
                     }

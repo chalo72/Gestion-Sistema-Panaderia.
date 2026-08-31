@@ -72,14 +72,12 @@ export class IndexedDBAdapter implements DatabaseAdapter {
         for (const col of COLLECTIONS) {
           if (!db.objectStoreNames.contains(col)) {
             db.createObjectStore(col, { keyPath: 'id' });
-            console.log(`📦 [IndexedDB]: Object Store creado → '${col}'`);
           }
         }
       };
 
       request.onsuccess = (event) => {
         this.db = (event.target as IDBOpenDBRequest).result;
-        console.log('🏠 [IndexedDB]: Base de datos local lista.');
         resolve();
       };
 
@@ -307,7 +305,6 @@ export class IndexedDBAdapter implements DatabaseAdapter {
     }
 
     if (!errorOccurred) {
-      console.log(`☁️→🏠 [IndexedDB]: Hidratado '${collection}' con ${items.length} items (MERGE LOCAL GANA).`);
     }
   }
 

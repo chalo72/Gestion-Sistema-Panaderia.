@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+*.min.js
+public/
+e2e/
+**/*.test.ts
+**/*.test.tsx
+**/*_backup.tsx

@@ -127,6 +127,18 @@ export interface FormulacionBase {
 // MODELOS DE PAN POR FORMULACIÓN
 // ============================================
 
+/** Categoría de producción: define qué tipo de producto es el modelo de pan
+ *  y en qué turno del panadero se produce. */
+export type CategoriaProduccion =
+  | 'pan_sal'         // 🍞 Pan salado corriente
+  | 'pan_dulce'       // 🍬 Pan dulce corriente
+  | 'empacado_sal'    // 📦 Pan de sal empacado (bolsa grande)
+  | 'empacado_dulce'  // 📦 Pan de dulce empacado (bolsa grande)
+  | 'hojaldrado'      // 🥐 Hojaldrados (cuernitos, palmeritas, etc.)
+  | 'torta'           // 🎂 Tortas
+  | 'galleta'         // 🍪 Galletas
+  | 'otro';           // 📌 Sin clasificar
+
 export interface ModeloPan {
   id: string;
   nombre: string;              // Ej: "Pan Francés 80gr", "Mogolla 50gr"
@@ -161,6 +173,9 @@ export interface ModeloPan {
     consejo: string;
     fechaAnalisis: string;
   };
+  velocidadVenta?: 'estrella' | 'alta' | 'media' | 'baja' | 'nuevo'; // Velocidad de rotación en vitrina
+  prioridadRotacion?: 'alta' | 'normal'; // Si es un pan que se daña rápido
+  categoriaProduccion?: CategoriaProduccion; // NUEVO: Categoría de turno de producción
   activo: boolean;
   createdAt: string;
 }
@@ -198,7 +213,7 @@ export interface PedidoInsumoProduccion {
 // CONTROL DE CALIDAD — PRE-VENTA
 // ============================================
 
-export type MotivoRechazo = 'quemado' | 'amogañado' | 'deforme' | 'crudo' | 'otro';
+export type MotivoRechazo = 'quemado' | 'amogañado' | 'deforme' | 'crudo' | 'mala_rotacion' | 'sobreproduccion' | 'otro';
 export type ResponsableRechazo = 'panadero' | 'vendedora' | 'panaderia';
 
 export interface RechazoCalidad {
@@ -294,6 +309,43 @@ export interface PlanSemanaItem {
 export interface PlanSemana {
   dias: PlanSemanaItem[][];
   updatedAt: string;
+}
+
+// ============================================
+// PROGRAMACIÓN SEMANAL FLEXIBLE POR CATEGORÍAS
+// ============================================
+
+/** Asignación de arrobas a una categoría dentro de un día */
+export interface AsignacionCategoria {
+  categoria: CategoriaProduccion;
+  arrobas: number; // Arrobas asignadas a esta categoría ese día
+}
+
+/** Configuración de un día en la programación semanal flexible */
+export interface ProgramacionDia {
+  categorias: AsignacionCategoria[]; // Categorías y sus arrobas asignadas
+  capacidadReferencia: number;       // Arrobas totales de referencia (ej: 3)
+  notas?: string;                    // Notas del Director para este día
+}
+
+/** Programación semanal flexible — el Director la actualiza cuando quiera */
+export interface ProgramacionSemanaFlexible {
+  semanaId: string;   // Ej: "2026-W33" (año-semana ISO)
+  fechaInicio: string; // Lunes de esa semana YYYY-MM-DD
+  dias: ProgramacionDia[]; // índice 0=lunes ... 6=domingo
+  updatedAt: string;
+}
+
+/** Registro de producción perdida y su estado de recuperación */
+export interface DiaProduccionPerdido {
+  id: string;
+  fecha: string;          // YYYY-MM-DD del día que no se produjo
+  diaSemana: number;      // 0=domingo ... 6=sábado
+  categoriasPerdidas: AsignacionCategoria[]; // Qué categorías no se hicieron
+  estado: 'pendiente' | 'recuperado_parcial' | 'recuperado' | 'cancelado';
+  accionTomada?: 'recuperar_hoy' | 'postergar' | 'cancelar';
+  fechaResolucion?: string;
+  notas?: string;
 }
 
 export interface PlanDiarioMasa {

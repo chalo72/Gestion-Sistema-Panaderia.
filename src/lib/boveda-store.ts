@@ -1,6 +1,6 @@
 import { generateUUID } from '@/lib/safe-utils';
 
-export type TipoBoveda = 'Caja Fuerte' | 'Base' | 'Banco' | 'Otro';
+export type TipoBoveda = 'Caja Fuerte' | 'Base' | 'Banco' | 'Provisión' | 'Otro';
 
 export interface Boveda {
   id: string;
@@ -8,6 +8,8 @@ export interface Boveda {
   tipo: TipoBoveda;
   saldo: number;
   creadoEn: string;
+  metaMensual?: number;
+  metaDiaria?: number;
 }
 
 export type TipoMovimientoBoveda = 'Ingreso' | 'Egreso' | 'Transferencia';

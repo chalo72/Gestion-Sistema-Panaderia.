@@ -108,7 +108,7 @@ const calcCostoVendidos = (
     productosLista: NonNullable<ReportesProps['productos']>,
     periodo: string
 ): number => {
-    const ventasPeriodo = ventasLista.filter(v => v.fecha.startsWith(periodo));
+    const ventasPeriodo = ventasLista.filter(v => (v.fecha || '').startsWith(periodo));
     const costo = ventasPeriodo.reduce((sum, v) => {
         return sum + (v.items ?? []).reduce((s, item) => {
             const prod = productosLista.find(p => p.id === item.productoId);
@@ -131,7 +131,7 @@ const aplicarCogsAlReporte = <T extends { totalVentas: number; totalGastos: numb
 };
 
 export function useReportesData(props: ReportesProps) {
-    const { ventas, sesionesCaja = [], gastos, formatCurrency, generarReporte, productos = [], categorias = [], proveedores = [] } = props;
+    const { ventas, sesionesCaja = [], gastos, formatCurrency, generarReporte, productos = [], categorias = [], proveedores = [], addGasto, updateGasto, deleteGasto } = props;
     
     
     const { role } = useAuth();
@@ -239,9 +239,9 @@ export function useReportesData(props: ReportesProps) {
     const margenAnterior = reporteMesAnterior.totalVentas > 0 ? (reporteMesAnterior.utilidadBruta / reporteMesAnterior.totalVentas) * 100 : 0;
 
     // Ticket promedio
-    const ventasMes = ventas.filter(v => v.fecha.startsWith(currentMonth));
+    const ventasMes = ventas.filter(v => (v.fecha || '').startsWith(currentMonth));
     const ticketPromedio = ventasMes.length > 0 ? reporteActual.totalVentas / ventasMes.length : 0;
-    const ventasMesAnt = ventas.filter(v => v.fecha.startsWith(prevPeriodo));
+    const ventasMesAnt = ventas.filter(v => (v.fecha || '').startsWith(prevPeriodo));
     const ticketAnterior = ventasMesAnt.length > 0 ? reporteMesAnterior.totalVentas / ventasMesAnt.length : 0;
 
     // Ratio gasto/venta
@@ -813,14 +813,20 @@ export function useReportesData(props: ReportesProps) {
 
         // Solo al registrar (no al editar): evita sumar dos veces el mismo arqueo en Bóveda
         if (!esEdicion) {
-            syncArqueoCajasABoveda({
-                cajas: cajas as Record<string, string | number> | undefined,
-                nequi: nq,
-                transferencia: tr,
-                turno: formVenta.turno || 'Día Completo',
-                fecha: formVenta.fecha,
-                usuario: role || 'Admin',
-            });
+            try {
+                syncArqueoCajasABoveda({
+                    cajas: cajas as Record<string, string | number> | undefined,
+                    nequi: nq,
+                    transferencia: tr,
+                    turno: formVenta.turno || 'Día Completo',
+                    fecha: formVenta.fecha,
+                    usuario: role || 'Admin',
+                });
+            } catch (err) {
+                console.error('[handleAddVentaDiaria] Error al sincronizar con bóveda:', err);
+                // No detenemos la ejecución para que la venta sí se registre en ventas diarias
+                toast.error('Venta registrada, pero falló la sincronización automática con Bóveda.', { duration: 5000 });
+            }
         }
         
         setVentasDiarias(getVentasDiarias());
@@ -1122,6 +1128,9 @@ export function useReportesData(props: ReportesProps) {
         cfg: null,
         cardsData,
         addMovimientoBoveda,
-        addBoveda
+        addBoveda,
+        addGasto,
+        updateGasto,
+        deleteGasto
     };
 }

@@ -6,7 +6,8 @@ import {
   Truck, CheckCircle, Wrench, MessageSquare,
   Leaf, Scale, FileText, Target, Instagram,
   Lightbulb, Clipboard, Brain, Building, ShieldAlert, Eye,
-  BarChart3, Zap, RefreshCw
+  BarChart3, Zap, TrendingDown, AlertTriangle, CreditCard,
+  ShoppingCart, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,8 +16,8 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import type { UserRole, Venta, Producto, CajaSesion, CreditoCliente, Gasto } from '@/types';
 import { cn } from '@/lib/utils';
-import { 
-  type AgenteId, AGENTES_CONFIG, consultarAgente 
+import {
+  type AgenteId, AGENTES_CONFIG, consultarAgente
 } from '@/constants/agentes';
 import { AccesoGlobalCard } from '@/components/layout/AccesoGlobalCard';
 
@@ -25,7 +26,6 @@ interface InventarioItem { productoId: string; stock: number; stockMinimo?: numb
 interface OficinaProps {
   publicAppUrl?: string;
   onViewChange: (view: any) => void;
-  // Datos reales del negocio
   ventas?: Venta[];
   productos?: Producto[];
   inventario?: InventarioItem[];
@@ -35,16 +35,19 @@ interface OficinaProps {
   formatCurrency?: (v: number) => string;
 }
 
+type Tab = 'hoy' | 'agentes' | 'equipo';
+
 const ROLE_CONFIG: Record<UserRole, { label: string; emoji: string; color: string; bg: string; borderColor: string; shadow: string }> = {
-  ADMIN:     { label: 'ADMINISTRADOR', emoji: '👑', color: 'text-[#DAA520]', bg: 'bg-[#DAA520]/10', borderColor: 'border-[#DAA520]/30', shadow: 'shadow-[#DAA520]/20' },
-  GERENTE:   { label: 'GERENTE',       emoji: '💼', color: 'text-[#60a5fa]', bg: 'bg-[#60a5fa]/10', borderColor: 'border-[#60a5fa]/30', shadow: 'shadow-[#60a5fa]/20' },
-  COMPRADOR: { label: 'COMPRADOR',     emoji: '🛒', color: 'text-[#10b981]', bg: 'bg-[#10b981]/10', borderColor: 'border-[#10b981]/30', shadow: 'shadow-[#10b981]/20' },
-  VENDEDOR:  { label: 'VENDEDOR',      emoji: '💰', color: 'text-[#f97316]', bg: 'bg-[#f97316]/10', borderColor: 'border-[#f97316]/30', shadow: 'shadow-[#f97316]/20' },
-  PANADERO:  { label: 'PANADERO',      emoji: '🍞', color: 'text-[#F5DEB3]', bg: 'bg-[#F5DEB3]/10', borderColor: 'border-[#F5DEB3]/30', shadow: 'shadow-[#F5DEB3]/20' },
-  AUXILIAR:  { label: 'AUXILIAR',      emoji: '🔧', color: 'text-[#94a3b8]', bg: 'bg-[#94a3b8]/10', borderColor: 'border-[#94a3b8]/30', shadow: 'shadow-[#94a3b8]/20' },
+  ADMIN:     { label: 'Administrador', emoji: '👑', color: 'text-[#DAA520]', bg: 'bg-[#DAA520]/10', borderColor: 'border-[#DAA520]/30', shadow: 'shadow-[#DAA520]/20' },
+  GERENTE:   { label: 'Gerente',       emoji: '💼', color: 'text-[#60a5fa]', bg: 'bg-[#60a5fa]/10', borderColor: 'border-[#60a5fa]/30', shadow: 'shadow-[#60a5fa]/20' },
+  COMPRADOR: { label: 'Comprador',     emoji: '🛒', color: 'text-[#10b981]', bg: 'bg-[#10b981]/10', borderColor: 'border-[#10b981]/30', shadow: 'shadow-[#10b981]/20' },
+  VENDEDOR:  { label: 'Vendedor',      emoji: '💰', color: 'text-[#f97316]', bg: 'bg-[#f97316]/10', borderColor: 'border-[#f97316]/30', shadow: 'shadow-[#f97316]/20' },
+  PANADERO:  { label: 'Panadero',      emoji: '🍞', color: 'text-[#F5DEB3]', bg: 'bg-[#F5DEB3]/10', borderColor: 'border-[#F5DEB3]/30', shadow: 'shadow-[#F5DEB3]/20' },
+  AUXILIAR:  { label: 'Auxiliar',      emoji: '🔧', color: 'text-[#94a3b8]', bg: 'bg-[#94a3b8]/10', borderColor: 'border-[#94a3b8]/30', shadow: 'shadow-[#94a3b8]/20' },
 };
 
-// ── IDs DE AGENTES POR DIVISIÓN (Vínculo con AGENTES_CONFIG) ────────────────
+// Agentes ordenados por importancia para el panadero
+const AGENTES_ESTRELLA: AgenteId[] = ['gerente', 'ventas', 'inventario', 'contable', 'abogado'];
 const DIV_ESTRATEGICA: AgenteId[] = ['gerente', 'inversion', 'contable', 'creditos', 'subvenciones'];
 const DIV_OPERATIVA: AgenteId[]   = ['produccion', 'inventario', 'logistica', 'calidad', 'mantenimiento', 'sostenibilidad'];
 const DIV_CRECIMIENTO: AgenteId[] = ['marketing', 'influencer', 'ventas', 'clientes', 'pitch'];
@@ -61,17 +64,10 @@ const ICON_MAP: Record<string, any> = {
 
 export default function Oficina({ publicAppUrl, onViewChange, ventas = [], productos = [], inventario = [], sesionesCaja = [], creditosClientes = [], gastos = [], formatCurrency }: OficinaProps) {
   const { usuarios, usuario } = useAuth();
-  const [anuncios, setAnuncios] = useState([{ id: 1, autor: 'Sistema', texto: 'Holding v8.0 Digitalizado al 100% 🎉', hora: 'Hoy' }]);
+  const [tab, setTab] = useState<Tab>('hoy');
+  const [anuncios, setAnuncios] = useState([{ id: 1, autor: 'Sistema', texto: 'Dulce Placer v8.5 — Digitalizado al 100% 🎉', hora: 'Hoy' }]);
   const [nuevoAnuncio, setNuevoAnuncio] = useState('');
-  const [onlineIds] = useState<Set<string>>(() => {
-    const ids = new Set<string>();
-    usuarios.slice(0, 3).forEach(u => ids.add(u.id));
-    return ids;
-  });
-
-  const appUrl = publicAppUrl || window.location.origin;
-
-  // Estado para la Autonomía de Agentes
+  const [verTodosAgentes, setVerTodosAgentes] = useState(false);
   const [agenteActivo, setAgenteActivo] = useState<AgenteId | null>(null);
   const [promptAgente, setPromptAgente] = useState('');
   const [respuestaAgente, setRespuestaAgente] = useState('');
@@ -81,14 +77,22 @@ export default function Oficina({ publicAppUrl, onViewChange, ventas = [], produ
 
   const fmt = (v: number) => formatCurrency ? formatCurrency(v) : `$${v.toLocaleString('es-CO')}`;
 
-  // ── Compila un resumen de datos reales del negocio ──
-  const contextoNegocio = useMemo(() => {
+  // ── KPIs REALES ──
+  const kpis = useMemo(() => {
     const hoy = new Date().toISOString().split('T')[0];
     const ventasHoy = ventas.filter(v => v.fecha?.startsWith(hoy));
     const totalHoy = ventasHoy.reduce((s, v) => s + v.total, 0);
-    const ticketProm = ventasHoy.length > 0 ? totalHoy / ventasHoy.length : 0;
 
-    // Top 3 productos hoy
+    const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
+    const ayerStr = ayer.toISOString().split('T')[0];
+    const totalAyer = ventas.filter(v => v.fecha?.startsWith(ayerStr)).reduce((s, v) => s + v.total, 0);
+    const diff = totalAyer > 0 ? ((totalHoy - totalAyer) / totalAyer * 100) : 0;
+
+    const stockBajo = inventario.filter(i => i.stockMinimo !== undefined && i.stock <= i.stockMinimo);
+    const creditosVencidos = creditosClientes.filter(c => c.estado === 'vencido');
+    const totalCreditosVencidos = creditosVencidos.reduce((s, c) => s + (c.saldo || 0), 0);
+    const cajaAbierta = sesionesCaja.find(s => s.estado === 'abierta');
+
     const conteoProductos: Record<string, { nombre: string; cantidad: number; total: number }> = {};
     ventasHoy.forEach(v => v.items.forEach(item => {
       const prod = productos.find(p => p.id === item.productoId);
@@ -99,68 +103,44 @@ export default function Oficina({ publicAppUrl, onViewChange, ventas = [], produ
     }));
     const top3 = Object.values(conteoProductos).sort((a, b) => b.total - a.total).slice(0, 3);
 
-    // Métodos de pago hoy
-    const metodos: Record<string, number> = {};
-    ventasHoy.forEach(v => { metodos[v.metodoPago] = (metodos[v.metodoPago] || 0) + v.total; });
+    return {
+      totalHoy, totalAyer, diff, txCount: ventasHoy.length,
+      stockBajo: stockBajo.length, stockBajoItems: stockBajo,
+      creditosVencidos: creditosVencidos.length, totalCreditosVencidos,
+      cajaAbierta, top3
+    };
+  }, [ventas, productos, inventario, sesionesCaja, creditosClientes]);
 
-    // Stock bajo
-    const stockBajo = inventario.filter(i => i.stockMinimo !== undefined && i.stock <= i.stockMinimo).map(i => {
-      const prod = productos.find(p => p.id === i.productoId);
-      return `${prod?.nombre || i.productoId} (stock: ${i.stock})`;
-    });
-
-    // Créditos vencidos
-    const creditosVencidos = creditosClientes.filter(c => c.estado === 'vencido');
-    const totalCreditosVencidos = creditosVencidos.reduce((s, c) => s + (c.saldo || 0), 0);
-
-    // Caja activa
-    const cajaAbierta = sesionesCaja.find(s => s.estado === 'abierta');
-
-    // Gastos del mes
-    const mesActual = hoy.substring(0, 7);
+  // ── Contexto para los agentes ──
+  const contextoNegocio = useMemo(() => {
+    const hoy = new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
+    const mesActual = new Date().toISOString().substring(0, 7);
     const gastosMes = gastos.filter(g => g.fecha?.startsWith(mesActual));
     const totalGastosMes = gastosMes.reduce((s, g) => s + g.monto, 0);
 
-    // Ventas de ayer para comparativo
-    const ayer = new Date(); ayer.setDate(ayer.getDate() - 1);
-    const ayerStr = ayer.toISOString().split('T')[0];
-    const ventasAyer = ventas.filter(v => v.fecha?.startsWith(ayerStr));
-    const totalAyer = ventasAyer.reduce((s, v) => s + v.total, 0);
+    return `RESUMEN OPERATIVO — ${hoy.toUpperCase()}:
 
-    return `RESUMEN OPERATIVO HOY (${new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}):
-
-VENTAS HOY:
-- Total: ${fmt(totalHoy)} en ${ventasHoy.length} transacciones
-- Ticket promedio: ${fmt(ticketProm)}
-- Vs ayer: ${fmt(totalAyer)} (${totalAyer > 0 ? ((totalHoy - totalAyer) / totalAyer * 100).toFixed(1) : 0}% diferencia)
+VENTAS HOY: ${fmt(kpis.totalHoy)} en ${kpis.txCount} transacciones
+COMPARATIVO vs AYER: ${fmt(kpis.totalAyer)} (${kpis.diff > 0 ? '+' : ''}${kpis.diff.toFixed(1)}%)
 
 PRODUCTOS MÁS VENDIDOS HOY:
-${top3.length > 0 ? top3.map((p, i) => `${i + 1}. ${p.nombre}: ${p.cantidad} unidades = ${fmt(p.total)}`).join('\n') : '- Sin ventas aún'}
+${kpis.top3.length > 0 ? kpis.top3.map((p, i) => `${i + 1}. ${p.nombre}: ${p.cantidad} uds = ${fmt(p.total)}`).join('\n') : '- Sin ventas aún'}
 
-MÉTODOS DE PAGO HOY:
-${Object.entries(metodos).map(([m, v]) => `- ${m}: ${fmt(v)}`).join('\n') || '- Sin datos'}
-
-CAJA:
-- Estado: ${cajaAbierta ? `ABIERTA (apertura: ${fmt(cajaAbierta.montoApertura || 0)})` : 'Cerrada / sin sesión activa'}
-
-INVENTARIO - ALERTAS DE STOCK BAJO (${stockBajo.length}):
-${stockBajo.length > 0 ? stockBajo.map(s => `- ${s}`).join('\n') : '- Todos los productos con stock suficiente'}
-
-CRÉDITOS VENCIDOS: ${creditosVencidos.length} clientes — Total pendiente: ${fmt(totalCreditosVencidos)}
-
+CAJA: ${kpis.cajaAbierta ? `ABIERTA (apertura: ${fmt(kpis.cajaAbierta.montoApertura || 0)})` : 'Cerrada'}
+STOCK BAJO: ${kpis.stockBajo} producto(s) con alerta
+CRÉDITOS VENCIDOS: ${kpis.creditosVencidos} cliente(s) — ${fmt(kpis.totalCreditosVencidos)}
 GASTOS DEL MES: ${fmt(totalGastosMes)} en ${gastosMes.length} registros
+EQUIPO: ${usuarios.filter(u => u.activo !== false).length} personas activas`;
+  }, [kpis, ventas, gastos, usuarios]);
 
-EQUIPO ACTIVO: ${usuarios.filter(u => u.activo !== false).length} personas registradas en el sistema`;
-  }, [ventas, productos, inventario, sesionesCaja, creditosClientes, gastos, usuarios]);
-
-  // ── Briefing automático del Gerente ──
+  // ── Briefing ──
   const pedirBriefingGerente = async () => {
     setCargandoBriefing(true);
     try {
       let texto = '';
       await consultarAgente(
         'gerente',
-        `Analiza los datos reales del negocio de hoy y dame un informe ejecutivo conciso (máximo 200 palabras) con: 1) Estado del negocio hoy, 2) Alertas críticas que requieren atención inmediata, 3) Una recomendación de acción para el dueño. Habla directamente al dueño como su gerente de confianza. Formato natural, no JSON.`,
+        `Analiza los datos reales del negocio y dame un informe ejecutivo conciso (máximo 180 palabras): 1) Estado del negocio hoy, 2) Alertas críticas, 3) Una recomendación de acción para el dueño. Tono directo como gerente de confianza.`,
         (chunk) => { texto += chunk; },
         undefined,
         contextoNegocio
@@ -173,20 +153,6 @@ EQUIPO ACTIVO: ${usuarios.filter(u => u.activo !== false).length} personas regis
     }
   };
 
-  const handleShareWhatsApp = (nombre: string, email: string, rol: UserRole) => {
-    const config = ROLE_CONFIG[rol] || ROLE_CONFIG.AUXILIAR;
-    const mensaje = `🌟 *DULCE PLACER - ACCESO* 🌟\n\nHola *${nombre}* ${config.emoji}, tus credenciales son:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${email}\n🔑 *Clave:* (Solicítala a tu administrador por seguridad)`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, '_blank');
-    toast.success(`Acceso enviado a ${nombre}`);
-  };
-
-  const handleAnuncioGeneral = () => {
-    if (!nuevoAnuncio.trim()) return;
-    setAnuncios(prev => [{ id: Date.now(), autor: 'Opc. Center', texto: nuevoAnuncio.trim(), hora: 'Ahora' }, ...prev]);
-    setNuevoAnuncio('');
-    toast.success('Pulsación de Mando Exitosa');
-  };
-
   const handleConsultarAgente = async () => {
     if (!agenteActivo || !promptAgente.trim() || estaCargandoAgente) return;
     setEstaCargandoAgente(true);
@@ -195,398 +161,481 @@ EQUIPO ACTIVO: ${usuarios.filter(u => u.activo !== false).length} personas regis
       await consultarAgente(agenteActivo, promptAgente, (chunk) => {
         setRespuestaAgente(prev => prev + chunk);
       }, undefined, contextoNegocio);
-      toast.success(`${AGENTES_CONFIG[agenteActivo].nombre} ha respondido.`);
     } catch (err: any) {
-      toast.error(`Error de enlace: ${err.message}`);
+      toast.error(`Error: ${err.message}`);
     } finally {
       setEstaCargandoAgente(false);
     }
   };
 
-  const RenderAgent = (id: AgenteId) => {
-    const config = AGENTES_CONFIG[id];
-    if (!config) return null; // Seguridad contra IDs inexistentes
-    const Icon = ICON_MAP[id] || Brain;
-    const borderClass = (config.bg || '').split(' ')[1] || 'border-white/10';
+  const handleAnuncioGeneral = () => {
+    if (!nuevoAnuncio.trim()) return;
+    setAnuncios(prev => [{ id: Date.now(), autor: usuario?.nombre || 'Dirección', texto: nuevoAnuncio.trim(), hora: new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }) }, ...prev]);
+    setNuevoAnuncio('');
+    toast.success('Anuncio enviado al equipo');
+  };
 
+  const handleShareWhatsApp = (nombre: string, email: string, rol: UserRole) => {
+    const config = ROLE_CONFIG[rol] || ROLE_CONFIG.AUXILIAR;
+    const appUrl = publicAppUrl || window.location.origin;
+    const mensaje = `🌟 *DULCE PLACER* 🌟\n\nHola *${nombre}* ${config.emoji}, tus credenciales:\n\n🔗 *App:* ${appUrl}\n📧 *Usuario:* ${email}\n🔑 *PIN:* Solicítalo al administrador`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, '_blank');
+  };
+
+  const abrirAgente = (id: AgenteId) => {
+    setAgenteActivo(id);
+    setRespuestaAgente('');
+    setPromptAgente('');
+  };
+
+  // ── Render tarjeta de agente ──
+  const AgentCard = ({ id }: { id: AgenteId }) => {
+    const config = AGENTES_CONFIG[id];
+    if (!config) return null;
+    const Icon = ICON_MAP[id] || Brain;
     return (
-      <div 
-        key={id} 
-        onClick={() => {
-          setAgenteActivo(id);
-          setRespuestaAgente('');
-          setPromptAgente('');
-        }}
-        className={cn(
-          "relative overflow-hidden rounded-2xl border p-3 group bg-slate-900/40 backdrop-blur-xl transition-all hover:scale-[1.05] hover:border-white/20 cursor-pointer shadow-lg",
-          borderClass
-        )}
+      <div
+        onClick={() => abrirAgente(id)}
+        className="flex flex-col items-center gap-2 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-indigo-500/30 cursor-pointer transition-all hover:scale-[1.04] active:scale-95 group"
       >
-        <div className="relative z-10 flex flex-col items-center text-center">
-          <div className="p-2 rounded-lg bg-white/5 border border-white/5 mb-2 group-hover:bg-white/10 transition-colors">
-            <Icon className={cn("w-4 h-4", config.color)} />
-          </div>
-          <h4 className="text-[10px] font-black text-white uppercase tracking-tighter leading-none mb-1 truncate w-full group-hover:text-indigo-400 transition-colors">{config.nombre}</h4>
-          <p className="text-[8px] text-slate-500 font-bold uppercase tracking-widest italic mb-3">{config.cargo}</p>
-          <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent mb-3" />
-          <p className="text-[10px] text-slate-200 font-medium leading-relaxed px-2 text-center drop-shadow-sm group-hover:text-white transition-colors">
-            {config.misionPanaderia}
-          </p>
+        <div className={cn('p-2.5 rounded-xl bg-white/5 border border-white/5 group-hover:bg-white/10 transition-colors', config.bg)}>
+          <Icon className={cn('w-5 h-5', config.color)} />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+        <p className="text-[11px] font-black text-white uppercase tracking-tight text-center leading-tight">{config.nombre}</p>
+        <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest text-center">{config.cargo}</p>
       </div>
     );
   };
 
-  // ── MODAL CONSOLA AGENTE AUTÓNOMO ──
+  // ─── TABS ───
+  const TABS: { id: Tab; label: string; icon: string }[] = [
+    { id: 'hoy', label: 'Panel del Día', icon: '📊' },
+    { id: 'agentes', label: 'Agentes IA', icon: '🤖' },
+    { id: 'equipo', label: 'Equipo', icon: '👥' },
+  ];
+
   const modalAgente = agenteActivo ? AGENTES_CONFIG[agenteActivo] : null;
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#020617] text-slate-200">
       <div className="fixed inset-0 pointer-events-none opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#4f46e5 1px, transparent 0)', backgroundSize: '40px 40px' }} />
 
-      <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-12 relative z-10 animate-ag-fade-in">
-        
-        {/* ── DESPACHO DEL GERENTE ── */}
-        <section className="relative overflow-hidden rounded-3xl border border-[#DAA520]/30 bg-gradient-to-br from-[#DAA520]/5 to-slate-900/60 backdrop-blur-xl p-6 shadow-2xl">
-          <div className="flex flex-col md:flex-row md:items-start gap-5">
-            <div className="flex-1 space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-8 bg-[#DAA520] rounded-full shadow-[0_0_10px_#DAA520]" />
-                <h2 className="text-sm font-black text-white uppercase tracking-widest italic">
-                  Despacho del <span className="text-[#DAA520]">Gerente IA</span>
-                </h2>
-                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full animate-pulse">
-                  DATOS REALES
-                </span>
+      <div className="max-w-5xl mx-auto px-4 pt-6 pb-12 relative z-10">
+
+        {/* ── HEADER ── */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-1 bg-[#DAA520] rounded-full shadow-[0_0_12px_#DAA520]" />
+            <div>
+              <h1 className="text-xl font-black text-white uppercase tracking-tight">
+                Oficina <span className="text-[#DAA520]">Central</span>
+              </h1>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                Dulce Placer · {new Date().toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full">
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">{Object.keys(AGENTES_CONFIG).length} Agentes IA</span>
+          </div>
+        </div>
+
+        {/* ── PESTAÑAS ── */}
+        <div className="flex gap-2 mb-6 p-1 bg-white/5 rounded-2xl border border-white/10">
+          {TABS.map(t => (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={cn(
+                'flex-1 flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wide transition-all',
+                tab === t.id
+                  ? 'bg-[#DAA520] text-black shadow-lg'
+                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+              )}
+            >
+              <span>{t.icon}</span>
+              <span className="hidden sm:inline">{t.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* ══════════════════════════════════════════
+            PESTAÑA 1: PANEL DEL DÍA
+        ══════════════════════════════════════════ */}
+        {tab === 'hoy' && (
+          <div className="space-y-6 animate-ag-fade-in">
+
+            {/* KPIs principales */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                {
+                  label: 'Ventas Hoy',
+                  value: fmt(kpis.totalHoy),
+                  sub: `${kpis.txCount} transacciones`,
+                  icon: ShoppingCart,
+                  color: 'text-emerald-400',
+                  bg: 'bg-emerald-500/10 border-emerald-500/20',
+                  trend: kpis.diff,
+                },
+                {
+                  label: 'Caja',
+                  value: kpis.cajaAbierta ? 'ABIERTA' : 'CERRADA',
+                  sub: kpis.cajaAbierta ? fmt(kpis.cajaAbierta.montoApertura || 0) + ' apertura' : 'Sin sesión activa',
+                  icon: Wallet,
+                  color: kpis.cajaAbierta ? 'text-green-400' : 'text-slate-400',
+                  bg: kpis.cajaAbierta ? 'bg-green-500/10 border-green-500/20' : 'bg-slate-800/50 border-white/10',
+                },
+                {
+                  label: 'Stock Bajo',
+                  value: String(kpis.stockBajo),
+                  sub: kpis.stockBajo > 0 ? 'Requiere atención' : 'Todo OK',
+                  icon: Package,
+                  color: kpis.stockBajo > 0 ? 'text-orange-400' : 'text-slate-400',
+                  bg: kpis.stockBajo > 0 ? 'bg-orange-500/10 border-orange-500/20' : 'bg-slate-800/50 border-white/10',
+                },
+                {
+                  label: 'Créditos Vencidos',
+                  value: String(kpis.creditosVencidos),
+                  sub: kpis.creditosVencidos > 0 ? fmt(kpis.totalCreditosVencidos) : 'Sin vencidos',
+                  icon: CreditCard,
+                  color: kpis.creditosVencidos > 0 ? 'text-red-400' : 'text-slate-400',
+                  bg: kpis.creditosVencidos > 0 ? 'bg-red-500/10 border-red-500/20' : 'bg-slate-800/50 border-white/10',
+                },
+              ].map((kpi) => (
+                <div key={kpi.label} className={cn('rounded-2xl border p-4 space-y-2', kpi.bg)}>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest">{kpi.label}</p>
+                    <kpi.icon className={cn('w-4 h-4', kpi.color)} />
+                  </div>
+                  <p className={cn('text-xl font-black', kpi.color)}>{kpi.value}</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-slate-500">{kpi.sub}</p>
+                    {'trend' in kpi && (
+                      <span className={cn('text-[10px] font-black flex items-center gap-0.5', kpi.trend >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                        {kpi.trend >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        {Math.abs(kpi.trend).toFixed(1)}%
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Top productos */}
+            {kpis.top3.length > 0 && (
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-3">🏆 Más vendidos hoy</p>
+                <div className="space-y-2">
+                  {kpis.top3.map((p, i) => (
+                    <div key={p.nombre} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-[#DAA520] w-4">{i + 1}.</span>
+                        <span className="text-sm font-bold text-white">{p.nombre}</span>
+                        <span className="text-[10px] text-slate-500">{p.cantidad} uds</span>
+                      </div>
+                      <span className="text-sm font-black text-emerald-400">{fmt(p.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Stock bajo alertas */}
+            {kpis.stockBajo > 0 && (
+              <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-orange-400" />
+                  <p className="text-[10px] text-orange-400 font-black uppercase tracking-widest">Stock Bajo — Requiere Reposición</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {kpis.stockBajoItems.slice(0, 6).map(item => {
+                    const prod = productos.find(p => p.id === item.productoId);
+                    return (
+                      <span key={item.productoId} className="text-[10px] bg-orange-500/10 border border-orange-500/20 text-orange-300 px-2 py-1 rounded-lg font-bold">
+                        {prod?.nombre || item.productoId} ({item.stock})
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Briefing del Gerente IA */}
+            <div className="rounded-2xl border border-[#DAA520]/30 bg-[#DAA520]/5 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-6 bg-[#DAA520] rounded-full shadow-[0_0_8px_#DAA520]" />
+                  <div>
+                    <p className="text-sm font-black text-white">Gerente IA</p>
+                    <p className="text-[9px] text-[#DAA520] font-bold uppercase tracking-widest">Análisis con datos reales</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={pedirBriefingGerente}
+                    disabled={cargandoBriefing}
+                    className="flex items-center gap-1.5 bg-[#DAA520] hover:bg-[#B8860B] disabled:opacity-60 text-black font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-xl transition-all active:scale-95"
+                  >
+                    {cargandoBriefing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+                    {cargandoBriefing ? 'Analizando...' : 'Briefing del Día'}
+                  </button>
+                  <button
+                    onClick={() => abrirAgente('gerente')}
+                    className="flex items-center gap-1.5 bg-white/5 hover:bg-white/10 text-white font-black text-[10px] uppercase tracking-widest px-4 py-2 rounded-xl transition-all border border-white/10"
+                  >
+                    <BarChart3 className="w-3.5 h-3.5 text-[#DAA520]" />
+                    Consultar
+                  </button>
+                </div>
               </div>
 
               {ultimoBriefing ? (
-                <div className="bg-black/30 rounded-2xl p-5 border border-white/5">
-                  <p className="text-sm text-slate-200 font-medium leading-relaxed whitespace-pre-wrap">
-                    {ultimoBriefing.texto}
-                  </p>
-                  <p className="text-[9px] text-[#DAA520] font-black uppercase tracking-widest mt-3">
-                    NEXUS-VOLT · {ultimoBriefing.hora}
-                  </p>
+                <div className="bg-black/30 rounded-xl p-4 border border-white/5">
+                  <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{ultimoBriefing.texto}</p>
+                  <p className="text-[9px] text-[#DAA520] font-black uppercase tracking-widest mt-3">GERENTE IA · {ultimoBriefing.hora}</p>
                 </div>
               ) : (
-                <div className="bg-black/20 rounded-2xl p-5 border border-white/5 text-center">
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">
-                    Presiona el botón para recibir el informe del día con datos reales del negocio
-                  </p>
-                  <div className="grid grid-cols-3 gap-3 mt-4">
-                    {[
-                      { label: 'Ventas hoy', val: (() => { const hoy = new Date().toISOString().split('T')[0]; return ventas.filter(v => v.fecha?.startsWith(hoy)).reduce((s, v) => s + v.total, 0); })() },
-                      { label: 'Stock alertas', val: inventario.filter(i => i.stockMinimo !== undefined && i.stock <= i.stockMinimo).length },
-                      { label: 'Créditos vencidos', val: creditosClientes.filter(c => c.estado === 'vencido').length },
-                    ].map(kpi => (
-                      <div key={kpi.label} className="bg-white/5 rounded-xl p-3 text-center">
-                        <p className="text-[9px] text-slate-500 font-black uppercase">{kpi.label}</p>
-                        <p className="text-lg font-black text-white">{typeof kpi.val === 'number' && kpi.val > 100 ? fmt(kpi.val) : kpi.val}</p>
-                      </div>
-                    ))}
-                  </div>
+                <div className="bg-black/20 rounded-xl p-4 border border-white/5 text-center">
+                  <p className="text-xs text-slate-500">Pulsa <strong className="text-[#DAA520]">Briefing del Día</strong> para recibir un análisis automático con los datos reales del negocio.</p>
                 </div>
               )}
             </div>
 
-            <div className="flex flex-col gap-3 shrink-0">
+            {/* Tablón de anuncios */}
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Terminal className="w-4 h-4 text-[#DAA520]" />
+                <p className="text-sm font-black text-white uppercase tracking-widest">Tablón de Anuncios</p>
+              </div>
+              <Textarea
+                placeholder="Escribe un anuncio para el equipo..."
+                value={nuevoAnuncio}
+                onChange={e => setNuevoAnuncio(e.target.value)}
+                className="bg-black/30 border-white/10 text-sm p-4 rounded-xl min-h-[80px] mb-3 resize-none"
+              />
               <button
-                onClick={pedirBriefingGerente}
-                disabled={cargandoBriefing}
-                className="flex items-center gap-2 bg-[#DAA520] hover:bg-[#B8860B] disabled:opacity-60 text-black font-black text-xs uppercase tracking-widest px-5 py-3 rounded-2xl transition-all active:scale-95 shadow-lg shadow-[#DAA520]/20"
+                onClick={handleAnuncioGeneral}
+                className="flex items-center gap-2 w-full justify-center bg-[#DAA520] hover:bg-[#B8860B] text-black font-black text-xs uppercase tracking-widest py-3 rounded-xl transition-all"
               >
-                {cargandoBriefing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                {cargandoBriefing ? 'Analizando...' : 'Briefing del Día'}
+                <Send className="w-4 h-4" /> Publicar Anuncio
               </button>
-              <button
-                onClick={() => { setAgenteActivo('gerente'); setRespuestaAgente(''); setPromptAgente(''); }}
-                className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white font-black text-xs uppercase tracking-widest px-5 py-3 rounded-2xl transition-all active:scale-95 border border-white/10"
-              >
-                <BarChart3 className="w-4 h-4 text-[#DAA520]" />
-                Consultar Gerente
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* Header Táctico */}
-        <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-slate-900/40 backdrop-blur-xl p-8 shadow-2xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-1">
-              <div className="flex items-center gap-3">
-                <div className="h-10 w-1 bg-[#DAA520] rounded-full shadow-[0_0_12px_#DAA520]" />
-                <h1 className="text-3xl font-black tracking-tighter text-white uppercase italic">
-                   Centro de <span className="text-[#DAA520]">Mando de Élite</span>
-                </h1>
-              </div>
-              <p className="text-slate-400 font-medium tracking-widest text-[10px] uppercase flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_10px_#22c55e]" />
-                Dulce Placer Holding v8.5 • Director General
-              </p>
-            </div>
-            
-            <div className="flex items-center gap-6">
-              <div className="flex flex-col items-end">
-                <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-1">Estatus Corporativo</span>
-                <span className="text-2xl font-black text-white">20 AGENTES IA <span className="text-indigo-500 text-xs">+ EQUIPO HUMANO</span></span>
-              </div>
-              <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl shadow-lg">
-                 <ShieldCheck className="w-7 h-7 text-indigo-400" />
-              </div>
-            </div>
-          </div>
-        </header>
-
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
-          <div className="xl:col-span-8 space-y-12">
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-               {/* DIVISIÓN ESTRATÉGICA */}
-               <section className="space-y-4">
-                 <div className="flex items-center gap-3">
-                   <Shield className="w-4 h-4 text-[#DAA520]" />
-                   <h2 className="text-xs font-black text-white uppercase tracking-widest italic">División <span className="text-[#DAA520]">Estratégica</span></h2>
-                   <div className="h-px flex-1 bg-white/5" />
-                 </div>
-                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                   {DIV_ESTRATEGICA.map(RenderAgent)}
-                 </div>
-               </section>
-
-               {/* DIVISIÓN ADMINISTRATIVA/LEGAL */}
-               <section className="space-y-4">
-                 <div className="flex items-center gap-3">
-                   <Scale className="w-4 h-4 text-red-500" />
-                   <h2 className="text-xs font-black text-white uppercase tracking-widest italic">División <span className="text-red-500">Legal & Fiscal</span></h2>
-                   <div className="h-px flex-1 bg-white/5" />
-                 </div>
-                 <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
-                   {DIV_ADMIN_LEGAL.map(RenderAgent)}
-                 </div>
-               </section>
-            </div>
-
-            {/* DIVISIÓN OPERATIVA */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Activity className="w-4 h-4 text-indigo-400" />
-                <h2 className="text-xs font-black text-white uppercase tracking-widest italic">División de <span className="text-indigo-400">Operaciones Tácticas</span></h2>
-                <div className="h-px flex-1 bg-white/5" />
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-                {DIV_OPERATIVA.map(RenderAgent)}
-              </div>
-            </section>
-
-            {/* DIVISIÓN CRECIMIENTO */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Rocket className="w-4 h-4 text-rose-500" />
-                <h2 className="text-xs font-black text-white uppercase tracking-widest italic">División de <span className="text-rose-500">Crecimiento & PR</span></h2>
-                <div className="h-px flex-1 bg-white/5" />
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {DIV_CRECIMIENTO.map(RenderAgent)}
-              </div>
-            </section>
-
-            {/* DIVISIÓN ADMIN & LEGAL */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-3">
-                <Scale className="w-4 h-4 text-slate-400" />
-                <h2 className="text-xs font-black text-white uppercase tracking-widest italic">División <span className="text-slate-400">Administrativa & Legal</span></h2>
-                <div className="h-px flex-1 bg-white/5" />
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {DIV_ADMIN_LEGAL.map(RenderAgent)}
-              </div>
-            </section>
-
-            {/* DIVISIÓN SEGURIDAD AUTÓNOMA (CLAW) */}
-            <section className="space-y-4">
-              <div className="flex items-center gap-3">
-                <ShieldAlert className="w-4 h-4 text-red-500 animate-pulse" />
-                <h2 className="text-xs font-black text-white uppercase tracking-widest italic">División de <span className="text-red-500">Seguridad Autónoma (CLAW)</span></h2>
-                <div className="h-px flex-1 bg-white/5" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {DIV_SEGURIDAD.map(RenderAgent)}
-              </div>
-            </section>
-
-            {/* FUERZA HUMANA */}
-            <section className="space-y-5 pt-6 border-t border-white/5">
-              <div className="flex items-center gap-3">
-                <Users className="w-4 h-4 text-slate-500" />
-                <h2 className="text-sm font-black text-white uppercase tracking-widest italic">Fuerza de Trabajo <span className="text-slate-500">Humana (Terminales)</span></h2>
-                <div className="h-px flex-1 bg-white/5" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {usuarios.map((u) => {
-                  const rol = (u.rol as UserRole) || 'AUXILIAR';
-                  const config = ROLE_CONFIG[rol] || ROLE_CONFIG.AUXILIAR;
-                  const isOnline = onlineIds.has(u.id);
-                  return (
-                    <div key={u.id} className={cn("relative p-6 rounded-[2.5rem] border-2 bg-slate-900/60 backdrop-blur-xl transition-all hover:-translate-y-2", config.borderColor, config.shadow)}>
-                       <div className="flex items-center justify-between mb-5">
-                          <div className="text-4xl drop-shadow-lg">{config.emoji}</div>
-                          <div className={cn("px-2 py-0.5 rounded-full text-[8px] font-black uppercase border border-white/5", isOnline ? "text-green-400 bg-green-500/10" : "text-slate-500 bg-slate-800")}>
-                             {isOnline ? 'Active' : 'Idle'}
-                          </div>
-                       </div>
-                       <h3 className="font-black text-white text-sm uppercase mb-1">{u.nombre} {u.apellido}</h3>
-                       <p className="text-[10px] text-slate-500 mb-6 lowercase italic truncate">{u.email}</p>
-                       <Badge className={cn("mb-8 text-[8px] font-black px-3 py-1 rounded-xl border-none shadow-sm", config.bg, config.color)}>{config.label}</Badge>
-                       <Button size="sm" className={cn("w-full rounded-[1.5rem] text-[9px] font-black uppercase tracking-widest py-5 transition-all shadow-xl", isOnline ? "bg-green-600 hover:bg-green-500" : "bg-slate-700 hover:bg-slate-600")} onClick={() => handleShareWhatsApp(`${u.nombre} ${u.apellido}`, u.email, rol)}>Enviar Directiva</Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-
-          {/* Panel de Mando Lateral */}
-          <div className="xl:col-span-4 space-y-8">
-            <div className="group relative">
-               <div className="absolute -inset-1 bg-gradient-to-r from-[#DAA520] to-orange-600 rounded-[2.5rem] opacity-10 blur-xl group-hover:opacity-30 transition duration-1000" />
-               <div className="relative bg-slate-900/80 backdrop-blur-3xl rounded-[2.5rem] border border-white/10 p-8 shadow-2xl">
-                <div className="flex items-center gap-3 mb-6">
-                   <Terminal className="w-5 h-5 text-[#DAA520]" />
-                   <span className="font-black text-white text-[11px] uppercase tracking-[0.3em]">Directiva General</span>
-                </div>
-                <Textarea placeholder="Escriba instrucción táctica aquí..." value={nuevoAnuncio} onChange={e => setNuevoAnuncio(e.target.value)} className="bg-black/40 border-white/5 text-sm p-5 rounded-2xl min-h-[120px] mb-6 focus:ring-1 ring-[#DAA520]/30" />
-                <Button onClick={handleAnuncioGeneral} className="w-full bg-[#DAA520] hover:bg-[#B8860B] text-black font-black py-8 rounded-2xl gap-3 transition-all hover:scale-[1.02] shadow-xl">
-                  <Send className="w-5 h-5" /> TRANSMITIR AL EQUIPO
-                </Button>
-               </div>
-            </div>
-
-            <div className="bg-slate-900/60 backdrop-blur-xl rounded-[2.5rem] border border-white/10 p-8 shadow-2xl overflow-hidden">
-              <div className="flex items-center justify-between mb-6">
-                 <div className="flex items-center gap-3">
-                    <Pin className="w-5 h-5 text-indigo-400 rotate-45" />
-                    <span className="font-black text-white text-[11px] uppercase tracking-[0.3em]">Registro Logístico</span>
-                 </div>
-                 <Badge variant="outline" className="text-[7px] border-white/10 text-slate-500">SYNC: OK</Badge>
-              </div>
-              <div className="space-y-5 max-h-[400px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-white/10">
-                {anuncios.map((a: any) => (
-                  <div key={a.id} className="p-5 bg-white/5 border border-white/5 rounded-3xl animate-ag-fade-in">
-                    <p className="text-[12px] text-slate-300 font-bold leading-relaxed">{a.texto}</p>
-                    <div className="flex justify-between items-center mt-4 pt-3 border-t border-white/5">
-                      <span className="text-[9px] text-[#DAA520] font-black uppercase tracking-widest">{a.autor}</span>
-                      <span className="text-[9px] text-slate-600 font-medium italic">{a.hora}</span>
+              <div className="mt-4 space-y-3 max-h-48 overflow-y-auto">
+                {anuncios.map(a => (
+                  <div key={a.id} className="p-3 bg-black/30 rounded-xl border border-white/5">
+                    <p className="text-xs text-slate-300">{a.texto}</p>
+                    <div className="flex justify-between mt-2">
+                      <span className="text-[9px] text-[#DAA520] font-black uppercase">{a.autor}</span>
+                      <span className="text-[9px] text-slate-600">{a.hora}</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        )}
 
-            <AccesoGlobalCard 
+        {/* ══════════════════════════════════════════
+            PESTAÑA 2: AGENTES IA
+        ══════════════════════════════════════════ */}
+        {tab === 'agentes' && (
+          <div className="space-y-6 animate-ag-fade-in">
+
+            {/* Agentes estrella */}
+            <div>
+              <p className="text-[10px] text-slate-500 font-black uppercase tracking-widest mb-3">⭐ Agentes más usados</p>
+              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
+                {AGENTES_ESTRELLA.map(id => <AgentCard key={id} id={id} />)}
+              </div>
+            </div>
+
+            {/* Consulta rápida */}
+            <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-4">
+              <p className="text-[10px] text-indigo-400 font-black uppercase tracking-widest mb-1">💡 ¿Tienes una pregunta?</p>
+              <p className="text-xs text-slate-400 mb-3">Selecciona un agente y escribe tu consulta. Usa los datos reales del negocio.</p>
+              <div className="flex flex-wrap gap-2">
+                {['¿Cuánto vendí hoy?', '¿Qué producir mañana?', '¿Cómo bajar gastos?', '¿Qué cobrar primero?'].map(q => (
+                  <button
+                    key={q}
+                    onClick={() => { abrirAgente('gerente'); setPromptAgente(q); }}
+                    className="text-[10px] bg-white/5 border border-white/10 text-slate-300 px-3 py-1.5 rounded-lg font-bold hover:bg-white/10 hover:border-indigo-500/30 transition-all"
+                  >
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Todos los agentes */}
+            <div>
+              <button
+                onClick={() => setVerTodosAgentes(v => !v)}
+                className="flex items-center gap-2 text-xs text-slate-400 hover:text-white font-black uppercase tracking-widest transition-colors mb-3"
+              >
+                {verTodosAgentes ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                {verTodosAgentes ? 'Ocultar' : 'Ver todos los agentes'} ({Object.keys(AGENTES_CONFIG).length} en total)
+              </button>
+
+              {verTodosAgentes && (
+                <div className="space-y-5">
+                  {[
+                    { label: '🧠 Estratégica', ids: DIV_ESTRATEGICA, color: 'text-[#DAA520]', icon: Shield },
+                    { label: '⚙️ Operaciones', ids: DIV_OPERATIVA, color: 'text-indigo-400', icon: Activity },
+                    { label: '📈 Crecimiento', ids: DIV_CRECIMIENTO, color: 'text-rose-400', icon: Rocket },
+                    { label: '⚖️ Legal & Fiscal', ids: DIV_ADMIN_LEGAL, color: 'text-red-400', icon: Scale },
+                    { label: '🛡️ Seguridad (CLAW)', ids: DIV_SEGURIDAD, color: 'text-slate-400', icon: ShieldAlert },
+                  ].map(div => (
+                    <div key={div.label}>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div.icon className={cn('w-3.5 h-3.5', div.color)} />
+                        <p className={cn('text-[10px] font-black uppercase tracking-widest', div.color)}>{div.label}</p>
+                        <div className="h-px flex-1 bg-white/5" />
+                      </div>
+                      <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                        {div.ids.map(id => <AgentCard key={id} id={id} />)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Enlace de acceso externo */}
+            <AccesoGlobalCard
               publicUrl={publicAppUrl}
-              localIp="192.168.1.5" 
+              localIp="192.168.1.5"
               nombreNegocio="Dulce Placer"
             />
           </div>
-        </div>
+        )}
+
+        {/* ══════════════════════════════════════════
+            PESTAÑA 3: EQUIPO
+        ══════════════════════════════════════════ */}
+        {tab === 'equipo' && (
+          <div className="space-y-6 animate-ag-fade-in">
+
+            {/* Resumen */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Total Usuarios', value: String(usuarios.length), icon: Users, color: 'text-indigo-400' },
+                { label: 'Activos', value: String(usuarios.filter(u => u.activo !== false).length), icon: Activity, color: 'text-green-400' },
+                { label: 'Roles', value: String(new Set(usuarios.map(u => u.rol)).size), icon: ShieldCheck, color: 'text-[#DAA520]' },
+              ].map(s => (
+                <div key={s.label} className="rounded-2xl border border-white/10 bg-white/5 p-4 text-center">
+                  <s.icon className={cn('w-5 h-5 mx-auto mb-2', s.color)} />
+                  <p className={cn('text-xl font-black', s.color)}>{s.value}</p>
+                  <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Lista de usuarios */}
+            <div className="space-y-3">
+              {usuarios.map(u => {
+                const rol = (u.rol as UserRole) || 'AUXILIAR';
+                const config = ROLE_CONFIG[rol] || ROLE_CONFIG.AUXILIAR;
+                const activo = u.activo !== false;
+                return (
+                  <div key={u.id} className={cn('flex items-center justify-between p-4 rounded-2xl border bg-white/5 transition-all hover:bg-white/8', config.borderColor)}>
+                    <div className="flex items-center gap-3">
+                      <div className={cn('w-10 h-10 rounded-full flex items-center justify-center text-lg font-black border-2', config.bg, config.borderColor)}>
+                        {config.emoji}
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-white">{u.nombre} {u.apellido}</p>
+                        <p className="text-[10px] text-slate-500 italic">{u.email}</p>
+                        <Badge className={cn('mt-1 text-[8px] font-black px-2 py-0 rounded-lg border-none', config.bg, config.color)}>
+                          {config.label}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className={cn('text-[9px] font-black uppercase px-2 py-0.5 rounded-full', activo ? 'bg-green-500/10 text-green-400' : 'bg-slate-700 text-slate-500')}>
+                        {activo ? 'Activo' : 'Inactivo'}
+                      </span>
+                      <button
+                        onClick={() => handleShareWhatsApp(`${u.nombre} ${u.apellido}`, u.email, rol)}
+                        className="text-[9px] bg-green-600/20 hover:bg-green-600/40 border border-green-600/30 text-green-400 px-3 py-1 rounded-lg font-black uppercase tracking-widest transition-all"
+                      >
+                        📲 Enviar Acceso
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ── MODAL CONSOLA AGENTE AUTÓNOMO ── */}
+      {/* ── MODAL AGENTE ── */}
       {agenteActivo && modalAgente && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-ag-fade-in">
           <div className={cn(
-            "relative w-full max-w-2xl bg-slate-900/90 backdrop-blur-2xl border-2 rounded-[3.5rem] overflow-hidden shadow-2xl transition-all duration-500",
-            modalAgente.bg.split(' ')[1]
+            'relative w-full max-w-2xl bg-slate-900/95 backdrop-blur-2xl border-2 rounded-3xl overflow-hidden shadow-2xl',
+            (modalAgente.bg || '').split(' ')[1] || 'border-white/10'
           )}>
-            {/* Header Modal */}
-            <div className="bg-white/5 px-10 py-8 border-b border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
-                  {(() => {
-                    const Icon = ICON_MAP[agenteActivo] || Brain;
-                    return <Icon className={cn("w-6 h-6", modalAgente.color)} />;
-                  })()}
+            {/* Header */}
+            <div className="bg-white/5 px-6 py-5 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-white/5 border border-white/10">
+                  {(() => { const Icon = ICON_MAP[agenteActivo] || Brain; return <Icon className={cn('w-5 h-5', modalAgente.color)} />; })()}
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-white uppercase tracking-tighter">
-                    {modalAgente.nombre}
-                  </h3>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest italic">
-                    Terminal de Enlace Directo • {modalAgente.cargo}
-                  </p>
+                  <h3 className="text-base font-black text-white uppercase tracking-tight">{modalAgente.nombre}</h3>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{modalAgente.cargo}</p>
                 </div>
               </div>
-              <button 
-                onClick={() => setAgenteActivo(null)}
-                className="p-3 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all"
-              >
-                <X className="w-6 h-6" />
+              <button onClick={() => setAgenteActivo(null)} className="p-2 rounded-full bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all">
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Cuerpo Modal */}
-            <div className="p-10 space-y-8">
-              <div className="min-h-[150px] max-h-[300px] overflow-y-auto bg-black/40 rounded-3xl p-6 border border-white/5">
+            {/* Cuerpo */}
+            <div className="p-6 space-y-5">
+              {/* Respuesta */}
+              <div className="min-h-[120px] max-h-[260px] overflow-y-auto bg-black/40 rounded-2xl p-5 border border-white/5">
                 {respuestaAgente ? (
-                  <p className="text-sm text-slate-300 font-medium leading-relaxed italic whitespace-pre-wrap">
-                    {respuestaAgente}
-                  </p>
+                  <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">{respuestaAgente}</p>
                 ) : (
-                  <p className="text-sm text-slate-600 font-bold uppercase tracking-widest text-center mt-12 italic">
-                    Esperando misión táctica...
-                  </p>
+                  <p className="text-sm text-slate-600 uppercase tracking-widest text-center mt-8 font-bold">Esperando tu consulta...</p>
                 )}
               </div>
 
-              {/* Botones de Plantilla (Preechos) */}
-              <div className="space-y-3">
-                <span className="text-[10px] text-slate-500 font-black uppercase tracking-widest block ml-2 mb-2">Misiones Tácticas (Plantillas)</span>
+              {/* Plantillas */}
+              <div>
+                <p className="text-[9px] text-slate-500 font-black uppercase tracking-widest mb-2">Consultas rápidas</p>
                 <div className="flex flex-wrap gap-2">
                   {modalAgente.plantillas.map((plantilla, idx) => (
-                    <Button 
+                    <button
                       key={idx}
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setPromptAgente(plantilla);
-                        // Ejecución automática inmediata
-                        setTimeout(() => handleConsultarAgente(), 100);
-                      }}
-                      className="text-[9px] font-black uppercase bg-white/5 border-white/10 hover:bg-white/10 hover:border-indigo-500/50 rounded-xl px-4 py-3 transition-all"
+                      onClick={() => { setPromptAgente(plantilla); setTimeout(() => handleConsultarAgente(), 50); }}
+                      className="text-[10px] font-bold bg-white/5 border border-white/10 hover:bg-white/10 hover:border-indigo-500/30 text-slate-300 px-3 py-1.5 rounded-lg transition-all"
                     >
                       {plantilla}
-                    </Button>
+                    </button>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="relative group">
-                  <Textarea 
-                    placeholder={`¿Cuál es su orden para ${modalAgente.nombre}?`}
-                    value={promptAgente}
-                    onChange={(e) => setPromptAgente(e.target.value)}
-                    className="bg-white/5 border-white/10 text-lg p-6 rounded-3xl min-h-[100px] focus:ring-1 ring-indigo-500/30 resize-none outline-none"
-                    disabled={estaCargandoAgente}
-                  />
-                  <div className="absolute top-4 right-4 animate-ag-pulse">
-                    <MsgIcon className="w-5 h-5 text-indigo-500/40" />
-                  </div>
-                </div>
-
-                <Button 
+              {/* Input */}
+              <div className="space-y-3">
+                <Textarea
+                  placeholder={`Pregunta algo a ${modalAgente.nombre}...`}
+                  value={promptAgente}
+                  onChange={e => setPromptAgente(e.target.value)}
+                  className="bg-white/5 border-white/10 text-sm p-4 rounded-2xl min-h-[80px] resize-none"
+                  disabled={estaCargandoAgente}
+                />
+                <button
                   onClick={handleConsultarAgente}
                   disabled={!promptAgente.trim() || estaCargandoAgente}
-                  className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-black py-8 rounded-3xl gap-3 shadow-xl transition-all"
+                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest py-4 rounded-2xl transition-all"
                 >
-                  {estaCargandoAgente ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> PROCESANDO INFORME...</>
-                  ) : (
-                    <><Send className="w-5 h-5" /> EJECUTAR ESPECIALIDAD</>
-                  )}
-                </Button>
+                  {estaCargandoAgente ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</> : <><MsgIcon className="w-4 h-4" /> Enviar Consulta</>}
+                </button>
               </div>
             </div>
           </div>

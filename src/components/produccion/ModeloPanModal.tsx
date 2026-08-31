@@ -12,9 +12,10 @@ import { Button } from '@/components/ui/button';
 import { Save, Calculator, Package, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { generateUUID } from '@/lib/safe-utils';
-import type { ModeloPan, FormulacionBase } from '@/types';
-import { ARROBA_GR } from '@/types';
+import type { ModeloPan, FormulacionBase, CategoriaProduccion } from '@/types';
+import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
 import { db } from '@/lib/database';
+
 
 interface ModeloPanModalProps {
   isOpen: boolean;
@@ -31,6 +32,8 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
   const [precioVentaUnitario, setPrecioVentaUnitario] = useState(0);
   const [mermaEstimada, setMermaEstimada] = useState(5);
   const [piezasPorLata, setPiezasPorLata] = useState(15);
+  const [velocidadVenta, setVelocidadVenta] = useState<'estrella' | 'alta' | 'media' | 'baja' | 'nuevo'>('nuevo');
+  const [categoriaProduccion, setCategoriaProduccion] = useState<CategoriaProduccion>('otro');
   const [latasSimulador, setLatasSimulador] = useState(1);
   const [ingredientes, setIngredientes] = useState<any[]>([]);
 
@@ -42,6 +45,8 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
       setPrecioVentaUnitario(modeloBase?.precioVentaUnitario || 0);
       setMermaEstimada(modeloBase?.mermaEstimada || 5);
       setPiezasPorLata(modeloBase?.piezasPorLata || 15);
+      setVelocidadVenta(modeloBase?.velocidadVenta || 'nuevo');
+      setCategoriaProduccion(modeloBase?.categoriaProduccion || 'otro');
       setIngredientes(modeloBase?.ingredientesAdicionales || []);
       setLatasSimulador(1);
     }
@@ -51,7 +56,10 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
   const costoArroba = formulacion?.costoTotalArroba || 0;
   
   // Cálculos reactivos
-  const masaUtilArroba = ARROBA_GR * (1 - (mermaEstimada / 100));
+  // CORRECTO: usar el kg real de la masa (21 kg sal, 19.32 kg hojaldre, 20.33 kg dulce)
+  // NO los 12.5 kg de harina (ARROBA_GR) que era el bug anterior
+  const kgRealMasa = resolverKgPorArrobaMasa(formulacion);
+  const masaUtilArroba = kgRealMasa * 1000 * (1 - (mermaEstimada / 100));
   const panesPorArroba = pesoUnitarioGr > 0 ? Math.floor(masaUtilArroba / pesoUnitarioGr) : 0;
   
   // Costo Insumos
@@ -92,6 +100,8 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
       margenPorcentaje,
       mermaEstimada,
       piezasPorLata,
+      velocidadVenta,
+      categoriaProduccion,
       ingredientesAdicionales: ingredientes,
       activo: true,
       createdAt: modeloBase?.createdAt || new Date().toISOString(),
@@ -159,18 +169,55 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
               />
             </div>
             
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-black tracking-widest text-slate-500 uppercase">Fórmula de masa que usa</label>
-              <Select value={formulacionId} onValueChange={setFormulacionId}>
-                <SelectTrigger className="rounded-xl h-12 bg-slate-50/50 border-slate-200">
-                  <SelectValue placeholder="Seleccionar receta técnica..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {formulaciones.filter(f => f.activo).map(f => (
-                    <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-black tracking-widest text-slate-500 uppercase">Fórmula de masa que usa</label>
+                <Select value={formulacionId} onValueChange={setFormulacionId}>
+                  <SelectTrigger className="rounded-xl h-12 bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Seleccionar receta..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {formulaciones.filter(f => f.activo).map(f => (
+                      <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-black tracking-widest text-slate-500 uppercase flex items-center gap-1">Velocidad de Venta (Estrategia)</label>
+                <Select value={velocidadVenta} onValueChange={(v: any) => setVelocidadVenta(v)}>
+                  <SelectTrigger className="rounded-xl h-12 bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Velocidad..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="estrella">⭐ Estrella (Hacer mucho)</SelectItem>
+                    <SelectItem value="alta">🟢 Alta rotación</SelectItem>
+                    <SelectItem value="media">🟡 Venta Media</SelectItem>
+                    <SelectItem value="baja">🔴 Baja (Poco/Bajo pedido)</SelectItem>
+                    <SelectItem value="nuevo">🟣 Nuevo (En prueba)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-black tracking-widest text-slate-500 uppercase flex items-center gap-1">Categoría de Producción (Turno)</label>
+                <Select value={categoriaProduccion} onValueChange={(v: any) => setCategoriaProduccion(v)}>
+                  <SelectTrigger className="rounded-xl h-12 bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Categoría..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pan_sal">🍞 Pan Sal Corriente</SelectItem>
+                    <SelectItem value="pan_dulce">🍬 Pan Dulce Corriente</SelectItem>
+                    <SelectItem value="empacado_sal">📦 Empacado Sal (Bolsa grande)</SelectItem>
+                    <SelectItem value="empacado_dulce">📦 Empacado Dulce (Bolsa grande)</SelectItem>
+                    <SelectItem value="hojaldrado">🥐 Hojaldrado</SelectItem>
+                    <SelectItem value="torta">🎂 Torta</SelectItem>
+                    <SelectItem value="galleta">🍪 Galleta</SelectItem>
+                    <SelectItem value="otro">📌 Sin clasificar</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Fila de 5 columnas */}
@@ -252,15 +299,15 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
             <div className="space-y-4 text-sm mt-8 flex-1">
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Masa por arroba:</span>
-                <span className="font-bold text-base">{ARROBA_GR.toLocaleString('es-CO')}g</span>
+                <span className="font-bold text-base">{(kgRealMasa * 1000).toLocaleString('es-CO')}g</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Merma ({mermaEstimada}%):</span>
-                <span className="font-bold text-rose-400 text-base">-{((ARROBA_GR * mermaEstimada) / 100).toFixed(0)}g</span>
+                <span className="font-bold text-rose-400 text-base">-{(kgRealMasa * 1000 * mermaEstimada / 100).toFixed(0)}g</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Masa útil:</span>
-                <span className="font-bold text-emerald-400 text-base">{(ARROBA_GR * (1 - mermaEstimada / 100)).toFixed(0)}g</span>
+                <span className="font-bold text-emerald-400 text-base">{masaUtilArroba.toFixed(0)}g</span>
               </div>
               
               <div className="pt-6 mt-6 border-t border-slate-700/50 space-y-4">

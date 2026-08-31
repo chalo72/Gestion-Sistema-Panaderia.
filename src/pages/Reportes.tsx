@@ -97,6 +97,7 @@ const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981'
 import { useReportesData } from '@/hooks/useReportesData';
 import { GraficosEstadisticos } from '@/components/reportes/GraficosEstadisticos';
 import { DiagnosticoFinanciero } from '@/components/reportes/DiagnosticoFinanciero';
+import { DashboardGraficos } from '@/components/reportes/DashboardGraficos';
 import { TablaFlujoCaja } from '@/components/reportes/TablaFlujoCaja';
 import {
     buscarProveedorIdPorNombre,
@@ -106,13 +107,16 @@ import {
     resolverProveedorPresupuesto,
 } from '@/lib/presupuesto-catalogo';
 import { guardarHintOrdenDesdePresupuesto } from '@/lib/whatsapp-alerts';
+import { useCan } from '@/contexts/AuthContext';
 
 export default function Reportes(props: ReportesProps) {
     const reportesData = useReportesData(props);
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData } = reportesData;
     const { formatCurrency, ventas, gastos, productos, categorias, proveedores, precios, cajaActiva, onAddRecepcion, onConfirmarRecepcion } = props;
 
-    const esLibretaHorno = role === 'PANADERO';
+    const { check, isAdmin } = useCan();
+    // Sin finanzas profundas: solo Libreta del Horno (panes), no quincena/ventas totales
+    const esLibretaHorno = !isAdmin && !check('VER_FINANZAS');
 
     useEffect(() => {
         if (esLibretaHorno) setActiveTab('quincena');
@@ -475,7 +479,7 @@ export default function Reportes(props: ReportesProps) {
                     )}
                     <TabsTrigger value="quincena" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-2">
                         <CalendarCheck className="w-4 h-4" />
-                        {esLibretaHorno ? 'Panes y masas' : 'Mi Quincena'}
+                        {esLibretaHorno ? 'Panes y masas' : 'Gestión Integral Operativa'}
                         {!esLibretaHorno && totalCompromisosActivos > 0 && (
                             <span className="text-[9px] font-black bg-violet-500/20 text-violet-600 dark:text-violet-400 px-1.5 py-0.5 rounded-full">
                                 {compromisos.filter(c => c.activo).length}
@@ -544,6 +548,9 @@ export default function Reportes(props: ReportesProps) {
                             </Card>
                         ))}
                     </div>
+
+                    {/* Nuevo Dashboard Analítico Profesional */}
+                    <DashboardGraficos gastos={gastos || []} ventasDiarias={ventasDiarias || []} ventasPOS={ventas || []} />
 
                     {/* Gráfico de Evolución + Piecharts */}
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -688,7 +695,7 @@ export default function Reportes(props: ReportesProps) {
                 </TabsContent>
 
                 {/* ══════════════════════════════════════════════════
-                    TAB 4: MI QUINCENA
+                    TAB 4: GESTIÓN INTEGRAL OPERATIVA
                 ══════════════════════════════════════════════════ */}
                 <DiagnosticoFinanciero
                     modoLibretaHorno={esLibretaHorno}
@@ -1714,7 +1721,7 @@ export default function Reportes(props: ReportesProps) {
                         {detallesModal === 'ventas_hoy' && (
                             <div className="space-y-4 pt-2">
                                 {(() => {
-                                    const ventasPOSHoy = ventas.filter(v => v.fecha.slice(0, 10) === quincenaReal.hoyStr);
+                                    const ventasPOSHoy = ventas.filter(v => (v.fecha || '').slice(0, 10) === quincenaReal.hoyStr);
                                     const totalPOSHoy = ventasPOSHoy.reduce((sum, v) => sum + v.total, 0);
                                     const ventasManualesHoy = ventasDiarias.filter(v => v.fecha === quincenaReal.hoyStr);
                                     const totalManualHoy = ventasManualesHoy.reduce((sum, v) => sum + v.total, 0);

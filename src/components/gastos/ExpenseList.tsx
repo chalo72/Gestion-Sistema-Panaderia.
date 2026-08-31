@@ -9,6 +9,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Gasto, Proveedor } from '@/types';
+import { normalizarCategoriaGasto } from '@/lib/gasto-categoria-inferencia';
+import {
+  agruparGastosPorDiaYProveedor,
+  idGastoAccion,
+  parseDescripcionLineaGasto,
+  etiquetaUnidades,
+  type GastoLineaLista,
+} from '@/lib/gastos-agrupacion';
 
 // ── Configuración de categorías ──────────────────────────────────────────────
 const CATEGORIAS_GASTOS = [
@@ -49,16 +57,6 @@ function formatDayLabel(fechaStr: string): string {
     return d.toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' });
 }
 
-function groupByDay(items: (Gasto & { esIngreso?: boolean })[]) {
-    const map = new Map<string, (Gasto & { esIngreso?: boolean })[]>();
-    items.forEach(g => {
-        const key = (g.fecha || '').split('T')[0];
-        if (!map.has(key)) map.set(key, []);
-        map.get(key)!.push(g);
-    });
-    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface ExpenseListProps {
     gastos: (Gasto & { esIngreso?: boolean })[];
@@ -81,8 +79,20 @@ export function ExpenseList({
     proveedores = [],
 }: ExpenseListProps) {
     const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+    const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+    const toggleDay = (fecha: string) => {
+        setExpandedDays(prev => {
+            const next = new Set(prev);
+            if (next.has(fecha)) next.delete(fecha);
+            else next.add(fecha);
+            return next;
+        });
+    };
 
-    const grupos = groupByDay(gastos);
+    const grupos = agruparGastosPorDiaYProveedor(
+        gastos,
+        (g) => (g.esIngreso ? 1 : -1)
+    );
 
     const provNombre = (id?: string) =>
         id ? (proveedores.find(p => p.id === id)?.nombre ?? null) : null;
@@ -94,7 +104,7 @@ export function ExpenseList({
                 <div className="relative group">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
                     <Input
-                        placeholder="Buscar por descripción..."
+                        placeholder="Buscar por descripción, proveedor o ítem..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
                         className="pl-11 h-11 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold focus:ring-2 focus:ring-rose-500/20"
@@ -147,18 +157,131 @@ export function ExpenseList({
                 </div>
             ) : (
                 <div className="space-y-6">
-                    {grupos.map(([fecha, items]) => {
-                        const totalDia = items.reduce((s, g) => s + (g.esIngreso ? g.monto : -g.monto), 0);
+                    {grupos.map((grupo) => {
+                        const { fecha, proveedores: provsDia, sinProveedor, totalDia } = grupo;
                         const label = formatDayLabel(fecha);
+                        const numLineas =
+                            provsDia.reduce((n, p) => n + p.lineas.length, 0) + sinProveedor.length;
+
+                        const renderGasto = (gasto: GastoLineaLista) => {
+                            const accionId = idGastoAccion(gasto);
+                            const catNorm = normalizarCategoriaGasto(gasto.categoria as string);
+                            const catInfo = CATEGORIAS_GASTOS.find(c => c.value === catNorm) ?? CATEGORIAS_GASTOS[5];
+                            const Icon = catInfo.icon;
+                            const metodo = METODO_CONFIG[gasto.metodoPago as string] ?? metodoFallback;
+                            const MetIcon = metodo.icon;
+                            const prov = provNombre(gasto.proveedorId);
+                            const esIngreso = !!gasto.esIngreso;
+
+                            const { cantidad, nombre: descClean } = parseDescripcionLineaGasto(gasto.descripcion);
+                            const etiquetaQty = etiquetaUnidades(cantidad);
+
+                            return (
+                                <div
+                                    key={gasto.id}
+                                    className={cn(
+                                        'group relative bg-white dark:bg-slate-900 rounded-xl border shadow-sm mb-2',
+                                        'hover:shadow-md transition-all duration-200',
+                                        esIngreso
+                                            ? 'border-l-4 border-l-emerald-400 border-slate-100 dark:border-slate-800'
+                                            : 'border-l-4 border-l-rose-400 border-slate-100 dark:border-slate-800'
+                                    )}
+                                >
+                                    <div className="flex items-center gap-3 p-3.5">
+                                        <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', CAT_COLOR_MAP[catInfo.color])}>
+                                            {esIngreso ? <TrendingUp className="w-4 h-4" /> : <Icon className="w-4 h-4" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <p className="font-black text-slate-900 dark:text-white text-sm leading-tight truncate">
+                                                    {descClean}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                                                    {esIngreso ? 'Ingreso' : catInfo.label}
+                                                </span>
+                                                <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider', metodo.cls)}>
+                                                    <MetIcon className="w-2.5 h-2.5" />
+                                                    {metodo.label}
+                                                </span>
+                                                {prov && (
+                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
+                                                        <FileText className="w-2.5 h-2.5" />
+                                                        {prov}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            {etiquetaQty && (
+                                                <span
+                                                    className="min-w-[58px] text-center shrink-0 bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-[10px] font-black px-2 py-1.5 rounded-lg uppercase tracking-wider border border-indigo-200/80 dark:border-indigo-700/50"
+                                                    title="Unidades compradas"
+                                                >
+                                                    {etiquetaQty}
+                                                </span>
+                                            )}
+                                            <div className="flex flex-col items-end">
+                                                <p className={cn('text-base font-black tabular-nums leading-none',
+                                                    esIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
+                                                    {esIngreso ? '+' : '-'}{formatCurrency(gasto.monto)}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); onEditGasto({ ...gasto, id: accionId }); }}
+                                                className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
+                                            >
+                                                <Pencil className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); setConfirmDelete(gasto.id); }}
+                                                className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {confirmDelete === gasto.id && (
+                                        <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm rounded-xl flex items-center justify-between px-4 z-10 border border-rose-200 dark:border-rose-800">
+                                            <div className="flex items-center gap-2">
+                                                <AlertTriangle className="w-4 h-4 text-rose-500" />
+                                                <span className="text-xs font-black text-slate-700 dark:text-slate-200">
+                                                    {gasto.esLineaFactura ? '¿Eliminar factura completa?' : '¿Eliminar este registro?'}
+                                                </span>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => setConfirmDelete(null)} className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all uppercase tracking-widest">
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    onClick={() => { onDeleteGasto(accionId); setConfirmDelete(null); }}
+                                                    className="px-3 py-1.5 rounded-lg bg-rose-600 text-[10px] font-black text-white hover:bg-rose-700 transition-all uppercase tracking-widest"
+                                                >
+                                                    Eliminar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        };
 
                         return (
                             <div key={fecha} className="space-y-2">
-                                {/* Cabecera del día */}
-                                <div className="flex items-center justify-between px-1 mb-1">
-                                    <div className="flex items-center gap-2">
-                                        <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 capitalize">
+                                <div
+                                    onClick={() => toggleDay(fecha)}
+                                    className="flex items-center justify-between px-3 py-2 mb-1 bg-slate-50 dark:bg-slate-800/50 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors border border-slate-100 dark:border-slate-800"
+                                >
+                                    <div className="flex items-center gap-2 overflow-hidden">
+                                        <Calendar className="w-4 h-4 shrink-0 text-slate-600 dark:text-slate-400" />
+                                        <span className="text-xs shrink-0 font-black uppercase tracking-widest text-slate-800 dark:text-slate-100 capitalize">
                                             {label}
+                                        </span>
+                                        <span className="text-slate-500 dark:text-slate-400 shrink-0 text-[10px] ml-1">
+                                            {expandedDays.has(fecha) ? '▼' : '▶'} · {numLineas} gastos
                                         </span>
                                     </div>
                                     <span className={cn(
@@ -169,113 +292,48 @@ export function ExpenseList({
                                     </span>
                                 </div>
 
-                                {/* Tarjetas del día */}
-                                {items.map(gasto => {
-                                    const catInfo = CATEGORIAS_GASTOS.find(c => c.value === gasto.categoria) ?? CATEGORIAS_GASTOS[5];
-                                    const Icon = catInfo.icon;
-                                    const metodo = METODO_CONFIG[gasto.metodoPago] ?? metodoFallback;
-                                    const MetIcon = metodo.icon;
-                                    const prov = provNombre(gasto.proveedorId);
-                                    const esIngreso = !!gasto.esIngreso;
-
-                                    return (
-                                        <div
-                                            key={gasto.id}
-                                            className={cn(
-                                                'group relative bg-white dark:bg-slate-900 rounded-xl border shadow-sm',
-                                                'hover:shadow-md transition-all duration-200',
-                                                esIngreso
-                                                    ? 'border-l-4 border-l-emerald-400 border-slate-100 dark:border-slate-800'
-                                                    : 'border-l-4 border-l-rose-400 border-slate-100 dark:border-slate-800'
-                                            )}
-                                        >
-                                            <div className="flex items-center gap-3 p-3.5">
-                                                {/* Ícono categoría */}
-                                                <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', CAT_COLOR_MAP[catInfo.color])}>
-                                                    {esIngreso
-                                                        ? <TrendingUp className="w-4 h-4" />
-                                                        : <Icon className="w-4 h-4" />
-                                                    }
-                                                </div>
-
-                                                {/* Info */}
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-black text-slate-900 dark:text-white text-sm leading-tight truncate">
-                                                        {gasto.descripcion}
-                                                    </p>
-                                                    <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                                        {/* Categoría */}
-                                                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                                                            {esIngreso ? 'Ingreso' : gasto.categoria}
+                                {expandedDays.has(fecha) && (
+                                    <div className="space-y-4 mt-4">
+                                        {provsDia.map((bloque) => {
+                                            const provName = provNombre(bloque.proveedorId) || 'Proveedor';
+                                            return (
+                                                <div key={bloque.proveedorId} className="mb-4 last:mb-0">
+                                                    <div className="flex items-center justify-between mb-2 pl-2 border-l-2 border-indigo-400">
+                                                        <h4 className="text-[11px] font-black uppercase tracking-widest text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+                                                            <Briefcase className="w-3.5 h-3.5" /> {provName}
+                                                        </h4>
+                                                        <span className="text-[10px] font-bold text-slate-500">
+                                                            {bloque.lineas.length} ítem{bloque.lineas.length !== 1 ? 's' : ''} · {formatCurrency(bloque.total)}
                                                         </span>
-                                                        {/* Método de pago badge */}
-                                                        <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider', metodo.cls)}>
-                                                            <MetIcon className="w-2.5 h-2.5" />
-                                                            {metodo.label}
-                                                        </span>
-                                                        {/* Proveedor */}
-                                                        {prov && (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[8px] font-bold bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">
-                                                                <FileText className="w-2.5 h-2.5" />
-                                                                {prov}
-                                                            </span>
-                                                        )}
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        {bloque.lineas.map((gasto) => renderGasto(gasto))}
                                                     </div>
                                                 </div>
-
-                                                {/* Monto */}
-                                                <div className="text-right shrink-0">
-                                                    <p className={cn('text-base font-black tabular-nums leading-none',
-                                                        esIngreso ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400')}>
-                                                        {esIngreso ? '+' : '-'}{formatCurrency(gasto.monto)}
-                                                    </p>
+                                            );
+                                        })}
+                                        {sinProveedor.length > 0 && (
+                                            <div className="mt-2">
+                                                <div className="flex items-center justify-between mb-2 pl-2 border-l-2 border-rose-400">
+                                                    <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                                                        <Tag className="w-3.5 h-3.5 text-rose-500" /> Sin proveedor
+                                                    </h4>
                                                 </div>
-
-                                                {/* Acciones */}
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => onEditGasto(gasto)}
-                                                        className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"
-                                                    >
-                                                        <Pencil className="w-3 h-3" />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setConfirmDelete(gasto.id)}
-                                                        className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-all"
-                                                    >
-                                                        <Trash2 className="w-3 h-3" />
-                                                    </button>
+                                                <div className="space-y-2">
+                                                    {sinProveedor.map((gasto) => renderGasto(gasto))}
                                                 </div>
                                             </div>
-
-                                            {/* Modal de confirmación inline */}
-                                            {confirmDelete === gasto.id && (
-                                                <div className="absolute inset-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm rounded-xl flex items-center justify-between px-4 z-10 border border-rose-200 dark:border-rose-800">
-                                                    <div className="flex items-center gap-2">
-                                                        <AlertTriangle className="w-4 h-4 text-rose-500" />
-                                                        <span className="text-xs font-black text-slate-700 dark:text-slate-200">
-                                                            ¿Eliminar este registro?
-                                                        </span>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <button
-                                                            onClick={() => setConfirmDelete(null)}
-                                                            className="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-black text-slate-600 dark:text-slate-300 hover:bg-slate-200 transition-all uppercase tracking-widest"
-                                                        >
-                                                            Cancelar
-                                                        </button>
-                                                        <button
-                                                            onClick={() => { onDeleteGasto(gasto.id); setConfirmDelete(null); }}
-                                                            className="px-3 py-1.5 rounded-lg bg-rose-600 text-[10px] font-black text-white hover:bg-rose-700 transition-all uppercase tracking-widest"
-                                                        >
-                                                            Eliminar
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
+                                        )}
+                                        <div className="mt-4 pt-4 border-t-2 border-dashed border-slate-200 dark:border-slate-700 flex justify-end">
+                                            <div className="bg-slate-50 dark:bg-slate-800/50 px-4 py-2 rounded-xl flex flex-col items-end">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total del día</span>
+                                                <span className={cn('text-lg font-black tabular-nums', totalDia >= 0 ? 'text-emerald-500' : 'text-rose-500')}>
+                                                    {totalDia >= 0 ? '+' : ''}{formatCurrency(totalDia)}
+                                                </span>
+                                            </div>
                                         </div>
-                                    );
-                                })}
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
@@ -284,3 +342,6 @@ export function ExpenseList({
         </div>
     );
 }
+
+
+

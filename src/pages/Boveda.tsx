@@ -19,6 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { consultarAgente } from '@/constants/agentes';
+import { FlujoCajaProyector } from '@/components/boveda/FlujoCaja';
 
 export default function BovedaPage() {
   const { usuario } = useAuth();
@@ -51,6 +52,27 @@ export default function BovedaPage() {
   const [showConciliacion, setShowConciliacion] = useState(false);
   const [conciliarBoveda, setConciliarBoveda] = useState('');
   const [saldoFisico, setSaldoFisico] = useState('');
+
+  /** Empezar control limpio: saldos reales por bóveda (texto del input) */
+  const [showControlLimpio, setShowControlLimpio] = useState(false);
+  const [saldosReales, setSaldosReales] = useState<Record<string, string>>({});
+  const [guardandoLimpio, setGuardandoLimpio] = useState(false);
+  const [corteLimpio, setCorteLimpio] = useState<{ fecha: string } | null>(() => {
+    try {
+      const raw = localStorage.getItem('dp_boveda_corte_limpio');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as { fecha?: string };
+      return parsed.fecha ? { fecha: parsed.fecha } : null;
+    } catch {
+      return null;
+    }
+  });
+
+  /** Detalle al tocar una cuenta (movimientos de esa bóveda) */
+  const [bovedaDetalle, setBovedaDetalle] = useState<Boveda | null>(null);
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState('cuentas');
 
   // Cargar datos
   const loadData = () => {
@@ -355,42 +377,57 @@ export default function BovedaPage() {
           </CardContent>
         </Card>
 
-        {/* GRILLA DE BÓVEDAS */}
-        <div>
-          <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 ml-2">Cuentas Internas</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {bovedas.map(boveda => (
-              <Card key={boveda.id} className="rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group">
-                <CardContent className="p-5 flex flex-col justify-between h-full">
-                  <div className="flex justify-between items-start mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center relative",
-                        boveda.tipo === 'Caja Fuerte' ? "bg-amber-100 text-amber-600" :
-                        boveda.tipo === 'Banco' ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600"
-                      )}>
-                        {boveda.saldo < 100000 && boveda.tipo === 'Base' && (
-                          <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full animate-pulse border-2 border-white dark:border-slate-900"></span>
-                        )}
-                        {getIcon(boveda.tipo)}
+        {/* TABS DE BÓVEDAS Y PROVISIONES */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-6">
+            <TabsTrigger value="cuentas" className="text-sm font-bold uppercase tracking-wider">Cuentas Internas</TabsTrigger>
+            <TabsTrigger value="proyeccion" className="text-sm font-bold uppercase tracking-wider">Flujo y Provisiones</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="cuentas" className="mt-0 space-y-8">
+            {/* GRILLA DE BÓVEDAS */}
+            <div>
+              <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 ml-2">Cuentas Internas</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {bovedas.map(boveda => (
+                  <Card key={boveda.id} className="rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group">
+                    <CardContent className="p-5 flex flex-col justify-between h-full">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center relative",
+                            boveda.tipo === 'Caja Fuerte' ? "bg-amber-100 text-amber-600" :
+                            boveda.tipo === 'Banco' ? "bg-blue-100 text-blue-600" : 
+                            boveda.tipo === 'Provisión' ? "bg-purple-100 text-purple-600" : "bg-emerald-100 text-emerald-600"
+                          )}>
+                            {boveda.saldo < 100000 && boveda.tipo === 'Base' && (
+                              <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full animate-pulse border-2 border-white dark:border-slate-900"></span>
+                            )}
+                            {getIcon(boveda.tipo)}
+                          </div>
+                          <div>
+                            <p className="font-black text-slate-900 dark:text-white leading-tight">{boveda.nombre}</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
+                              {boveda.tipo} 
+                              {boveda.saldo < 100000 && boveda.tipo === 'Base' && <span className="text-rose-500">- Alerta Liquidez</span>}
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-black text-slate-900 dark:text-white leading-tight">{boveda.nombre}</p>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                          {boveda.tipo} 
-                          {boveda.saldo < 100000 && boveda.tipo === 'Base' && <span className="text-rose-500">- Alerta Liquidez</span>}
-                        </p>
+                      <div className="mt-2">
+                        <p className="text-2xl font-black text-slate-700 dark:text-slate-200 tabular-nums">{formatCurrency(boveda.saldo)}</p>
                       </div>
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <p className="text-2xl font-black text-slate-700 dark:text-slate-200 tabular-nums">{formatCurrency(boveda.saldo)}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="proyeccion" className="mt-0">
+            <FlujoCajaProyector bovedas={bovedas} />
+          </TabsContent>
+        </Tabs>
 
         {/* GRÁFICO FLUJO DE CAJA */}
         <Card className="rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm mt-8 overflow-hidden">

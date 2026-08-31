@@ -37,7 +37,6 @@ export const backupService = {
     
     try {
       localStorage.setItem(BACKUP_KEY, JSON.stringify(updated));
-      console.log(`📸 [BACKUP]: Snapshot '${label}' creado exitosamente.`);
     } catch (e) {
       console.warn('⚠️ [BACKUP]: LocalStorage lleno, intentando con ventana reducida...', e);
       localStorage.setItem(BACKUP_KEY, JSON.stringify(updated.slice(0, 2)));

@@ -19,6 +19,9 @@ export interface ModuloInfo {
 export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
   { id: 'dashboard',        label: 'Centro de Mando',       seccion: 'General' },
   { id: 'comunicaciones',   label: 'Equipo & Checklist',    seccion: 'General' },
+  { id: 'agentes-ia',       label: 'Mando Superior (IA)',   seccion: 'General' },
+  { id: 'videovigilancia',  label: 'Videovigilancia',       seccion: 'General' },
+  { id: 'cctv',             label: 'Auditoría Digital (CCTV)', seccion: 'General' },
   { id: 'ventas',           label: 'Ventas / POS',           seccion: 'Ventas' },
   { id: 'historial-ventas', label: 'Historial de Ventas',   seccion: 'Ventas' },
   { id: 'caja',             label: 'Control de Caja',        seccion: 'Ventas' },

@@ -2,14 +2,17 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
-import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2, ChevronDown, ChevronUp, Search, ChefHat, ShoppingCart, PlusCircle, MinusCircle, ChevronRight } from 'lucide-react';
+import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2, ChevronDown, ChevronUp, Search, ChefHat, ShoppingCart, PlusCircle, MinusCircle, ChevronRight, Download } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { descargarInformePdf } from '@/lib/informe-pdf';
 import { GastoDiarioForm } from '@/components/gastos/gasto-diario-form';
+import { ExpenseList } from '@/components/gastos/ExpenseList';
+import { TurboExpenseManager } from '@/components/gastos/TurboExpenseManager';
 import type { GastoCategoria, MetodoPago } from '@/types';
 import { normalizarFechaYYYYMMDD, getProducciones, deleteProduccion } from '@/lib/finanzas-personales';
 import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
@@ -597,6 +600,98 @@ const resumenChequeosPanes = (chequeos: ChequeoRendimiento[]) => {
     };
 };
 
+/** Claves viejas de cajas → nombres canónicos del formulario. */
+const CAJAS_KEY_MAP: Record<string, string> = {
+    principal: 'Principal',
+    helados: 'Helados',
+    helado: 'Helados',
+    mecato: 'Mecato',
+    michelada: 'Michelada',
+    bebidas: 'Michelada',
+    tinto: 'Tinto',
+    fritos: 'Fritos',
+    tortas: 'Tortas',
+    torta: 'Tortas',
+    juegos: 'Juegos',
+    juego: 'Juegos',
+    piñateria: 'PIÑATERIA',
+    gastos: 'Gastos/Salidas',
+    salidas: 'Gastos/Salidas',
+    'gastos/salidas': 'Gastos/Salidas',
+};
+
+type VentaDiariaLista = {
+    id: string;
+    fecha: string;
+    turno?: string;
+    evento?: string;
+    totalEfectivo?: number;
+    totalNequi?: number;
+    totalTransferencia?: number;
+    totalCredito?: number;
+    notas?: string;
+    cajas?: Record<string, number>;
+};
+
+const normalizarCajasVenta = (cajas?: Record<string, number>): Record<string, number> => {
+    const out: Record<string, number> = {};
+    if (!cajas) return out;
+    Object.entries(cajas).forEach(([k, val]) => {
+        const mapped = CAJAS_KEY_MAP[k.toLowerCase().trim()] || k;
+        out[mapped] = (out[mapped] || 0) + (Number(val) || 0);
+    });
+    return out;
+};
+
+/** Desglose legible de un cierre (Principal, Nequi, otras cajas, gastos, total). */
+const desgloseVentaDiaria = (v: VentaDiariaLista) => {
+    const princCaja = Number(v.cajas?.['Principal']) || 0;
+    const princ = princCaja > 0 ? princCaja : (Number(v.totalEfectivo) || 0);
+    const nequi = Number(v.totalNequi) || 0;
+    const transf = Number(v.totalTransferencia) || 0;
+    const credito = Number(v.totalCredito) || 0;
+    let gastos = 0;
+    let sumOtras = 0;
+    const otrasCajas: { nombre: string; monto: number }[] = [];
+    if (v.cajas) {
+        Object.entries(v.cajas).forEach(([k, val]) => {
+            const monto = Number(val) || 0;
+            if (monto <= 0) return;
+            if (k === 'Gastos/Salidas') gastos += monto;
+            else if (k !== 'Principal') {
+                sumOtras += monto;
+                otrasCajas.push({ nombre: k, monto });
+            }
+        });
+    }
+    const princMasNequi = princ + nequi;
+    const totalGeneral = princMasNequi + sumOtras - gastos + transf + credito;
+    return { princ, nequi, princMasNequi, transf, credito, gastos, sumOtras, otrasCajas, totalGeneral };
+};
+
+/** Orden fijo: Mañana (1) → Tarde-Noche (2) → Día Completo → otros. */
+const ordenTurnoCierre = (turno?: string): number => {
+    if (turno === 'Mañana') return 0;
+    if (turno === 'Tarde-Noche') return 1;
+    if (turno === 'Día Completo') return 2;
+    return 3;
+};
+
+/** Etiqueta fija: Cierre 1 = Mañana, Cierre 2 = Tarde-Noche. */
+const etiquetaCierreTurno = (turno?: string, idx = 0): string => {
+    if (turno === 'Mañana') return 'Cierre 1 · Mañana';
+    if (turno === 'Tarde-Noche') return 'Cierre 2 · Tarde-Noche';
+    if (turno === 'Día Completo') return 'Cierre · Día Completo';
+    return `Cierre ${idx + 1}${turno ? ` · ${turno}` : ''}`;
+};
+
+const formatearFechaFicha = (fecha: string) =>
+    new Date(`${fecha}T12:00:00`).toLocaleDateString('es-CO', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+    });
+
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHorno = false }: { data: any, addMovimientoBoveda?: any, modoLibretaHorno?: boolean }) {
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto, updateGasto, deleteGasto, proveedores, productos, precios, cajaActiva, sesionesCaja } = data;
     const [editGastoId, setEditGastoId] = useState<string | null>(null);
@@ -604,8 +699,270 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
     const [isSavingGasto, setIsSavingGasto] = useState(false);
 
     const [gastoExpanded, setGastoExpanded] = useState(false);
+    const [usarModoTurbo, setUsarModoTurbo] = useState(true);
+    const [activeRecentTab, setActiveRecentTab] = useState<string | null>(null);
     const [ventasCardExpanded, setVentasCardExpanded] = useState(false);
     const [compromisosCardExpanded, setCompromisosCardExpanded] = useState(false);
+    /** Si true, muestra cierres fuera de la quincena/mes filtrado. */
+    const [verTodasVentasDiarias, setVerTodasVentasDiarias] = useState(false);
+
+    /** Agrupa ventas diarias por fecha (orden turno mañana → tarde). */
+    const agruparVentasDiarias = (fuente: VentaDiariaLista[]) => {
+        const list = [...fuente].sort((a, b) => b.fecha.localeCompare(a.fecha));
+        const porFecha = new Map<string, VentaDiariaLista[]>();
+        for (const v of list) {
+            const arr = porFecha.get(v.fecha) || [];
+            arr.push(v);
+            porFecha.set(v.fecha, arr);
+        }
+        return Array.from(porFecha.entries()).map(([fecha, registros]) => {
+            const ordenados = [...registros].sort(
+                (a, b) => ordenTurnoCierre(a.turno) - ordenTurnoCierre(b.turno)
+            );
+            return {
+                fecha,
+                registros: ordenados,
+                totalDia: ordenados.reduce((s, v) => s + desgloseVentaDiaria(v).totalGeneral, 0),
+            };
+        });
+    };
+
+    /** Lista de Ventas del Día: filtrada por quincena y agrupada por fecha (ficha = día). */
+    const ventasDiariasAgrupadas = useMemo(() => {
+        const inicio = quincenaReal?.inicioStr as string | undefined;
+        const fin = quincenaReal?.finStr as string | undefined;
+        let list: VentaDiariaLista[] = Array.isArray(ventasDiarias) ? [...ventasDiarias] : [];
+        if (!verTodasVentasDiarias && inicio && fin) {
+            list = list.filter((v) => {
+                // Para evitar fallos si hay fechas mal formateadas o "24/07/2026"
+                const normalizeToDate = (d: string) => {
+                    const m1 = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+                    if (m1) return new Date(Number(m1[1]), Number(m1[2])-1, Number(m1[3])).getTime();
+                    const m2 = d.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+                    if (m2) return new Date(Number(m2[3]), Number(m2[2])-1, Number(m2[1])).getTime();
+                    return new Date(d).getTime();
+                };
+                const vTime = normalizeToDate(v.fecha);
+                const iTime = normalizeToDate(inicio);
+                const fTime = normalizeToDate(fin);
+                
+                // Si la fecha no es válida, la mostramos por si acaso
+                if (isNaN(vTime) || isNaN(iTime) || isNaN(fTime)) return true;
+                return vTime >= iTime && vTime <= fTime;
+            });
+        }
+        return agruparVentasDiarias(list);
+    }, [ventasDiarias, quincenaReal?.inicioStr, quincenaReal?.finStr, verTodasVentasDiarias]);
+
+    const descargarPdfVentas = (alcance: 'periodo' | 'general') => {
+        const inicio = quincenaReal?.inicioStr as string | undefined;
+        const fin = quincenaReal?.finStr as string | undefined;
+        let fuente: VentaDiariaLista[] = Array.isArray(ventasDiarias) ? [...ventasDiarias] : [];
+        if (alcance === 'periodo') {
+            if (inicio && fin) {
+                fuente = fuente.filter((v) => v.fecha >= inicio && v.fecha <= fin);
+            }
+        }
+        const list = agruparVentasDiarias(fuente);
+        if (list.length === 0) {
+            toast.error(
+                alcance === 'periodo'
+                    ? 'No hay cierres de venta en este periodo'
+                    : 'No hay ventas del día registradas'
+            );
+            return;
+        }
+        const total = list.reduce((s, g) => s + g.totalDia, 0);
+        const etiqueta =
+            alcance === 'periodo'
+                ? `Periodo · ${String(quincenaReal?.label ?? 'actual')}`
+                : 'General · todo el historial';
+        void descargarInformePdf({
+            titulo: `Ventas del día · ${etiqueta}`,
+            kpis: [
+                { label: 'Alcance', value: alcance === 'periodo' ? 'Periodo' : 'General' },
+                { label: 'Total', value: formatCurrency(total) },
+                { label: 'Días', value: String(list.length) },
+                {
+                    label: 'Cierres',
+                    value: String(list.reduce((s, g) => s + g.registros.length, 0)),
+                },
+            ],
+            secciones: list.map((grupo) => ({
+                titulo: `${formatearFechaFicha(grupo.fecha)} · ${formatCurrency(grupo.totalDia)}`,
+                encabezados: ['Cierre', 'Principal+Nequi', 'Otras cajas', 'Gastos', 'Total'],
+                filas: grupo.registros.map((v, idx) => {
+                    const d = desgloseVentaDiaria(v);
+                    const otras =
+                        d.otrasCajas.map((c) => `${c.nombre}: ${formatCurrency(c.monto)}`).join(' | ') ||
+                        '—';
+                    return [
+                        etiquetaCierreTurno(v.turno, idx),
+                        formatCurrency(d.princMasNequi),
+                        otras,
+                        formatCurrency(d.gastos),
+                        formatCurrency(d.totalGeneral),
+                    ];
+                }),
+            })),
+        });
+    };
+
+    const descargarPdfProduccion = (alcance: 'periodo' | 'general' = 'periodo') => {
+        const inicio = quincenaReal?.inicioStr as string | undefined;
+        const fin = quincenaReal?.finStr as string | undefined;
+        type ProdRow = {
+            id?: string;
+            fecha?: string;
+            notas?: string;
+            masaDulce?: number;
+            masaHojaldrado?: number;
+            masaSalada?: number;
+            masas?: Array<{ nombre?: string; cantidadArrobas?: number }>;
+            hornadas?: Array<{
+                totalPanes?: number | string;
+                bandejas?: number | string;
+                panesPorBandeja?: number | string;
+                nombre?: string;
+            }>;
+        };
+        let list: ProdRow[] = Array.isArray(producciones) ? [...producciones] : [];
+        if (alcance === 'periodo' && inicio && fin) {
+            list = list.filter((p) => {
+                const f = normalizarFechaYYYYMMDD(p.fecha);
+                return Boolean(f) && f >= inicio && f <= fin;
+            });
+        }
+        if (list.length === 0) {
+            toast.error(
+                alcance === 'periodo'
+                    ? 'No hay producción en este periodo'
+                    : 'No hay auditorías de producción registradas'
+            );
+            return;
+        }
+        list.sort((a, b) => String(b.fecha ?? '').localeCompare(String(a.fecha ?? '')));
+        const etiqueta =
+            alcance === 'periodo'
+                ? `Periodo · ${String(quincenaReal?.label ?? 'actual')}`
+                : 'General · todo el historial';
+        void descargarInformePdf({
+            titulo: `Auditoría de producción · ${etiqueta}`,
+            kpis: [
+                { label: 'Alcance', value: alcance === 'periodo' ? 'Periodo' : 'General' },
+                { label: 'Lotes', value: String(list.length) },
+            ],
+            secciones: [
+                {
+                    encabezados: ['Fecha', 'Masas', 'Hornadas', 'Panes', 'Notas'],
+                    filas: list.map((p) => {
+                        let masas = Array.isArray(p.masas) ? p.masas : [];
+                        if (masas.length === 0) {
+                            masas = [
+                                { nombre: 'Masa Dulce', cantidadArrobas: Number(p.masaDulce) || 0 },
+                                { nombre: 'Hojaldrado', cantidadArrobas: Number(p.masaHojaldrado) || 0 },
+                                { nombre: 'Salada', cantidadArrobas: Number(p.masaSalada) || 0 },
+                            ].filter((m) => (m.cantidadArrobas || 0) > 0);
+                        }
+                        const hornadas = Array.isArray(p.hornadas) ? p.hornadas : [];
+                        const totalPanes = hornadas.reduce((s, h) => s + panesDeHornada(h), 0);
+                        const masasTxt =
+                            masas
+                                .map((m) => `${m.nombre || 'Masa'} (${Number(m.cantidadArrobas) || 0} arr)`)
+                                .join(' | ') || '—';
+                        const hornadasTxt =
+                            hornadas
+                                .map((h) => `${h.nombre || 'Lote'}: ${panesDeHornada(h)} und`)
+                                .join(' | ') || '—';
+                        return [
+                            formatearFechaFicha(normalizarFechaYYYYMMDD(p.fecha)),
+                            masasTxt,
+                            hornadasTxt,
+                            String(totalPanes),
+                            p.notas || '—',
+                        ];
+                    }),
+                },
+            ],
+        });
+    };
+
+    const BotonesDescargaPdf = ({
+        onPeriodo,
+        onGeneral,
+        className,
+    }: {
+        onPeriodo: () => void;
+        onGeneral: () => void;
+        className?: string;
+    }) => (
+        <div
+            className={cn('flex flex-wrap items-center gap-1.5 shrink-0', className)}
+            onClick={(e) => e.stopPropagation()}
+        >
+            <Button
+                type="button"
+                size="sm"
+                className="h-8 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[9px] font-black uppercase tracking-wide gap-1 px-2.5"
+                onClick={onPeriodo}
+            >
+                <Download className="w-3 h-3" /> Periodo
+            </Button>
+            <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-lg border-indigo-300 text-indigo-700 dark:text-indigo-300 dark:border-indigo-700 text-[9px] font-black uppercase tracking-wide gap-1 px-2.5"
+                onClick={onGeneral}
+            >
+                <Download className="w-3 h-3" /> General
+            </Button>
+        </div>
+    );
+
+    const cargarVentaEnFormulario = (v: VentaDiariaLista) => {
+        const cajasNorm = normalizarCajasVenta(v.cajas);
+        const principal =
+            (cajasNorm['Principal'] && cajasNorm['Principal'] > 0)
+                ? cajasNorm['Principal']
+                : (Number(v.totalEfectivo) || 0);
+        if (principal > 0) cajasNorm['Principal'] = principal;
+
+        setFormVenta({
+            id: v.id,
+            fecha: v.fecha,
+            turno: (v.turno as 'Mañana' | 'Tarde-Noche' | 'Día Completo') || 'Día Completo',
+            evento: v.evento || '',
+            totalEfectivo: principal > 0 ? String(principal) : '',
+            totalNequi: v.totalNequi ? String(v.totalNequi) : '',
+            totalTransferencia: v.totalTransferencia ? String(v.totalTransferencia) : '',
+            totalCredito: v.totalCredito ? String(v.totalCredito) : '',
+            notas: v.notas || '',
+            cajas: cajasNorm,
+        });
+        setVentasCardExpanded(true);
+        toast.info('Editando este cierre. Cambia los montos y pulsa «Guardar cambios».');
+        // Sube al formulario para que se vea claro que está editando
+        requestAnimationFrame(() => {
+            document.getElementById('form-venta-diaria')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+    };
+
+    const cancelarEdicionVenta = () => {
+        setFormVenta((prev: typeof formVenta) => ({
+            id: undefined,
+            fecha: prev.fecha,
+            turno: prev.turno,
+            evento: '',
+            totalEfectivo: '',
+            totalNequi: '',
+            totalTransferencia: '',
+            totalCredito: '',
+            notas: '',
+            cajas: {},
+        }));
+        toast.message('Edición cancelada. Puedes registrar un cierre nuevo.');
+    };
     
     // Estados para hacer colapsables las demás tarjetas principales
     const [estadoExpanded, setEstadoExpanded] = useState(false);
@@ -628,8 +985,15 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
             toast.error('No se pudo guardar el gasto');
             return;
         }
-        await addGasto(gastoData);
-        toast.success('Gasto guardado. Ya suma en Gastos Diarios de Mi Quincena.');
+        
+        // ASEGURAR FECHA PARA EVITAR CRASH "Cannot read properties of undefined (reading 'startsWith')"
+        const dataConFecha = {
+            ...gastoData,
+            fecha: gastoData.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0]
+        };
+
+        await addGasto(dataConFecha);
+        toast.success('Gasto guardado. Ya suma en Gastos Diarios de Gestión Integral Operativa.');
     };
     
     // Add COLORS if needed
@@ -823,7 +1187,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                 type="month" 
                                 className="bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-lg text-xs font-bold px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-slate-700 dark:text-slate-200"
                                 value={periodoFiltro.mes}
-                                onChange={(e) => setPeriodoFiltro(p => ({ ...p, mes: e.target.value }))}
+                                onChange={(e) => setPeriodoFiltro(p => ({ ...p, mes: e.target.value, quincena: 'mes' }))}
                             />
                             <div className="flex bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-white/10 rounded-lg overflow-hidden">
                                 {(['1','2','mes'] as const).map((q, idx) => (
@@ -872,35 +1236,95 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                         </div>
                         {gastoExpanded && (
                             <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                <GastoDiarioForm 
-                                    onSave={handleSaveGastoDiario}
-                                    onUpdateGasto={async (id, updates) => {
-                                        if (updateGasto) {
-                                            await updateGasto(id, updates);
-                                            toast.success('Gasto actualizado ✓');
-                                        }
-                                    }}
-                                    onAnular={async (id, motivo) => {
-                                        if (updateGasto) {
-                                            const gastoAnterior = gastos.find(g => g.id === id);
-                                            await updateGasto(id, { estado: 'anulado', descripcion: `[ANULADO: ${motivo}] ${gastoAnterior?.descripcion || ''}` });
-                                            toast.success('Gasto anulado ✓');
-                                        }
-                                    }}
-                                    proveedores={proveedores}
-                                    productos={productos}
-                                    precios={precios}
-                                    cajaActiva={cajaActiva}
-                                    sesionesCaja={sesionesCaja}
-                                    gastos={gastos}
-                                    hoyStr={hoyStr}
-                                    formatCurrency={formatCurrency}
-                                />
+                                <div className="flex justify-end mb-2">
+                                    <button
+                                        onClick={(e) => { e.stopPropagation(); setUsarModoTurbo(!usarModoTurbo); }}
+                                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-full font-black text-[9px] uppercase tracking-widest transition-all shadow-sm"
+                                    >
+                                        {usarModoTurbo ? 'Volver al Clásico' : 'Probar Modo Turbo 🚀'}
+                                    </button>
+                                </div>
+                                {usarModoTurbo ? (
+                                    <>
+                                    <TurboExpenseManager 
+                                      onSave={handleSaveGastoDiario} 
+                                      esInline 
+                                      proveedores={proveedores}
+                                      productos={productos}
+                                      precios={precios}
+                                      gastosList={gastos}
+                                      gastoEdicion={editGastoData}
+                                      onEdicionCerrada={() => {
+                                          setEditGastoData(null);
+                                          setEditGastoId(null);
+                                      }}
+                                      onUpdateGasto={async (id, updates) => {
+                                          if (updateGasto) {
+                                              await updateGasto(id, updates);
+                                              toast.success('Gasto actualizado ✓');
+                                          }
+                                      }}
+                                      onDeleteGasto={async (id) => {
+                                          if (deleteGasto) {
+                                              await deleteGasto(id);
+                                              toast.success('Gasto eliminado');
+                                          }
+                                      }}
+                                    />
+                                    <div className="mt-8 border-t border-slate-200 dark:border-white/5 pt-8">
+                                        <ExpenseList 
+                                            gastos={gastos} 
+                                            proveedores={proveedores}
+                                            onDeleteGasto={deleteGasto}
+                                            onEditGasto={(g) => {
+                                                setEditGastoData(g);
+                                                setEditGastoId(g.id);
+                                            }}
+                                            formatCurrency={formatCurrency}
+                                            searchTerm=""
+                                            setSearchTerm={()=>{}}
+                                            selectedCategory="todas"
+                                            setSelectedCategory={()=>{}}
+                                        />
+                                    </div>
+                                    </>
+                                ) : (
+                                    <GastoDiarioForm 
+                                        onSave={handleSaveGastoDiario}
+                                        onUpdateGasto={async (id, updates) => {
+                                            if (updateGasto) {
+                                                await updateGasto(id, updates);
+                                                toast.success('Gasto actualizado ✓');
+                                            }
+                                        }}
+                                        onCambiarFecha={async (id, fecha) => {
+                                            if (updateGasto) {
+                                                await updateGasto(id, { fecha });
+                                                toast.success('Fecha actualizada ✓');
+                                            }
+                                        }}
+                                        onAnular={async (id, motivo) => {
+                                            if (updateGasto) {
+                                                const gastoAnterior = gastos.find(g => g.id === id);
+                                                await updateGasto(id, { estado: 'anulado', descripcion: `[ANULADO: ${motivo}] ${gastoAnterior?.descripcion || ''}` });
+                                                toast.success('Gasto anulado ✓');
+                                            }
+                                        }}
+                                        proveedores={proveedores}
+                                        productos={productos}
+                                        precios={precios}
+                                        cajaActiva={cajaActiva}
+                                        sesionesCaja={sesionesCaja}
+                                        gastos={gastos}
+                                        hoyStr={hoyStr}
+                                        formatCurrency={formatCurrency}
+                                    />
+                                )}
                                 
                                 {/* COMPARATIVA DE GASTOS RECIENTES */}
                                 {(() => {
                                     // Usamos hoyStr prop para evitar desfases de zona horaria (UTC vs Local)
-                                    const [y, m, d] = (hoyStr || new Date().toISOString().split('T')[0]).split('-');
+                                    const [y, m, d] = (hoyStr || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0]).split('-');
                                     const hoyObj = new Date(Number(y), Number(m) - 1, Number(d), 12, 0, 0);
                                     
                                     const ayerObj = new Date(hoyObj); ayerObj.setDate(ayerObj.getDate() - 1);
@@ -921,23 +1345,83 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                     const tAyer = gAyer.reduce((a: number,b: any)=>a+b.monto, 0);
                                     const tAnteayer = gAnteayer.reduce((a: number,b: any)=>a+b.monto, 0);
 
+                                    const renderHistoryList = (list: any[], tabName: string) => (
+                                        <div className="mt-2 space-y-1.5 animate-in fade-in max-h-[250px] overflow-y-auto pr-1">
+                                            <div className="flex justify-between items-center mb-2 px-1">
+                                                <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Registros de {tabName}</h4>
+                                                <button onClick={() => setActiveRecentTab(null)} className="text-[9px] font-bold text-slate-400 hover:text-slate-600">Cerrar</button>
+                                            </div>
+                                            {list.length === 0 ? (
+                                                <p className="text-xs text-muted-foreground text-center py-2">No hay registros</p>
+                                            ) : (
+                                                list.sort((a,b)=>b.id.localeCompare(a.id)).map((g: any) => {
+                                                    const prov = proveedores.find(p => p.id === g.proveedorId);
+                                                    return (
+                                                        <div key={g.id} className="flex items-center justify-between bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-white/5 hover:border-indigo-300 transition-colors group">
+                                                            <div className="flex flex-col overflow-hidden">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">{g.descripcion}</span>
+                                                                    <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded-sm bg-slate-100 dark:bg-slate-800 text-slate-500">{g.categoria}</span>
+                                                                </div>
+                                                                {prov && <span className="text-[10px] font-medium text-amber-600 dark:text-amber-500 truncate">Prov: {prov.nombre}</span>}
+                                                            </div>
+                                                            <div className="flex items-center gap-3 shrink-0">
+                                                                <span className="text-xs font-black tabular-nums text-slate-900 dark:text-white">
+                                                                    {formatCurrency(g.monto)}
+                                                                </span>
+                                                                <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    {updateGasto && (
+                                                                        <button onClick={() => {
+                                                                            if (usarModoTurbo) {
+                                                                                setEditGastoData(g);
+                                                                                setEditGastoId(g.id);
+                                                                            } else {
+                                                                                const desc = window.prompt('Nueva descripción:', g.descripcion);
+                                                                                if (desc) updateGasto(g.id, { descripcion: desc });
+                                                                            }
+                                                                        }} className="p-1 text-slate-400 hover:text-indigo-600">
+                                                                            <Edit2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
+                                                                    {deleteGasto && (
+                                                                        <button onClick={() => {
+                                                                            if(confirm('¿Eliminar registro?')) deleteGasto(g.id);
+                                                                        }} className="p-1 text-slate-400 hover:text-red-600">
+                                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                })
+                                            )}
+                                        </div>
+                                    );
+
                                     return (
-                                        <div className="grid grid-cols-3 gap-2 mt-4">
-                                            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-white/5 flex flex-col justify-between">
-                                                <p className="text-[10px] font-black uppercase text-slate-400">Hoy</p>
-                                                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(tHoy)}</p>
-                                                <p className="text-[9px] text-muted-foreground truncate">{gHoy.length} reg.</p>
+                                        <div className="mt-4 flex flex-col gap-2">
+                                            <div className="grid grid-cols-3 gap-2">
+                                                <button onClick={() => setActiveRecentTab(activeRecentTab === 'hoy' ? null : 'hoy')} className={`text-left p-3 rounded-2xl border transition-all flex flex-col justify-between ${activeRecentTab === 'hoy' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/30 ring-1 ring-indigo-500/50' : 'bg-slate-50 dark:bg-slate-900/50 border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                                    <p className="text-[10px] font-black uppercase text-slate-400">Hoy</p>
+                                                    <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{formatCurrency(tHoy)}</p>
+                                                    <p className="text-[9px] text-muted-foreground truncate">{gHoy.length} reg.</p>
+                                                </button>
+                                                <button onClick={() => setActiveRecentTab(activeRecentTab === 'ayer' ? null : 'ayer')} className={`text-left p-3 rounded-2xl border transition-all flex flex-col justify-between ${activeRecentTab === 'ayer' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/30 ring-1 ring-indigo-500/50' : 'bg-slate-50 dark:bg-slate-900/50 border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                                    <p className="text-[10px] font-black uppercase text-slate-400">Ayer</p>
+                                                    <p className="text-lg font-black text-slate-700 dark:text-slate-300">{formatCurrency(tAyer)}</p>
+                                                    <p className="text-[9px] text-muted-foreground truncate">{gAyer.length} reg.</p>
+                                                </button>
+                                                <button onClick={() => setActiveRecentTab(activeRecentTab === 'anteayer' ? null : 'anteayer')} className={`text-left p-3 rounded-2xl border transition-all flex flex-col justify-between ${activeRecentTab === 'anteayer' ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-500/30 ring-1 ring-indigo-500/50' : 'bg-slate-50 dark:bg-slate-900/50 border-white/5 hover:bg-slate-100 dark:hover:bg-slate-800'}`}>
+                                                    <p className="text-[10px] font-black uppercase text-slate-400">Anteayer</p>
+                                                    <p className="text-lg font-black text-slate-700 dark:text-slate-300">{formatCurrency(tAnteayer)}</p>
+                                                    <p className="text-[9px] text-muted-foreground truncate">{gAnteayer.length} reg.</p>
+                                                </button>
                                             </div>
-                                            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-white/5 flex flex-col justify-between">
-                                                <p className="text-[10px] font-black uppercase text-slate-400">Ayer</p>
-                                                <p className="text-lg font-black text-slate-700 dark:text-slate-300">{formatCurrency(tAyer)}</p>
-                                                <p className="text-[9px] text-muted-foreground truncate">{gAyer.length} reg.</p>
-                                            </div>
-                                            <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-2xl border border-white/5 flex flex-col justify-between">
-                                                <p className="text-[10px] font-black uppercase text-slate-400">Anteayer</p>
-                                                <p className="text-lg font-black text-slate-700 dark:text-slate-300">{formatCurrency(tAnteayer)}</p>
-                                                <p className="text-[9px] text-muted-foreground truncate">{gAnteayer.length} reg.</p>
-                                            </div>
+                                            
+                                            {activeRecentTab === 'hoy' && renderHistoryList(gHoy, 'Hoy')}
+                                            {activeRecentTab === 'ayer' && renderHistoryList(gAyer, 'Ayer')}
+                                            {activeRecentTab === 'anteayer' && renderHistoryList(gAnteayer, 'Anteayer')}
                                         </div>
                                     );
                                 })()}
@@ -1095,7 +1579,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                 val: quincenaReal.ventasPOS,
                                 color: 'text-emerald-500',
                                 border: 'border-emerald-200 dark:border-emerald-800',
-                                sub: `${ventas.filter(v => v.fecha.slice(0, 10) >= quincenaReal.inicioStr && v.fecha.slice(0, 10) <= quincenaReal.finStr).length} transacciones`,
+                                sub: `${ventas.filter(v => (v.fecha || '').slice(0, 10) >= quincenaReal.inicioStr && (v.fecha || '').slice(0, 10) <= quincenaReal.finStr).length} transacciones`,
                                 modalKey: 'ingresos'
                             },
                             {
@@ -1226,7 +1710,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                         );
                     })()}
 
-                    {/* ── SEMÁFORO Y SOBRES (MI QUINCENA PRO) ── */}
+                    {/* ── SEMÁFORO Y SOBRES (GESTIÓN INTEGRAL OPERATIVA PRO) ── */}
                     <div 
                         className="flex items-center justify-between mb-4 mt-8 cursor-pointer bg-violet-500/5 dark:bg-violet-500/10 hover:bg-violet-500/10 dark:hover:bg-violet-500/20 p-3 px-4 rounded-2xl border border-violet-500/10 shadow-sm transition-all group" 
                         onClick={(e) => { e.stopPropagation(); setSemaforoExpanded(x => !x); }}
@@ -1641,20 +2125,48 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                         {/* Columna der — Registro de ventas del día */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-sm overflow-hidden">
                             <CardHeader 
-                                className="pb-3 flex flex-row items-center justify-between cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors"
+                                className="pb-3 flex flex-row items-center justify-between gap-2 cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors"
                                 onClick={(e) => { e.stopPropagation(); setVentasCardExpanded(x => !x); }}
                             >
-                                <div>
+                                <div className="min-w-0">
                                     <CardTitle className="text-base font-black text-slate-800 dark:text-slate-100">Ventas del Día</CardTitle>
                                     <CardDescription className="text-xs font-medium">Registro manual detallado por caja (efectivo) y otros métodos</CardDescription>
                                 </div>
-                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0">
-                                    {ventasCardExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <BotonesDescargaPdf
+                                        onPeriodo={() => descargarPdfVentas('periodo')}
+                                        onGeneral={() => descargarPdfVentas('general')}
+                                    />
+                                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0">
+                                        {ventasCardExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                    </div>
                                 </div>
                             </CardHeader>
                             {ventasCardExpanded && (
                             <CardContent className="space-y-3">
-                                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-2xl p-4 space-y-3 border border-white/5">
+                                <div
+                                    id="form-venta-diaria"
+                                    className={cn(
+                                        "rounded-2xl p-4 space-y-3 border",
+                                        formVenta.id
+                                            ? "bg-indigo-50/80 dark:bg-indigo-950/30 border-indigo-300 dark:border-indigo-500/40 ring-1 ring-indigo-400/30"
+                                            : "bg-slate-50 dark:bg-slate-900/50 border-white/5"
+                                    )}
+                                >
+                                    {formVenta.id ? (
+                                        <div className="flex items-center justify-between gap-2 rounded-xl bg-indigo-600/10 border border-indigo-500/30 px-3 py-2">
+                                            <p className="text-[11px] font-black text-indigo-600 dark:text-indigo-300">
+                                                Editando cierre del {formatearFechaFicha(formVenta.fecha)}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={cancelarEdicionVenta}
+                                                className="text-[10px] font-bold text-slate-500 hover:text-rose-500 underline shrink-0"
+                                            >
+                                                Cancelar
+                                            </button>
+                                        </div>
+                                    ) : null}
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <Label className="text-[10px] font-black uppercase text-muted-foreground">Fecha</Label>
@@ -2050,209 +2562,207 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                         </div>
                                     </div>
                                     
-                                    <Button onClick={handleAddVentaDiaria} size="sm" className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs h-9 shadow-lg shadow-indigo-600/10">
-                                        <Plus className="w-4 h-4 mr-1" /> Registrar cierre del día
+                                    <Button
+                                        onClick={handleAddVentaDiaria}
+                                        size="sm"
+                                        className={cn(
+                                            "w-full rounded-xl text-white font-black text-xs h-10 shadow-lg",
+                                            formVenta.id
+                                                ? "bg-amber-600 hover:bg-amber-700 shadow-amber-600/10"
+                                                : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/10"
+                                        )}
+                                    >
+                                        {formVenta.id ? (
+                                            <><Save className="w-4 h-4 mr-1" /> Guardar cambios</>
+                                        ) : (
+                                            <><Plus className="w-4 h-4 mr-1" /> Registrar cierre del día</>
+                                        )}
                                     </Button>
                                 </div>
 
-                                {ventasDiarias.length === 0 && (
-                                    <p className="text-center text-xs text-muted-foreground py-4">Sin ventas registradas manualmente aún</p>
-                                )}
-                                <div className="max-h-64 overflow-y-auto space-y-2 pr-1">
-                                    {/* VISTA ESCRITORIO (TABLA) */}
-                                    <div className="hidden md:block w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10">
-                                        <table className="w-full text-left border-collapse text-xs">
-                                            <thead>
-                                                <tr className="bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400">
-                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Fecha / Turno</th>
-                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Neto (Princ+Nequi)</th>
-                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Gastos</th>
-                                                    <th className="px-4 py-2 font-black uppercase tracking-wider">Otras Cajas</th>
-                                                    <th className="px-4 py-2 font-black uppercase tracking-wider text-right">Total General</th>
-                                                    <th className="px-4 py-2 font-black uppercase tracking-wider text-center">Acciones</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {ventasDiarias.slice(0, 30).map(v => {
-                                                    const princ = v.totalEfectivo || 0;
-                                                    const nequi = v.totalNequi || 0;
-                                                    const princMasNequi = princ + nequi;
-                                                    let sumOtras = 0; let gastos = 0;
-                                                    if (v.cajas) {
-                                                        Object.entries(v.cajas).forEach(([k, val]) => {
-                                                            if (k === 'Gastos/Salidas') gastos += (val || 0);
-                                                            else if (k !== 'Principal') sumOtras += (val || 0);
-                                                        });
-                                                    }
-                                                    const totalGeneral = princMasNequi + sumOtras - gastos + (v.totalTransferencia || 0) + (v.totalCredito || 0);
-                                                    return (
-                                                        <tr key={v.id} className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors">
-                                                            <td className="px-4 py-2">
-                                                                <div className="font-bold text-slate-800 dark:text-slate-200">{new Date(v.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
-                                                                {(v.turno && v.turno !== 'Día Completo' || v.evento) && (
-                                                                    <div className="flex gap-1 mt-1">
-                                                                        {v.turno && v.turno !== 'Día Completo' && <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-violet-500/10 text-violet-500">{v.turno}</span>}
-                                                                        {v.evento && <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500/10 text-amber-500">{v.evento}</span>}
-                                                                    </div>
-                                                                )}
-                                                            </td>
-                                                            <td className="px-4 py-2 font-medium text-indigo-600 dark:text-indigo-400">{formatCurrency(princMasNequi - gastos)}</td>
-                                                            <td className="px-4 py-2 font-medium text-rose-600 dark:text-rose-400">{gastos > 0 ? formatCurrency(gastos) : '-'}</td>
-                                                            <td className="px-4 py-2">
-                                                                <div className="font-medium text-emerald-600 dark:text-emerald-400">{sumOtras > 0 ? formatCurrency(sumOtras) : '-'}</div>
-                                                                <div className="flex flex-wrap gap-1 mt-1">
-                                                                    {v.cajas && Object.entries(v.cajas).map(([k, val]) => val > 0 && k !== 'Principal' && k !== 'Gastos/Salidas' && (
-                                                                        <span key={k} className="text-[9px] text-slate-500">{k.substring(0,3)}: {formatCurrency(val)}</span>
-                                                                    ))}
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-2 font-black text-emerald-600 dark:text-emerald-400 text-right">{formatCurrency(totalGeneral)}</td>
-                                                            <td className="px-4 py-2">
-                                                                <div className="flex items-center justify-center gap-2">
-                                                                    <button onClick={() => {
-                                                                        const normalizedCajas: any = {};
-                                                                        if (v.cajas) {
-                                                                            const keyMap: any = { 'principal': 'Principal', 'helados': 'Helados', 'helado': 'Helados', 'mecato': 'Mecato', 'michelada': 'Michelada', 'bebidas': 'Michelada', 'tinto': 'Tinto', 'fritos': 'Fritos', 'tortas': 'Tortas', 'torta': 'Tortas', 'juegos': 'Juegos', 'juego': 'Juegos', 'piñateria': 'PIÑATERIA', 'gastos': 'Gastos/Salidas', 'salidas': 'Gastos/Salidas', 'gastos/salidas': 'Gastos/Salidas' };
-                                                                            Object.entries(v.cajas).forEach(([k, val]) => {
-                                                                                const mappedKey = keyMap[k.toLowerCase().trim()] || k;
-                                                                                normalizedCajas[mappedKey] = (normalizedCajas[mappedKey] || 0) + val;
-                                                                            });
-                                                                        }
-                                                                        setFormVenta({ id: v.id, fecha: v.fecha, turno: v.turno || 'Día Completo', evento: v.evento || '', totalEfectivo: v.totalEfectivo.toString() || '', totalNequi: v.totalNequi.toString() || '', totalTransferencia: v.totalTransferencia.toString() || '', totalCredito: v.totalCredito.toString() || '', notas: v.notas || '', cajas: normalizedCajas });
-                                                                        toast.info("Venta cargada para editar.");
-                                                                    }} className="text-indigo-500 hover:text-indigo-700 p-1"><Edit2 className="w-3.5 h-3.5" /></button>
-                                                                    <button onClick={() => handleDeleteVentaDiaria(v.id)} className="text-slate-400 hover:text-rose-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
-                                                                </div>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                {ventasDiariasAgrupadas.length === 0 ? (
+                                    <div className="text-center py-4 space-y-1">
+                                        <p className="text-xs text-muted-foreground">
+                                            Sin ventas registradas en este periodo
+                                        </p>
+                                        {periodoFiltro.quincena !== 'mes' && (
+                                            <p className="text-[10px] text-amber-500 font-medium">
+                                                Intenta seleccionar "Mes" arriba para ver todo el historial del mes.
+                                            </p>
+                                        )}
                                     </div>
-
-                                    {/* VISTA MÓVIL (TARJETAS) */}
-                                    <div className="md:hidden space-y-2">
-                                        {ventasDiarias.slice(0, 30).map(v => {
-                                            // Cálculos para la vista del historial
-                                            const princ = v.totalEfectivo || 0; // en cajas.Principal o el viejo totalEfectivo
-                                            const nequi = v.totalNequi || 0;
-                                            const princMasNequi = princ + nequi;
-
-                                            let sumOtras = 0;
-                                            let gastos = 0;
-                                            if (v.cajas) {
-                                                Object.entries(v.cajas).forEach(([k, val]) => {
-                                                    if (k === 'Gastos/Salidas') {
-                                                        gastos += (val || 0);
-                                                    } else if (k !== 'Principal') {
-                                                        sumOtras += (val || 0);
-                                                    }
-                                                });
-                                            }
-                                            const totalGeneral = princMasNequi + sumOtras - gastos + (v.totalTransferencia || 0) + (v.totalCredito || 0);
-
-                                            return (
-                                            <div key={v.id} className="flex flex-col gap-1.5 rounded-2xl p-3 bg-card/40 border border-white/5 shadow-sm">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <p className="text-sm font-black text-slate-800 dark:text-slate-200">{new Date(v.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</p>
-                                                            {v.turno && v.turno !== 'Día Completo' && (
-                                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-violet-500/20 text-violet-500 border border-violet-500/30">
-                                                                    {v.turno}
-                                                                </span>
-                                                            )}
-                                                            {v.evento && (
-                                                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black uppercase bg-amber-500/20 text-amber-500 border border-amber-500/30">
-                                                                    {v.evento}
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                        {v.notas && <p className="text-[10px] italic text-slate-500 truncate mt-0.5">"{v.notas}"</p>}
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        <p className="text-sm font-black text-emerald-500 shrink-0">{formatCurrency(totalGeneral)}</p>
-                                                        <button 
-                                                            onClick={() => {
-                                                                const normalizedCajas: any = {};
-                                                                if (v.cajas) {
-                                                                    const keyMap: any = {
-                                                                        'principal': 'Principal', 'helados': 'Helados', 'helado': 'Helados',
-                                                                        'mecato': 'Mecato', 'michelada': 'Michelada', 'bebidas': 'Michelada',
-                                                                        'tinto': 'Tinto', 'fritos': 'Fritos', 'tortas': 'Tortas', 'torta': 'Tortas',
-                                                                        'juegos': 'Juegos', 'juego': 'Juegos', 'piñateria': 'PIÑATERIA',
-                                                                        'gastos': 'Gastos/Salidas', 'salidas': 'Gastos/Salidas', 'gastos/salidas': 'Gastos/Salidas'
-                                                                    };
-                                                                    Object.entries(v.cajas).forEach(([k, val]) => {
-                                                                        const lowerK = k.toLowerCase().trim();
-                                                                        const mappedKey = keyMap[lowerK] || k;
-                                                                        normalizedCajas[mappedKey] = (normalizedCajas[mappedKey] || 0) + val;
-                                                                    });
-                                                                }
-                                                                setFormVenta({
-                                                                    id: v.id, fecha: v.fecha, turno: v.turno || 'Día Completo', evento: v.evento || '',
-                                                                    totalEfectivo: v.totalEfectivo.toString() || '', totalNequi: v.totalNequi.toString() || '',
-                                                                    totalTransferencia: v.totalTransferencia.toString() || '', totalCredito: v.totalCredito.toString() || '',
-                                                                    notas: v.notas || '', cajas: normalizedCajas
-                                                                });
-                                                                toast.info("Venta cargada en el formulario para editar.");
-                                                            }} 
-                                                            className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 hover:underline"
-                                                        >
-                                                            Editar
-                                                        </button>
-                                                        <button onClick={() => handleDeleteVentaDiaria(v.id)} className="shrink-0 text-slate-400 hover:text-rose-500 transition-colors">
-                                                            <Trash2 className="w-3.5 h-3.5" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div className="text-xs text-slate-500 border-t border-slate-100 dark:border-white/5 pt-2 flex flex-col gap-2">
-                                                    
-                                                    {/* Detalle agrupado que solicitó el usuario */}
-                                                    <div className="flex flex-wrap items-center gap-1.5">
-                                                        <span className="bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 px-1.5 py-0.5 rounded text-[10px] font-bold text-indigo-600 dark:text-indigo-300">
-                                                            P+N: {formatCurrency(princMasNequi - gastos)}
-                                                        </span>
-                                                        {gastos > 0 && (
-                                                            <span className="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 px-1.5 py-0.5 rounded text-[10px] font-bold text-rose-600 dark:text-rose-300">
-                                                                Gastos: -{formatCurrency(gastos)}
-                                                            </span>
-                                                        )}
-                                                        {sumOtras > 0 && (
-                                                            <span className="bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 px-1.5 py-0.5 rounded text-[10px] font-bold text-emerald-600 dark:text-emerald-300">
-                                                                Otras: {formatCurrency(sumOtras)}
-                                                            </span>
-                                                        )}
-                                                        {v.totalTransferencia > 0 && (
-                                                            <span className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 px-1.5 py-0.5 rounded text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                                                                Transf: {formatCurrency(v.totalTransferencia)}
-                                                            </span>
-                                                        )}
-                                                        {v.totalCredito > 0 && (
-                                                            <span className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 px-1.5 py-0.5 rounded text-[10px] font-bold text-amber-600 dark:text-amber-400">
-                                                                Cred: {formatCurrency(v.totalCredito)}
-                                                            </span>
-                                                        )}
-                                                    </div>
-
-                                                    {/* Desglose individual de cajas pequeñas */}
-                                                    <div className="flex flex-wrap gap-1 mt-0.5">
-                                                        {v.cajas && Object.entries(v.cajas).map(([k, val]) => val > 0 && k !== 'Principal' && k !== 'Gastos/Salidas' && (
-                                                            <span key={k} className="bg-slate-100 dark:bg-slate-800/50 px-1.5 py-0.5 rounded text-[9px] font-medium text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700/50">
-                                                                {k}: {formatCurrency(val)}
-                                                            </span>
-                                                        ))}
-                                                    </div>
-                                                </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between gap-2 px-0.5">
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+                                                {ventasDiariasAgrupadas.length} día{ventasDiariasAgrupadas.length !== 1 ? 's' : ''} ·{' '}
+                                                {ventasDiariasAgrupadas.reduce((s, g) => s + g.registros.length, 0)} cierre
+                                                {ventasDiariasAgrupadas.reduce((s, g) => s + g.registros.length, 0) !== 1 ? 's' : ''}
+                                            </p>
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setVerTodasVentasDiarias((x) => !x)}
+                                                    className="text-[10px] font-bold text-indigo-500 hover:text-indigo-600 hover:underline"
+                                                >
+                                                    {verTodasVentasDiarias ? 'Solo esta quincena' : 'Ver todas'}
+                                                </button>
                                             </div>
-                                        )})}
+                                        </div>
+
+                                        <div className="max-h-[28rem] overflow-y-auto space-y-3 pr-1">
+                                            {ventasDiariasAgrupadas.map((grupo) => (
+                                                <div
+                                                    key={grupo.fecha}
+                                                    className="rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-950/40 overflow-hidden shadow-sm"
+                                                >
+                                                    {/* Encabezado de la ficha = un día */}
+                                                    <div className="flex items-center justify-between gap-2 px-3 py-2 bg-slate-100 dark:bg-slate-900/80 border-b border-slate-200 dark:border-white/10">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-black text-slate-800 dark:text-slate-100 capitalize truncate">
+                                                                {formatearFechaFicha(grupo.fecha)}
+                                                            </p>
+                                                            <p className="text-[10px] font-bold text-muted-foreground">
+                                                                {grupo.registros.length} registro{grupo.registros.length !== 1 ? 's' : ''} ese día
+                                                            </p>
+                                                        </div>
+                                                        <p className="text-sm font-black text-emerald-600 dark:text-emerald-400 shrink-0">
+                                                            {formatCurrency(grupo.totalDia)}
+                                                        </p>
+                                                    </div>
+
+                                                    {/* Cada cierre del día: 1=Mañana, 2=Tarde-Noche */}
+                                                    <div className="divide-y divide-slate-200 dark:divide-white/10">
+                                                        {grupo.registros.map((v, idx) => {
+                                                            const d = desgloseVentaDiaria(v);
+                                                            const etiqueta = etiquetaCierreTurno(v.turno, idx);
+                                                            return (
+                                                                <div
+                                                                    key={v.id}
+                                                                    className={cn(
+                                                                        "px-3 py-2.5",
+                                                                        formVenta.id === v.id
+                                                                            ? "bg-indigo-50 dark:bg-indigo-950/40 ring-1 ring-inset ring-indigo-400/40"
+                                                                            : "bg-slate-50/80 dark:bg-slate-900/30"
+                                                                    )}
+                                                                >
+                                                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                                                        <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                                                            <span className={cn(
+                                                                                "px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide border",
+                                                                                v.turno === 'Mañana'
+                                                                                    ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                                                                                    : v.turno === 'Tarde-Noche'
+                                                                                      ? "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/30"
+                                                                                      : "bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/20"
+                                                                            )}>
+                                                                                {etiqueta}
+                                                                            </span>
+                                                                            {v.evento && (
+                                                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/20">
+                                                                                    {v.evento}
+                                                                                </span>
+                                                                            )}
+                                                                            {formVenta.id === v.id && (
+                                                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-500 text-white">
+                                                                                    Editando…
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => cargarVentaEnFormulario(v)}
+                                                                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-black uppercase bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                                                                            >
+                                                                                <Edit2 className="w-3 h-3" /> Editar
+                                                                            </button>
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleDeleteVentaDiaria(v.id)}
+                                                                                className="inline-flex items-center justify-center rounded-lg p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-500/10"
+                                                                                title="Eliminar"
+                                                                            >
+                                                                                <Trash2 className="w-3.5 h-3.5" />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* 3 totales pedidos: cierre · Principal+Nequi · otras cajas */}
+                                                                    <div className="grid grid-cols-3 gap-1.5 text-[10px] mb-2">
+                                                                        <div className="rounded-lg px-2 py-1.5 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/25">
+                                                                            <p className="font-bold text-emerald-700/80 dark:text-emerald-300/80 uppercase leading-tight">Total cierre</p>
+                                                                            <p className="font-black text-emerald-700 dark:text-emerald-300 text-xs sm:text-sm">{formatCurrency(d.totalGeneral)}</p>
+                                                                        </div>
+                                                                        <div className="rounded-lg px-2 py-1.5 bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/25">
+                                                                            <p className="font-bold text-indigo-700/80 dark:text-indigo-300/80 uppercase leading-tight">Princ + Nequi</p>
+                                                                            <p className="font-black text-indigo-700 dark:text-indigo-300 text-xs sm:text-sm">{formatCurrency(d.princMasNequi)}</p>
+                                                                        </div>
+                                                                        <div className="rounded-lg px-2 py-1.5 bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/25">
+                                                                            <p className="font-bold text-teal-700/80 dark:text-teal-300/80 uppercase leading-tight">Otras cajas</p>
+                                                                            <p className="font-black text-teal-700 dark:text-teal-300 text-xs sm:text-sm">{formatCurrency(d.sumOtras)}</p>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 text-[10px]">
+                                                                        <div className="rounded-lg px-2 py-1.5 bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/5">
+                                                                            <p className="font-bold text-muted-foreground uppercase">Principal</p>
+                                                                            <p className="font-black text-slate-800 dark:text-slate-100">{formatCurrency(d.princ)}</p>
+                                                                        </div>
+                                                                        <div className="rounded-lg px-2 py-1.5 bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/5">
+                                                                            <p className="font-bold text-muted-foreground uppercase">Nequi</p>
+                                                                            <p className="font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(d.nequi)}</p>
+                                                                        </div>
+                                                                        {d.transf > 0 && (
+                                                                            <div className="rounded-lg px-2 py-1.5 bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/5">
+                                                                                <p className="font-bold text-muted-foreground uppercase">Transferencia</p>
+                                                                                <p className="font-black text-blue-600 dark:text-blue-400">{formatCurrency(d.transf)}</p>
+                                                                            </div>
+                                                                        )}
+                                                                        {d.credito > 0 && (
+                                                                            <div className="rounded-lg px-2 py-1.5 bg-white dark:bg-slate-950/60 border border-slate-200 dark:border-white/5">
+                                                                                <p className="font-bold text-muted-foreground uppercase">Crédito</p>
+                                                                                <p className="font-black text-amber-600 dark:text-amber-400">{formatCurrency(d.credito)}</p>
+                                                                            </div>
+                                                                        )}
+                                                                        {d.gastos > 0 && (
+                                                                            <div className="rounded-lg px-2 py-1.5 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/40">
+                                                                                <p className="font-bold text-rose-500 uppercase">Gastos/Salidas</p>
+                                                                                <p className="font-black text-rose-600 dark:text-rose-400">-{formatCurrency(d.gastos)}</p>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {d.otrasCajas.length > 0 && (
+                                                                        <div className="flex flex-wrap gap-1 mt-2">
+                                                                            {d.otrasCajas.map((c) => (
+                                                                                <span
+                                                                                    key={`${v.id}-${c.nombre}`}
+                                                                                    className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/20"
+                                                                                >
+                                                                                    {c.nombre}: {formatCurrency(c.monto)}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+
+                                                                    {v.notas && (
+                                                                        <p className="text-[10px] italic text-slate-500 mt-1.5 truncate">“{v.notas}”</p>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
                                     </div>
-                                </div>
+                                )}
                             </CardContent>
                             )}
                         </Card>
 
+                    </div>
                     </>
                     )}
 
@@ -2263,17 +2773,23 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                 className="pb-3 cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors" 
                                 onClick={(e) => { e.stopPropagation(); setProduccionExpanded(x => !x); }}
                             >
-                                <div className="flex items-center justify-between">
+                                <div className="flex items-center justify-between gap-2">
                                     <CardTitle className="text-lg font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
                                         <div className="p-2 bg-rose-500/10 rounded-lg">
                                             <ChefHat className="w-5 h-5 text-rose-500" />
                                         </div>
                                         {modoLibretaHorno ? 'Registro de panes y masas' : 'Auditoría de Producción'}
                                     </CardTitle>
-                                    <div 
-                                        className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0 sm:hidden"
-                                    >
-                                        {produccionExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <BotonesDescargaPdf
+                                            onPeriodo={() => descargarPdfProduccion('periodo')}
+                                            onGeneral={() => descargarPdfProduccion('general')}
+                                        />
+                                        <div 
+                                            className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-slate-500 shrink-0 sm:hidden"
+                                        >
+                                            {produccionExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mt-2">
@@ -2545,7 +3061,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                 </div>
 
                                                                 {/* Explicación visual de latas */}
-                                                                {h.panesPorBandeja > 0 && h.totalPanes > 0 && (() => {
+                                                                {(() => {
+                                                                    if (!h.panesPorBandeja || !h.totalPanes) return null;
                                                                     const latasLlenas = Math.floor(h.totalPanes / h.panesPorBandeja);
                                                                     const resto = h.totalPanes % h.panesPorBandeja;
                                                                     return (
@@ -2878,35 +3395,41 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
 
                         {/* Historial de Producción Grouped */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-xl overflow-hidden">
-                            <button
-                                onClick={() => setHistorialExpanded(x => !x)}
-                                className="w-full text-left"
-                            >
-                                <CardHeader className="pb-3 bg-slate-50/50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-white/5 hover:bg-slate-100/80 dark:hover:bg-slate-800/40 transition-colors">
-                                    <div className="flex items-center justify-between">
+                            <CardHeader className="pb-3 bg-slate-50/50 dark:bg-slate-900/20 border-b border-slate-100 dark:border-white/5">
+                                <div className="flex items-center justify-between gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setHistorialExpanded(x => !x)}
+                                        className="text-left min-w-0 flex-1"
+                                    >
                                         <CardTitle className="text-base font-black flex items-center gap-2 text-slate-800 dark:text-slate-100">
                                             <div className="p-2 bg-indigo-500/10 rounded-lg">
                                                 <ClipboardList className="w-4 h-4 text-indigo-500" />
                                             </div>
                                             Historial de Producción y Auditorías
                                         </CardTitle>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <span className="text-[9px] font-black uppercase text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/50">
-                                                {producciones?.length || 0} registros
-                                            </span>
-                                            <div 
-                                                className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-muted-foreground shrink-0 cursor-pointer hover:bg-black/10 dark:hover:bg-white/10"
-                                                onClick={(e) => { e.stopPropagation(); e.preventDefault(); setHistorialExpanded(x => !x); }}
-                                            >
-                                                {historialExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-                                            </div>
-                                        </div>
+                                        <CardDescription className="text-xs font-medium mt-1">
+                                            {historialExpanded ? 'Lotes guardados clasificados por fecha de producción' : 'Toca el título para ver el historial completo'}
+                                        </CardDescription>
+                                    </button>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <BotonesDescargaPdf
+                                            onPeriodo={() => descargarPdfProduccion('periodo')}
+                                            onGeneral={() => descargarPdfProduccion('general')}
+                                        />
+                                        <span className="text-[9px] font-black uppercase text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 rounded-full border border-indigo-200 dark:border-indigo-800/50">
+                                            {producciones?.length || 0} registros
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="flex items-center justify-center w-8 h-8 rounded-full bg-black/5 dark:bg-white/5 text-muted-foreground shrink-0 hover:bg-black/10 dark:hover:bg-white/10"
+                                            onClick={() => setHistorialExpanded(x => !x)}
+                                        >
+                                            {historialExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                                        </button>
                                     </div>
-                                    <CardDescription className="text-xs font-medium">
-                                        {historialExpanded ? 'Lotes guardados clasificados por fecha de producción' : 'Toca para ver el historial completo'}
-                                    </CardDescription>
-                                </CardHeader>
-                            </button>
+                                </div>
+                            </CardHeader>
                             {historialExpanded && <CardContent className="p-4 sm:p-5">
                                 {(() => {
                                     const calculateMetrics = (p: any) => {
@@ -3354,7 +3877,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                 Esas {totalPanes.toLocaleString('es-CO')} unidades equivalen a ≈ <strong className="capitalize">{arrobasEnLetras(arrobasEquivalentes)}</strong> ({panKg.toFixed(1)} kg) para compararlas con la masa de entrada.
                                                             </p>
                                                             <div className="flex flex-col gap-1.5">
-                                                                {p.hornadas.map((h: any, i: number) => {
+                                                                {(p.hornadas || []).map((h: any, i: number) => {
                                                                     const panCant = panesDeHornada(h);
                                                                     const mod = modelosPan?.find((m: any) => m.nombre === h.tipoPan);
                                                                     const ppa = Number(mod?.panesPorArroba) || 0;
@@ -3404,8 +3927,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                     };
 
                                     const fechaFiltro = normalizarFechaYYYYMMDD(formProd.fecha);
-                                    const produccionesHoy = producciones.filter(p => normalizarFechaYYYYMMDD(p.fecha) === fechaFiltro);
-                                    const produccionesAnteriores = producciones.filter(p => normalizarFechaYYYYMMDD(p.fecha) !== fechaFiltro);
+                                    const produccionesHoy = (producciones || []).filter(p => normalizarFechaYYYYMMDD(p.fecha) === fechaFiltro);
+                                    const produccionesAnteriores = (producciones || []).filter(p => normalizarFechaYYYYMMDD(p.fecha) !== fechaFiltro);
 
                                     // Agrupar otros días por mes y luego por fecha
                                     const gruposPorMes = (() => {
@@ -3923,12 +4446,21 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                 })()}
                             </DialogContent>
                         </Dialog>
-                    </div>
 
                     {/* ── PLAN DE COMPRAS A PROVEEDORES ── */}
-                    {presupuestosMinimos.length > 0 && (() => {
+                    {(() => {
+                        if (!presupuestosMinimos.length) return null;
                         const getLimite = (item: any) => temporadaBaja && item.montoBaja !== undefined ? item.montoBaja : item.monto;
                         const limiteProveedor = presupuestosMinimos.reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const comprasSemana   = presupuestosMinimos.filter((i: any) => i.frecuencia === 'Semanal');
+                        const comprasQuincena = presupuestosMinimos.filter((i: any) => i.frecuencia === 'Quincenal');
+                        const comprasMes      = presupuestosMinimos.filter((i: any) => i.frecuencia !== 'Semanal' && i.frecuencia !== 'Quincenal');
+                        const totalSem  = comprasSemana.reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const totalQuin = comprasQuincena.reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const totalMes  = comprasMes.reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const totalCiclo = totalSem + totalQuin + totalMes;
+                        const yaComprado = presupuestosMinimos.filter((i: any) => i.estado === 'completado').reduce((s: number, i: any) => s + getLimite(i), 0);
+                        const totalPendiente = totalCiclo - yaComprado;
                         return (
                             <Card className="rounded-3xl border border-amber-500/20 bg-amber-950/10">
                                 <CardHeader 
@@ -4037,7 +4569,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                             )}
 
                                                             {/* PANEL EXPANDIBLE */}
-                                                            {isOpen && (() => {
+                                                            {(() => {
+                                                                if (!isOpen) return null;
                                                                 // Extraer historial de productos comprados antes para este proveedor
                                                                 const historialProductos: { producto: string, cantidad: number, montoReal: number }[] = [];
                                                                 presupuestosMinimos.forEach((l: any) => {
@@ -4160,4 +4693,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
         </TabsContent>
     );
 }
+
+
+
 

@@ -54,7 +54,6 @@ export class SectionErrorBoundary extends Component<Props, State> {
     };
 
     private handleHardReload = () => {
-        console.log("🧹 [Shield] Ejecutando purga de caché y reinicio forzado...");
         
         // Limpiar Service Worker
         if ('serviceWorker' in navigator) {

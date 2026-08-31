@@ -20,42 +20,12 @@ export default defineConfig(({ mode }) => {
       chunkSizeWarningLimit: 600,
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            // React core — chunk estable, hash no cambia hasta que React cambie de versión
-            if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/react/jsx-runtime')) {
-              return 'vendor-react';
-            }
-            // Supabase
-            if (id.includes('node_modules/@supabase/')) {
-              return 'vendor-supabase';
-            }
-            // Firebase
-            if (id.includes('node_modules/firebase/')) {
-              return 'vendor-firebase';
-            }
-            // Gráficos — lazy, solo en Reportes
-            if (id.includes('node_modules/recharts') || id.includes('node_modules/d3')) {
-              return 'vendor-charts';
-            }
-            // Excel — lazy, solo en exportaciones
-            if (id.includes('node_modules/xlsx')) {
-              return 'vendor-excel';
-            }
-            // OCR — lazy, solo en escaneo de facturas
-            if (id.includes('node_modules/tesseract')) {
-              return 'vendor-ocr';
-            }
-            // UI primitivos Radix + utilidades — estables
-            if (
-              id.includes('node_modules/@radix-ui/') ||
-              id.includes('node_modules/lucide-react') ||
-              id.includes('node_modules/class-variance-authority') ||
-              id.includes('node_modules/clsx') ||
-              id.includes('node_modules/tailwind-merge') ||
-              id.includes('node_modules/sonner')
-            ) {
-              return 'vendor-ui';
-            }
+          manualChunks: {
+            'vendor-react': ['react', 'react-dom'],
+            'vendor-supabase': ['@supabase/supabase-js'],
+            'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
+            'vendor-charts': ['recharts'],
+            'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-dropdown-menu', 'lucide-react', 'class-variance-authority', 'clsx', 'tailwind-merge', 'sonner']
           },
         },
       },
@@ -155,6 +125,9 @@ export default defineConfig(({ mode }) => {
           cleanupOutdatedCaches: true,
           // Navigation preload desactivado → evita advertencia "preloadResponse cancelled"
           navigationPreload: false,
+          // CRÍTICO PARA OFFLINE: Si no hay red y se recarga la página, servir index.html
+          navigateFallback: '/index.html',
+          navigateFallbackAllowlist: [/^(?!\/api)/],
           runtimeCaching: [
             {
               // version.json: siempre desde red para detectar nuevas versiones

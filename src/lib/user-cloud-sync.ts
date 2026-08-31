@@ -72,7 +72,15 @@ export async function pullUsersFromCloud(): Promise<Record<string, unknown>[]> {
 export function mergeUsersToLocalStorage(remoteUsers: Record<string, unknown>[]): number {
     if (!remoteUsers.length) return 0;
     const localRaw = localStorage.getItem(LOCAL_KEY);
-    const localUsers: Record<string, unknown>[] = localRaw ? JSON.parse(localRaw) : [];
+    let localUsers: Record<string, unknown>[] = [];
+    if (localRaw) {
+        try {
+            const parsed: unknown = JSON.parse(localRaw);
+            localUsers = Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : [];
+        } catch {
+            localUsers = [];
+        }
+    }
 
     let changed = 0;
     for (const remote of remoteUsers) {
@@ -131,7 +139,15 @@ export function applyAccessCode(code: string): { ok: boolean; nombre?: string; e
     if (!user) return { ok: false, error: 'Código inválido o expirado' };
 
     const localRaw = localStorage.getItem(LOCAL_KEY);
-    const localUsers: Record<string, unknown>[] = localRaw ? JSON.parse(localRaw) : [];
+    let localUsers: Record<string, unknown>[] = [];
+    if (localRaw) {
+        try {
+            const parsed: unknown = JSON.parse(localRaw);
+            localUsers = Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : [];
+        } catch {
+            localUsers = [];
+        }
+    }
 
     const existingIdx = localUsers.findIndex(u => u.id === user.id || u.email === user.email);
     if (existingIdx >= 0) {

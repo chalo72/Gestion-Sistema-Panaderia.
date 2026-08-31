@@ -152,6 +152,68 @@ export function GraficosEstadisticos({ data }: { data: any }) {
                         ))}
                     </div>
 
+                    
+                    {/* TOP 5 Más Vendidos vs TOP 5 Mayor Margen */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+                        {/* Top 5 Más Vendidos */}
+                        <Card className="rounded-[3rem] border-emerald-500/10 bg-card/40 backdrop-blur-xl overflow-hidden shadow-xl">
+                            <CardHeader className="p-5 border-b border-white/5 bg-emerald-500/5">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-sm font-black uppercase tracking-tighter text-emerald-500 flex items-center gap-2">
+                                        <Layers className="w-4 h-4" /> Top 5 Más Vendidos (Unidades)
+                                    </CardTitle>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                                <div className="space-y-3">
+                                    {data.topVendidos && data.topVendidos.length > 0 ? data.topVendidos.map((p, i) => (
+                                        <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center font-black text-xs shrink-0">#{i + 1}</div>
+                                                <span className="text-sm font-bold truncate">{p.nombre}</span>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <p className="text-sm font-black text-foreground">{p.unidades} uds</p>
+                                                <p className="text-[10px] text-muted-foreground">{data.formatCurrency(p.ingresos)} ingresos</p>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <p className="text-xs text-muted-foreground text-center py-8">Sin datos suficientes</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        {/* Top 5 Mayor Margen */}
+                        <Card className="rounded-[3rem] border-amber-500/10 bg-card/40 backdrop-blur-xl overflow-hidden shadow-xl">
+                            <CardHeader className="p-5 border-b border-white/5 bg-amber-500/5">
+                                <div className="flex items-center justify-between">
+                                    <CardTitle className="text-sm font-black uppercase tracking-tighter text-amber-500 flex items-center gap-2">
+                                        <TrendingUp className="w-4 h-4" /> Top 5 Mayor Margen (Absoluto)
+                                    </CardTitle>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                                <div className="space-y-3">
+                                    {data.topMargen && data.topMargen.length > 0 ? data.topMargen.map((p, i) => (
+                                        <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-8 h-8 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center font-black text-xs shrink-0">#{i + 1}</div>
+                                                <span className="text-sm font-bold truncate">{p.nombre}</span>
+                                            </div>
+                                            <div className="text-right shrink-0">
+                                                <p className="text-sm font-black text-amber-500">{data.formatCurrency(p.margenAbsoluto)} <span className="text-[10px] text-muted-foreground font-normal">ganancia</span></p>
+                                                <p className="text-[10px] text-muted-foreground">{p.unidades} uds vendidas</p>
+                                            </div>
+                                        </div>
+                                    )) : (
+                                        <p className="text-xs text-muted-foreground text-center py-8">Sin datos suficientes</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+
                     {/* Rendimiento de Eventos Especiales */}
                     {data.eventosStats && data.eventosStats.length > 0 && (
                         <div className="mt-8 space-y-4">

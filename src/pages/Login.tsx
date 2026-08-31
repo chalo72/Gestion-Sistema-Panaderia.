@@ -1,29 +1,33 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Eye, EyeOff, KeyRound, CloudDownload } from 'lucide-react';
-import { pullUsersFromCloud, mergeUsersToLocalStorage, applyAccessCode } from '@/lib/user-cloud-sync';
+import { CloudDownload, ChevronLeft, Check } from 'lucide-react';
+import { pullUsersFromCloud, mergeUsersToLocalStorage } from '@/lib/user-cloud-sync';
+import type { Usuario } from '@/types';
+import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
+import {
+  esUsuarioLoginOficial,
+  ordenarUsuariosLogin,
+  etiquetaRolLogin,
+} from '@/lib/usuarios-login-oficiales';
 
 interface LoginProps {
   onLoginSuccess: () => void;
 }
 
 export function Login({ onLoginSuccess }: LoginProps) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<Usuario | null>(null);
+  const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showCodeSection, setShowCodeSection] = useState(false);
-  const [accessCode, setAccessCode] = useState('');
-  const [codeMsg, setCodeMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done'>('idle');
   const [failCount, setFailCount] = useState(0);
   const syncDone = useRef(false);
-  const { login } = useAuth();
+  const { login, usuarios } = useAuth();
+  
+  // Solo perfiles oficiales del Director (Admin, Gerente, Panadero, 3 turnos)
+  const activeUsers = ordenarUsuariosLogin(usuarios.filter(esUsuarioLoginOficial));
 
   // Al montar: traer usuarios del cloud
   useEffect(() => {
@@ -35,74 +39,69 @@ export function Login({ onLoginSuccess }: LoginProps) {
       .catch(() => setSyncStatus('idle'));
   }, []);
 
-  const handleForceSyncAndRetry = async () => {
+  const handleForceSync = async () => {
     setSyncStatus('syncing');
     try {
       const remote = await pullUsersFromCloud();
-      const added = mergeUsersToLocalStorage(remote);
+      mergeUsersToLocalStorage(remote);
       setSyncStatus('done');
       setError('');
       setFailCount(0);
-      if (added > 0) {
-        setError('');
-        // Pequeño toast orientativo
-        setTimeout(() => setError(''), 100);
-      }
+      toast.success('Usuarios actualizados de la nube');
     } catch {
       setSyncStatus('idle');
+      toast.error('Error al sincronizar con la nube');
     }
   };
 
-  const handleApplyCode = () => {
-    if (!accessCode.trim()) return;
-    const result = applyAccessCode(accessCode.trim());
-    if (result.ok) {
-      setCodeMsg({ ok: true, text: `✅ ¡Listo! ${result.nombre} ya puede entrar. Inicia sesión normalmente.` });
-      setAccessCode('');
-    } else {
-      setCodeMsg({ ok: false, text: result.error || 'Código inválido' });
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePinSubmit = async (finalPin: string) => {
+    if (!selectedUser) return;
     setError('');
     setIsLoading(true);
     try {
-      const result = await login(email, password);
-      if (result.success) { onLoginSuccess(); return; }
-
-      // Si el usuario no existe localmente → sync automático con nube y reintento
-      if (result.error === 'Usuario no registrado.') {
-        setSyncStatus('syncing');
-        try {
-          const remote = await pullUsersFromCloud();
-          const added = mergeUsersToLocalStorage(remote);
-          setSyncStatus('done');
-          if (added > 0) {
-            // Reintento automático tras sync
-            const retry = await login(email, password);
-            if (retry.success) { onLoginSuccess(); return; }
-            setError(retry.error || 'Error al iniciar sesión');
-            setFailCount(prev => prev + 1);
-            return;
-          }
-        } catch { setSyncStatus('idle'); }
+      const result = await login(selectedUser.email, finalPin);
+      if (result.success) { 
+        onLoginSuccess(); 
+        return; 
       }
-
-      setError(result.error || 'Error al iniciar sesión');
+      
+      setError(result.error || 'PIN o contraseña incorrecta');
+      setPin(''); // Limpiar PIN al fallar
       setFailCount(prev => prev + 1);
     } catch (err: any) {
       console.error(err);
       setError('Error inesperado al iniciar sesión');
+      setPin('');
       setFailCount(prev => prev + 1);
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleNumberClick = (num: string) => {
+    if (pin.length < 10) { // Permitir contraseñas más largas si no son 4 dígitos exactos
+      const newPin = pin + num;
+      setPin(newPin);
+      
+      // Auto-submit si la mayoría tiene 4 dígitos (opcional, dejamos que den Enter mejor para evitar bloqueos si alguien tiene 5 dígitos)
+      // Pero si tienen 4, autoentrar es mejor para UX. Asumimos PIN de 4.
+      if (newPin.length === 4) {
+        handlePinSubmit(newPin);
+      }
+    }
+  };
+
+  const handleBackspace = () => {
+    setPin(prev => prev.slice(0, -1));
+  };
+  
+  const handleManualSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      if (pin.length > 0) handlePinSubmit(pin);
+  };
+
   return (
-    <div className="h-screen w-full flex items-center justify-center p-4 relative overflow-hidden"
+    <div className="min-h-screen w-full flex items-center justify-center p-4 relative overflow-hidden"
          style={{ background: 'linear-gradient(90deg, #1a0533 0%, #0c1a3a 30%, #0a1628 55%, #1a0a2e 80%, #2d0a1a 100%)' }}>
 
       {/* Glows horizontales de fondo */}
@@ -110,256 +109,165 @@ export function Login({ onLoginSuccess }: LoginProps) {
            style={{ background: 'linear-gradient(90deg, rgba(109,40,217,0.28) 0%, transparent 45%)' }} />
       <div className="absolute inset-0 pointer-events-none"
            style={{ background: 'linear-gradient(90deg, transparent 55%, rgba(255,0,127,0.22) 100%)' }} />
-      <div className="absolute inset-0 pointer-events-none"
-           style={{ background: 'radial-gradient(ellipse at 50% 50%, rgba(30,58,138,0.15) 0%, transparent 65%)' }} />
 
-      {/* ── WRAPPER con luz que recorre el borde ── */}
-      <div className="relative z-10 w-full max-w-lg"
+      {/* WRAPPER PRINCIPAL */}
+      <div className="relative z-10 w-full max-w-2xl"
            style={{ padding: '2px', borderRadius: '1.5rem', overflow: 'hidden' }}>
 
-        {/* Elemento rotatorio — ocupa 200% centrado para cubrir todo el perímetro */}
         <div style={{
-          position: 'absolute',
-          width: '200%',
-          height: '200%',
-          top: '-50%',
-          left: '-50%',
+          position: 'absolute', width: '200%', height: '200%', top: '-50%', left: '-50%',
           background: 'conic-gradient(from 0deg, transparent 0deg, #ff007f 15deg, #ffffff 20deg, #ff007f 25deg, transparent 40deg, transparent 360deg)',
           animation: 'borderSpin 3s linear infinite',
         }} />
 
-        {/* Card glassmorphism — tapa el centro, deja solo 2px de borde */}
-        <div className="relative rounded-3xl px-8 py-5 sm:px-10 sm:py-7"
+        <div className="relative rounded-3xl p-6 sm:p-10"
              style={{
                background: 'linear-gradient(135deg, rgba(15,12,35,0.95) 0%, rgba(10,18,40,0.95) 100%)',
                backdropFilter: 'blur(24px)',
                WebkitBackdropFilter: 'blur(24px)',
              }}>
 
-          {/* ── LOGO + NOMBRE ── */}
-          <div className="flex flex-col items-center mb-3">
-
-            {/* Anillos orbitales */}
-            <div className="relative flex items-center justify-center w-28 h-28 sm:w-32 sm:h-32 mb-3">
-
-              {/* Anillo exterior */}
-              <div className="absolute inset-0 rounded-full border border-[#ff007f]/35 animate-spin"
-                   style={{ animationDuration: '12s' }}>
-                <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-[#ff007f] shadow-[0_0_16px_rgba(255,0,127,1)]" />
+          {/* LOGO SUPERIOR */}
+          {!selectedUser && (
+              <div className="flex flex-col items-center mb-6">
+                <div className="relative flex items-center justify-center w-24 h-24 mb-3">
+                  <div className="absolute rounded-full border-2 border-white/15 overflow-hidden p-2"
+                       style={{ inset: '10%', background: 'rgba(10,12,30,0.92)', backdropFilter: 'blur(12px)', boxShadow: '0 0 30px rgba(255,0,127,0.2)' }}>
+                    <img src="/logo.png" alt="Dulce Placer" className="w-full h-full object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                  </div>
+                </div>
+                <h1 className="text-3xl font-black text-white tracking-tight leading-none text-center">
+                  Dulce <span className="text-[#ff007f]">Placer</span>
+                </h1>
+                
+                <div className="flex items-center gap-2 mt-4 px-3 py-1 bg-white/5 border border-white/10 rounded-full cursor-pointer hover:bg-white/10 transition-colors" onClick={handleForceSync}>
+                  <CloudDownload className={cn("w-3.5 h-3.5 text-slate-300", syncStatus === 'syncing' && "animate-pulse text-emerald-400")} />
+                  <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">
+                    {syncStatus === 'syncing' ? 'Sincronizando Usuarios...' : `${activeUsers.length} Usuarios Disponibles`}
+                  </span>
+                </div>
               </div>
+          )}
 
-              {/* Anillo interior inverso */}
-              <div className="absolute rounded-full border border-violet-400/30"
-                   style={{ animation: 'spin 8s linear infinite reverse', inset: '12%' }}>
-                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2.5 h-2.5 rounded-full bg-violet-400 shadow-[0_0_12px_rgba(167,139,250,1)]" />
+          {/* ESTADO 1: SELECTOR DE USUARIOS */}
+          {!selectedUser ? (
+            <div className="animate-in fade-in zoom-in-95 duration-300">
+              <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest text-center mb-6">¿Quién eres?</h2>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
+                {activeUsers.map(user => (
+                  <div 
+                    key={user.id}
+                    onClick={() => setSelectedUser(user)}
+                    className="flex flex-col items-center gap-3 p-4 rounded-2xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-[#ff007f]/50 cursor-pointer transition-all hover:scale-105 active:scale-95"
+                  >
+                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#ff007f] to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-[#ff007f]/20">
+                      {user.avatar ? <img src={user.avatar} className="w-full h-full rounded-full object-cover" alt="" /> : user.nombre.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="text-center">
+                      <p className="text-white font-bold text-sm leading-tight">{user.nombre}</p>
+                      <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-0.5">{etiquetaRolLogin(user.rol)}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
-
-              {/* Tercer anillo medio */}
-              <div className="absolute rounded-full border border-fuchsia-500/20"
-                   style={{ animation: 'spin 16s linear infinite', inset: '25%' }}>
-                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-fuchsia-400 shadow-[0_0_10px_rgba(232,121,249,0.9)]" />
-              </div>
-
-              {/* Glow central */}
-              <div className="absolute rounded-full animate-pulse"
-                   style={{ inset: '15%', background: 'radial-gradient(circle, rgba(255,0,127,0.2) 0%, transparent 70%)', filter: 'blur(8px)' }} />
-
-              {/* Logo */}
-              <div className="absolute rounded-full border-2 border-white/15 overflow-hidden p-3"
-                   style={{
-                     inset: '14%',
-                     background: 'rgba(10,12,30,0.92)',
-                     backdropFilter: 'blur(12px)',
-                     boxShadow: '0 0 40px rgba(255,0,127,0.3), inset 0 1px 0 rgba(255,255,255,0.1)',
-                   }}>
-                <img
-                  src="/logo.png"
-                  alt="Dulce Placer"
-                  className="w-full h-full object-contain"
-                  style={{ animation: 'logoFloat 4s ease-in-out infinite' }}
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              </div>
-            </div>
-
-            {/* Nombre */}
-            <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight leading-none text-center">
-              Dulce <span className="text-[#ff007f]">Placer</span>
-            </h1>
-            <p className="text-slate-400 text-xs mt-1 text-center tracking-wide">
-              Sistema de Gestión de Panadería
-            </p>
-
-            {/* Indicador online + sync */}
-            <div className="flex items-center gap-2 mt-2 px-3 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-              <span className="text-[10px] font-black text-emerald-400 tracking-widest uppercase">
-                {syncStatus === 'syncing' ? 'Sincronizando...' : 'Sistema en línea'}
-              </span>
-              {syncStatus === 'syncing' && <CloudDownload className="w-3 h-3 text-emerald-400 animate-pulse" />}
-            </div>
-          </div>
-
-          {/* Divisor */}
-          <div className="h-px w-full mb-4"
-               style={{ background: 'linear-gradient(90deg, transparent, rgba(255,0,127,0.4), rgba(124,58,237,0.4), transparent)' }} />
-
-          {/* ── FORMULARIO ── */}
-          <form onSubmit={handleSubmit} className="space-y-3">
-
-            {syncStatus === 'syncing' && !error && (
-              <div className="flex items-center justify-center gap-2 py-2 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-black animate-pulse">
-                <CloudDownload className="w-4 h-4" />
-                Buscando tu cuenta en la nube…
-              </div>
-            )}
-
-            {error && (
-              <Alert variant="destructive" className="bg-red-500/10 border-red-500/30 text-red-300 rounded-xl">
-                <AlertDescription>
-                  <span className="font-bold block">Error de Acceso</span>
-                  <span className="text-sm">{error}</span>
-                  {error === 'Usuario no registrado.' && (
-                    <p className="text-[10px] text-amber-300 mt-1 font-bold">
-                      💡 Pídele al admin que abra Usuarios → Sync Nube, o que te envíe un código de acceso por WhatsApp.
-                    </p>
-                  )}
-                  {failCount >= 1 && (
-                    <button
-                      type="button"
-                      onClick={handleForceSyncAndRetry}
-                      disabled={syncStatus === 'syncing'}
-                      className="mt-2 w-full flex items-center justify-center gap-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-black uppercase tracking-widest transition-colors disabled:opacity-50"
-                    >
-                      <CloudDownload className="w-3.5 h-3.5" />
-                      {syncStatus === 'syncing' ? 'Sincronizando…' : 'Sincronizar con la nube e intentar de nuevo'}
-                    </button>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                Usuario / Correo
-              </Label>
-              <Input
-                id="email"
-                type="text"
-                autoComplete="username"
-                placeholder="usuario@dulceplacer.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full bg-white/[0.06] border-white/10 text-white placeholder:text-slate-600
-                           rounded-xl h-12 px-4 text-base
-                           focus:border-[#ff007f]/60 focus:bg-white/[0.09]
-                           transition-all duration-200"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-xs text-slate-400 font-bold uppercase tracking-widest">
-                Contraseña
-              </Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white/[0.06] border-white/10 text-white placeholder:text-slate-600
-                             rounded-xl h-12 px-4 pr-12 text-base
-                             focus:border-[#ff007f]/60 focus:bg-white/[0.09]
-                             transition-all duration-200"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white p-1.5 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                </button>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full h-12 mt-2
-                         bg-[#ff007f] hover:bg-[#ff007f]/90 active:scale-[0.98]
-                         text-white text-base font-black rounded-xl
-                         shadow-[0_0_30px_rgba(255,0,127,0.45),0_4px_20px_rgba(255,0,127,0.25)]
-                         hover:shadow-[0_0_45px_rgba(255,0,127,0.6)]
-                         transition-all duration-200 border-0"
-            >
-              {isLoading ? (
-                <span className="flex items-center gap-2.5">
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Verificando...
-                </span>
-              ) : 'Entrar al Sistema'}
-            </Button>
-          </form>
-
-          {/* ── Código de acceso ── */}
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => { setShowCodeSection(s => !s); setCodeMsg(null); }}
-              className="w-full text-[10px] font-black text-slate-500 hover:text-violet-400 tracking-widest uppercase transition-colors flex items-center justify-center gap-1.5"
-            >
-              <KeyRound className="w-3 h-3" />
-              {showCodeSection ? 'Ocultar' : '¿No puedes entrar? Tengo un código de acceso'}
-            </button>
-
-            {showCodeSection && (
-              <div className="mt-3 space-y-2 p-4 bg-violet-500/10 border border-violet-500/20 rounded-xl animate-in fade-in slide-in-from-top-2 duration-200">
-                <p className="text-[10px] text-violet-300 font-bold uppercase tracking-widest">
-                  Código de acceso — enviado por el Administrador
+              {activeUsers.length === 0 && (
+                <p className="text-center text-slate-400 text-xs mt-4">
+                  Sin perfiles. Toca «Sincronizando Usuarios» o recarga la app.
                 </p>
-                <textarea
-                  rows={3}
-                  value={accessCode}
-                  onChange={e => { setAccessCode(e.target.value); setCodeMsg(null); }}
-                  placeholder="Pega aquí el código que te envió el administrador..."
-                  className="w-full bg-white/[0.06] border border-white/10 text-white placeholder:text-slate-600 rounded-xl px-3 py-2 text-xs font-mono resize-none focus:border-violet-500/60 focus:outline-none"
-                />
-                {codeMsg && (
-                  <p className={`text-[11px] font-bold ${codeMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {codeMsg.text}
-                  </p>
-                )}
-                <Button
-                  type="button"
-                  onClick={handleApplyCode}
-                  className="w-full h-9 bg-violet-600 hover:bg-violet-500 text-white text-xs font-black rounded-xl"
-                >
-                  Activar Código
-                </Button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          ) : (
+            /* ESTADO 2: PIN PAD */
+            <div className="animate-in slide-in-from-right-4 fade-in duration-300 max-w-xs mx-auto">
+              
+              <button 
+                onClick={() => { setSelectedUser(null); setPin(''); setError(''); }}
+                className="flex items-center gap-1 text-slate-400 hover:text-white transition-colors mb-6 text-sm font-bold"
+              >
+                <ChevronLeft className="w-4 h-4" /> Volver a perfiles
+              </button>
 
-          <p className="text-slate-600 text-xs text-center mt-4">
-            © 2026 Panadería Dulce Placer —{' '}
-            <span className="text-[#ff007f]/40 italic">Sistema Premium 100% Offline</span>
-          </p>
+              <div className="flex flex-col items-center mb-8">
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#ff007f] to-indigo-600 flex items-center justify-center text-white text-3xl font-bold mb-4 shadow-xl shadow-[#ff007f]/30 border-4 border-white/10">
+                  {selectedUser.avatar ? <img src={selectedUser.avatar} className="w-full h-full rounded-full object-cover" /> : selectedUser.nombre.charAt(0).toUpperCase()}
+                </div>
+                <h2 className="text-xl font-black text-white">{selectedUser.nombre}</h2>
+                <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">{etiquetaRolLogin(selectedUser.rol)}</p>
+              </div>
+
+              {error && (
+                <Alert variant="destructive" className="bg-red-500/10 border-red-500/30 text-red-300 rounded-xl mb-6 py-2">
+                  <AlertDescription className="text-center font-bold text-xs">{error}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* PIN DISPLAY */}
+              <div className="flex justify-center gap-3 mb-8">
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className={cn(
+                    "w-4 h-4 rounded-full transition-all duration-300",
+                    i < pin.length ? "bg-[#ff007f] shadow-[0_0_15px_rgba(255,0,127,0.8)] scale-110" : "bg-white/10"
+                  )} />
+                ))}
+              </div>
+
+              {/* TECLADO */}
+              <form onSubmit={handleManualSubmit}>
+                {/* Fallback de input oculto para autocompletado o teclados físicos */}
+                <input 
+                  type="password" 
+                  value={pin} 
+                  onChange={e => setPin(e.target.value)}
+                  className="opacity-0 absolute h-0 w-0 pointer-events-none"
+                  autoFocus
+                />
+                
+                <div className="grid grid-cols-3 gap-3">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => handleNumberClick(num.toString())}
+                      className="h-16 rounded-2xl bg-white/5 border border-white/10 text-white text-2xl font-black hover:bg-white/10 hover:border-[#ff007f]/50 active:bg-[#ff007f]/20 active:scale-95 transition-all"
+                    >
+                      {num}
+                    </button>
+                  ))}
+                  
+                  {/* Cero y acciones */}
+                  <button
+                    type="button"
+                    onClick={handleBackspace}
+                    disabled={pin.length === 0}
+                    className="h-16 rounded-2xl bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 active:scale-95 transition-all flex items-center justify-center disabled:opacity-30"
+                  >
+                    Borrar
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => handleNumberClick('0')}
+                    className="h-16 rounded-2xl bg-white/5 border border-white/10 text-white text-2xl font-black hover:bg-white/10 hover:border-[#ff007f]/50 active:bg-[#ff007f]/20 active:scale-95 transition-all"
+                  >
+                    0
+                  </button>
+                  
+                  <button
+                    type="submit"
+                    disabled={isLoading || pin.length === 0}
+                    className="h-16 rounded-2xl bg-[#ff007f] text-white hover:bg-[#ff007f]/80 active:scale-95 transition-all flex items-center justify-center disabled:opacity-50 shadow-[0_0_20px_rgba(255,0,127,0.3)]"
+                  >
+                    {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Check className="w-6 h-6" />}
+                  </button>
+                </div>
+              </form>
+
+            </div>
+          )}
+
         </div>
       </div>
-
-      <style>{`
-        @keyframes logoFloat {
-          0%, 100% { transform: translateY(0px) scale(1); }
-          50%       { transform: translateY(-7px) scale(1.05); }
-        }
-        @keyframes borderSpin {
-          from { transform: rotate(0deg); }
-          to   { transform: rotate(360deg); }
-        }
-      `}</style>
     </div>
   );
 }

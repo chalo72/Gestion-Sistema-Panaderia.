@@ -204,7 +204,6 @@ class MultiAdapter implements DatabaseAdapter {
 
   subscribe<T>(collection: string, callback: (data: T[]) => void) {
     if (this.shadow && typeof this.shadow.subscribe === 'function') {
-      console.log(`📡 [NEXUS]: Activando Real-time Sync para '${collection}'`);
       return this.shadow.subscribe<T>(collection, async (cloudData) => {
         try {
           // Filtro Anti-Zombies
@@ -275,14 +274,11 @@ async function hydratarDesdeNube(
   colecciones: string[],
   force: boolean = false
 ): Promise<void> {
-  console.log(`🌊 [NEXUS]: Iniciando sincronización Firebase → IndexedDB (Force: ${force})...`);
   for (const col of colecciones) {
     try {
       const localCount = await localDB.count(col);
       // Siempre sincronizar (merge) — no solo cuando está vacío
-      console.log(`📡 [NEXUS-DEBUG]: Sincronizando '${col}' (local: ${localCount} items)...`);
       const datosNube = await nube.getCollection<any>(col);
-      console.log(`📡 [NEXUS-DEBUG]: Recibidos ${datosNube.length} items de '${col}' de la nube.`);
 
       if (datosNube.length === 0 && localCount > 0) {
         // La nube está vacía pero tenemos datos locales — no borrar locales
@@ -296,7 +292,6 @@ async function hydratarDesdeNube(
       const datosVivos = datosNube.filter((d: any) => !deadKeys.has(`${col}:${d.id}`));
 
       if (datosVivos.length < datosNube.length) {
-        console.log(`🛡️ [NEXUS]: Filtrados ${datosNube.length - datosVivos.length} items zombies de '${col}'.`);
       }
 
       // force=true → Firebase es fuente de verdad: restaurar TODOS los items,
@@ -314,7 +309,6 @@ async function hydratarDesdeNube(
               const tombKey = `${col}:${item.id}`;
               if (deadKeys.has(tombKey)) {
                 await localDB.deleteDocument('tombstones', tombKey).catch(() => {});
-                console.log(`🔓 [NEXUS]: Tombstone limpiado para '${tombKey}' (restaurado por Firebase).`);
               }
             }
           }
@@ -332,9 +326,7 @@ async function hydratarDesdeNube(
             // Si ya existe localmente, se respeta la versión local (offline-first)
           }
           if (nuevos > 0) {
-            console.log(`🔄 [NEXUS]: Merge '${col}': ${nuevos} items nuevos desde la nube.`);
           } else {
-            console.log(`✅ [NEXUS]: '${col}' sincronizado — sin cambios nuevos.`);
           }
         }
       } else {
@@ -344,7 +336,6 @@ async function hydratarDesdeNube(
       console.warn(`⚠️ [NEXUS]: No se pudo sincronizar '${col}'.`, e);
     }
   }
-  console.log('✅ [NEXUS]: Sincronización completada.');
 }
 
 /**
@@ -636,8 +627,14 @@ class NexusDatabase implements IDatabase {
   // Finanzas
 
   // Finanzas
-  async addGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
-  async updateGasto(g: any) { return this.adapter.setDocument('gastos', g.id, g); }
+  async addGasto(g: any) {
+    await this.adapter.setDocument('gastos', g.id, g);
+    new SupabaseDatabase().addGasto(g).catch(() => {});
+  }
+  async updateGasto(g: any) {
+    await this.adapter.setDocument('gastos', g.id, g);
+    new SupabaseDatabase().updateGasto(g).catch(() => {});
+  }
   async deleteGasto(id: string) { return this._delete('gastos', id); }
 
   async addCreditoCliente(c: any) {
@@ -723,7 +720,6 @@ class NexusDatabase implements IDatabase {
         const supaDB = new SupabaseDatabase();
         const remoteProductos = await supaDB.getAllProductos();
         if (remoteProductos && remoteProductos.length > 0) {
-          console.log('☁️ [NEXUS] Datos encontrados en Supabase. Sincronizando hacia local (MERGE — LOCAL GANA)...');
           const tasks: Array<{ col: string; fn: () => Promise<any[]> }> = [
             { col: 'productos',          fn: () => supaDB.getAllProductos() },
             { col: 'proveedores',        fn: () => supaDB.getAllProveedores() },
@@ -741,22 +737,45 @@ class NexusDatabase implements IDatabase {
             { col: 'pedidos_activos',    fn: () => supaDB.getAllPedidosActivos() },
           ];
 
+          // 🛡️ Anti-zombies: no resucitar eliminados locales
+          const tombstonesData = await localAdapter.getCollection<{ table?: string; item_id?: string }>('tombstones').catch(() => []);
+          const deadKeys = new Set(
+            (tombstonesData || []).map((t) => `${t.table}:${t.item_id}`)
+          );
+
           for (const task of tasks) {
             try {
               const items = await task.fn();
               if (items && items.length > 0) {
-                // 🔀 MERGE BIDIRECCIONAL EFICIENTE: Usar hydrateFromCloud (Upsert)
-                // hydrateFromCloud utiliza una sola transacción IndexedDB para insertar/actualizar
-                // todos los items. Al usar store.put(), los items existentes se actualizan y los nuevos se agregan,
-                // sin bloquear el hilo principal con múltiples awaits.
-                await (localAdapter as any).hydrateFromCloud(task.col, items);
-                console.log(`✅ [NEXUS]: '${task.col}' sincronizado y actualizado desde Supabase (${items.length} items).`);
+                const vivos = items.filter(
+                  (i: { id?: string }) => i?.id && !deadKeys.has(`${task.col}:${i.id}`)
+                );
+                // hydrateFromCloud ya aplica mergeHydrateItem (timestamp + LOCAL GANA)
+                await (localAdapter as any).hydrateFromCloud(task.col, vivos);
               }
             } catch (_) { // colección opcional, continuar 
             }
           }
+
+          // Tablas extra para que Admin/POS/celular no se atrasen
+          const extraTasks: Array<{ col: string; fn: () => Promise<any[]> }> = [
+            { col: 'trabajadores', fn: () => supaDB.getAllTrabajadores() },
+            { col: 'creditos_trabajadores', fn: () => supaDB.getAllCreditosTrabajadores() },
+            { col: 'produccion', fn: () => supaDB.getAllOrdenesProduccion() },
+            { col: 'nominas', fn: () => supaDB.getAllNominas() },
+          ];
+          for (const task of extraTasks) {
+            try {
+              const items = await task.fn();
+              if (!items?.length) continue;
+              const vivos = items.filter(
+                (i: { id?: string }) => i?.id && !deadKeys.has(`${task.col}:${i.id}`)
+              );
+              await (localAdapter as any).hydrateFromCloud(task.col, vivos);
+            } catch (_) { /* opcional */ }
+          }
+
           cloudExito = true;
-          console.log('✅ [NEXUS] Sincronización MERGE desde Supabase completada. Datos locales preservados.');
         }
       } catch (e) {
         console.warn('☁️ [NEXUS] Supabase no disponible en este momento:', e);
@@ -775,14 +794,12 @@ class NexusDatabase implements IDatabase {
           }
         }
       }
-      console.log('✅ [NEXUS] Rescate Físico Terminado.');
 
       // 4️⃣ Subir RESCUE_DATA a Supabase si está vacío, para que otros dispositivos puedan sincronizar
       try {
         const supaDB = new SupabaseDatabase();
         const remoteCheck = await supaDB.getAllProductos().catch(() => [] as any[]);
         if (remoteCheck.length === 0) {
-          console.log('☁️ [NEXUS] Supabase vacío — subiendo RESCUE_DATA para sincronización entre dispositivos...');
           const tombstonesData = await localAdapter.getCollection<any>('tombstones') || [];
           const deadKeys = new Set(tombstonesData.map((t: any) => `${t.table}:${t.item_id}`));
           const rescueUploads: Array<{ col: string; items: any[]; fn: (item: any) => Promise<void> }> = [
@@ -797,7 +814,6 @@ class NexusDatabase implements IDatabase {
               }
             }
           }
-          console.log('✅ [NEXUS] RESCUE_DATA disponible en Supabase para todos los dispositivos.');
         }
       } catch (e) {
         console.warn('⚠️ [NEXUS] No se pudo subir RESCUE_DATA a Supabase (no crítico):', e);
@@ -807,7 +823,6 @@ class NexusDatabase implements IDatabase {
 
   async syncLocalToCloud() {
     if (firebaseAdapter) {
-      console.log('📤 [NEXUS]: Iniciando respaldo local → nube...');
 
       // NOTA: Los tombstones NO se propagan a Firebase automáticamente.
       // La eliminación en Firebase ya se hace en tiempo real dentro de _delete().
@@ -822,20 +837,16 @@ class NexusDatabase implements IDatabase {
           await firebaseAdapter.setDocument(col, item.id, item);
         }
       }
-      console.log('✅ [NEXUS]: Respaldo completado.');
     }
   }
 
   async clearAll() {
-    console.log('🗑️ [NEXUS]: Borrando todos los datos locales...');
     for (const col of COLECCIONES_PRINCIPALES) {
       await localAdapter.clearCollection(col);
     }
-    console.log('✅ [NEXUS]: Base de datos local limpia.');
   }
 
   async exportDatabaseToJson(): Promise<void> {
-    console.log('📦 [NEXUS]: Generando backup completo...');
     const backup: Record<string, any[]> = {};
     for (const col of COLECCIONES_PRINCIPALES) {
       backup[col] = await localAdapter.getCollection(col);
@@ -850,23 +861,18 @@ class NexusDatabase implements IDatabase {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    console.log('✅ [NEXUS]: Backup descargado.');
   }
 
   async importDatabaseFromJson(jsonData: any): Promise<void> {
-    console.log('📥 [NEXUS]: Restaurando backup completo desde JSON...');
     for (const [colName, items] of Object.entries(jsonData)) {
       if (COLECCIONES_PRINCIPALES.includes(colName) && Array.isArray(items)) {
-        console.log(`Restaurando coleccion: ${colName} con ${items.length} items`);
         await localAdapter.hydrateFromCloud(colName, items);
       }
     }
-    console.log('✅ [NEXUS]: Restauración local completada, sincronizando con la nube...');
     await this.syncLocalToCloud();
   }
 
   async rescueFromSupabase() {
-    console.log('🚨 [NEXUS]: Iniciando Protocolo Armagedón — Rescate desde Supabase...');
     await this.exportDatabaseToJson(); // CAPA 1: Backup Automático antes del rescate
     
     const legacyDB = new SupabaseDatabase();
@@ -893,17 +899,14 @@ class NexusDatabase implements IDatabase {
 
     for (const task of rescate) {
       try {
-        console.log('[RESCATE] Recuperando ' + task.col + '...');
         const items = await task.fn();
         if (items && items.length > 0) {
-          console.log('[RESCATE] Volcando ' + items.length + ' items en local...');
           await localAdapter.hydrateFromCloud(task.col, items);
         }
       } catch (e) {
         console.error('[RESCATE] Error en ' + task.col + ':', e);
       }
     }
-    console.log('[NEXUS] Rescate completado. Sincronizando con nueva nube...');
     await this.syncLocalToCloud();
   }
 }

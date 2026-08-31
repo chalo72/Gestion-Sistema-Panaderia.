@@ -21,6 +21,8 @@ import type { Producto, AlertaPrecio } from '@/types';
 import { FindingsFeed } from '@/components/agentes/FindingsFeed';
 import { FinancialDashboard } from '@/components/FinancialDashboard';
 import { ManoDerechaDirector } from '@/components/dashboard/mano-derecha-director';
+import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
+import { useCan } from '@/contexts/AuthContext';
 
 // Fallback preventivo (Hoisted safe)
 const LayoutList = LayoutListIcon || Package;
@@ -83,11 +85,16 @@ export default function Dashboard(props: DashboardProps) {
     ventas
   } = props;
 
+  const { check, isAdmin } = useCan();
+  const canVerTotales = isAdmin || check('VER_ESTADISTICAS');
+  const canVerMargen = isAdmin || check('VER_MARGEN');
+  const canVerFinanzas = isAdmin || check('VER_FINANZAS');
+
   const alertasNoLeidas = alertas.filter(a => !a.leida);
 
   // KPI Cards config al estilo Stitch
   const kpiCards = [
-    {
+    canVerTotales && {
       label: 'Ingresos del Día',
       value: formatCurrency(Number(estadisticas.ingresosHoy || 0)),
       icon: TrendingUp,
@@ -117,7 +124,7 @@ export default function Dashboard(props: DashboardProps) {
       badgeColor: '',
       onClick: onViewProveedores,
     },
-    {
+    canVerMargen && {
       label: 'Margen de Utilidad',
       value: `${Number(estadisticas.utilidadPromedio || 0).toFixed(1)}%`,
       icon: BarChart3,
@@ -140,7 +147,7 @@ export default function Dashboard(props: DashboardProps) {
       onClick: onViewInventario,
       hasPing: estadisticas.itemsBajoStock > 0,
     },
-    {
+    canVerTotales && {
       label: 'Ticket Promedio',
       value: formatCurrency(Number(estadisticas.ticketPromedio || 0)),
       icon: Star,
@@ -150,7 +157,26 @@ export default function Dashboard(props: DashboardProps) {
       badgeColor: '',
       onClick: onViewVentas,
     },
-  ];
+  ].filter(Boolean) as Array<{
+    label: string;
+    value: string;
+    icon: typeof TrendingUp;
+    iconBg: string;
+    iconColor: string;
+    badge: string | null;
+    badgeColor: string;
+    onClick?: () => void;
+    hasPing?: boolean;
+  }>;
+
+  const handleNavigateTo = (view: string) => {
+    switch(view) {
+      case 'productos': onViewProductos(); break;
+      case 'proveedores': onViewProveedores(); break;
+      case 'recetas': onViewProductos(); break; // asumiendo que recetas puede ir a productos o algo similar si no hay onViewRecetas
+      default: break;
+    }
+  };
 
   return (
     <div className="space-y-5 sm:space-y-8 pb-12">
@@ -159,6 +185,11 @@ export default function Dashboard(props: DashboardProps) {
         onViewVentas={onViewVentas}
         onViewProductos={onViewProductos}
         onViewRecepciones={onViewRecepciones}
+      />
+
+      <OnboardingChecklist 
+        estadisticas={estadisticas} 
+        onNavigateTo={handleNavigateTo} 
       />
 
       {/* Mano derecha del Director — pulso, dinero, producción, 3 decisiones */}
@@ -219,6 +250,7 @@ export default function Dashboard(props: DashboardProps) {
       </div>
 
       {/* ═══ Resumen Financiero (Yimi-Style) ═══ */}
+      {(canVerFinanzas || canVerTotales) && (
       <FinancialDashboard
         totalSales={estadisticas.ventasHoy}
         totalRevenue={estadisticas.ingresosHoy}
@@ -229,6 +261,7 @@ export default function Dashboard(props: DashboardProps) {
         ventas={ventas}
         getProductoById={getProductoById}
       />
+      )}
 
       {/* ═══ Sección Mixta: Inteligencia CLAW & Alertas ═══ */}
       <div className="grid grid-cols-1 xl:grid-cols-4 gap-10">
@@ -253,6 +286,7 @@ export default function Dashboard(props: DashboardProps) {
           {/* Otros Paneles debajo del Feed si es necesario */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-10 mt-10 sm:mt-16">
              {/* Panel: Ahorro */}
+            {canVerTotales && (
             <GlassCard onClick={onViewAhorros} className="border-l-4 border-l-purple-500">
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/30">
@@ -263,6 +297,7 @@ export default function Dashboard(props: DashboardProps) {
               <h3 className="text-2xl font-bold">{formatCurrency(Number(estadisticas.ingresosHoy || 0) * 0.15)}</h3>
               <p className="text-xs text-slate-400 mt-1">15% sugerido del día</p>
             </GlassCard>
+            )}
 
             {/* Panel: Recepciones */}
             <GlassCard onClick={onViewRecepciones} className="border-l-4 border-l-blue-500">

@@ -52,12 +52,10 @@ export const SentinelWatcher: React.FC = () => {
           const backupProvs = await db.getBackup('proveedores_snapshot');
 
           if (backupProds && backupProds.length > 0) {
-            console.log('🛡️ [Sentinel] Restaurando desde Espejo Local...');
             for (const p of backupProds) await db.addProducto(p).catch(() => {});
             for (const p of backupProvs) await db.addProveedor(p).catch(() => {});
             toast.success('Sentinel: Datos restaurados desde el espejo local.', { id: 'sentinel-recovery' });
           } else {
-            console.log('☁️ [Sentinel] Espejo vacío. Forzando descarga completa desde la nube...');
             if (db.syncCloudToLocal) {
               await db.syncCloudToLocal();
               toast.success('Sentinel: Catálogo recuperado desde la nube.', { id: 'sentinel-recovery' });

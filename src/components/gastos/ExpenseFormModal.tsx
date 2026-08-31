@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import {
     TrendingDown, TrendingUp, Camera, X, DollarSign, Loader2,
-    Banknote, CreditCard, Building2, Smartphone, Pencil
+    Banknote, CreditCard, Building2, Smartphone, Pencil, Trash2, Plus
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ import {
     SelectTrigger,
     SelectValue
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import type { Gasto, GastoCategoria, MetodoPago, Proveedor } from '@/types';
 
@@ -71,6 +72,34 @@ export function ExpenseFormModal({
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [esIngreso]);
+
+    // Extraer a producto individual para edición más clara
+    useEffect(() => {
+        if (isOpen && isEditMode && !esIngreso) {
+            if (!(formData.facturaItems?.length) && !formData.productoLibre && formData.descripcion) {
+                const match = formData.descripcion.match(/^(\d+)x\s(.*)/);
+                if (match) {
+                    const qty = parseInt(match[1], 10);
+                    const descClean = match[2];
+                    const price = (formData.monto || 0) / qty;
+                    setFormData({
+                        ...formData,
+                        cantidad: qty,
+                        precioUnitario: price,
+                        productoLibre: descClean,
+                    });
+                } else {
+                    setFormData({
+                        ...formData,
+                        cantidad: 1,
+                        precioUnitario: formData.monto || 0,
+                        productoLibre: formData.descripcion,
+                    });
+                }
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, isEditMode]);
 
     const accentColor = esIngreso ? 'emerald' : 'rose';
     const headerCls   = esIngreso
@@ -158,6 +187,7 @@ export function ExpenseFormModal({
                     )}
 
                     {/* Descripción */}
+                    {!(formData.productoLibre) && (
                     <div className="space-y-1.5">
                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Descripción</Label>
                         <Input
@@ -167,6 +197,7 @@ export function ExpenseFormModal({
                             className="h-11 rounded-xl border border-slate-200 dark:border-slate-700 px-4 font-bold"
                         />
                     </div>
+                    )}
 
                     {/* Monto + Fecha */}
                     <div className="grid grid-cols-2 gap-3">
@@ -183,6 +214,7 @@ export function ExpenseFormModal({
                                     onChange={e => setFormData({ ...formData, monto: parseFloat(e.target.value) || 0 })}
                                     className="h-11 pl-9 rounded-xl border border-slate-200 dark:border-slate-700 font-black tabular-nums text-base"
                                     placeholder="0"
+                                    readOnly={(formData.facturaItems?.length ?? 0) > 0 || (!!formData.productoLibre)}
                                 />
                             </div>
                         </div>
@@ -215,6 +247,124 @@ export function ExpenseFormModal({
                             </SelectContent>
                         </Select>
                     </div>
+                    
+                    {/* Es Factura? */}
+                    <div className="flex items-center gap-2 pt-2 pb-1">
+                        <Switch
+                            checked={formData.esFactura || false}
+                            onCheckedChange={val => setFormData({ ...formData, esFactura: val })}
+                        />
+                        <Label className="text-[11px] font-black uppercase tracking-widest text-slate-500 cursor-pointer" onClick={() => setFormData({ ...formData, esFactura: !formData.esFactura })}>
+                            Es una Factura Oficial
+                        </Label>
+                    </div>
+
+                    {/* Items de Factura (Si es factura) */}
+                    {formData.esFactura && (
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Productos de la Factura</Label>
+                            <div className="space-y-2 max-h-40 overflow-y-auto pr-1">
+                                {(formData.facturaItems || []).map((item, idx) => (
+                                    <div key={item.id} className="flex gap-2 items-center bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                                        <Input
+                                            value={item.nombre}
+                                            onChange={e => {
+                                                const newItems = [...(formData.facturaItems || [])];
+                                                newItems[idx] = { ...newItems[idx], nombre: e.target.value };
+                                                setFormData({ ...formData, facturaItems: newItems });
+                                            }}
+                                            placeholder="Nombre"
+                                            className="h-8 text-xs font-bold px-2"
+                                        />
+                                        <Input
+                                            type="number"
+                                            value={item.cantidad}
+                                            onChange={e => {
+                                                const newItems = [...(formData.facturaItems || [])];
+                                                const qty = parseFloat(e.target.value) || 0;
+                                                newItems[idx] = { ...newItems[idx], cantidad: qty, total: qty * newItems[idx].precioUnitario };
+                                                const newMonto = newItems.reduce((acc, it) => acc + it.total, 0);
+                                                setFormData({ ...formData, facturaItems: newItems, monto: newMonto });
+                                            }}
+                                            placeholder="Cant"
+                                            className="h-8 text-xs w-16 px-2 text-center"
+                                        />
+                                        <Input
+                                            type="number"
+                                            value={item.precioUnitario}
+                                            onChange={e => {
+                                                const newItems = [...(formData.facturaItems || [])];
+                                                const price = parseFloat(e.target.value) || 0;
+                                                newItems[idx] = { ...newItems[idx], precioUnitario: price, total: newItems[idx].cantidad * price };
+                                                const newMonto = newItems.reduce((acc, it) => acc + it.total, 0);
+                                                setFormData({ ...formData, facturaItems: newItems, monto: newMonto });
+                                            }}
+                                            placeholder="Precio"
+                                            className="h-8 text-xs w-24 px-2"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const newItems = (formData.facturaItems || []).filter((_, i) => i !== idx);
+                                                const newMonto = newItems.reduce((acc, it) => acc + it.total, 0);
+                                                setFormData({ ...formData, facturaItems: newItems, monto: newMonto });
+                                            }}
+                                            className="h-8 w-8 flex items-center justify-center shrink-0 rounded-lg text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-950/50 transition-colors"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="w-full h-8 mt-2 text-[10px] font-black uppercase tracking-widest text-slate-500 border-dashed"
+                                onClick={() => {
+                                    const newItem = { id: `item_${Date.now()}`, nombre: '', cantidad: 1, precioUnitario: 0, total: 0 };
+                                    setFormData({ ...formData, facturaItems: [...(formData.facturaItems || []), newItem] });
+                                }}
+                            >
+                                <Plus className="w-3 h-3 mr-1" /> Agregar Producto
+                            </Button>
+                        </div>
+                    )}
+
+                    {/* Producto Individual (Si existe y no es múltiple) */}
+                    {!formData.facturaItems?.length && (formData.productoLibre || formData.productoId) && (
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Producto Individual</Label>
+                            <div className="flex gap-2 bg-slate-50 dark:bg-slate-900/50 p-2 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <Input
+                                    value={formData.productoLibre || ''}
+                                    onChange={e => setFormData({ ...formData, productoLibre: e.target.value })}
+                                    placeholder="Nombre producto"
+                                    className="h-8 text-xs font-bold px-2"
+                                />
+                                <Input
+                                    type="number"
+                                    value={formData.cantidad || ''}
+                                    onChange={e => {
+                                        const qty = parseFloat(e.target.value) || 0;
+                                        setFormData({ ...formData, cantidad: qty, monto: qty * (formData.precioUnitario || 0) });
+                                    }}
+                                    placeholder="Cant"
+                                    className="h-8 text-xs w-16 px-2 text-center"
+                                />
+                                <Input
+                                    type="number"
+                                    value={formData.precioUnitario || ''}
+                                    onChange={e => {
+                                        const price = parseFloat(e.target.value) || 0;
+                                        setFormData({ ...formData, precioUnitario: price, monto: (formData.cantidad || 0) * price });
+                                    }}
+                                    placeholder="Precio"
+                                    className="h-8 text-xs w-24 px-2"
+                                />
+                            </div>
+                        </div>
+                    )}
 
                     {/* Proveedor (solo egresos) */}
                     {!esIngreso && proveedores.length > 0 && (
@@ -317,3 +467,5 @@ export function ExpenseFormModal({
         </Dialog>
     );
 }
+
+
