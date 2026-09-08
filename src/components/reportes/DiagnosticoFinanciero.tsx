@@ -964,6 +964,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
         toast.message('Edición cancelada. Puedes registrar un cierre nuevo.');
     };
     
+    /** Menú de accesos rápidos de Gestión de Control de Datos: null = pantalla de botones, o el bloque abierto. */
+    const [vista, setVista] = useState<string | null>(null);
     // Estados para hacer colapsables las demás tarjetas principales
     const [estadoExpanded, setEstadoExpanded] = useState(false);
     const [semaforoExpanded, setSemaforoExpanded] = useState(false);
@@ -1221,6 +1223,11 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                         </div>
                     </div>
 
+                    {vista === 'gasto' && (
+                    <>
+                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-emerald-500 hover:text-emerald-600 flex items-center gap-1 mb-2">
+                        ← Volver al menú
+                    </button>
                     {/* ── REGISTRO RÁPIDO DE GASTOS DIARIOS ── */}
                     <div className="mb-6 rounded-2xl border-2 border-emerald-500/20 bg-emerald-500/5 p-4">
                         <div className="flex items-center justify-between mb-4">
@@ -1428,7 +1435,14 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             </div>
                         )}
                     </div>
+                    </>
+                    )}
 
+                    {vista === 'ia' && (
+                    <>
+                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-violet-500 hover:text-violet-600 flex items-center gap-1 mb-2">
+                        ← Volver al menú
+                    </button>
                     {/* ── CONSEJERO IA — colapsable ── */}
                     <div className="rounded-2xl border-2 border-violet-500/40 bg-violet-500/5 overflow-hidden">
                         <button
@@ -1480,7 +1494,11 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             </div>
                         )}
                     </div>
+                    </>
+                    )}
 
+                    {vista === null && (
+                    <>
                     {/* ── ESTADO FINANCIERO DEL NEGOCIO (P&L) ── */}
                     <Card className="rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/10 to-blue-950/5 shadow-xl overflow-hidden relative">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -1709,9 +1727,49 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             </div>
                         );
                     })()}
+                    </>
+                    )}
 
+                    {vista === null && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
+                        <button type="button" onClick={() => setVista('gasto')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 p-4 transition-colors">
+                            <span className="text-2xl">💸</span>
+                            <span className="text-[11px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300 text-center">Gasto de la Quincena</span>
+                        </button>
+                        <button type="button" onClick={() => setVista('compromiso')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 p-4 transition-colors">
+                            <span className="text-2xl">🎯</span>
+                            <span className="text-[11px] font-black uppercase tracking-wide text-rose-700 dark:text-rose-300 text-center">Compromiso Fijo</span>
+                        </button>
+                        <button type="button" onClick={() => setVista('venta')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 p-4 transition-colors">
+                            <span className="text-2xl">💰</span>
+                            <span className="text-[11px] font-black uppercase tracking-wide text-indigo-700 dark:text-indigo-300 text-center">Venta del Día</span>
+                        </button>
+                        <button type="button" onClick={() => setVista('produccion')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 p-4 transition-colors">
+                            <span className="text-2xl">🍞</span>
+                            <span className="text-[11px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-300 text-center">Producción y Auditoría</span>
+                        </button>
+                        <button type="button" onClick={() => setVista('sobres')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 p-4 transition-colors">
+                            <span className="text-2xl">🛡️</span>
+                            <span className="text-[11px] font-black uppercase tracking-wide text-violet-700 dark:text-violet-300 text-center">Sobres y Bóveda de Ahorro</span>
+                        </button>
+                        <button type="button" onClick={() => setVista('compras')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 p-4 transition-colors">
+                            <span className="text-2xl">🛒</span>
+                            <span className="text-[11px] font-black uppercase tracking-wide text-blue-700 dark:text-blue-300 text-center">Plan de Compras</span>
+                        </button>
+                        <button type="button" onClick={() => setVista('ia')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-fuchsia-500/20 bg-fuchsia-500/5 hover:bg-fuchsia-500/10 p-4 transition-colors">
+                            <span className="text-2xl">🤖</span>
+                            <span className="text-[11px] font-black uppercase tracking-wide text-fuchsia-700 dark:text-fuchsia-300 text-center">Consejero IA</span>
+                        </button>
+                    </div>
+                    )}
+
+                    {vista === 'sobres' && (
+                    <>
+                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-violet-500 hover:text-violet-600 flex items-center gap-1">
+                        ← Volver al menú
+                    </button>
                     {/* ── SEMÁFORO Y SOBRES (GESTIÓN INTEGRAL OPERATIVA PRO) ── */}
-                    <div 
+                    <div
                         className="flex items-center justify-between mb-4 mt-8 cursor-pointer bg-violet-500/5 dark:bg-violet-500/10 hover:bg-violet-500/10 dark:hover:bg-violet-500/20 p-3 px-4 rounded-2xl border border-violet-500/10 shadow-sm transition-all group" 
                         onClick={(e) => { e.stopPropagation(); setSemaforoExpanded(x => !x); }}
                     >
@@ -1985,8 +2043,15 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                         </div>
                     )}
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {/* Columna izq — Compromisos fijos */}
+                    </>
+                    )}
+
+                    {vista === 'compromiso' && (
+                    <>
+                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-600 flex items-center gap-1 mb-2">
+                        ← Volver al menú
+                    </button>
+                        {/* Compromisos fijos */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-sm overflow-hidden">
                             <CardHeader 
                                 className="pb-3 flex flex-row items-center justify-between cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors"
@@ -2122,7 +2187,15 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             )}
                         </Card>
 
-                        {/* Columna der — Registro de ventas del día */}
+                    </>
+                    )}
+
+                    {vista === 'venta' && (
+                    <>
+                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-600 flex items-center gap-1 mb-2">
+                        ← Volver al menú
+                    </button>
+                        {/* Registro de ventas del día */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-sm overflow-hidden">
                             <CardHeader 
                                 className="pb-3 flex flex-row items-center justify-between gap-2 cursor-pointer bg-slate-50 dark:bg-slate-900/40 hover:bg-slate-100 dark:hover:bg-slate-800/60 border-b border-slate-100 dark:border-white/5 transition-colors"
@@ -2761,11 +2834,18 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             </CardContent>
                             )}
                         </Card>
-
-                    </div>
+                    </>
+                    )}
                     </>
                     )}
 
+                    {(modoLibretaHorno || vista === 'produccion') && (
+                    <>
+                    {!modoLibretaHorno && (
+                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-amber-500 hover:text-amber-600 flex items-center gap-1 mb-2">
+                        ← Volver al menú
+                    </button>
+                    )}
                         {/* ── Auditoría de Producción ─────────────────────────────── */}
                         <Card className="rounded-3xl border-slate-200 dark:border-white/5 bg-white dark:bg-card/30 shadow-xl overflow-hidden">
                             <div className="h-1.5 w-full bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500" />
@@ -4446,7 +4526,16 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                 })()}
                             </DialogContent>
                         </Dialog>
+                    </>
+                    )}
 
+                    {(modoLibretaHorno || vista === 'compras') && (
+                    <>
+                    {!modoLibretaHorno && (
+                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-600 flex items-center gap-1 mb-2">
+                        ← Volver al menú
+                    </button>
+                    )}
                     {/* ── PLAN DE COMPRAS A PROVEEDORES ── */}
                     {(() => {
                         if (!presupuestosMinimos.length) return null;
@@ -4687,6 +4776,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             </Card>
                         );
                     })()}
+                    </>
+                    )}
                     </>
                 );
             })()}
