@@ -15,7 +15,7 @@ import { mergeHydrateItem } from './sync-merge-local-gana';
  */
 
 const DB_NAME = 'dulce-placer-db';
-const DB_VERSION = 7;
+const DB_VERSION = 8;
 
 /** Colecciones conocidas — cada una se convierte en un Object Store de IndexedDB */
 const COLLECTIONS = [
@@ -53,7 +53,8 @@ const COLLECTIONS = [
   'nominas',
   'auditorias_produccion',
   'planes_diarios',
-  'workflows'
+  'workflows',
+  'camaras_cctv'
 ];
 
 export class IndexedDBAdapter implements DatabaseAdapter {
