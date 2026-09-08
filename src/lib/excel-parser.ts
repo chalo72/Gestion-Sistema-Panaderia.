@@ -88,6 +88,17 @@ function parsearNumero(valor: any): number {
     } else {
       numero = limpio.replace(/,/g, '');
     }
+  } else if (tienePunto) {
+    // Solo puntos, sin comas: formato colombiano de miles (ej. "45.000" = 45000, "1.234.567" = 1234567).
+    // Si tiene más de un punto, o el último grupo tiene exactamente 3 dígitos, son separadores de miles.
+    const gruposPorPunto = limpio.split('.');
+    const esFormatoMiles =
+      gruposPorPunto.length > 2 ||
+      (gruposPorPunto.length === 2 && gruposPorPunto[1]?.length === 3);
+    if (esFormatoMiles) {
+      numero = limpio.replace(/\./g, '');
+    }
+    // Si no, se deja tal cual (es un decimal real, ej. "45.5")
   }
   
   return parseFloat(numero) || 0;

@@ -240,6 +240,10 @@ export default function CargaMasiva({
     setImportState('saving');
     let guardados = 0;
     let errores = 0;
+    let omitidosPorDuplicado = 0;
+    // Nombres ya activos en el sistema, para no re-crear "productos fantasma"
+    // cuando una factura o Excel se escanea/sube más de una vez.
+    const nombresExistentes = new Set(productos.map(p => p.nombre.trim().toLowerCase()));
     
     try {
       // Primero crear proveedor si fue detectado y no existe
@@ -295,7 +299,12 @@ export default function CargaMasiva({
       if (activeTab === 'factura') {
         for (const prod of productosDetectados) {
           if (!prod.nombre.trim()) continue;
-          
+          const nombreNormalizado = prod.nombre.trim().toLowerCase();
+          if (nombresExistentes.has(nombreNormalizado)) {
+            omitidosPorDuplicado++;
+            continue;
+          }
+
           try {
             // Guardar o identificar producto
             const productoCreado = await onAddProducto({
@@ -321,7 +330,8 @@ export default function CargaMasiva({
                 cantidadEmbalaje: 1
               });
             }
-            
+
+            nombresExistentes.add(nombreNormalizado);
             guardados++;
           } catch (err) {
             console.error('Error guardando producto:', err);
@@ -331,7 +341,12 @@ export default function CargaMasiva({
       } else {
         for (const fila of filasImportadas) {
           if (!fila.nombre.trim() || fila.errores.length > 0) continue;
-          
+          const nombreNormalizado = fila.nombre.trim().toLowerCase();
+          if (nombresExistentes.has(nombreNormalizado)) {
+            omitidosPorDuplicado++;
+            continue;
+          }
+
           try {
             await onAddProducto({
               nombre: fila.nombre,
@@ -343,6 +358,7 @@ export default function CargaMasiva({
               costoBase: fila.costoCompra,
               imagen: '',
             });
+            nombresExistentes.add(nombreNormalizado);
             guardados++;
           } catch (err) {
             console.error('Error guardando producto:', err);
@@ -350,9 +366,13 @@ export default function CargaMasiva({
           }
         }
       }
-      
+
       setImportState('done');
-      toast.success(`Se guardaron ${guardados} productos${errores > 0 ? ` (${errores} errores)` : ''}`);
+      toast.success(
+        `Se guardaron ${guardados} productos` +
+        `${omitidosPorDuplicado > 0 ? ` (${omitidosPorDuplicado} ya existían, no se duplicaron)` : ''}` +
+        `${errores > 0 ? ` (${errores} errores)` : ''}`
+      );
       
       // Limpiar después de 2 segundos
       setTimeout(() => {
