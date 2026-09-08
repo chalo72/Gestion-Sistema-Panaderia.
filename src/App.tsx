@@ -928,7 +928,7 @@ const App = () => {
                </div>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 overflow-x-auto min-w-0">
                {/* Botones de Caja — solo visibles en POS con caja abierta */}
                {currentView === 'ventas' && cajaActiva && (
                  <div className="flex items-center gap-1">
