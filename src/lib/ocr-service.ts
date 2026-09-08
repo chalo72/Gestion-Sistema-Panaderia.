@@ -231,11 +231,14 @@ function normalizarPrecio(precio: string): number {
     }
   } else if (tieneComa) {
     const partes = limpio.split(',');
-    if (partes[1]?.length === 2) limpio = limpio.replace(',', '.');
+    // 1 o 2 dígitos después de la coma → decimal (ej. "45,5"); 3 dígitos o varias comas → miles (ej. "45,000")
+    if (partes.length === 2 && partes[1]?.length !== 3) limpio = limpio.replace(',', '.');
     else limpio = limpio.replace(/,/g, '');
   } else if (tienePunto) {
     const partes = limpio.split('.');
-    if (partes[1]?.length !== 2) limpio = limpio.replace(/\./g, '');
+    // Igual que arriba pero con puntos: "45.000" o "1.234.567" → miles; "45.5" o "45.50" → decimal
+    const esFormatoMiles = partes.length > 2 || (partes.length === 2 && partes[1]?.length === 3);
+    if (esFormatoMiles) limpio = limpio.replace(/\./g, '');
   }
   return parseFloat(limpio) || 0;
 }

@@ -83,9 +83,11 @@ function parsearNumero(valor: any): number {
     }
   } else if (tieneComa) {
     const partes = limpio.split(',');
-    if (partes[1]?.length === 2) {
+    if (partes.length === 2 && partes[1]?.length !== 3) {
+      // 1 o 2 dígitos después de la coma → es un decimal (ej. "45,5" o "45,50")
       numero = limpio.replace(',', '.');
     } else {
+      // 3 dígitos, o más de una coma → separador de miles (ej. "45,000")
       numero = limpio.replace(/,/g, '');
     }
   } else if (tienePunto) {
