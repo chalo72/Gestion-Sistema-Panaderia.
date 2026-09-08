@@ -993,7 +993,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
         };
 
         await addGasto(dataConFecha);
-        toast.success('Gasto guardado. Ya suma en Gastos Diarios de Gestión Integral Operativa.');
+        toast.success('Gasto guardado. Ya suma en Gastos Diarios de Gestión de Control de Datos.');
     };
     
     // Add COLORS if needed

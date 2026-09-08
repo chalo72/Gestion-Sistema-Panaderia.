@@ -479,7 +479,7 @@ export default function Reportes(props: ReportesProps) {
                     )}
                     <TabsTrigger value="quincena" className="rounded-xl h-10 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-emerald-600 data-[state=active]:text-white gap-2">
                         <CalendarCheck className="w-4 h-4" />
-                        {esLibretaHorno ? 'Panes y masas' : 'Gestión Integral Operativa'}
+                        {esLibretaHorno ? 'Panes y masas' : 'Gestión de Control de Datos'}
                         {!esLibretaHorno && totalCompromisosActivos > 0 && (
                             <span className="text-[9px] font-black bg-violet-500/20 text-violet-600 dark:text-violet-400 px-1.5 py-0.5 rounded-full">
                                 {compromisos.filter(c => c.activo).length}
