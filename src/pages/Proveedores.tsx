@@ -316,6 +316,17 @@ export function Proveedores({
   }>>([]);
   const [necesitaRecargar, setNecesitaRecargar] = useState(false);
 
+  /* ─── Categorías reales desde Configuración (fallback si un producto no trae categoría) ─── */
+  const [categoriasConfig, setCategoriasConfig] = useState<string[]>([]);
+  useEffect(() => {
+    db.getConfiguracion()
+      .then(config => {
+        const nombres = (config?.categorias || []).map((c: any) => c?.nombre).filter(Boolean);
+        if (nombres.length > 0) setCategoriasConfig(nombres);
+      })
+      .catch(() => {}); // Si falla, se sigue usando el fallback fijo de abajo
+  }, []);
+
   const buscarProveedoresEliminados = useCallback(async () => {
     setBuscandoEliminados(true);
     setShowRecuperarDialog(true);
@@ -786,7 +797,7 @@ export function Proveedores({
         uid: precio.id,
         productoId: precio.productoId,
         nombre: prod?.nombre || 'Producto eliminado',
-        categoria: prod?.categoria || CATEGORIAS_PROD[0],
+        categoria: prod?.categoria || categoriasConfig[0] || CATEGORIAS_PROD[0],
         precioCosto: precio.precioCosto,
         margenVenta: margenCalc,
         cantidadEmbalaje: cantEmb,

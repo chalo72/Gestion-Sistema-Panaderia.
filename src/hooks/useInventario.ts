@@ -28,6 +28,12 @@ export function useInventario({ productos }: UseInventarioParams) {
     try {
       const dbItem = await db.getInventarioItemByProducto(productoId);
       const stockActual = dbItem ? dbItem.stockActual : 0;
+
+      // Aviso (no bloquea): si la salida pide más de lo que hay, se avisa y se deja seguir
+      if (tipo === 'salida' && cantidad > stockActual) {
+        toast.warning(`Stock insuficiente: quedaban ${stockActual} y se descontaron ${cantidad}. La operación se registró igual.`);
+      }
+
       // entrada: suma · salida: resta · ajuste: cantidad = stock absoluto deseado
       const nuevoStock =
         tipo === 'entrada'

@@ -53,6 +53,16 @@ export function useWorkflowEngine() {
         if (nodeTitle.includes('Código') || nodeTitle.includes('Script')) {
             const code = (node.data?.code as string) || 'return input;';
             try {
+                // Candado de seguridad: solo ADMIN puede ejecutar código JS libre en un nodo de workflow
+                const rolActual = (() => {
+                  try {
+                    const u = localStorage.getItem('pricecontrol_local_user');
+                    return u ? JSON.parse(u)?.rol : null;
+                  } catch { return null; }
+                })();
+                if (rolActual !== 'ADMIN') {
+                  throw new Error('Este nodo de Código solo puede ejecutarlo un usuario con rol ADMIN (medida de seguridad).');
+                }
                 // eslint-disable-next-line no-new-func
                 const fn = new Function('input', `return (async () => { ${code} })();`);
                 const res = await fn(inputData);
