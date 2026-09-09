@@ -153,6 +153,18 @@ export interface IDatabase {
   getAllCamaras(): Promise<any[]>;
   saveCamara(c: any): Promise<void>;
   deleteCamara(id: string): Promise<void>;
+
+  // Expedientes de Empleadas (Vigilancia Conductual)
+  getAllEmpleadasPerfil(): Promise<any[]>;
+  saveEmpleadaPerfil(e: any): Promise<void>;
+  deleteEmpleadaPerfil(id: string): Promise<void>;
+  getAllFaltasEmpleada(empleadaId?: string): Promise<any[]>;
+  getAllMeritosEmpleada(empleadaId?: string): Promise<any[]>;
+  saveMeritoEmpleada(merito: any): Promise<void>;
+  deleteMeritoEmpleada(id: string): Promise<void>;
+  saveFaltaEmpleada(f: any): Promise<void>;
+  updateFaltaEmpleada(f: any): Promise<void>;
+  deleteFaltaEmpleada(id: string): Promise<void>;
 }
 
 /**
@@ -254,6 +266,7 @@ const COLECCIONES_PRINCIPALES = [
   'modelosPan',
   'produccion',
   'backups',
+  'ventas_diarias',
   'agente_misiones',
   'agente_hallazgos',
   'agente_config',
@@ -378,6 +391,32 @@ class NexusDatabase implements IDatabase {
         (op === 'add' ? supaDB.addPrecio(data) : supaDB.updatePrecio(data)).catch(() => {});
       }
     } catch (_) { /* fallo silencioso — IndexedDB ya tiene el dato */ }
+  }
+
+  // 🩹 FIX 2026-09-08: estos 3 helpers se usaban (produccion/planes_diarios) pero nunca
+  // se habían escrito — cada llamada tronaba y eso hacía fallar el Promise.all de
+  // useProduccionHook.ts, saltándose TODA la fusión con la nube de formulaciones/modelosPan
+  // (quedaba solo el localStorage de cada aparato, nunca comparado ni completado).
+  // Ver informe: claude/auditoria-masa-dulce-especial-duplicada-dulce-placer.md
+
+  /** Lee una colección local; si el adapter falla, no revienta al que llama (devuelve []). */
+  private async tryGet(collection: string) {
+    try {
+      return await this.adapter.getCollection(collection);
+    } catch (e) {
+      console.warn(`⚠️ [NEXUS]: tryGet('${collection}') falló, devolviendo vacío.`, e);
+      return [];
+    }
+  }
+
+  /** Guarda local (mismo patrón que el resto de addX/updateX de este archivo). */
+  private async syncSet(collection: string, id: string, data: any) {
+    return this.adapter.setDocument(collection, id, data);
+  }
+
+  /** Borra local + tombstone (mismo patrón que el resto de deleteX de este archivo). */
+  private async syncDelete(collection: string, id: string) {
+    return this._delete(collection, id);
   }
 
   // Productos
@@ -523,10 +562,37 @@ class NexusDatabase implements IDatabase {
     return this.adapter.setDocument('camaras_cctv', c.id, c);
   }
   async deleteCamara(id: string) {
-    return this.adapter.deleteDocument('camaras_cctv', id);
-  }
+      return this.adapter.deleteDocument('camaras_cctv', id);
+    }
 
-  // Asistencia
+    // Expedientes de Empleadas (Vigilancia Conductual)
+    async getAllEmpleadasPerfil() { return this.adapter.getCollection('empleadas_perfil'); }
+    async saveEmpleadaPerfil(e: any) {
+      if (!e.id) e.id = generateUUID();
+      e.updatedAt = new Date().toISOString();
+      return this.adapter.setDocument('empleadas_perfil', e.id, e);
+    }
+    async deleteEmpleadaPerfil(id: string) { return this.adapter.deleteDocument('empleadas_perfil', id); }
+    async getAllMeritosEmpleada(empleadaId?: string) {
+      const all = await this.adapter.getCollection<any>('meritos_empleada');
+      if (empleadaId) return all.filter((m: any) => m.empleadaId === empleadaId);
+      return all;
+    }
+    async saveMeritoEmpleada(m: any) { return this.adapter.setDocument('meritos_empleada', m.id, m); }
+    async deleteMeritoEmpleada(id: string) { return this.adapter.deleteDocument('meritos_empleada', id); }
+    async getAllFaltasEmpleada(empleadaId?: string) {
+      const all = await this.adapter.getCollection<any>('faltas_empleada');
+      if (empleadaId) return all.filter((f: any) => f.empleadaId === empleadaId);
+      return all;
+    }
+    async saveFaltaEmpleada(f: any) {
+      if (!f.id) f.id = generateUUID();
+      return this.adapter.setDocument('faltas_empleada', f.id, f);
+    }
+    async updateFaltaEmpleada(f: any) { return this.adapter.setDocument('faltas_empleada', f.id, f); }
+    async deleteFaltaEmpleada(id: string) { return this.adapter.deleteDocument('faltas_empleada', id); }
+
+    // Asistencia
   async getAllAsistencia() { return this.adapter.getCollection('asistencia'); }
   async addRegistroAsistencia(r: any) { return this.adapter.setDocument('asistencia', r.id, r); }
   async getAsistenciaByFecha(fecha: string) {
