@@ -680,6 +680,22 @@ export function useRealtimeSync() {
     setTimeout(() => syncNowIds.current.clear(), 30_000);
   }, []);
 
+  // 🩹 FIX 2026-09-09: throttle a la sincronizacion AUTOMATICA (reconexion de red / volver
+  // a la app). Antes, cada evento 'online' o cada vez que el celular volvia de segundo plano
+  // disparaba syncNow(), que sube/baja CASI TODA la base de datos (productos, proveedores,
+  // ventas, etc.) completa, no solo lo nuevo. En una conexion inestable (celular en la
+  // panaderia) eso se repite muchas veces al dia y agota la cuota gratis de Supabase en
+  // pocos dias. Este freno NO afecta la sincronizacion manual/forzada (boton del usuario,
+  // evento 'dp-force-sync' tras una carga masiva) — esas siguen corriendo al instante.
+  const lastAutoSyncAt = useRef(0);
+  const AUTO_SYNC_COOLDOWN_MS = 3 * 60 * 1000; // 3 minutos
+  const syncNowAutoThrottled = useCallback(() => {
+    const ahora = Date.now();
+    if (ahora - lastAutoSyncAt.current < AUTO_SYNC_COOLDOWN_MS) return Promise.resolve();
+    lastAutoSyncAt.current = ahora;
+    return syncNow();
+  }, [syncNow]);
+
   // Suscripciones Realtime — solo escucha, no hace peticiones en segundo plano
   useEffect(() => {
     const tables = Object.keys(HANDLERS);
@@ -702,7 +718,7 @@ export function useRealtimeSync() {
     );
 
     // Sincronizar al recuperar conexión de red
-    const handleOnline = () => syncNow().catch(() => {});
+    const handleOnline = () => syncNowAutoThrottled().catch(() => {});
     window.addEventListener('online', handleOnline);
 
     // Sync forzado por operaciones masivas (ej: carga 100 uds de inventario)
@@ -718,7 +734,7 @@ export function useRealtimeSync() {
       } else if (document.visibilityState === 'visible') {
         const ausencia = Date.now() - hiddenAt;
         if (hiddenAt > 0 && ausencia > 30_000) {
-          syncNow().catch(() => {});
+          syncNowAutoThrottled().catch(() => {});
         }
       }
     };
