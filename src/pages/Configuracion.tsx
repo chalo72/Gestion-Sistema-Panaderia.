@@ -135,16 +135,24 @@ function Configuracion(props: ConfiguracionProps) {
 
   // ── MIGRACIÓN COMPLETA DE BASE DE DATOS ──
   const STORES_MIGRACION = [
-    'productos','proveedores','precios','recepciones','prepedidos',
-    'inventario','movimientos','ventas','caja','gastos','recetas',
-    'produccion','alertas','ahorros','facturas_escaneadas','configuracion',
+    // Lista completa y real de colecciones de 'dulce-placer-db' (antes apuntaba
+    // a una base de datos equivocada y con lista incompleta — no incluia
+    // formulaciones, modelosPan ni backups, que es donde viven las masas y panes).
+    'productos','proveedores','precios','clientes','tombstones','configuracion',
+    'ventas','inventario','movimientos','recepciones','historial','sesiones_caja',
+    'backups','pre_pedidos','prepedidos','alertas','gastos','mesas','ahorros',
+    'creditos_clientes','creditos_trabajadores','trabajadores','pedidos_activos',
+    'recetas','formulaciones','modelosPan','produccion','agente_misiones',
+    'agente_hallazgos','agente_config','bitacora_ia','asistencia','nominas',
+    'auditorias_produccion','planes_diarios','workflows','camaras_cctv',
+    'facturas_escaneadas','caja',
   ];
 
   const handleExportarDB = async () => {
     setMigrando(true);
     try {
       const idb: IDBDatabase = await new Promise((res, rej) => {
-        const r = indexedDB.open('PriceControlDB');
+        const r = indexedDB.open('dulce-placer-db');
         r.onsuccess = () => res(r.result);
         r.onerror   = () => rej(r.error);
       });
@@ -181,7 +189,7 @@ function Configuracion(props: ConfiguracionProps) {
     try {
       const data: Record<string, any[]> = JSON.parse(await file.text());
       const idb: IDBDatabase = await new Promise((res, rej) => {
-        const r = indexedDB.open('PriceControlDB');
+        const r = indexedDB.open('dulce-placer-db');
         r.onsuccess = () => res(r.result);
         r.onerror   = () => rej(r.error);
       });
