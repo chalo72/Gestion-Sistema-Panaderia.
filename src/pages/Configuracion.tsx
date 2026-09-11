@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload, MessageCircle, Phone } from 'lucide-react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Coins, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload, MessageCircle, Phone } from 'lucide-react';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import {
@@ -17,7 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Configuracion, MonedaCode } from '@/types';
+import { type Configuracion, type MonedaCode, MONEDAS } from '@/types';
 import { ARROBA_KG } from '@/types';
 
 interface ConfiguracionProps {
@@ -318,6 +318,87 @@ function Configuracion(props: ConfiguracionProps) {
                     </div>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Configuración de Moneda y Divisa */}
+          <Card className="border-none shadow-xl bg-gradient-to-br from-indigo-50/40 to-card dark:from-indigo-950/10 dark:to-card backdrop-blur-sm overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-indigo-500" />
+                Moneda del Negocio
+              </CardTitle>
+              <CardDescription>
+                Selecciona la divisa principal para toda la aplicación (Ventas, Precios, Gastos, Caja y Reportes). Por defecto: Pesos Colombianos (COP).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="font-bold flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                  <Coins className="w-4 h-4 text-indigo-500" />
+                  Divisa Principal
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {MONEDAS.map((m) => {
+                    const isSelected = monedaSeleccionada === m.code;
+                    return (
+                      <button
+                        key={m.code}
+                        type="button"
+                        onClick={() => setMonedaSeleccionada(m.code)}
+                        className={cn(
+                          "flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left",
+                          isSelected
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/20"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 text-slate-700 dark:text-slate-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={cn(
+                            "w-9 h-9 rounded-xl font-black text-sm flex items-center justify-center shrink-0",
+                            isSelected
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400"
+                          )}>
+                            {m.simbolo}
+                          </span>
+                          <div>
+                            <p className="font-bold text-xs leading-tight">{m.nombre}</p>
+                            <p className={cn("text-[10px] uppercase tracking-wider font-semibold mt-0.5", isSelected ? "text-indigo-200" : "text-muted-foreground")}>
+                              {m.code} · {m.locale}
+                            </p>
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <Badge className="bg-white text-indigo-700 border-none font-black text-[9px]">ACTIVA</Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Vista previa en tiempo real */}
+              <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ejemplo de formato en vivo:</p>
+                  <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-0.5">
+                    {new Intl.NumberFormat(
+                      MONEDAS.find(m => m.code === monedaSeleccionada)?.locale || 'es-CO',
+                      {
+                        style: 'currency',
+                        currency: monedaSeleccionada,
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      }
+                    ).format(150000)}
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs font-mono py-1 px-2.5">
+                  Código: {monedaSeleccionada}
+                </Badge>
               </div>
             </CardContent>
           </Card>
