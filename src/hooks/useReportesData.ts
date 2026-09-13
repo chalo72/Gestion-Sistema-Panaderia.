@@ -257,6 +257,35 @@ export function useReportesData(props: ReportesProps) {
     const [ventasDiarias, setVentasDiarias] = useState<VentaDiaria[]>(() => getVentasDiarias());
     const [detallesModal, setDetallesModal] = useState<string | null>(null);
 
+    // ── Ventas reales de un período: usa POS si el día tiene ventas registradas,
+    // si no usa el cierre manual de ese mismo día (mismo criterio ya usado en
+    // DashboardGraficos y en quincenaReal más abajo — evita sumar dos veces). ──
+    const calcularVentasBlend = (inicioStr: string, finStr: string) => {
+        let total = 0;
+        const fechasConPOS = new Set<string>();
+        ventas.forEach(v => {
+            const f = (v.fecha || '').slice(0, 10);
+            if (f >= inicioStr && f <= finStr) {
+                total += v.total;
+                fechasConPOS.add(f);
+            }
+        });
+        ventasDiarias.forEach(v => {
+            if (v.fecha >= inicioStr && v.fecha <= finStr && !fechasConPOS.has(v.fecha)) {
+                total += v.total;
+            }
+        });
+        return total;
+    };
+    const ventasMesReal = useMemo(
+        () => calcularVentasBlend(`${currentMonth}-01`, `${currentMonth}-31`),
+        [ventas, ventasDiarias, currentMonth]
+    );
+    const ventasMesAnteriorReal = useMemo(
+        () => calcularVentasBlend(`${prevPeriodo}-01`, `${prevPeriodo}-31`),
+        [ventas, ventasDiarias, prevPeriodo]
+    );
+
     // ── Producción del Día ────────────────────────────────────
     const [producciones, setProducciones] = useState<RegistroProduccion[]>(() => getProducciones());
 
@@ -429,8 +458,8 @@ export function useReportesData(props: ReportesProps) {
             })
             .reduce((s, c) => s + c.monto, 0);
     }, [compromisos]);
-    const ratioCompromisosVsVentas = reporteActual.totalVentas > 0
-        ? (totalCompromisosActivos / reporteActual.totalVentas) * 100 : 0;
+    const ratioCompromisosVsVentas = ventasMesReal > 0
+        ? (totalCompromisosActivos / ventasMesReal) * 100 : 0;
     const saludFinanciera = (() => {
         if (reporteActual.totalVentas === 0) return { label: 'Sin datos', color: 'text-slate-400', bg: 'bg-slate-400/10', barra: 'bg-slate-400', pct: 0 };
         const margen = (reporteActual.utilidadBruta / reporteActual.totalVentas) * 100;
@@ -690,7 +719,7 @@ export function useReportesData(props: ReportesProps) {
     const totalObligaciones = totalCompromisosActivos + promedioInsumos + promedioOtrosGastos;
 
     const coberturaActual = totalObligaciones > 0
-        ? (reporteActual.totalVentas / totalObligaciones) * 100 : 100;
+        ? (ventasMesReal / totalObligaciones) * 100 : 100;
 
     const ventasNecesariasDiarias = (() => {
         const diasMes = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
@@ -875,12 +904,12 @@ export function useReportesData(props: ReportesProps) {
     const cardsData = [
         {
             title: 'Ventas del Mes',
-            value: reporteActual.totalVentas,
+            value: ventasMesReal,
             icon: TrendingUp,
             color: 'text-emerald-500',
             bg: 'bg-emerald-500/10',
-            trend: calcTrend(reporteActual.totalVentas, reporteMesAnterior.totalVentas),
-            sub: `${ventasMes.length} transacciones`
+            trend: calcTrend(ventasMesReal, ventasMesAnteriorReal),
+            sub: ventasMesReal > reporteActual.totalVentas ? `${ventasMes.length} del POS + cierres manuales` : `${ventasMes.length} transacciones`
         },
         {
             title: 'Gastos del Mes',
@@ -1000,6 +1029,8 @@ export function useReportesData(props: ReportesProps) {
         ticketPromedio,
         ventasMesAnt,
         ticketAnterior,
+        ventasMesReal,
+        ventasMesAnteriorReal,
         ratioGasto,
         ratioGastoAnt,
         compromisos,

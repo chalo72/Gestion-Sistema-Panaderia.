@@ -43,7 +43,7 @@ import {
     DialogTitle,
     DialogDescription
 } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
+import { cn, escapeHtml } from '@/lib/utils';
 import { exportCSV } from '@/lib/exportUtils';
 import {
     DropdownMenu,
@@ -563,13 +563,13 @@ export default function HistorialVentas({
         <div class="info-row"><span>Ticket:</span><span>#${venta.id.substring(0, 8)}</span></div>
         <div class="info-row"><span>Fecha:</span><span>${isValid(date) ? format(date, "dd/MM/yyyy HH:mm") : 'N/A'}</span></div>
         <div class="info-row"><span>Método:</span><span>${venta.metodoPago.toUpperCase()}</span></div>
-        ${venta.cliente ? `<div class="info-row"><span>Cliente:</span><span>${venta.cliente}</span></div>` : ''}
+        ${venta.cliente ? `<div class="info-row"><span>Cliente:</span><span>${escapeHtml(venta.cliente)}</span></div>` : ''}
     </div>
     <div class="items">
         ${venta.items.map(item => {
             const prod = getProductoById(item.productoId);
             return `<div class="item">
-                <span class="item-name">${prod?.nombre || 'Producto'}</span>
+                <span class="item-name">${escapeHtml(prod?.nombre || 'Producto')}</span>
                 <span class="item-qty">x${item.cantidad}</span>
                 <span class="item-price">${formatCurrency(item.subtotal)}</span>
             </div>`;

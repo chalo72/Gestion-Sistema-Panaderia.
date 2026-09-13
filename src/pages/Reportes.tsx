@@ -49,6 +49,7 @@ import {
     List,
     Wallet,
     ChevronDown,
+    ChevronUp,
     ShoppingCart,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -121,6 +122,9 @@ export default function Reportes(props: ReportesProps) {
     useEffect(() => {
         if (esLibretaHorno) setActiveTab('quincena');
     }, [esLibretaHorno, setActiveTab]);
+
+    // Tab Consejero IA (Pico-Claw)
+    const [consejeroIaExpanded, setConsejeroIaExpanded] = useState(true);
 
     // Control de compra real en tab Presupuestos
     /** Varias pestañas de proveedor abiertas a la vez (acordeón) */
@@ -1469,7 +1473,64 @@ export default function Reportes(props: ReportesProps) {
                     TAB 5.5: ARQUEO DE CAJAS
                 ══════════════════════════════════════════════════ */}
                 <TabsContent value="arqueo-cajas" className="space-y-6 mt-0">
-                    <ArqueoCajas ventasDiarias={ventasDiarias} />
+                    <ArqueoCajas ventasDiarias={ventasDiarias} sesionesCaja={props.sesionesCaja ?? []} />
+                </TabsContent>
+
+                {/* ══════════════════════════════════════════════════
+                    TAB: CONSEJERO IA (Pico-Claw)
+                ══════════════════════════════════════════════════ */}
+                <TabsContent value="consejero-ia" className="space-y-6 mt-0">
+                    <div className="rounded-2xl border-2 border-violet-500/40 bg-violet-500/5 overflow-hidden">
+                        <button
+                            type="button"
+                            onClick={() => setConsejeroIaExpanded(x => !x)}
+                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-violet-500/10 transition-colors"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-violet-500/20">
+                                    <Sparkles className="w-4 h-4 text-violet-500" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-violet-500">Pico-Claw · Análisis IA</p>
+                                    <p className="text-[11px] text-violet-400/70 font-medium">
+                                        {analisisIA ? 'Análisis disponible — toca para leer' : pidiendoIA ? 'Analizando...' : 'Toca para pedir consejo financiero'}
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {pidiendoIA && <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />}
+                                {analisisIA && !consejeroIaExpanded && <span className="text-[9px] bg-violet-500 text-white px-2 py-0.5 rounded-full font-black">NUEVO</span>}
+                                {consejeroIaExpanded ? <ChevronUp className="w-4 h-4 text-violet-400" /> : <ChevronDown className="w-4 h-4 text-violet-400" />}
+                            </div>
+                        </button>
+                        {consejeroIaExpanded && (
+                            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-violet-500/20">
+                                {!analisisIA && !pidiendoIA ? (
+                                    <div className="space-y-2">
+                                        <p className="text-sm text-muted-foreground">Analiza los datos de esta quincena y recibe una estrategia personalizada.</p>
+                                        <Button onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)} className="bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2">
+                                            <Bot className="w-4 h-4" /> Analizar Datos Ahora
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {analisisIA ? (
+                                            <div className="whitespace-pre-wrap leading-relaxed text-sm text-muted-foreground">{analisisIA}</div>
+                                        ) : (
+                                            <div className="flex items-center gap-2 text-violet-400 animate-pulse font-medium">
+                                                <Loader2 className="w-4 h-4 animate-spin" /> Pico-Claw está analizando tus finanzas...
+                                            </div>
+                                        )}
+                                        {analisisIA && !pidiendoIA && (
+                                            <Button variant="outline" size="sm" onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)} className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10">
+                                                <Sparkles className="w-3.5 h-3.5 mr-2" /> Re-evaluar Estrategia
+                                            </Button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
                 </TabsContent>
 
                 {/* ══════════════════════════════════════════════════

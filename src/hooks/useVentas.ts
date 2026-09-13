@@ -121,7 +121,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       ...data,
       id: generateUUID(),
       cajaId: targetCajaId,
-      usuarioId: 'admin',
+      usuarioId: _usuarioId || 'admin',
       fecha: new Date().toISOString()
     };
     

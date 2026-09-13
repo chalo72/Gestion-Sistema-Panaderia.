@@ -1,4 +1,4 @@
-import { LayoutDashboard, ShoppingCart, DollarSign, Bell } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Wallet, ChefHat, Menu } from 'lucide-react';
 import type { ViewType } from '@/types';
 import { cn } from '@/lib/utils';
 import { useCan } from '@/contexts/AuthContext';
@@ -32,15 +32,14 @@ export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpe
     {
       id: 'caja',
       label: 'Caja',
-      icon: DollarSign,
+      icon: Wallet,
       view: 'caja' as ViewType,
     },
     {
-      id: 'alertas',
-      label: 'Alertas',
-      icon: Bell,
-      view: 'alertas' as ViewType,
-      badge: alertasNoLeidas > 0 ? alertasNoLeidas : undefined,
+      id: 'produccion',
+      label: role === 'PANADERO' ? 'Horno' : 'Producción',
+      icon: ChefHat,
+      view: 'produccion' as ViewType,
     },
   ];
 
@@ -52,7 +51,7 @@ export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpe
   if (visibleItems.length === 0) return null;
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-lg border-t border-slate-800/50 md:hidden flex items-center justify-around pb-safe pt-2 px-2 h-[72px]">
+    <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-950/92 backdrop-blur-xl border-t border-slate-800/80 md:hidden flex items-center justify-around px-2 min-h-[68px] h-[calc(68px+env(safe-area-inset-bottom,0px))] pb-[env(safe-area-inset-bottom,0px)] shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
       {visibleItems.map((item) => {
         const Icon = item.icon;
         const isActive = currentView === item.view;
@@ -62,29 +61,24 @@ export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpe
             key={item.id}
             onClick={() => onViewChange(item.view)}
             className={cn(
-              "relative flex flex-col items-center justify-center w-full h-full space-y-1 transition-all duration-200",
-              isActive ? "text-indigo-400" : "text-slate-400 hover:text-slate-300"
+              "relative flex flex-col items-center justify-center w-full h-full py-1 transition-all duration-200 active:scale-95 select-none",
+              isActive ? "text-amber-400 font-bold" : "text-slate-400 hover:text-slate-200 font-medium"
             )}
           >
+            {isActive && (
+              <span className="absolute top-0 w-8 h-1 rounded-full bg-gradient-to-r from-amber-400 to-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.6)]" />
+            )}
             <div className={cn(
               "p-1.5 rounded-xl transition-all duration-300",
-              isActive ? "bg-indigo-500/20 scale-110" : "bg-transparent"
+              isActive
+                ? "bg-amber-500/15 text-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.2)] scale-105"
+                : "bg-transparent text-slate-400"
             )}>
               <Icon className="w-5 h-5" />
             </div>
-            <span className={cn(
-              "text-[10px] font-medium transition-all duration-300",
-              isActive ? "font-bold" : ""
-            )}>
+            <span className="text-[10px] tracking-tight">
               {item.label}
             </span>
-
-            {/* Badge para Alertas */}
-            {item.badge !== undefined && (
-              <span className="absolute top-1 right-[20%] flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-bold text-white shadow-[0_0_10px_rgba(244,63,94,0.5)]">
-                {item.badge > 99 ? '99+' : item.badge}
-              </span>
-            )}
           </button>
         );
       })}
@@ -92,12 +86,12 @@ export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpe
       {onOpenMenu && (
         <button
           onClick={onOpenMenu}
-          className="relative flex flex-col items-center justify-center w-full h-full space-y-1 transition-all duration-200 text-slate-400 hover:text-slate-300"
+          className="relative flex flex-col items-center justify-center w-full h-full py-1 transition-all duration-200 active:scale-95 select-none text-slate-400 hover:text-slate-200 font-medium"
         >
-          <div className="p-1.5 rounded-xl transition-all duration-300 bg-transparent">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-menu"><line x1="4" x2="20" y1="12" y2="12"/><line x1="4" x2="20" y1="6" y2="6"/><line x1="4" x2="20" y1="18" y2="18"/></svg>
+          <div className="p-1.5 rounded-xl transition-all duration-300 bg-transparent text-slate-400">
+            <Menu className="w-5 h-5" />
           </div>
-          <span className="text-[10px] font-medium transition-all duration-300">
+          <span className="text-[10px] tracking-tight">
             Menú
           </span>
         </button>

@@ -583,7 +583,7 @@ export function Inventario({
 
     const handleExportCSV = () => {
         const movsAudit = movimientos.filter(m =>
-            m.motivo.toLowerCase().includes('auditoría') || m.motivo.toLowerCase().includes('ronda') || m.tipo === 'ajuste'
+            m.motivo.toLowerCase().includes('auditoría') || m.motivo.toLowerCase().includes('ronda') || m.motivo.toLowerCase().includes('ajuste') || m.tipo === 'ajuste'
         );
         if (movsAudit.length === 0) { toast.error('No hay datos de rondas para exportar'); return; }
         const csv = [['Fecha', 'Producto', 'Tipo', 'Cantidad', 'Motivo', 'Valor'].join(','),
@@ -738,11 +738,6 @@ export function Inventario({
                         {badge && <span className="text-amber-300 animate-pulse">{badge}</span>}
                     </button>
                 ))}
-                <button onClick={() => setTab('analitica' as TabInventario)}
-                    className="hidden" />
-                {/* Tab extra: Precios+Stock */}
-                <button onClick={() => setTab('stock' as any)}
-                    className="hidden" />
             </div>
 
             {/* ════════════════════════════════════════════════════════

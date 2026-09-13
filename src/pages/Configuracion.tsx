@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload, MessageCircle, Phone } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Save, Trash2, AlertTriangle, RefreshCw, Activity, Globe, DollarSign, Coins, Eye, EyeOff, KeyRound, Shield, Download, Upload, Clock, Zap, CloudUpload, MessageCircle, Phone, Database } from 'lucide-react';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
 import {
@@ -17,7 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import type { Configuracion, MonedaCode } from '@/types';
+import { type Configuracion, type MonedaCode, MONEDAS } from '@/types';
 import { ARROBA_KG } from '@/types';
 
 interface ConfiguracionProps {
@@ -26,6 +26,19 @@ interface ConfiguracionProps {
   onSyncWithCloud: () => Promise<void>;
   onClearAllData: () => void;
 }
+
+// ── MIGRACIÓN COMPLETA DE BASE DE DATOS ──
+// Lista completa y real de colecciones de 'dulce-placer-db'
+const STORES_MIGRACION = [
+  'productos','proveedores','precios','clientes','tombstones','configuracion',
+  'ventas','inventario','movimientos','recepciones','historial','sesiones_caja',
+  'backups','pre_pedidos','prepedidos','alertas','gastos','mesas','ahorros',
+  'creditos_clientes','creditos_trabajadores','trabajadores','pedidos_activos',
+  'recetas','formulaciones','modelosPan','produccion','agente_misiones',
+  'agente_hallazgos','agente_config','bitacora_ia','asistencia','nominas',
+  'auditorias_produccion','planes_diarios','workflows','camaras_cctv',
+  'facturas_escaneadas','caja',
+];
 
 function Configuracion(props: ConfiguracionProps) {
   const {
@@ -50,6 +63,57 @@ function Configuracion(props: ConfiguracionProps) {
   const [snapshots, setSnapshots] = useState<ConfigSnapshot[]>([]);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Recuento en vivo de la base de datos local
+  const [conteoStores, setConteoStores] = useState<{
+    formulaciones: number;
+    modelosPan: number;
+    recetas: number;
+    productos: number;
+    total: number;
+    cargando: boolean;
+  }>({ formulaciones: 0, modelosPan: 0, recetas: 0, productos: 0, total: 0, cargando: true });
+
+  const cargarConteoStores = useCallback(async () => {
+    try {
+      const idb: IDBDatabase = await new Promise((res, rej) => {
+        const r = indexedDB.open('dulce-placer-db');
+        r.onsuccess = () => res(r.result);
+        r.onerror   = () => rej(r.error);
+      });
+      const disponibles = [...idb.objectStoreNames];
+      const contar = async (store: string): Promise<number> => {
+        if (!disponibles.includes(store)) return 0;
+        return new Promise((res) => {
+          try {
+            const tx = idb.transaction(store, 'readonly');
+            const req = tx.objectStore(store).count();
+            req.onsuccess = () => res(req.result || 0);
+            req.onerror = () => res(0);
+          } catch {
+            res(0);
+          }
+        });
+      };
+      const [formulaciones, modelosPan, recetas, productos] = await Promise.all([
+        contar('formulaciones'),
+        contar('modelosPan'),
+        contar('recetas'),
+        contar('productos'),
+      ]);
+      let total = 0;
+      for (const s of STORES_MIGRACION) {
+        total += await contar(s);
+      }
+      setConteoStores({ formulaciones, modelosPan, recetas, productos, total, cargando: false });
+    } catch {
+      setConteoStores(prev => ({ ...prev, cargando: false }));
+    }
+  }, []);
+
+  useEffect(() => {
+    cargarConteoStores();
+  }, [cargarConteoStores]);
 
   // Cargar snapshots al abrir
   useEffect(() => { setSnapshots(leerTodos()); }, [showSnapshots]);
@@ -133,21 +197,6 @@ function Configuracion(props: ConfiguracionProps) {
     toast.success('♻️ Sistema restablecido correctamente');
   };
 
-  // ── MIGRACIÓN COMPLETA DE BASE DE DATOS ──
-  const STORES_MIGRACION = [
-    // Lista completa y real de colecciones de 'dulce-placer-db' (antes apuntaba
-    // a una base de datos equivocada y con lista incompleta — no incluia
-    // formulaciones, modelosPan ni backups, que es donde viven las masas y panes).
-    'productos','proveedores','precios','clientes','tombstones','configuracion',
-    'ventas','inventario','movimientos','recepciones','historial','sesiones_caja',
-    'backups','pre_pedidos','prepedidos','alertas','gastos','mesas','ahorros',
-    'creditos_clientes','creditos_trabajadores','trabajadores','pedidos_activos',
-    'recetas','formulaciones','modelosPan','produccion','agente_misiones',
-    'agente_hallazgos','agente_config','bitacora_ia','asistencia','nominas',
-    'auditorias_produccion','planes_diarios','workflows','camaras_cctv',
-    'facturas_escaneadas','caja',
-  ];
-
   const handleExportarDB = async () => {
     setMigrando(true);
     try {
@@ -173,9 +222,12 @@ function Configuracion(props: ConfiguracionProps) {
       const a     = document.createElement('a');
       a.href      = url;
       a.download  = `dulce-placer-backup-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
       toast.success(`Base de datos exportada — ${total} registros`);
+      void cargarConteoStores();
     } catch (e) {
       toast.error('Error al exportar la base de datos');
       console.error(e);
@@ -269,6 +321,112 @@ function Configuracion(props: ConfiguracionProps) {
         </div>
       </div>
 
+      {/* ── COPIA DE SEGURIDAD Y TRASPASO DIRECTO (PC ↔ CELULAR) ── */}
+      <Card className="border-2 border-blue-500/40 bg-gradient-to-br from-blue-50/80 via-card to-indigo-50/40 dark:from-blue-950/30 dark:via-card dark:to-indigo-950/20 shadow-xl overflow-hidden relative">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2.5 bg-blue-600 text-white rounded-xl shadow-md shadow-blue-500/20">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-black text-blue-700 dark:text-blue-400 flex items-center gap-2">
+                  Copias de Seguridad y Traspaso (PC ↔ Celular)
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-600 dark:text-blue-400 text-[10px] uppercase font-bold">
+                    Sin Depender de la Nube
+                  </Badge>
+                </CardTitle>
+                <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                  Exporta todas tus masas, panes, recetas e inventario a un archivo para transferirlo directamente entre tu PC y tu celular.
+                </CardDescription>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={cargarConteoStores}
+              className="text-xs text-blue-600 hover:text-blue-800 gap-1 self-start sm:self-auto"
+              title="Actualizar recuento de datos locales"
+            >
+              <RefreshCw className={cn("w-3.5 h-3.5", conteoStores.cargando && "animate-spin")} />
+              Actualizar datos
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4 pt-1">
+          {/* Indicadores de datos locales detectados */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 p-3 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-blue-200/60 dark:border-blue-900/40 backdrop-blur-sm">
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">Masas / Formulac.</span>
+              <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">
+                {conteoStores.cargando ? '...' : `${conteoStores.formulaciones} masas`}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">Modelos de Pan</span>
+              <span className="text-lg font-black text-blue-600 dark:text-blue-400">
+                {conteoStores.cargando ? '...' : `${conteoStores.modelosPan} panes`}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">Recetas Técnicas</span>
+              <span className="text-lg font-black text-purple-600 dark:text-purple-400">
+                {conteoStores.cargando ? '...' : `${conteoStores.recetas} recetas`}
+              </span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">Insumos y Catálogo</span>
+              <span className="text-lg font-black text-emerald-600 dark:text-emerald-400">
+                {conteoStores.cargando ? '...' : `${conteoStores.productos} productos`}
+              </span>
+            </div>
+            <div className="col-span-2 sm:col-span-1 flex flex-col justify-center border-t sm:border-t-0 sm:border-l border-blue-200 dark:border-blue-900 sm:pl-2.5 pt-1 sm:pt-0">
+              <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-slate-400">Total Registros</span>
+              <span className="text-lg font-black text-slate-800 dark:text-slate-100">
+                {conteoStores.cargando ? '...' : `${conteoStores.total} datos`}
+              </span>
+            </div>
+          </div>
+
+          {/* Botones de acción principales */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <Button
+              onClick={handleExportarDB}
+              disabled={migrando}
+              size="lg"
+              className="h-14 bg-blue-600 hover:bg-blue-700 text-white font-bold gap-2 shadow-lg shadow-blue-600/20 text-sm hover:scale-[1.01] transition-transform"
+            >
+              <Download className="w-5 h-5" />
+              <div className="text-left">
+                <p className="leading-tight">{migrando ? 'Exportando base de datos...' : 'Exportar todos los datos (.json)'}</p>
+                <p className="text-[10px] font-normal text-blue-100 opacity-90">Descarga masas, panes y recetas para enviar al celular</p>
+              </div>
+            </Button>
+            <Button
+              onClick={() => migracionInputRef.current?.click()}
+              disabled={migrando}
+              variant="outline"
+              size="lg"
+              className="h-14 border-2 border-blue-500/50 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 font-bold gap-2 text-sm hover:scale-[1.01] transition-transform"
+            >
+              <Upload className="w-5 h-5 text-blue-600" />
+              <div className="text-left">
+                <p className="leading-tight">{migrando ? 'Importando base de datos...' : 'Importar datos (.json)'}</p>
+                <p className="text-[10px] font-normal text-muted-foreground">Carga el archivo descargado en este dispositivo</p>
+              </div>
+            </Button>
+            <input
+              ref={migracionInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleImportarDB(f); e.target.value = ''; }}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Columna Izquierda: Identidad y Moneda */}
         <div className="space-y-8 lg:col-span-2">
@@ -326,6 +484,87 @@ function Configuracion(props: ConfiguracionProps) {
                     </div>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Configuración de Moneda y Divisa */}
+          <Card className="border-none shadow-xl bg-gradient-to-br from-indigo-50/40 to-card dark:from-indigo-950/10 dark:to-card backdrop-blur-sm overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-indigo-500" />
+                Moneda del Negocio
+              </CardTitle>
+              <CardDescription>
+                Selecciona la divisa principal para toda la aplicación (Ventas, Precios, Gastos, Caja y Reportes). Por defecto: Pesos Colombianos (COP).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="font-bold flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                  <Coins className="w-4 h-4 text-indigo-500" />
+                  Divisa Principal
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {MONEDAS.map((m) => {
+                    const isSelected = monedaSeleccionada === m.code;
+                    return (
+                      <button
+                        key={m.code}
+                        type="button"
+                        onClick={() => setMonedaSeleccionada(m.code)}
+                        className={cn(
+                          "flex items-center justify-between p-3.5 rounded-2xl border transition-all text-left",
+                          isSelected
+                            ? "bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-600/20"
+                            : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 text-slate-700 dark:text-slate-200"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={cn(
+                            "w-9 h-9 rounded-xl font-black text-sm flex items-center justify-center shrink-0",
+                            isSelected
+                              ? "bg-white/20 text-white"
+                              : "bg-slate-100 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400"
+                          )}>
+                            {m.simbolo}
+                          </span>
+                          <div>
+                            <p className="font-bold text-xs leading-tight">{m.nombre}</p>
+                            <p className={cn("text-[10px] uppercase tracking-wider font-semibold mt-0.5", isSelected ? "text-indigo-200" : "text-muted-foreground")}>
+                              {m.code} · {m.locale}
+                            </p>
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <Badge className="bg-white text-indigo-700 border-none font-black text-[9px]">ACTIVA</Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Vista previa en tiempo real */}
+              <div className="p-4 rounded-2xl bg-slate-100 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ejemplo de formato en vivo:</p>
+                  <p className="text-xl font-black text-slate-800 dark:text-slate-100 mt-0.5">
+                    {new Intl.NumberFormat(
+                      MONEDAS.find(m => m.code === monedaSeleccionada)?.locale || 'es-CO',
+                      {
+                        style: 'currency',
+                        currency: monedaSeleccionada,
+                        minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
+                      }
+                    ).format(150000)}
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-xs font-mono py-1 px-2.5">
+                  Código: {monedaSeleccionada}
+                </Badge>
               </div>
             </CardContent>
           </Card>
@@ -997,45 +1236,6 @@ function Configuracion(props: ConfiguracionProps) {
           </div>
 
         </div>
-
-        {/* ── COPIAS DE SEGURIDAD Y MIGRACIÓN ── */}
-        <Card className="border-blue-200 dark:border-blue-800">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
-              <Download className="w-5 h-5" />
-              Copias de Seguridad (Backups)
-            </CardTitle>
-            <CardDescription>
-              Guarda un respaldo total de todos los productos y configuraciones en tu dispositivo. (Haz esto frecuentemente)
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col sm:flex-row gap-3">
-            <Button
-              onClick={handleExportarDB}
-              disabled={migrando}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white gap-2"
-            >
-              <Download className="w-4 h-4" />
-              {migrando ? 'Exportando...' : 'Exportar todos los datos (.json)'}
-            </Button>
-            <Button
-              onClick={() => migracionInputRef.current?.click()}
-              disabled={migrando}
-              variant="outline"
-              className="flex-1 border-blue-400 text-blue-700 hover:bg-blue-50 gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              {migrando ? 'Importando...' : 'Importar datos (.json)'}
-            </Button>
-            <input
-              ref={migracionInputRef}
-              type="file"
-              accept=".json"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; if (f) handleImportarDB(f); e.target.value = ''; }}
-            />
-          </CardContent>
-        </Card>
 
       </div>
     </div>

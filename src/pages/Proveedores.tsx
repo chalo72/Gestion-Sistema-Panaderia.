@@ -671,6 +671,11 @@ export function Proveedores({
 
       // Guardar productos del catálogo
       if (items.length > 0) {
+        // Evita crear productos duplicados cuando el catálogo trae 2+ items con el mismo
+        // nombre sin productoId (ej: escaneo de factura con líneas repetidas): _productos
+        // es una foto fija del estado al iniciar el guardado y no se actualiza entre items
+        // de este mismo lote, así que llevamos aparte los que ya creamos en esta pasada.
+        const productosCreadosEnEsteLote = new Map<string, string>();
         for (const item of items) {
           try {
             let productoId = item.productoId;
@@ -689,11 +694,14 @@ export function Proveedores({
 
             // Si no hay productoId (el usuario escribió el nombre sin seleccionar del dropdown),
             // buscar si ya existe un producto con ese nombre exacto para reutilizarlo en vez de duplicar
+            const nombreNorm = item.nombre.trim().toLowerCase();
             if (!productoId || !yaExiste) {
-              const nombreNorm = item.nombre.trim().toLowerCase();
               const productoHomonimo = _productos.find(p => p.nombre.trim().toLowerCase() === nombreNorm);
               if (productoHomonimo) {
                 productoId = productoHomonimo.id;
+              } else if (productosCreadosEnEsteLote.has(nombreNorm)) {
+                // Ya se creó un producto con este nombre en un item anterior de este mismo guardado
+                productoId = productosCreadosEnEsteLote.get(nombreNorm);
               }
             }
 
@@ -711,6 +719,7 @@ export function Proveedores({
                 costoBase: Math.round(Number(item.costoUnitario) || 0),
               });
               productoId = np.id;
+              productosCreadosEnEsteLote.set(nombreNorm, np.id);
             }
 
             if (productoId) {

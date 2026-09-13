@@ -17,6 +17,7 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { escapeHtml } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type {
     Trabajador, TrabajadorRol, TrabajadorEstado,
@@ -423,7 +424,7 @@ export default function Trabajadores({
         const totalPendiente = filas.reduce((s, r) => s + r.saldoPendiente, 0);
 
         const tablasHTML = filas.map(r => `<tr>
-          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:700">${r.t.nombre}</td>
+          <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;font-weight:700">${escapeHtml(r.t.nombre)}</td>
           <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:11px;color:#64748b">${r.rolLabel}</td>
           <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;font-weight:700">${fmt(r.t.salarioBase)}</td>
           <td style="padding:8px 6px;border-bottom:1px solid #e2e8f0;font-size:12px;text-align:right;color:#d97706">${r.totalAdelantos > 0 ? fmt(r.totalAdelantos) : '—'}</td>

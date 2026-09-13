@@ -45,15 +45,33 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
         const localMod = JSON.parse(localStorage.getItem('modelosPan') || '[]');
 
         // 1.5 Cargar forzosamente desde Supabase por si la caché está rota
-        let cloudForm = [];
-        let cloudMod = [];
+        let cloudForm: any[] = [];
+        let cloudMod: any[] = [];
         try {
-          const { supabaseDB } = await import('@/lib/supabase');
-          const serverConf = await supabaseDB.getAllConfiguraciones();
-          const sf = serverConf.find((c: any) => c.id === 'formulaciones_data');
-          const sm = serverConf.find((c: any) => c.id === 'modelosPan_data');
-          if (sf && sf.categorias) cloudForm = Array.isArray(sf.categorias) ? sf.categorias : Object.values(sf.categorias);
-          if (sm && sm.categorias) cloudMod = Array.isArray(sm.categorias) ? sm.categorias : Object.values(sm.categorias);
+          const { supabaseDB } = await import('@/lib/supabase-sync-bridge');
+          if (supabaseDB) {
+            const [backupForm, backupMod, serverConf] = await Promise.all([
+              supabaseDB.getBackup('formulaciones_data').catch(() => null),
+              supabaseDB.getBackup('modelosPan_data').catch(() => null),
+              supabaseDB.getAllConfiguraciones().catch(() => [])
+            ]);
+
+            if (backupForm && (Array.isArray(backupForm) || typeof backupForm === 'object')) {
+              cloudForm = Array.isArray(backupForm) ? backupForm : Object.values(backupForm);
+            }
+            if (backupMod && (Array.isArray(backupMod) || typeof backupMod === 'object')) {
+              cloudMod = Array.isArray(backupMod) ? backupMod : Object.values(backupMod);
+            }
+
+            if (cloudForm.length === 0 && Array.isArray(serverConf)) {
+              const sf = serverConf.find((c: any) => c.id === 'formulaciones_data');
+              if (sf && sf.categorias) cloudForm = Array.isArray(sf.categorias) ? sf.categorias : Object.values(sf.categorias);
+            }
+            if (cloudMod.length === 0 && Array.isArray(serverConf)) {
+              const sm = serverConf.find((c: any) => c.id === 'modelosPan_data');
+              if (sm && sm.categorias) cloudMod = Array.isArray(sm.categorias) ? sm.categorias : Object.values(sm.categorias);
+            }
+          }
         } catch (e) {
           console.warn('No se pudo contactar a Supabase para fusión en caliente', e);
         }
@@ -70,25 +88,33 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
                if (!existente) {
                  map.set(d.id, d);
                } else {
-                 // Si ambos tienen fecha, gana el más reciente
+                 // Si ambos tienen fecha de actualización, gana el más reciente
                  if (d.fechaActualizacion && existente.fechaActualizacion) {
                    if (new Date(d.fechaActualizacion) > new Date(existente.fechaActualizacion)) {
-                     map.set(d.id, d);
+                     map.set(d.id, { ...existente, ...d });
                    }
+                 } else if (d.fechaActualizacion && !existente.fechaActualizacion) {
+                   map.set(d.id, { ...existente, ...d });
+                 } else if (!d.fechaActualizacion && existente.fechaActualizacion) {
+                   // El existente ya tiene fecha confirmada, preservarlo
                  } else {
-                   // Fallback a sobreescritura simple si no hay fechas
-                   map.set(d.id, d);
+                   // Ninguno tiene fecha: preferir el que tenga más insumos o configuración más completa
+                   const dIngCount = Array.isArray(d.ingredientes) ? d.ingredientes.length : 0;
+                   const exIngCount = Array.isArray(existente.ingredientes) ? existente.ingredientes.length : 0;
+                   if (dIngCount >= exIngCount) {
+                     map.set(d.id, { ...existente, ...d });
+                   }
                  }
                }
              });
            };
 
-           // El orden base (del más débil al más fuerte)
+           // El orden base: defaults -> local -> backup -> idb -> cloud (la nube sincroniza el estado más actual entre dispositivos)
            procesarArr(defaults);
-           procesarArr(cloud);
-           procesarArr(backup);
            procesarArr(local);
+           procesarArr(backup);
            procesarArr(idb);
+           procesarArr(cloud);
            
            return Array.from(map.values()).filter(d => d && typeof d === 'object' && d.id && d.nombre);
         };
@@ -138,6 +164,18 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
       }
     };
     cargarDatos();
+
+    // Escuchar cambios en tiempo real desde Supabase Realtime
+    const handleRealtimeChange = (e: any) => {
+      const table = e?.detail?.table;
+      if (table === 'formulaciones_data' || table === 'modelosPan_data' || table === 'formulaciones' || table === 'modelosPan') {
+        cargarDatos();
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handleRealtimeChange);
+    return () => {
+      window.removeEventListener('nexus-realtime-change', handleRealtimeChange);
+    };
   }, []);
 
   // Sincronizar hacia la nube a través de saveBackup cuando cambien localmente
@@ -304,6 +342,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     const formulacion: import('@/types').FormulacionBase = {
       ...data,
       id: generateUUID(),
+      fechaActualizacion: new Date().toISOString(),
     };
     setFormulaciones(prev => {
       const newList = [...prev, formulacion];
@@ -341,6 +380,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
     const modelo: import('@/types').ModeloPan = {
       ...data,
       id: generateUUID(),
+      fechaActualizacion: new Date().toISOString(),
     };
     setModelosPan(prev => {
       const newList = [...prev, modelo];
@@ -354,7 +394,7 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
 
   const updateModeloPan = useCallback(async (id: string, updates: Partial<import('@/types').ModeloPan>) => {
     setModelosPan(prev => {
-      const updatedList = prev.map(m => m.id === id ? { ...m, ...updates } : m);
+      const updatedList = prev.map(m => m.id === id ? { ...m, ...updates, fechaActualizacion: new Date().toISOString() } : m);
       const updatedModel = updatedList.find(m => m.id === id);
       if (updatedModel) db.updateModeloPan(updatedModel).catch(console.error);
       db.saveBackup('modelosPan_data', updatedList).catch(() => {});

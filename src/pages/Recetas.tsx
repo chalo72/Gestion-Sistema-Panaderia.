@@ -1226,6 +1226,18 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                         <Badge variant="outline" className="text-[9px] font-black capitalize shrink-0">{f.categoria}</Badge>
                                                     </div>
                                                     {f.descripcion && <p className="text-xs text-slate-400 mt-0.5 truncate">{f.descripcion}</p>}
+                                                    {/* Mini stats para móvil */}
+                                                    <div className="flex md:hidden items-center gap-1.5 mt-2 flex-wrap text-xs">
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 font-bold text-[10px] border border-indigo-100 dark:border-indigo-900/50">
+                                                            <Wheat className="w-3 h-3" /> {(f.ingredientes || []).length} insumos
+                                                        </span>
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-bold text-[10px] border border-emerald-100 dark:border-emerald-900/50">
+                                                            {formatCurrency(f.costoTotalArroba)}/arr
+                                                        </span>
+                                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-bold text-[10px] border border-amber-100 dark:border-amber-900/50">
+                                                            <Package className="w-3 h-3" /> {modelos.length} panes
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
 
@@ -1276,11 +1288,107 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                 </div>
                                             </div>
                                         </div>
+
+                                        {/* Insumos agregados a la masa (visible en tarjeta en PC y celular) */}
+                                        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800/60">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <p className="text-[10px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                    <Wheat className="w-3.5 h-3.5 text-indigo-500" />
+                                                    Insumos agregados ({ (f.ingredientes || []).length }):
+                                                </p>
+                                                <span className="text-[10px] text-slate-400 font-bold">
+                                                    {f.rendimientoBaseKg ? `${f.rendimientoBaseKg} kg masa` : (f as any).pesoTotalArroba ? `${(f as any).pesoTotalArroba} kg masa` : 'Base 1 Arroba'}
+                                                </span>
+                                            </div>
+                                            {(f.ingredientes || []).length === 0 ? (
+                                                <p className="text-xs text-amber-600 dark:text-amber-400 font-medium italic">
+                                                    Sin insumos agregados aún. Toca el lápiz para agregar ingredientes a esta masa.
+                                                </p>
+                                            ) : (
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {(f.ingredientes || []).map((ing, idx) => {
+                                                        const prod = getProductoById(ing.productoId);
+                                                        const nombreInsumo = prod?.nombre || 'Insumo';
+                                                        const unidad = ing.unidad || (ing as any).unidadMedida || 'gr';
+                                                        return (
+                                                            <Badge
+                                                                key={ing.id || `${ing.productoId}-${idx}`}
+                                                                variant="secondary"
+                                                                className="text-[10px] font-semibold py-0.5 px-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/70 dark:border-slate-700/70 flex items-center gap-1"
+                                                            >
+                                                                <span className="font-black text-slate-900 dark:text-white">{nombreInsumo}:</span>
+                                                                <span className="text-indigo-600 dark:text-indigo-400 font-bold">{ing.cantidadPorArroba} {unidad}</span>
+                                                            </Badge>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Modelos expandibles */}
                                     {isExpanded && (
                                         <div className="border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/20 p-6">
+                                            {/* Ficha técnica detallada de insumos */}
+                                            <div className="mb-6 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 p-4 shadow-sm">
+                                                <div className="flex items-center justify-between mb-3 border-b border-slate-100 dark:border-slate-800 pb-2">
+                                                    <h4 className="text-xs font-black uppercase tracking-widest text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                                                        <Wheat className="w-3.5 h-3.5 text-indigo-500" /> Ficha Técnica de Insumos ({ (f.ingredientes || []).length })
+                                                    </h4>
+                                                    <Button size="sm" variant="ghost" onClick={() => openEditFormulacion(f)} className="h-7 px-2 text-[10px] font-black uppercase text-indigo-600 hover:bg-indigo-50">
+                                                        <Edit2 className="w-3 h-3 mr-1" /> Editar Insumos
+                                                    </Button>
+                                                </div>
+                                                {(f.ingredientes || []).length === 0 ? (
+                                                    <p className="text-xs text-slate-400 italic py-2">No hay insumos registrados para esta masa.</p>
+                                                ) : (
+                                                    <div className="overflow-x-auto">
+                                                        <table className="w-full text-left text-xs border-collapse">
+                                                            <thead>
+                                                                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-[10px] uppercase font-black">
+                                                                    <th className="py-1.5 px-2">Insumo</th>
+                                                                    <th className="py-1.5 px-2 text-center">Cantidad x Arroba</th>
+                                                                    <th className="py-1.5 px-2 text-center">% Panadero</th>
+                                                                    <th className="py-1.5 px-2 text-right">Costo Insumo</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-50 dark:divide-slate-800/40 font-medium">
+                                                                {(f.ingredientes || []).map((ing, idx) => {
+                                                                    const prod = getProductoById(ing.productoId);
+                                                                    const unidad = ing.unidad || (ing as any).unidadMedida || 'gr';
+                                                                    return (
+                                                                        <tr key={ing.id || idx} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/30">
+                                                                            <td className="py-2 px-2 font-bold text-slate-800 dark:text-slate-200">
+                                                                                {prod?.nombre || 'Insumo'}
+                                                                            </td>
+                                                                            <td className="py-2 px-2 text-center font-black text-indigo-600 dark:text-indigo-400">
+                                                                                {ing.cantidadPorArroba} {unidad}
+                                                                            </td>
+                                                                            <td className="py-2 px-2 text-center font-bold text-slate-500">
+                                                                                {ing.porcentajePanadero ? `${ing.porcentajePanadero}%` : '-'}
+                                                                            </td>
+                                                                            <td className="py-2 px-2 text-right font-black text-slate-800 dark:text-slate-200">
+                                                                                {formatCurrency(ing.costoTotalArroba || 0)}
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })}
+                                                                <tr className="border-t-2 border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/40 font-black">
+                                                                    <td className="py-2 px-2 uppercase text-[10px] text-slate-500">Total Insumos Arroba</td>
+                                                                    <td className="py-2 px-2 text-center text-indigo-600">
+                                                                        {f.rendimientoBaseKg ? `${f.rendimientoBaseKg} kg` : (f as any).pesoTotalArroba ? `${(f as any).pesoTotalArroba} kg` : '-'}
+                                                                    </td>
+                                                                    <td className="py-2 px-2 text-center text-slate-400">-</td>
+                                                                    <td className="py-2 px-2 text-right text-emerald-600 text-sm">
+                                                                        {formatCurrency(f.costoTotalArroba)}
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                )}
+                                            </div>
+
                                             <div className="flex items-center justify-between mb-4">
                                                 <h4 className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                                                     <Package className="w-3.5 h-3.5" /> Modelos de Pan vinculados

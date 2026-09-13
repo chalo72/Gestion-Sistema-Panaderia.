@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 
 export function TablaFlujoCaja({ data }: { data: any }) {
-    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos } = data;
+    const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ventasMesReal, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos } = data;
     
     // Add COLORS if needed
     const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
@@ -23,12 +23,14 @@ export function TablaFlujoCaja({ data }: { data: any }) {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                         {[
                             {
-                                label: 'Ventas del mes (POS)',
-                                val: reporteActual.totalVentas,
-                                sub: 'Fuente: transacciones reales del sistema',
+                                label: 'Ventas del mes',
+                                val: ventasMesReal,
+                                sub: ventasMesReal > reporteActual.totalVentas
+                                    ? 'Ventas del POS + cierres manuales de días sin POS'
+                                    : 'Fuente: transacciones reales del sistema',
                                 color: 'text-emerald-500',
                                 border: 'border-emerald-200 dark:border-emerald-800',
-                                empty: reporteActual.totalVentas === 0,
+                                empty: ventasMesReal === 0,
                             },
                             {
                                 label: 'Compromisos fijos activos',
@@ -50,8 +52,8 @@ export function TablaFlujoCaja({ data }: { data: any }) {
                                 label: 'Total obligaciones',
                                 val: totalObligaciones,
                                 sub: 'Compromisos + Insumos + Otros gastos',
-                                color: totalObligaciones > reporteActual.totalVentas ? 'text-rose-500' : 'text-cyan-500',
-                                border: totalObligaciones > reporteActual.totalVentas ? 'border-rose-200 dark:border-rose-800' : 'border-cyan-200 dark:border-cyan-800',
+                                color: totalObligaciones > ventasMesReal ? 'text-rose-500' : 'text-cyan-500',
+                                border: totalObligaciones > ventasMesReal ? 'border-rose-200 dark:border-rose-800' : 'border-cyan-200 dark:border-cyan-800',
                                 empty: totalObligaciones === 0,
                             },
                         ].map(item => (
@@ -78,7 +80,7 @@ export function TablaFlujoCaja({ data }: { data: any }) {
                                 <ul className="text-[11px] text-muted-foreground mt-1 space-y-0.5 list-disc ml-4">
                                     {totalCompromisosActivos === 0 && <li>Ve a <strong>Gestión Integral Operativa</strong> y registra tus compromisos fijos (arriendo, servicios, préstamos, salarios)</li>}
                                     {promedioInsumos === 0 && <li>Registra gastos de <strong>Materia Prima</strong> en el módulo Finanzas para que el promedio de insumos sea real</li>}
-                                    {reporteActual.totalVentas === 0 && <li>Las ventas del mes aún no se han registrado en el POS</li>}
+                                    {ventasMesReal === 0 && <li>Las ventas del mes aún no se han registrado (ni en el POS ni en Ventas del Día)</li>}
                                 </ul>
                             </div>
                         </div>
@@ -99,7 +101,7 @@ export function TablaFlujoCaja({ data }: { data: any }) {
                                 <div>
                                     <div className="flex justify-between mb-2">
                                         <span className="text-[10px] font-black uppercase text-muted-foreground">
-                                            Ventas: {formatCurrency(reporteActual.totalVentas)}
+                                            Ventas: {formatCurrency(ventasMesReal)}
                                         </span>
                                         <span className={cn(
                                             "text-[10px] font-black uppercase",
@@ -287,11 +289,11 @@ export function TablaFlujoCaja({ data }: { data: any }) {
                                     },
                                     {
                                         label: 'Excedente / Déficit mes',
-                                        valor: formatCurrency(reporteActual.totalVentas - totalObligaciones),
-                                        desc: reporteActual.totalVentas >= totalObligaciones
+                                        valor: formatCurrency(ventasMesReal - totalObligaciones),
+                                        desc: ventasMesReal >= totalObligaciones
                                             ? 'Tienes excedente este mes. Considera guardarlo como fondo de emergencia.'
                                             : 'Hay déficit. Cada peso que puedas ahorrar en gastos ayuda a cerrar esta brecha.',
-                                        color: reporteActual.totalVentas >= totalObligaciones ? 'text-emerald-400' : 'text-rose-400',
+                                        color: ventasMesReal >= totalObligaciones ? 'text-emerald-400' : 'text-rose-400',
                                     },
                                 ].map((item, i) => (
                                     <div key={i} className="bg-white/5 rounded-2xl p-4 border border-white/5">

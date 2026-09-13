@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatCurrency } from '@/lib/utils';
-import { Wallet, CalendarDays, BarChart3, Info } from 'lucide-react';
+import { Wallet, CalendarDays, BarChart3, Info, Lock, AlertTriangle } from 'lucide-react';
 import type { VentaDiaria } from '@/types';
 import {
     BarChart,
@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 
 interface ArqueoCajasProps {
     ventasDiarias: VentaDiaria[];
+    sesionesCaja?: any[];
 }
 
 type PeriodoFiltro = 'hoy' | 'semana' | 'quincena' | 'mes' | 'año' | 'libre';
@@ -37,7 +38,7 @@ const CAJAS_COLORS: Record<string, string> = {
     'Gastos/Salidas': '#64748b', // Slate
 };
 
-export function ArqueoCajas({ ventasDiarias }: ArqueoCajasProps) {
+export function ArqueoCajas({ ventasDiarias, sesionesCaja = [] }: ArqueoCajasProps) {
     const [periodo, setPeriodo] = useState<PeriodoFiltro>('mes');
     const [fechaInicio, setFechaInicio] = useState<string>(() => {
         const hoy = new Date();
@@ -124,6 +125,55 @@ export function ArqueoCajas({ ventasDiarias }: ArqueoCajasProps) {
         };
     }, [ventasDiarias, fechaInicio, fechaFin]);
 
+    /**
+     * Referencia de Control de Caja real para el mismo rango — solo lectura,
+     * no modifica ni fusiona nada. Mismo criterio ya usado en Gestión de
+     * Control de Datos (cajaRealDelDia): estado === 'cerrada', fecha =
+     * fechaCierre || fechaApertura.
+     * También detecta días ya pasados del rango sin ningún registro
+     * (ni manual ni caja real) — posibles turnos sin cerrar/reportar.
+     */
+    const datosCajaReal = useMemo(() => {
+        const cerradas = (sesionesCaja || []).filter((s: any) => {
+            if (s.estado !== 'cerrada') return false;
+            const fechaSesion = (s.fechaCierre || s.fechaApertura || '').slice(0, 10);
+            return fechaSesion >= fechaInicio && fechaSesion <= fechaFin;
+        });
+        const totalEfectivo = cerradas.reduce((s: number, c: any) => s + (Number(c.totalVentasEfectivo ?? c.totalVentas) || 0), 0);
+        const totalCredito = cerradas.reduce((s: number, c: any) => s + (Number(c.totalCreditos) || 0), 0);
+
+        const fechasConManual = new Set(
+            ventasDiarias.filter(v => v.fecha >= fechaInicio && v.fecha <= fechaFin).map(v => v.fecha)
+        );
+        const fechasConCajaReal = new Set(cerradas.map((c: any) => (c.fechaCierre || c.fechaApertura || '').slice(0, 10)));
+
+        const diasFaltantes: string[] = [];
+        const hoy = new Date();
+        const hoyStr = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`;
+        const finChequeo = fechaFin > hoyStr ? hoyStr : fechaFin;
+        if (fechaInicio && finChequeo >= fechaInicio) {
+            const [y1, m1, d1] = fechaInicio.split('-').map(Number);
+            const [y2, m2, d2] = finChequeo.split('-').map(Number);
+            const cursor = new Date(y1, (m1 || 1) - 1, d1 || 1);
+            const fin = new Date(y2, (m2 || 1) - 1, d2 || 1);
+            let guard = 0;
+            while (cursor <= fin && guard < 400) {
+                const f = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+                if (!fechasConManual.has(f) && !fechasConCajaReal.has(f)) diasFaltantes.push(f);
+                cursor.setDate(cursor.getDate() + 1);
+                guard++;
+            }
+        }
+
+        return {
+            numCierres: cerradas.length,
+            totalEfectivo,
+            totalCredito,
+            totalReal: totalEfectivo + totalCredito,
+            diasFaltantes,
+        };
+    }, [sesionesCaja, ventasDiarias, fechaInicio, fechaFin]);
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -198,6 +248,42 @@ export function ArqueoCajas({ ventasDiarias }: ArqueoCajasProps) {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Referencia de Control de Caja real (solo lectura) */}
+            {datosCajaReal.numCierres > 0 && (
+                <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex items-start gap-3">
+                    <Lock className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                        <p className="font-black text-sky-400">
+                            Caja real (Control de Caja): {datosCajaReal.numCierres} cierre{datosCajaReal.numCierres !== 1 ? 's' : ''} en este rango
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                            {formatCurrency(datosCajaReal.totalEfectivo)} en efectivo
+                            {datosCajaReal.totalCredito > 0 ? ` + ${formatCurrency(datosCajaReal.totalCredito)} a crédito` : ''}
+                            {' '}— total real: {formatCurrency(datosCajaReal.totalReal)}
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                            Arqueo manual del mismo rango: {formatCurrency(datosAgregados.totalNeto)}. Son datos independientes (uno por caja física/turno, otro por categoría de producto) — esto es solo referencia, no se fusionan.
+                        </p>
+                    </div>
+                </div>
+            )}
+
+            {/* Aviso de días sin ningún registro */}
+            {datosCajaReal.diasFaltantes.length > 0 && (
+                <div className="rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4 flex items-start gap-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs">
+                        <p className="font-black text-amber-400">
+                            {datosCajaReal.diasFaltantes.length} día{datosCajaReal.diasFaltantes.length !== 1 ? 's' : ''} de este rango sin ningún cierre registrado (ni manual ni Control de Caja)
+                        </p>
+                        <p className="text-muted-foreground mt-0.5">
+                            {datosCajaReal.diasFaltantes.slice(0, 8).join(', ')}
+                            {datosCajaReal.diasFaltantes.length > 8 ? `, y ${datosCajaReal.diasFaltantes.length - 8} más` : ''}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {/* Tarjetas de Resumen Financiero */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

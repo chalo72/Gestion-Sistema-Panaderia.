@@ -11,6 +11,55 @@ export interface NodeExecution {
   error?: string;
 }
 
+// Ejecuta el código de un nodo "Código" dentro de un Web Worker aislado (sin acceso a
+// window/document/localStorage/cookies ni a funciones del resto de la app), con un
+// timeout de 10s para evitar que un loop infinito deje el workflow colgado.
+function ejecutarCodigoAislado(code: string, inputData: string | undefined): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const workerSrc = `
+      self.onmessage = async function(e) {
+        const input = e.data;
+        try {
+          const resultado = await (async () => { ${code} })();
+          self.postMessage({ ok: true, resultado });
+        } catch (err) {
+          self.postMessage({ ok: false, error: (err && err.message) ? err.message : String(err) });
+        }
+      };
+    `;
+    let worker: Worker;
+    let blobUrl: string;
+    try {
+      const blob = new Blob([workerSrc], { type: 'application/javascript' });
+      blobUrl = URL.createObjectURL(blob);
+      worker = new Worker(blobUrl);
+    } catch (err: any) {
+      reject(new Error(`No se pudo iniciar el entorno aislado: ${err.message}`));
+      return;
+    }
+    const limpiar = () => {
+      worker.terminate();
+      URL.revokeObjectURL(blobUrl);
+    };
+    const timeoutId = setTimeout(() => {
+      limpiar();
+      reject(new Error('El código tardó demasiado (más de 10s) y fue detenido.'));
+    }, 10000);
+    worker.onmessage = (e: MessageEvent) => {
+      clearTimeout(timeoutId);
+      limpiar();
+      if (e.data?.ok) resolve(e.data.resultado);
+      else reject(new Error(e.data?.error || 'Error desconocido en el código'));
+    };
+    worker.onerror = (err: ErrorEvent) => {
+      clearTimeout(timeoutId);
+      limpiar();
+      reject(new Error(err.message || 'Error al ejecutar el código'));
+    };
+    worker.postMessage(inputData);
+  });
+}
+
 export function useWorkflowEngine() {
   const [status, setStatus] = useState<EngineStatus>('idle');
   const [executions, setExecutions] = useState<Record<string, NodeExecution>>({});
@@ -63,9 +112,11 @@ export function useWorkflowEngine() {
                 if (rolActual !== 'ADMIN') {
                   throw new Error('Este nodo de Código solo puede ejecutarlo un usuario con rol ADMIN (medida de seguridad).');
                 }
-                // eslint-disable-next-line no-new-func
-                const fn = new Function('input', `return (async () => { ${code} })();`);
-                const res = await fn(inputData);
+                // Sandboxing real: el código corre en un Web Worker aislado, sin acceso a
+                // window/document/localStorage ni al resto de la app (antes corría con new Function
+                // directo en el hilo principal, con acceso completo a la página). Con timeout de
+                // seguridad para no dejar el workflow colgado si el código entra en loop infinito.
+                const res = await ejecutarCodigoAislado(code, inputData);
                 finalResult = typeof res === 'object' ? JSON.stringify(res, null, 2) : String(res);
             } catch (err: any) {
                 throw new Error(`Error en código JS: ${err.message}`);

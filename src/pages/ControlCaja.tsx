@@ -86,6 +86,11 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
     const cajaEmoji  = CAJA_EMOJIS[caja.cajaNombre || ''] || '📦';
 
     const handleConfirmar = async () => {
+        if (hayAlerta && !window.confirm(
+            `Hay un FALTANTE de ${formatCurrency(Math.abs(diferencia))} respecto a lo que el sistema esperaba.\n\n¿Confirmas que quieres cerrar el turno de todas formas?`
+        )) {
+            return;
+        }
         setLoading(true);
         await onConfirmar(caja.id, entregado);
         setMonto('');
@@ -361,6 +366,11 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
     const retencionGlobal = Math.max(0, totalVentasJornada * 0.10);
 
     const handleConfirmar = async () => {
+        if (hayAlerta && !window.confirm(
+            `Hay un FALTANTE neto de ${formatCurrency(Math.abs(diferenciaNeta))} en el cierre de jornada.\n\n¿Confirmas que quieres cerrar de todas formas?`
+        )) {
+            return;
+        }
         setLoading(true);
         setProgreso(0);
         const cierres = cajas.map(c => ({

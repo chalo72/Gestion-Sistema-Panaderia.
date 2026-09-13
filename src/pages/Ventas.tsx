@@ -9,7 +9,6 @@ import {
     AlertCircle,
     Store,
     CreditCard,
-    BarChart3,
     ShoppingCart,
     MessageCircle,
     Package,
@@ -35,8 +34,6 @@ import {
     deduplicarPorNombre,
     buscarProductosVenta,
 } from '@/lib/busqueda-productos';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
 
 // Componentes modulares
 import { POSHeader } from '@/components/ventas/POSHeader';
@@ -166,9 +163,12 @@ export function Ventas(props: VentasProps) {
         const clamped = Math.round(Math.max(0, Math.min(safeNumber(newDesc), tope)) * 100) / 100;
         setDescuento(clamped);
         if (clamped > 0 && tope > 0 && (clamped / tope) > 0.15) {
+             toast.info('Descuento mayor al 15% registrado como control interno', {
+                 description: 'Los descuentos grandes quedan guardados automáticamente para revisión.',
+             });
              import('@/lib/ojo-bionico').then(m => {
                  m.OjoBionico.capturarAnomalia(
-                     'odysseus', 
+                     'odysseus',
                      `Se aplicó un descuento de $${clamped} sobre un total de $${tope}`,
                      'Monitor de facturación en segundo plano',
                      'Posible manipulación de precios detectada.',
@@ -182,7 +182,6 @@ export function Ventas(props: VentasProps) {
     const [adHocNombre, setAdHocNombre] = useState('');
     const [adHocPrecio, setAdHocPrecio] = useState('');
     const [adHocGuardar, setAdHocGuardar] = useState(false);
-    const [showDailyReport, setShowDailyReport] = useState(false);
     const [showAperturaModal, setShowAperturaModal] = useState(false);
     const [showCierreModal, setShowCierreModal] = useState(false);
     const [movimientoCaja, setMovimientoCaja] = useState<{ tipo: 'entrada' | 'salida' } | null>(null);
@@ -999,10 +998,6 @@ export function Ventas(props: VentasProps) {
                     onSelectTab={handleSelectTab}
                     onCloseTab={handleCloseTab}
                     onAddVentaRapida={handleAddVentaRapida}
-                    cajaActiva={!!cajaActiva}
-                    onCerrarCaja={() => setShowCierreModal(true)}
-                    onMovimientoEntrada={() => setMovimientoCaja({ tipo: 'entrada' })}
-                    onMovimientoSalida={() => setMovimientoCaja({ tipo: 'salida' })}
                     vendedoras={vendedorasDisponibles}
                     vendedoraActivaId={vendedoraActiva?.id ?? null}
                     onSelectVendedora={setVendedoraActiva}
@@ -1461,57 +1456,6 @@ export function Ventas(props: VentasProps) {
                     setShowAperturaModal(false);
                 }}
             />
-
-            {/* Modal de Resumen Diario */}
-            <Dialog open={showDailyReport} onOpenChange={setShowDailyReport}>
-                <DialogContent className="max-w-2xl rounded-[2.5rem] p-8 bg-white dark:bg-slate-900 border-none shadow-2xl">
-                    <div className="flex items-center gap-4 mb-8">
-                        <div className="w-14 h-14 bg-indigo-600 rounded-[1.25rem] flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                            <BarChart3 className="w-7 h-7 text-white" />
-                        </div>
-                        <div>
-                            <h2 className="text-2xl font-black tracking-tight">Ventas del Día</h2>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Resumen por categorías · {format(new Date(), 'dd MMMM yyyy', { locale: es })}</p>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 mb-8">
-                        {categorias.map(cat => {
-                            const hoy = new Date().toISOString().split('T')[0];
-                            const ventasHoy = ventas.filter(v => (v.fecha || '').startsWith(hoy));
-                            const totalCat = ventasHoy.reduce((acc, v) => {
-                                return acc + v.items.reduce((accI, item) => {
-                                    const prod = productos.find(p => p.id === item.productoId);
-                                    return prod?.categoria === cat.nombre ? accI + (item.precioUnitario * item.cantidad) : accI;
-                                }, 0);
-                            }, 0);
-
-                            return (totalCat > 0 || true) && (
-                                <div key={cat.id} className="p-5 rounded-[1.5rem] bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 group hover:shadow-xl transition-all">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <span className="text-2xl">{cat.icono || '📦'}</span>
-                                        <div className="w-2 h-2 rounded-full" style={{ backgroundColor: cat.color }} />
-                                    </div>
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{cat.nombre}</p>
-                                    <p className="text-xl font-black text-slate-900 dark:text-white group-hover:text-indigo-600 transition-colors">
-                                        {formatCurrency(totalCat)}
-                                    </p>
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    <div className="bg-slate-900 dark:bg-white text-white dark:text-black p-8 rounded-[2rem] flex justify-between items-center shadow-xl">
-                        <div>
-                            <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-60 mb-1">Total Ventas Bruto</p>
-                            <p className="text-4xl font-black tabular-nums">
-                                {formatCurrency(ventas.filter(v => (v.fecha || '').startsWith(new Date().toISOString().split('T')[0])).reduce((acc, v) => acc + v.total, 0))}
-                            </p>
-                        </div>
-                        <Button onClick={() => setShowDailyReport(false)} className="h-14 px-8 rounded-2xl bg-white/20 dark:bg-black/10 hover:bg-white/30 dark:hover:bg-black/20 text-white dark:text-black font-black uppercase text-xs tracking-widest border border-white/10 dark:border-black/5">Cerrar</Button>
-                    </div>
-                </DialogContent>
-            </Dialog>
 
             {/* ── Modal rápido: ¿Quién atiende esta mesa? ── */}
             {mesaPendienteVendedora && (

@@ -18,8 +18,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
+import { cn, escapeHtml } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Producto, PrecioProveedor, Cliente } from '@/types';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
@@ -43,6 +44,7 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 
 // ─── Componente principal ────────────────────────────────────────────────────
 export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
+    const { usuario } = useAuth();
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -76,7 +78,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             saldo: saldo,
                             descripcion: 'Venta Mayorista (Rescate Histórico)',
                             items: h.items,
-                            usuarioId: 'admin',
+                            usuarioId: usuario?.id || 'admin',
                             estado: saldo <= 0 ? 'pagado' : 'activo',
                             pagos: (h.abonos || []).map(a => ({
                                 id: a.id,
@@ -352,7 +354,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         descripcion: 'Venta Mayorista',
                         fecha: new Date().toISOString(),
                         items: nuevo.items,
-                        usuarioId: 'admin',
+                        usuarioId: usuario?.id || 'admin',
                         estado: 'activo',
                         pagos: []
                     });
@@ -1203,7 +1205,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
             const saldo = h.total - abonado;
             const metodo = metodoBadgeLabel[h.metodoPago ?? 'efectivo'] ?? (h.metodoPago ?? '');
-            const items = h.items.map(i => `${i.cantidad}× ${i.nombre} &mdash; ${fmt(i.precio * i.cantidad)}`).join('<br>');
+            const items = h.items.map(i => `${i.cantidad}× ${escapeHtml(i.nombre)} &mdash; ${fmt(i.precio * i.cantidad)}`).join('<br>');
             const estadoCred = h.metodoPago === 'credito'
                 ? (saldo > 0
                     ? `<span style="color:#dc2626;font-weight:700">Debe: ${fmt(saldo)}</span>`
@@ -1221,7 +1223,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Historial — ${nombreCliente}</title>
+<title>Historial — ${escapeHtml(nombreCliente)}</title>
 <style>
   *{box-sizing:border-box}
   body{font-family:system-ui,sans-serif;margin:24px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -1245,7 +1247,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
   </div>
   <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;border-radius:8px;padding:8px 18px;font-weight:700;font-size:12px;cursor:pointer">Imprimir / PDF</button>
 </div>
-<h2 style="font-size:16px;margin:14px 0 2px">${nombreCliente}</h2>
+<h2 style="font-size:16px;margin:14px 0 2px">${escapeHtml(nombreCliente)}</h2>
 <p class="sub">Generado el ${new Date().toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
 <div class="kpi-row">
   <div class="kpi"><div class="kpi-label">Total facturado</div><div class="kpi-value">${fmt(totalGeneral)}</div></div>

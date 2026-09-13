@@ -5,6 +5,7 @@ import {
   ShoppingBag, Eye, UserX, ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { escapeHtml } from '@/lib/utils';
 import type {
   Trabajador, RegistroAsistencia, CreditoTrabajador,
   NominaQuincenal, NominaItem, NominaEstado
@@ -388,12 +389,12 @@ export default function Nomina({
     const trab = trabajadores.find(t => t.id === acTrabId);
     if (!trab) return;
     const recetasClausula = acRecetasExtra.trim()
-      ? `<p>Entre las informaciones consideradas confidenciales se incluyen, de manera enunciativa más no limitativa: fórmulas de masas, proporciones de ingredientes, tiempos de fermentación, temperaturas de horneado, procesos de decoración, y especialmente: <em>${acRecetasExtra.trim()}</em>.</p>`
+      ? `<p>Entre las informaciones consideradas confidenciales se incluyen, de manera enunciativa más no limitativa: fórmulas de masas, proporciones de ingredientes, tiempos de fermentación, temperaturas de horneado, procesos de decoración, y especialmente: <em>${escapeHtml(acRecetasExtra.trim())}</em>.</p>`
       : `<p>Entre las informaciones consideradas confidenciales se incluyen, de manera enunciativa más no limitativa: fórmulas de masas, proporciones de ingredientes, tiempos de fermentación, temperaturas de horneado, procesos de decoración, y cualquier método, técnica o proceso productivo propio del establecimiento.</p>`;
 
     const html = `<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
-<title>Acuerdo de Confidencialidad — ${trab.nombre}</title>
+<title>Acuerdo de Confidencialidad — ${escapeHtml(trab.nombre)}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: 'Georgia', serif; padding: 40px 48px; color: #1e293b; font-size: 13px; line-height: 1.7; }
@@ -436,7 +437,7 @@ export default function Nomina({
 <div class="partes">
   <p>En <strong>Canalete, Córdoba</strong>, el día <strong>${acFecha}</strong>, entre las partes:</p>
   <p><strong>EL ESTABLECIMIENTO:</strong> Panadería Dulce Placer, establecimiento de panadería artesanal ubicado en Canalete, Córdoba, en adelante <em>"El Establecimiento"</em>.</p>
-  <p><strong>EL TRABAJADOR(A):</strong> <strong>${trab.nombre}</strong>${trab.cedula ? `, identificado(a) con C.C. N° ${trab.cedula}` : ''}, quien se desempeña como <strong>${trab.rol}</strong>, en adelante <em>"El Trabajador"</em>.</p>
+  <p><strong>EL TRABAJADOR(A):</strong> <strong>${escapeHtml(trab.nombre)}</strong>${trab.cedula ? `, identificado(a) con C.C. N° ${escapeHtml(trab.cedula)}` : ''}, quien se desempeña como <strong>${trab.rol}</strong>, en adelante <em>"El Trabajador"</em>.</p>
 </div>
 
 <h3>Antecedentes</h3>
@@ -475,9 +476,9 @@ export default function Nomina({
   <div class="firma-box">
     <div class="huella">Huella dactilar</div>
     <div class="firma-linea">
-      <div class="firma-label">${trab.nombre}</div>
+      <div class="firma-label">${escapeHtml(trab.nombre)}</div>
       <div class="firma-sub">El Trabajador(a)</div>
-      <div class="firma-sub">C.C. ${trab.cedula || '___________________'}</div>
+      <div class="firma-sub">C.C. ${escapeHtml(trab.cedula || '___________________')}</div>
       <div class="firma-sub" style="margin-top:6px">Firma: _______________________</div>
     </div>
   </div>
@@ -509,9 +510,9 @@ export default function Nomina({
       fechaPago: nominaExistente?.fechaPago, observaciones: obsText || undefined } as any;
     const titulo = `Nómina ${src.periodo === 'primera' ? '1ra' : '2da'} quincena ${MES_LABEL[src.mes]} ${src.año}`;
     const filas = src.items.map((item: NominaItem) => {
-      const descs = item.descuentos.map(d => `<div>${d.concepto}: -${formatCurrency(d.monto)}</div>`).join('');
+      const descs = item.descuentos.map(d => `<div>${escapeHtml(d.concepto)}: -${formatCurrency(d.monto)}</div>`).join('');
       return `<tr>
-        <td style="padding:7px 6px;font-weight:700;border-bottom:1px solid #f1f5f9">${item.trabajadorNombre}</td>
+        <td style="padding:7px 6px;font-weight:700;border-bottom:1px solid #f1f5f9">${escapeHtml(item.trabajadorNombre)}</td>
         <td style="padding:7px 6px;text-align:center;border-bottom:1px solid #f1f5f9">${item.diasTrabajados}/${item.totalDiasPeriodo}</td>
         <td style="padding:7px 6px;text-align:right;border-bottom:1px solid #f1f5f9">${formatCurrency(item.valorBruto)}</td>
         <td style="padding:7px 6px;font-size:11px;text-align:right;border-bottom:1px solid #f1f5f9;color:#dc2626">${descs||'—'}</td>
@@ -534,7 +535,7 @@ export default function Nomina({
     <td style="text-align:right;color:#dc2626">-${formatCurrency(src.totalDescuentos)}</td>
     <td style="text-align:right;color:#059669">${formatCurrency(src.totalNeto)}</td>
     </tr></tfoot></table>
-    ${src.observaciones?`<p class="obs">Obs: ${src.observaciones}</p>`:''}
+    ${src.observaciones?`<p class="obs">Obs: ${escapeHtml(src.observaciones)}</p>`:''}
     <p style="margin-top:14px;font-size:10px;color:#94a3b8">* Bruto = salario mensual ÷ 2 × (días asistidos / días del período)</p>
     </body></html>`;
     const win = window.open('', '_blank');
@@ -552,19 +553,19 @@ export default function Nomina({
       const monto = typeof val === 'number' ? Math.min(val, c.saldo) : c.saldo;
       const tipo = esConsumoProductos(c) ? 'Consumo de productos' : 'Préstamo/adelanto';
       return `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">${tipo}: ${c.descripcion || ''}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">${tipo}: ${escapeHtml(c.descripcion || '')}</td>
         <td style="padding:6px 8px;text-align:right;border-bottom:1px solid #f1f5f9;color:#dc2626">-${formatCurrency(monto)}</td>
       </tr>`;
     }).join('');
 
     const itemsProductos = credLiq
       .filter(c => esConsumoProductos(c))
-      .flatMap(c => c.items.map(i => `<li style="font-size:11px;color:#64748b">${i.nombre} × ${i.cantidad} = ${formatCurrency(i.subtotal)}</li>`))
+      .flatMap(c => c.items.map(i => `<li style="font-size:11px;color:#64748b">${escapeHtml(i.nombre)} × ${i.cantidad} = ${formatCurrency(i.subtotal)}</li>`))
       .join('');
 
     const html = `<!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
-<title>Liquidación — ${trabajadorLiq.nombre}</title>
+<title>Liquidación — ${escapeHtml(trabajadorLiq.nombre)}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: Arial, sans-serif; padding: 32px 40px; color: #1e293b; font-size: 13px; }
@@ -613,10 +614,10 @@ export default function Nomina({
 <div class="section">
   <div class="section-title">Datos del Trabajador</div>
   <div class="grid2">
-    <div class="field"><label>Nombre completo</label><span>${trabajadorLiq.nombre}</span></div>
-    <div class="field"><label>Cédula / Documento</label><span>${trabajadorLiq.cedula || '_______________'}</span></div>
+    <div class="field"><label>Nombre completo</label><span>${escapeHtml(trabajadorLiq.nombre)}</span></div>
+    <div class="field"><label>Cédula / Documento</label><span>${escapeHtml(trabajadorLiq.cedula || '_______________')}</span></div>
     <div class="field"><label>Cargo / Rol</label><span>${trabajadorLiq.rol}</span></div>
-    <div class="field"><label>Teléfono</label><span>${trabajadorLiq.telefono || '_______________'}</span></div>
+    <div class="field"><label>Teléfono</label><span>${escapeHtml(trabajadorLiq.telefono || '_______________')}</span></div>
     <div class="field"><label>Fecha de ingreso</label><span>${trabajadorLiq.fechaIngreso}</span></div>
     <div class="field"><label>Fecha de retiro</label><span>${liqFecha}</span></div>
   </div>
@@ -624,9 +625,9 @@ export default function Nomina({
 
 <div class="section">
   <div class="section-title">Información del Retiro</div>
-  <div class="field"><label>Motivo</label><span>${motivoTexto}</span></div>
+  <div class="field"><label>Motivo</label><span>${escapeHtml(motivoTexto)}</span></div>
   <div class="field" style="margin-top:4px"><label>Salario mensual pactado</label><span>${formatCurrency(trabajadorLiq.salarioBase)}</span></div>
-  ${liqObs ? `<div class="field" style="margin-top:4px"><label>Acuerdo / Observaciones</label><span>${liqObs}</span></div>` : ''}
+  ${liqObs ? `<div class="field" style="margin-top:4px"><label>Acuerdo / Observaciones</label><span>${escapeHtml(liqObs)}</span></div>` : ''}
 </div>
 
 <div class="section">
@@ -641,7 +642,7 @@ export default function Nomina({
         <td style="padding:6px 8px;text-align:right;border-bottom:1px solid #f1f5f9;font-weight:700">${formatCurrency(liqValorDias)}</td>
       </tr>
       ${liqAjuste !== 0 ? `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">${liqAjusteLabel || (liqAjuste > 0 ? 'Bonificación / ajuste a favor' : 'Descuento adicional')}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #f1f5f9">${escapeHtml(liqAjusteLabel || (liqAjuste > 0 ? 'Bonificación / ajuste a favor' : 'Descuento adicional'))}</td>
         <td style="padding:6px 8px;text-align:right;border-bottom:1px solid #f1f5f9;color:${liqAjuste>0?'#059669':'#dc2626'};font-weight:700">${liqAjuste>0?'+':''}${formatCurrency(liqAjuste)}</td>
       </tr>` : ''}
       ${descFilas}
@@ -657,7 +658,7 @@ export default function Nomina({
 </div>
 
 <div class="paz-salvo">
-  Con la firma del presente documento, el trabajador <strong>${trabajadorLiq.nombre}</strong> y la
+  Con la firma del presente documento, el trabajador <strong>${escapeHtml(trabajadorLiq.nombre)}</strong> y la
   Panadería Dulce Placer declaran haber llegado a un acuerdo de mutua satisfacción sobre la
   liquidación del contrato de trabajo. El trabajador declara que ha recibido el pago de todos
   los conceptos acordados y que no tiene ninguna reclamación pendiente de carácter laboral
@@ -676,9 +677,9 @@ export default function Nomina({
   </div>
   <div class="firma-box">
     <div class="firma-linea">
-      <div class="firma-label">${trabajadorLiq.nombre}</div>
+      <div class="firma-label">${escapeHtml(trabajadorLiq.nombre)}</div>
       <div class="firma-sub">Trabajador(a)</div>
-      <div class="firma-sub">C.C. ${trabajadorLiq.cedula || '___________________'}</div>
+      <div class="firma-sub">C.C. ${escapeHtml(trabajadorLiq.cedula || '___________________')}</div>
     </div>
   </div>
 </div>
@@ -686,7 +687,7 @@ export default function Nomina({
 <div class="recibo">
   <div class="recibo-title">✂ Recibí a satisfacción</div>
   <p style="font-size:12px;color:#475569;margin:0">
-    Yo, <strong>${trabajadorLiq.nombre}</strong>, declaro haber recibido la suma de
+    Yo, <strong>${escapeHtml(trabajadorLiq.nombre)}</strong>, declaro haber recibido la suma de
     <strong>${formatCurrency(liqNeto)}</strong> como pago total de mi liquidación, quedando
     a paz y salvo con Panadería Dulce Placer por todo concepto laboral.
   </p>

@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Search, TrendingUp, Package, ShoppingBag, Percent, ChevronDown, ChevronUp, Calendar } from 'lucide-react';
+import { Search, TrendingUp, Package, ShoppingBag, Percent, ChevronDown, ChevronUp, Calendar, Info } from 'lucide-react';
 import type { Venta, Producto, Categoria } from '@/types';
 import { format, parseISO, isValid, startOfDay, startOfWeek, startOfMonth, startOfYear, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -191,6 +191,15 @@ export function HistorialVentasCategoria({
                     />
                 </div>
             </div>
+
+            {totalGlobal === 0 && (
+                <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4 flex items-start gap-3">
+                    <Info className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground">
+                        Esta ficha necesita saber qué producto se vendió, así que depende de las ventas registradas en el punto de venta (POS) — no se puede completar con los cierres manuales de "Venta del Día". Se irá llenando a medida que el POS esté en uso.
+                    </p>
+                </div>
+            )}
 
             {/* ── KPIs globales ──────────────────────────────────────── */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

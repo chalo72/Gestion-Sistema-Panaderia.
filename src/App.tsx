@@ -332,6 +332,8 @@ const App = () => {
             onViewInventario={() => setCurrentView('inventario')}
             onViewVentas={() => setCurrentView('ventas')}
             onViewAhorros={() => setCurrentView('ahorro')}
+            onViewCargaMasiva={() => setCurrentView('cargamasiva')}
+            onViewRecetas={() => setCurrentView('recetas')}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
@@ -859,6 +861,8 @@ const App = () => {
             onViewInventario={() => setCurrentView('inventario')}
             onViewVentas={() => setCurrentView('ventas')}
             onViewAhorros={() => setCurrentView('ahorro')}
+            onViewCargaMasiva={() => setCurrentView('cargamasiva')}
+            onViewRecetas={() => setCurrentView('recetas')}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}

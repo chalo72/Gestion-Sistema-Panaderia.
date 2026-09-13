@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   Package,
   Truck,
@@ -23,6 +24,7 @@ import { FinancialDashboard } from '@/components/FinancialDashboard';
 import { ManoDerechaDirector } from '@/components/dashboard/mano-derecha-director';
 import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
 import { useCan } from '@/contexts/AuthContext';
+import { getVentasDiarias } from '@/lib/finanzas-personales';
 
 // Fallback preventivo (Hoisted safe)
 const LayoutList = LayoutListIcon || Package;
@@ -59,6 +61,8 @@ interface DashboardProps {
   onViewInventario: () => void;
   onViewVentas: () => void;
   onViewAhorros: () => void;
+  onViewCargaMasiva?: () => void;
+  onViewRecetas?: () => void;
   getProveedorById: (id: string) => { nombre: string } | undefined;
   nombre?: string;
   getProductoById: (id: string) => Producto | undefined;
@@ -79,6 +83,8 @@ export default function Dashboard(props: DashboardProps) {
     onViewInventario,
     onViewVentas,
     onViewAhorros,
+    onViewCargaMasiva,
+    onViewRecetas,
     getProductoById,
     formatCurrency,
     nombre,
@@ -92,15 +98,35 @@ export default function Dashboard(props: DashboardProps) {
 
   const alertasNoLeidas = alertas.filter(a => !a.leida);
 
+  // Ingresos del día: el POS casi no se usa a diario, así que si hoy no
+  // hay ninguna venta de POS, se usa el cierre manual del día (mismo
+  // criterio "POS si existe, si no manual, nunca sumar los dos" que ya
+  // se aplica en Reportes). Sin esto, la cifra que se ve al abrir la app
+  // queda casi siempre subestimada.
+  const { ingresosHoyReal, ingresosEsManual } = useMemo(() => {
+    if (Number(estadisticas.ventasHoy || 0) > 0) {
+      return { ingresosHoyReal: Number(estadisticas.ingresosHoy || 0), ingresosEsManual: false };
+    }
+    try {
+      const hoyStr = new Date().toISOString().split('T')[0];
+      const manual = getVentasDiarias().find(v => v.fecha === hoyStr);
+      return { ingresosHoyReal: Number(manual?.total || 0), ingresosEsManual: !!manual };
+    } catch {
+      return { ingresosHoyReal: Number(estadisticas.ingresosHoy || 0), ingresosEsManual: false };
+    }
+  }, [estadisticas.ventasHoy, estadisticas.ingresosHoy]);
+
   // KPI Cards config al estilo Stitch
   const kpiCards = [
     canVerTotales && {
       label: 'Ingresos del Día',
-      value: formatCurrency(Number(estadisticas.ingresosHoy || 0)),
+      value: formatCurrency(ingresosHoyReal),
       icon: TrendingUp,
       iconBg: 'bg-emerald-100 dark:bg-emerald-900/30',
       iconColor: 'text-emerald-600 dark:text-emerald-400',
-      badge: estadisticas.ventasHoy > 0 ? `${estadisticas.ventasHoy} ventas` : null,
+      badge: estadisticas.ventasHoy > 0
+        ? `${estadisticas.ventasHoy} ventas`
+        : (ingresosEsManual ? 'cierre manual' : null),
       badgeColor: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20',
       onClick: onViewVentas,
     },
@@ -173,7 +199,7 @@ export default function Dashboard(props: DashboardProps) {
     switch(view) {
       case 'productos': onViewProductos(); break;
       case 'proveedores': onViewProveedores(); break;
-      case 'recetas': onViewProductos(); break; // asumiendo que recetas puede ir a productos o algo similar si no hay onViewRecetas
+      case 'recetas': (onViewRecetas || onViewProductos)(); break;
       default: break;
     }
   };
@@ -195,7 +221,7 @@ export default function Dashboard(props: DashboardProps) {
       {/* Mano derecha del Director — pulso, dinero, producción, 3 decisiones */}
       <ManoDerechaDirector
         nombre={nombre}
-        ingresosHoy={Number(estadisticas.ingresosHoy || 0)}
+        ingresosHoy={ingresosHoyReal}
         gastosHoy={Number(estadisticas.gastosHoy || 0)}
         ventasHoy={Number(estadisticas.ventasHoy || 0)}
         itemsBajoStock={Number(estadisticas.itemsBajoStock || 0)}
@@ -253,7 +279,7 @@ export default function Dashboard(props: DashboardProps) {
       {(canVerFinanzas || canVerTotales) && (
       <FinancialDashboard
         totalSales={estadisticas.ventasHoy}
-        totalRevenue={estadisticas.ingresosHoy}
+        totalRevenue={ingresosHoyReal}
         totalExpenses={estadisticas.gastosHoy}
         activeOrders={estadisticas.ventasHoy}
         totalCustomers={estadisticas.totalProveedores}
@@ -294,7 +320,7 @@ export default function Dashboard(props: DashboardProps) {
                 </div>
                 <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Proyección Ahorro</p>
               </div>
-              <h3 className="text-2xl font-bold">{formatCurrency(Number(estadisticas.ingresosHoy || 0) * 0.15)}</h3>
+              <h3 className="text-2xl font-bold">{formatCurrency(ingresosHoyReal * 0.15)}</h3>
               <p className="text-xs text-slate-400 mt-1">15% sugerido del día</p>
             </GlassCard>
             )}
@@ -374,7 +400,7 @@ export default function Dashboard(props: DashboardProps) {
               {[
                 { label: 'Inventario', icon: Warehouse, onClick: onViewInventario },
                 { label: 'Proveedores', icon: Truck, onClick: onViewProveedores },
-                { label: 'Carga Masiva', icon: LayoutList, onClick: () => {} },
+                { label: 'Carga Masiva', icon: LayoutList, onClick: onViewCargaMasiva || (() => {}) },
               ].map((item, idx) => (
                 <button
                   key={idx}

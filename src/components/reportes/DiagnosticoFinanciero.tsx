@@ -706,6 +706,29 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
     /** Si true, muestra cierres fuera de la quincena/mes filtrado. */
     const [verTodasVentasDiarias, setVerTodasVentasDiarias] = useState(false);
 
+    /**
+     * Sincronía Ventas del Día ↔ Control de Caja: busca los cierres REALES de caja
+     * (Control de Caja → turno) que coinciden con la fecha/turno que se está registrando
+     * a mano aquí, para poder mostrar una referencia y autocompletar sin duplicar el tecleo,
+     * y para poder avisar si lo escrito a mano no coincide con lo que de verdad se cerró.
+     * No modifica nada de Control de Caja — es solo lectura.
+     */
+    const cajaRealDelDia = useMemo(() => {
+        if (!formVenta?.fecha || !Array.isArray(sesionesCaja)) return null;
+        const cerradas = sesionesCaja.filter((s: any) => {
+            if (s.estado !== 'cerrada') return false;
+            const fechaSesion = (s.fechaCierre || s.fechaApertura || '').slice(0, 10);
+            if (fechaSesion !== formVenta.fecha) return false;
+            if (!formVenta.turno || formVenta.turno === 'Día Completo') return true;
+            return !s.turno || s.turno === formVenta.turno;
+        });
+        if (cerradas.length === 0) return null;
+        const totalCaja = cerradas.reduce((s: number, c: any) => s + (Number(c.totalVentasEfectivo ?? c.totalVentas) || 0), 0);
+        const totalCredito = cerradas.reduce((s: number, c: any) => s + (Number(c.totalCreditos) || 0), 0);
+        const nombres = Array.from(new Set(cerradas.map((c: any) => c.cajaNombre).filter(Boolean)));
+        return { numCajas: cerradas.length, totalCaja, totalCredito, nombres };
+    }, [formVenta?.fecha, formVenta?.turno, sesionesCaja]);
+
     /** Agrupa ventas diarias por fecha (orden turno mañana → tarde). */
     const agruparVentasDiarias = (fuente: VentaDiariaLista[]) => {
         const list = [...fuente].sort((a, b) => b.fecha.localeCompare(a.fecha));
@@ -1054,7 +1077,6 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
         };
     };
     const [pctCrecimiento, setPctCrecimiento] = useState(5);
-    const [iaExpanded, setIaExpanded] = useState(false);
     const [produccionTab, setProduccionTab] = useState<'masas' | 'panes' | 'cuadre'>('panes');
     const [historialExpanded, setHistorialExpanded] = useState(false);
     /** Ficha del historial abierta al hacer clic (detalle de masas / lotes). */
@@ -1438,65 +1460,6 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                     </>
                     )}
 
-                    {vista === 'ia' && (
-                    <>
-                    <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-violet-500 hover:text-violet-600 flex items-center gap-1 mb-2">
-                        ← Volver al menú
-                    </button>
-                    {/* ── CONSEJERO IA — colapsable ── */}
-                    <div className="rounded-2xl border-2 border-violet-500/40 bg-violet-500/5 overflow-hidden">
-                        <button
-                            onClick={() => setIaExpanded(x => !x)}
-                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-violet-500/10 transition-colors"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-violet-500/20">
-                                    <Sparkles className="w-4 h-4 text-violet-500" />
-                                </div>
-                                <div className="text-left">
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-violet-500">Pico-Claw · Análisis IA</p>
-                                    <p className="text-[11px] text-violet-400/70 font-medium">
-                                        {analisisIA ? 'Análisis disponible — toca para leer' : pidiendoIA ? 'Analizando...' : 'Toca para pedir consejo financiero'}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                {pidiendoIA && <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />}
-                                {analisisIA && !iaExpanded && <span className="text-[9px] bg-violet-500 text-white px-2 py-0.5 rounded-full font-black">NUEVO</span>}
-                                {iaExpanded ? <ChevronUp className="w-4 h-4 text-violet-400" /> : <ChevronDown className="w-4 h-4 text-violet-400" />}
-                            </div>
-                        </button>
-                        {iaExpanded && (
-                            <div className="px-4 pb-4 pt-1 space-y-3 border-t border-violet-500/20">
-                                {!analisisIA && !pidiendoIA ? (
-                                    <div className="space-y-2">
-                                        <p className="text-sm text-muted-foreground">Analiza los datos de esta quincena y recibe una estrategia personalizada.</p>
-                                        <Button onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)} className="bg-violet-600 hover:bg-violet-700 text-white font-bold gap-2">
-                                            <Bot className="w-4 h-4" /> Analizar Datos Ahora
-                                        </Button>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-3">
-                                        {analisisIA ? (
-                                            <div className="whitespace-pre-wrap leading-relaxed text-sm text-muted-foreground">{analisisIA}</div>
-                                        ) : (
-                                            <div className="flex items-center gap-2 text-violet-400 animate-pulse font-medium">
-                                                <Loader2 className="w-4 h-4 animate-spin" /> Pico-Claw está analizando tus finanzas...
-                                            </div>
-                                        )}
-                                        {analisisIA && !pidiendoIA && (
-                                            <Button variant="outline" size="sm" onClick={() => pedirConsejoIA(diagnosticoFinanciero, quincenaReal)} className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10">
-                                                <Sparkles className="w-3.5 h-3.5 mr-2" /> Re-evaluar Estrategia
-                                            </Button>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-                    </div>
-                    </>
-                    )}
-
                     {vista === null && (
                     <>
                     {/* ── ESTADO FINANCIERO DEL NEGOCIO (P&L) ── */}
@@ -1731,35 +1694,58 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                     )}
 
                     {vista === null && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-2">
-                        <button type="button" onClick={() => setVista('gasto')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 p-4 transition-colors">
-                            <span className="text-2xl">💸</span>
-                            <span className="text-[11px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300 text-center">Gasto de la Quincena</span>
-                        </button>
-                        <button type="button" onClick={() => setVista('compromiso')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 p-4 transition-colors">
-                            <span className="text-2xl">🎯</span>
-                            <span className="text-[11px] font-black uppercase tracking-wide text-rose-700 dark:text-rose-300 text-center">Compromiso Fijo</span>
-                        </button>
-                        <button type="button" onClick={() => setVista('venta')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 p-4 transition-colors">
-                            <span className="text-2xl">💰</span>
-                            <span className="text-[11px] font-black uppercase tracking-wide text-indigo-700 dark:text-indigo-300 text-center">Venta del Día</span>
-                        </button>
-                        <button type="button" onClick={() => setVista('produccion')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 p-4 transition-colors">
-                            <span className="text-2xl">🍞</span>
-                            <span className="text-[11px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-300 text-center">Producción y Auditoría</span>
-                        </button>
-                        <button type="button" onClick={() => setVista('sobres')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 p-4 transition-colors">
-                            <span className="text-2xl">🛡️</span>
-                            <span className="text-[11px] font-black uppercase tracking-wide text-violet-700 dark:text-violet-300 text-center">Sobres y Bóveda de Ahorro</span>
-                        </button>
-                        <button type="button" onClick={() => setVista('compras')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 p-4 transition-colors">
-                            <span className="text-2xl">🛒</span>
-                            <span className="text-[11px] font-black uppercase tracking-wide text-blue-700 dark:text-blue-300 text-center">Plan de Compras</span>
-                        </button>
-                        <button type="button" onClick={() => setVista('ia')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-fuchsia-500/20 bg-fuchsia-500/5 hover:bg-fuchsia-500/10 p-4 transition-colors">
-                            <span className="text-2xl">🤖</span>
-                            <span className="text-[11px] font-black uppercase tracking-wide text-fuchsia-700 dark:text-fuchsia-300 text-center">Consejero IA</span>
-                        </button>
+                    <div className="space-y-5 mt-2">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">Día a día</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <button type="button" onClick={() => setVista('venta')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 p-4 transition-colors">
+                                    <span className="text-2xl">💰</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wide text-indigo-700 dark:text-indigo-300 text-center">Venta del Día</span>
+                                </button>
+                                <button type="button" onClick={() => setVista('gasto')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-emerald-500/20 bg-emerald-500/5 hover:bg-emerald-500/10 p-4 transition-colors">
+                                    <span className="text-2xl">💸</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300 text-center">Gasto de la Quincena</span>
+                                </button>
+                                <button type="button" onClick={() => setVista('compromiso')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 p-4 transition-colors">
+                                    <span className="text-2xl">🎯</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wide text-rose-700 dark:text-rose-300 text-center">Compromiso Fijo</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">Planeación</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <button type="button" onClick={() => setVista('compras')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-blue-500/20 bg-blue-500/5 hover:bg-blue-500/10 p-4 transition-colors">
+                                    <span className="text-2xl">🛒</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wide text-blue-700 dark:text-blue-300 text-center">Plan de Compras</span>
+                                </button>
+                                <button type="button" onClick={() => setVista('sobres')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-violet-500/20 bg-violet-500/5 hover:bg-violet-500/10 p-4 transition-colors">
+                                    <span className="text-2xl">🛡️</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wide text-violet-700 dark:text-violet-300 text-center">Sobres y Bóveda de Ahorro</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">Producción</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <button type="button" onClick={() => setVista('produccion')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-amber-500/20 bg-amber-500/5 hover:bg-amber-500/10 p-4 transition-colors">
+                                    <span className="text-2xl">🍞</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wide text-amber-700 dark:text-amber-300 text-center">Producción y Auditoría</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2 px-1">Consejo</p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <button type="button" onClick={() => setActiveTab('consejero-ia')} className="flex flex-col items-center gap-1.5 rounded-2xl border-2 border-fuchsia-500/20 bg-fuchsia-500/5 hover:bg-fuchsia-500/10 p-4 transition-colors">
+                                    <span className="text-2xl">🤖</span>
+                                    <span className="text-[11px] font-black uppercase tracking-wide text-fuchsia-700 dark:text-fuchsia-300 text-center">Consejero IA</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     )}
 
@@ -2260,7 +2246,35 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                             </select>
                                         </div>
                                     </div>
-                                    
+
+                                    {/* Referencia de Control de Caja real para esta fecha/turno — solo lectura, no se autocompleta solo */}
+                                    {cajaRealDelDia && (
+                                        <div className="flex items-center justify-between gap-2 rounded-xl bg-sky-50 dark:bg-sky-950/30 border border-sky-300 dark:border-sky-500/30 px-3 py-2">
+                                            <div className="text-[10px] leading-tight text-sky-700 dark:text-sky-300">
+                                                <p className="font-black uppercase tracking-wide">
+                                                    🔒 Caja real: {cajaRealDelDia.numCajas} cierre{cajaRealDelDia.numCajas !== 1 ? 's' : ''}
+                                                    {cajaRealDelDia.nombres.length > 0 ? ` (${cajaRealDelDia.nombres.join(', ')})` : ''}
+                                                </p>
+                                                <p className="font-bold">
+                                                    {formatCurrency(cajaRealDelDia.totalCaja)} en caja
+                                                    {cajaRealDelDia.totalCredito > 0 ? ` + ${formatCurrency(cajaRealDelDia.totalCredito)} a crédito` : ''}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormVenta((p: any) => ({
+                                                    ...p,
+                                                    totalEfectivo: String(cajaRealDelDia.totalCaja),
+                                                    totalCredito: String(cajaRealDelDia.totalCredito || p.totalCredito || ''),
+                                                    cajas: { ...(p.cajas || {}), 'Principal': cajaRealDelDia.totalCaja },
+                                                }))}
+                                                className="text-[10px] font-black uppercase text-sky-700 dark:text-sky-300 bg-sky-100 dark:bg-sky-900/40 hover:bg-sky-200 dark:hover:bg-sky-900/70 px-2.5 py-1.5 rounded-lg shrink-0"
+                                            >
+                                                Usar
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <div>
                                         <Label className="text-[10px] font-black uppercase text-violet-500">Día Especial / Evento (Opcional)</Label>
                                         <select
@@ -2633,8 +2647,35 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                 })()}
                                             </span>
                                         </div>
+                                        {cajaRealDelDia && (() => {
+                                            const princ = parseInt(formVenta.totalEfectivo || '0') || 0;
+                                            const nequi = parseInt(formVenta.totalNequi || '0') || 0;
+                                            const transf = parseInt(formVenta.totalTransferencia || '0') || 0;
+                                            const credito = parseInt(formVenta.totalCredito || '0') || 0;
+                                            let sumOtras = 0; let gastos = 0;
+                                            if (formVenta.cajas) {
+                                                Object.entries(formVenta.cajas).forEach(([k, v]) => {
+                                                    if (k === 'Gastos/Salidas') gastos += (parseInt(String(v)) || 0);
+                                                    else if (k !== 'Principal') sumOtras += (parseInt(String(v)) || 0);
+                                                });
+                                            }
+                                            const totalManual = princ + nequi + sumOtras - gastos + transf + credito;
+                                            const totalReal = cajaRealDelDia.totalCaja + cajaRealDelDia.totalCredito;
+                                            const diferencia = totalManual - totalReal;
+                                            if (Math.abs(diferencia) < 1000) return (
+                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-500 pt-1">
+                                                    <span>✓ Coincide con Control de Caja</span>
+                                                </div>
+                                            );
+                                            return (
+                                                <div className="flex items-center justify-between gap-2 text-[10px] font-bold text-amber-600 dark:text-amber-400 pt-1">
+                                                    <span>⚠️ No coincide con Control de Caja</span>
+                                                    <span>{diferencia > 0 ? '+' : ''}{formatCurrency(diferencia)}</span>
+                                                </div>
+                                            );
+                                        })()}
                                     </div>
-                                    
+
                                     <Button
                                         onClick={handleAddVentaDiaria}
                                         size="sm"

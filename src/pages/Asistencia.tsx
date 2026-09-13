@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Clock, CheckCircle2, LogOut, Users, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, BarChart3, Monitor, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
+import { escapeHtml } from '@/lib/utils';
 import type { Trabajador, RegistroAsistencia } from '@/types';
 
 interface AsistenciaProps {
@@ -154,7 +155,7 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
         </td>`;
       }).join('');
       return `<tr>
-        <td style="padding:8px 6px;font-weight:700;font-size:12px;border-bottom:1px solid #f1f5f9">${r.t.nombre}</td>
+        <td style="padding:8px 6px;font-weight:700;font-size:12px;border-bottom:1px solid #f1f5f9">${escapeHtml(r.t.nombre)}</td>
         ${diasHtml}
         <td style="padding:8px 6px;text-align:center;font-weight:700;font-size:12px;border-bottom:1px solid #f1f5f9">${r.diasTrabajados}</td>
         <td style="padding:8px 6px;text-align:center;font-weight:700;font-size:12px;border-bottom:1px solid #f1f5f9">${formatHoras(r.totalMins)}</td>

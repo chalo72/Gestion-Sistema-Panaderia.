@@ -841,6 +841,30 @@ class NexusDatabase implements IDatabase {
             } catch (_) { /* opcional */ }
           }
 
+          // Sincronizar formulaciones y modelosPan desde Supabase configuracion hacia localAdapter
+          try {
+            const fBackup = await supaDB.getBackup('formulaciones_data');
+            if (fBackup) {
+              const fArray = Array.isArray(fBackup) ? fBackup : Object.values(fBackup);
+              const validF = fArray.filter((f: any) => f && typeof f === 'object' && f.id);
+              if (validF.length > 0) {
+                await localAdapter.setDocument('backups', 'formulaciones_data', { id: 'formulaciones_data', data: validF });
+                await (localAdapter as any).hydrateFromCloud('formulaciones', validF);
+              }
+            }
+            const mBackup = await supaDB.getBackup('modelosPan_data');
+            if (mBackup) {
+              const mArray = Array.isArray(mBackup) ? mBackup : Object.values(mBackup);
+              const validM = mArray.filter((m: any) => m && typeof m === 'object' && m.id);
+              if (validM.length > 0) {
+                await localAdapter.setDocument('backups', 'modelosPan_data', { id: 'modelosPan_data', data: validM });
+                await (localAdapter as any).hydrateFromCloud('modelosPan', validM);
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ [NEXUS] No se pudo sincronizar backups de formulaciones/modelos:', e);
+          }
+
           cloudExito = true;
         }
       } catch (e) {
