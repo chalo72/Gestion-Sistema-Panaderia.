@@ -11,7 +11,12 @@ import { registerSelfWrite } from './deviceId';
 import { encolarOutbox, flushOutbox } from './sync-outbox';
 import { stampUpdatedAt } from './sync-merge-local-gana';
 import { validarBackupNube } from './boveda-produccion-inmutable';
-import { enviarTelemetria } from './telemetria-nexus';
+
+// Telemetría Nexus local y segura (sin depender de módulos externos)
+const enviarTelemetria = (tipoIncidente: string, descripcion: string, origen?: string) => {
+  if (typeof window === 'undefined') return;
+  console.warn(`📡 [Telemetría Nexus] ${tipoIncidente} (${origen || 'Sensor'}): ${descripcion}`);
+};
 
 let patched = false;
 
