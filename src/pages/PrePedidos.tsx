@@ -143,6 +143,7 @@ export default function PrePedidos({
   const [activeProveedorId, setActiveProveedorId] = useState<string | null>(null);
   const [showProveedorPanel, setShowProveedorPanel] = useState(false); // ✅ NUEVO: Panel de proveedor abierto
   const [searchProveedorText, setSearchProveedorText] = useState(''); // ✅ NUEVO: Buscador de proveedores
+  const [mobileView, setMobileView] = useState<'catalogo' | 'ticket'>('catalogo');
 
   // Estados para la vista de Cuenta
   const [panelView, setPanelView] = useState<'ticket' | 'cuenta'>('ticket');
@@ -669,10 +670,49 @@ export default function PrePedidos({
   }
 
   return (
-    <div className="h-[100dvh] w-full flex bg-slate-50 dark:bg-slate-950 overflow-hidden font-sans">
+    <div className="h-[100dvh] w-full flex flex-col lg:flex-row bg-slate-50 dark:bg-slate-950 overflow-hidden font-sans relative">
       
-      {/* ═══ PANEL PRINCIPAL (IZQUIERDA) ═══ */}
-      <div className="flex-1 flex flex-col h-full bg-white dark:bg-slate-900 z-10 relative min-w-0">
+      {/* 📱 TABS MÓVILES (Solo se muestran en celular) 📱 */}
+      <div className="flex lg:hidden items-center p-1 mx-3 my-2 bg-slate-200/80 dark:bg-slate-800/80 rounded-2xl border border-slate-300/50 dark:border-slate-700/50 shrink-0 z-20">
+        <button
+          onClick={() => setMobileView('catalogo')}
+          className={cn(
+            "flex-1 py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95",
+            mobileView === 'catalogo'
+              ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm border border-slate-200/60 dark:border-slate-700/60"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-700"
+          )}
+        >
+          <Package className="w-3.5 h-3.5 text-emerald-500" />
+          <span>Catálogo</span>
+        </button>
+        <button
+          onClick={() => setMobileView('ticket')}
+          className={cn(
+            "flex-1 py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 relative",
+            mobileView === 'ticket'
+              ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+              : "text-slate-500 dark:text-slate-400 hover:text-slate-700"
+          )}
+        >
+          <ShoppingCart className="w-3.5 h-3.5" />
+          <span>Pedido</span>
+          {(activeDraft?.items?.reduce((s, i) => s + i.cantidad, 0) || 0) > 0 && (
+            <span className={cn(
+              "px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none",
+              mobileView === 'ticket' ? "bg-white text-indigo-600" : "bg-indigo-600 text-white"
+            )}>
+              {activeDraft?.items?.reduce((s, i) => s + i.cantidad, 0)}
+            </span>
+          )}
+        </button>
+      </div>
+      
+      {/* ✅ PANEL PRINCIPAL (IZQUIERDA) ✅ */}
+      <div className={cn(
+        "flex-1 flex-col h-full bg-white dark:bg-slate-900 z-10 relative min-w-0",
+        mobileView === 'catalogo' ? 'flex' : 'hidden lg:flex'
+      )}>
 
         {verDetallePedido ? (
           <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-hidden min-h-0">
@@ -920,8 +960,11 @@ export default function PrePedidos({
         )}
       </div>
 
-      {/* ═══ PANEL DERECHO (TICKET / CUENTA) ═══ */}
-      <div className="w-[320px] lg:w-[380px] xl:w-[420px] h-full flex flex-col bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0">
+      {/* ✅ PANEL DERECHO (TICKET / CUENTA) ✅ */}
+      <div className={cn(
+        "w-full lg:w-[380px] xl:w-[420px] h-full flex-col bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0",
+        mobileView === 'ticket' ? 'flex' : 'hidden lg:flex'
+      )}>
           
           {/* TABS DEL PANEL DERECHO */}
           <div className="flex bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
