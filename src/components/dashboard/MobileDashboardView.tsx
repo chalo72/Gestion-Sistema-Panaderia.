@@ -79,6 +79,8 @@ export function MobileDashboardView({
   onViewInventario,
   onViewProductos,
   onViewProveedores,
+  onViewRecepciones,
+  onViewPrePedidos,
   onViewAlertas,
   onViewRecetas,
   onViewReportes,
