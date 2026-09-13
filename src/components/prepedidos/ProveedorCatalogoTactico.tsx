@@ -334,7 +334,7 @@ export function ProveedorCatalogoTactico({
             <h2 className="text-base font-black uppercase tracking-tight text-slate-900 dark:text-white truncate leading-tight">
               {activeProveedor.nombre}
             </h2>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight mt-0.5">
               {catalogoInsumos.length + catalogoVentas.length} productos · Selecciona zona de compra
             </p>
           </div>
@@ -353,19 +353,19 @@ export function ProveedorCatalogoTactico({
         </div>
 
         {/* ── ZONA SELECTOR (3 botones grandes) ── */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
+        <div className="grid grid-cols-3 gap-1 mb-3">
           {/* Ambas */}
           <button
             onClick={() => setZoneFilter('ambas')}
             className={cn(
-              'flex flex-col items-center justify-center py-2.5 px-2 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-widest gap-1',
+              'flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all font-bold text-[9px] sm:text-[10px] uppercase tracking-tight gap-1 overflow-hidden w-full',
               zoneFilter === 'ambas'
                 ? 'bg-slate-900 border-slate-900 text-white shadow-md'
                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-500 hover:border-slate-400'
             )}
           >
-            <span className="text-base">📋</span>
-            <span>Todo</span>
+            <span className="text-base truncate">📋</span>
+            <span className="truncate w-full text-center">Todo</span>
             <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-black',
               zoneFilter === 'ambas' ? 'bg-white/20' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'
             )}>
@@ -380,14 +380,14 @@ export function ProveedorCatalogoTactico({
               setTimeout(() => refInsumos.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
             }}
             className={cn(
-              'flex flex-col items-center justify-center py-2.5 px-2 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-widest gap-1',
+              'flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all font-bold text-[9px] sm:text-[10px] uppercase tracking-tight gap-1 overflow-hidden w-full',
               zoneFilter === 'insumos'
                 ? 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-500/30'
                 : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:border-amber-400'
             )}
           >
             <FlaskConical className="w-4 h-4" />
-            <span>Insumos</span>
+            <span className="truncate w-full text-center">Insumos</span>
             <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-black',
               zoneFilter === 'insumos' ? 'bg-white/25' : 'bg-amber-100 dark:bg-amber-900/40 text-amber-600'
             )}>
@@ -402,14 +402,14 @@ export function ProveedorCatalogoTactico({
               setTimeout(() => refVentas.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
             }}
             className={cn(
-              'flex flex-col items-center justify-center py-2.5 px-2 rounded-xl border-2 transition-all font-black text-[10px] uppercase tracking-widest gap-1',
+              'flex flex-col items-center justify-center py-2 px-1 rounded-xl border-2 transition-all font-bold text-[9px] sm:text-[10px] uppercase tracking-tight gap-1 overflow-hidden w-full',
               zoneFilter === 'ventas'
                 ? 'bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-500/30'
                 : 'bg-indigo-50 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-400 hover:border-indigo-400'
             )}
           >
             <ShoppingBag className="w-4 h-4" />
-            <span>Ventas</span>
+            <span className="truncate w-full text-center">Ventas</span>
             <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-black',
               zoneFilter === 'ventas' ? 'bg-white/25' : 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600'
             )}>
