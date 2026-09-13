@@ -767,6 +767,7 @@ export default function Nomina({
             <button onClick={siguienteQuincena} disabled={esActual}
               className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 disabled:opacity-20 disabled:pointer-events-none">
               <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-300" />
+            </button>
           </div>
 
           {/* Selector de modo de asistencia / deducción */}
