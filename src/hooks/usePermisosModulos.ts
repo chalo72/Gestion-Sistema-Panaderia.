@@ -42,6 +42,7 @@ export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
   { id: 'reportes',         label: 'Análisis Financiero',   seccion: 'Finanzas' },
   { id: 'ahorro',           label: 'Mis Ahorros',            seccion: 'Finanzas' },
   { id: 'trabajadores',     label: 'Trabajadores',           seccion: 'Admin' },
+  { id: 'expedientes',      label: 'Expediente Empleadas',   seccion: 'Admin' },
   { id: 'asistencia',       label: 'Asistencia',             seccion: 'Admin' },
   { id: 'nomina',           label: 'Nómina',                 seccion: 'Admin' },
 ];

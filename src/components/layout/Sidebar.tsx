@@ -29,7 +29,8 @@ import {
   RefreshCw,
   TrendingUp,
   Video,
-  Briefcase
+  Briefcase,
+  FileCheck
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -209,6 +210,7 @@ export function Sidebar({
       items: [
         { id: 'oficina',       label: 'Oficina del Equipo',   icon: Building2,   permission: 'VER_USUARIOS' },
         { id: 'trabajadores',  label: 'Trabajadores',         icon: UserCircle2,    permission: 'VER_USUARIOS' },
+        { id: 'expedientes',   label: 'Expediente Empleadas', icon: FileCheck,      permission: 'VER_USUARIOS' },
         { id: 'asistencia',    label: 'Asistencia',           icon: CalendarCheck,  permission: 'VER_USUARIOS' },
         { id: 'nomina',        label: 'Nómina',               icon: Wallet,         permission: 'VER_FINANZAS' },
         { id: 'usuarios',      label: 'Equipo de Trabajo',    icon: Users,          permission: 'VER_USUARIOS' },

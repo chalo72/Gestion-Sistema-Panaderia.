@@ -203,6 +203,8 @@ export default function Nomina({
   const [confirmDelete, setConfirmDelete] = useState<CreditoTrabajador | null>(null);
   const [selectedNomina, setSelectedNomina] = useState<NominaQuincenal | null>(null);
   const [expandedWorker, setExpandedWorker] = useState<string | null>(null);
+  // 'estricto_asistencia' descuenta automáticamente los días no asistidos; 'quincena_completa' asume quincena completa salvo ajustes
+  const [modoCalculo, setModoCalculo] = useState<'quincena_completa' | 'estricto_asistencia'>('quincena_completa');
 
   // ── Estado acuerdo de confidencialidad ────────────────────────────────
   const [acTrabId, setAcTrabId]       = useState('');
@@ -245,19 +247,28 @@ export default function Nomina({
   const trabajadoresActivos = trabajadores.filter(t => t.estado === 'activo');
 
   // ── Cálculo items nómina ───────────────────────────────────────────────
-  const items = useMemo((): (NominaItem & { _totalMins: number })[] => {
+  const items = useMemo((): (NominaItem & { _totalMins: number; _diasFaltados: number })[] => {
     if (nominaExistente) return nominaExistente.items as any;
     return trabajadoresActivos.map(t => {
       const diasTrabajados = diasPeriodo.filter(fecha =>
         asistencia.some(r => r.trabajadorId === t.id && r.fecha === fecha)
       ).length;
+      const diasFaltados = Math.max(0, diasPeriodo.length - diasTrabajados);
       const totalMins = diasPeriodo.reduce((sum, fecha) => {
         const regs = asistencia.filter(r => r.trabajadorId === t.id && r.fecha === fecha);
         return sum + calcularMinutos(regs);
       }, 0);
       const valorBase  = t.salarioBase / 2;
-      const proporcion = diasPeriodo.length > 0 ? diasTrabajados / diasPeriodo.length : 0;
-      const valorBruto = Math.max(0, Math.round(valorBase * proporcion) + (ajustes[t.id] ?? 0));
+      
+      // Si el modo es 'estricto_asistencia', descuenta los días que no asistió:
+      // Si el modo es 'quincena_completa', paga la quincena base y permite ajustes manuales o alertas
+      let valorBrutoCalculado = valorBase;
+      if (modoCalculo === 'estricto_asistencia') {
+        const proporcion = diasPeriodo.length > 0 ? diasTrabajados / diasPeriodo.length : 0;
+        valorBrutoCalculado = Math.round(valorBase * proporcion);
+      }
+
+      const valorBruto = Math.max(0, valorBrutoCalculado + (ajustes[t.id] ?? 0));
       const credActivos = creditosTrabajadores.filter(
         c => c.trabajadorId === t.id && c.descontarDeSalario && c.estado === 'activo' && c.saldo > 0
       );
@@ -272,9 +283,10 @@ export default function Nomina({
         diasTrabajados, totalDiasPeriodo: diasPeriodo.length, valorBruto,
         descuentos, totalDescuentos, valorNeto: Math.max(0, valorBruto - totalDescuentos),
         _totalMins: totalMins,
+        _diasFaltados: diasFaltados,
       };
     });
-  }, [trabajadoresActivos, asistencia, creditosTrabajadores, diasPeriodo, nominaExistente, ajustes, parciales]);
+  }, [trabajadoresActivos, asistencia, creditosTrabajadores, diasPeriodo, nominaExistente, ajustes, parciales, modoCalculo]);
 
   const totalBruto      = items.reduce((s, i) => s + i.valorBruto, 0);
   const totalDescuentos = items.reduce((s, i) => s + i.totalDescuentos, 0);
@@ -755,13 +767,54 @@ export default function Nomina({
             <button onClick={siguienteQuincena} disabled={esActual}
               className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 active:scale-95 disabled:opacity-20 disabled:pointer-events-none">
               <ChevronRight className="w-5 h-5 text-gray-600 dark:text-gray-300" />
-            </button>
+          </div>
+
+          {/* Selector de modo de asistencia / deducción */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-sm p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border border-slate-100 dark:border-slate-800">
+            <div>
+              <p className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-wider">
+                Control de Ausencias y Asistencia
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {modoCalculo === 'estricto_asistencia' 
+                  ? '⚠️ Descontando automáticamente días sin registro de asistencia.' 
+                  : '✅ Pagando quincena estándar (puedes activar descuento automático si faltaron).'}
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setModoCalculo('quincena_completa')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${
+                  modoCalculo === 'quincena_completa'
+                    ? 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Quincena Completa
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoCalculo('estricto_asistencia')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black uppercase transition-all ${
+                  modoCalculo === 'estricto_asistencia'
+                    ? 'bg-rose-500 text-white shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                Descontar Faltas
+              </button>
+            </div>
           </div>
 
           {items.every(i => i.diasTrabajados === 0) && (
             <div className="flex items-center gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-2xl px-4 py-3">
               <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0" />
-              <p className="text-sm text-amber-800 dark:text-amber-300">Sin registros de asistencia — el valor bruto será $0.</p>
+              <p className="text-sm text-amber-800 dark:text-amber-300">
+                {modoCalculo === 'estricto_asistencia'
+                  ? 'Sin registros de asistencia en el período — el valor bruto será $0 porque el modo de descuento por faltas está activado.'
+                  : 'Sin registros de asistencia registrados, pero se está calculando el salario quincenal completo acordado.'}
+              </p>
             </div>
           )}
 
@@ -783,9 +836,16 @@ export default function Nomina({
                       {item.trabajadorNombre.charAt(0)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-gray-900 dark:text-white text-sm truncate">{item.trabajadorNombre}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-bold text-gray-900 dark:text-white text-sm truncate">{item.trabajadorNombre}</p>
+                        {item._diasFaltados > 0 && (
+                          <span className="text-[10px] font-black bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 px-2 py-0.5 rounded-full">
+                            {item._diasFaltados} {item._diasFaltados === 1 ? 'falta' : 'faltas'}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-400">
-                        {item.diasTrabajados}/{item.totalDiasPeriodo} días
+                        {item.diasTrabajados}/{item.totalDiasPeriodo} días asistidos
                         {(item as any)._totalMins > 0 && ` · ${formatHoras((item as any)._totalMins)}`}
                         {' · '}Sal. {formatCurrency(item.salarioBase)}
                       </p>
