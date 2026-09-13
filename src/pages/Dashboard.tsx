@@ -87,6 +87,7 @@ export default function Dashboard(props: DashboardProps) {
     onViewProductos,
     onViewProveedores,
     onViewRecepciones,
+    onViewPrePedidos,
     onViewInventario,
     onViewVentas,
     onViewAhorros,
