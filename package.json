@@ -66,6 +66,7 @@
     "@supabase/supabase-js": "^2.97.0",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs": "^4.22.0",
+    "@vladmandic/face-api": "^1.7.15",
     "@xyflow/react": "^12.11.2",
     "appwrite": "^25.0.0",
     "better-sqlite3": "^9.2.2",
