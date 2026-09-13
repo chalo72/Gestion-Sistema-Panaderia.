@@ -26,6 +26,8 @@ import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist'
 import { useCan } from '@/contexts/AuthContext';
 import { getVentasDiarias } from '@/lib/finanzas-personales';
 
+import { MobileDashboardView } from '@/components/dashboard/MobileDashboardView';
+
 // Fallback preventivo (Hoisted safe)
 const LayoutList = LayoutListIcon || Package;
 
@@ -63,6 +65,11 @@ interface DashboardProps {
   onViewAhorros: () => void;
   onViewCargaMasiva?: () => void;
   onViewRecetas?: () => void;
+  onViewCaja?: () => void;
+  onViewProduccion?: () => void;
+  onViewGastos?: () => void;
+  onViewHistorial?: () => void;
+  onViewReportes?: () => void;
   getProveedorById: (id: string) => { nombre: string } | undefined;
   nombre?: string;
   getProductoById: (id: string) => Producto | undefined;
@@ -85,6 +92,11 @@ export default function Dashboard(props: DashboardProps) {
     onViewAhorros,
     onViewCargaMasiva,
     onViewRecetas,
+    onViewCaja,
+    onViewProduccion,
+    onViewGastos,
+    onViewHistorial,
+    onViewReportes,
     getProductoById,
     formatCurrency,
     nombre,
@@ -205,13 +217,36 @@ export default function Dashboard(props: DashboardProps) {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-8 pb-12">
-      {/* Header Stitch Style */}
-      <DashboardHeader
+    <>
+      {/* ═══ VISTA MÓVIL MODERNA ERGONÓMICA (Solo en pantallas < 768px) ═══ */}
+      <MobileDashboardView
+        estadisticas={estadisticas}
+        alertas={alertas}
+        ingresosHoyReal={ingresosHoyReal}
+        ingresosEsManual={ingresosEsManual}
+        nombre={nombre}
+        formatCurrency={formatCurrency}
+        canVerTotales={canVerTotales}
+        canVerMargen={canVerMargen}
         onViewVentas={onViewVentas}
+        onViewCaja={onViewCaja}
+        onViewProduccion={onViewProduccion}
+        onViewInventario={onViewInventario}
         onViewProductos={onViewProductos}
-        onViewRecepciones={onViewRecepciones}
+        onViewProveedores={onViewProveedores}
+        onViewAlertas={onViewAlertas}
+        onViewRecetas={onViewRecetas}
+        onViewReportes={onViewReportes}
       />
+
+      {/* ═══ VISTA ESCRITORIO (Solo en pantallas >= 768px: 100% INTACTA) ═══ */}
+      <div className="hidden md:block space-y-5 sm:space-y-8 pb-12">
+        {/* Header Stitch Style */}
+        <DashboardHeader
+          onViewVentas={onViewVentas}
+          onViewProductos={onViewProductos}
+          onViewRecepciones={onViewRecepciones}
+        />
 
       <OnboardingChecklist 
         estadisticas={estadisticas} 
@@ -416,5 +451,6 @@ export default function Dashboard(props: DashboardProps) {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -863,6 +863,11 @@ const App = () => {
             onViewAhorros={() => setCurrentView('ahorro')}
             onViewCargaMasiva={() => setCurrentView('cargamasiva')}
             onViewRecetas={() => setCurrentView('recetas')}
+            onViewCaja={() => setCurrentView('caja')}
+            onViewProduccion={() => setCurrentView('produccion')}
+            onViewGastos={() => setCurrentView('gastos')}
+            onViewHistorial={() => setCurrentView('historial-ventas')}
+            onViewReportes={() => setCurrentView('reportes')}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}

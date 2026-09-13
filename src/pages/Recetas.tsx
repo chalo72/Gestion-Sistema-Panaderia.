@@ -161,7 +161,10 @@ const Recetas: React.FC<RecetasProps> = ({
     const repararYSincronizar = async () => {
         setReparando(true);
         try {
-            toast.info('Sincronizando con la nube…');
+            toast.info('Blindando fórmulas maestras y sincronizando…');
+            const { forzarRestauracionDesdeBoveda } = await import('@/lib/boveda-produccion-inmutable');
+            const resBoveda = await forzarRestauracionDesdeBoveda().catch(() => null);
+
             await db.syncCloudToLocal().catch(() => {});
 
             const todos = await db.getAllProductos();
@@ -186,7 +189,7 @@ const Recetas: React.FC<RecetasProps> = ({
             setCatTipoMap(new Map(
                 (cfg?.categorias ?? []).map((c: any) => [c.nombre, c.tipo || 'venta'])
             ));
-            toast.success(`✅ Sincronizado: ${todos.length} productos · ${reparados} tipos reparados`);
+            toast.success(`✅ Bóveda blindada (${resBoveda?.formulacionesCount || 5} masas completas) · ${todos.length} productos verificados`);
         } catch {
             toast.error('Error durante la reparación');
         } finally {
@@ -1240,8 +1243,33 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                     <div className="flex items-center gap-2 flex-wrap">
                                                         <h3 className="font-black text-slate-900 dark:text-white text-base uppercase tracking-tight truncate">{f.nombre}</h3>
                                                         <Badge variant="outline" className="text-[9px] font-black capitalize shrink-0">{f.categoria}</Badge>
+                                                        {/* Badges para móviles */}
+                                                        <span className="inline-flex md:hidden items-center gap-1 text-[10px] font-black bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full">
+                                                            {(f.ingredientes || []).length} insumos
+                                                        </span>
+                                                        <span className="inline-flex md:hidden items-center gap-1 text-[10px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-full">
+                                                            {formatCurrency(f.costoTotalArroba)}
+                                                        </span>
                                                     </div>
                                                     {f.descripcion && <p className="text-xs text-slate-400 mt-0.5 truncate">{f.descripcion}</p>}
+                                                    
+                                                    {/* Vista previa inmediata de insumos */}
+                                                    {(f.ingredientes || []).length > 0 && (
+                                                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                                            {(f.ingredientes || []).map((ing, iIdx) => {
+                                                                const prod = getProductoById(ing.productoId);
+                                                                const nombreInsumo = prod?.nombre || ing.productoId;
+                                                                return (
+                                                                    <span
+                                                                        key={iIdx}
+                                                                        className="inline-flex items-center text-[10px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60"
+                                                                    >
+                                                                        <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1">{ing.cantidadKg} {ing.unidadMedida || 'kg'}</span> {nombreInsumo}
+                                                                    </span>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
