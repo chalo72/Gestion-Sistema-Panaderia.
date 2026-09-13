@@ -199,6 +199,48 @@ export function ProductCatalog({
                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest hidden sm:block">Explore el catálogo</span>
                     )}
                 </div>
+
+                {/* ── Carrusel horizontal de categorías (Acceso rápido táctil) ── */}
+                <div className="flex lg:hidden items-center gap-2 overflow-x-auto no-scrollbar pt-3 pb-1 -mx-2 px-2">
+                    <button
+                        onClick={() => setSelectedCategory(null)}
+                        className={cn(
+                            "px-3.5 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all active:scale-95 flex items-center gap-1.5 shadow-sm border",
+                            !selectedCategory
+                                ? "bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/20"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
+                        )}
+                    >
+                        <span>✨</span>
+                        <span>Todas</span>
+                    </button>
+                    {categoriasConProductos.map(cat => {
+                        const isSelected = selectedCategory?.toLowerCase().trim() === cat.nombre.toLowerCase().trim();
+                        return (
+                            <button
+                                key={cat.id}
+                                onClick={() => setSelectedCategory(isSelected ? null : cat.nombre)}
+                                className={cn(
+                                    "px-3 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all active:scale-95 flex items-center gap-1.5 shadow-sm border",
+                                    isSelected
+                                        ? "bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/20 ring-2 ring-emerald-500/30"
+                                        : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-slate-300"
+                                )}
+                            >
+                                <span className="text-sm leading-none">{cat.icono || '📦'}</span>
+                                <span className="capitalize">{cat.nombre}</span>
+                                {productosPorCategoria[cat.nombre.toLowerCase().trim()] ? (
+                                    <span className={cn(
+                                        "text-[10px] px-1.5 py-0.2 rounded-full font-bold",
+                                        isSelected ? "bg-white/20 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500"
+                                    )}>
+                                        {productosPorCategoria[cat.nombre.toLowerCase().trim()]}
+                                    </span>
+                                ) : null}
+                            </button>
+                        );
+                    })}
+                </div>
             </div>
 
             {/* Contenido con SCROLL */}

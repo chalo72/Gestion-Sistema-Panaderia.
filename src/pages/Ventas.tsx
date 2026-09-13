@@ -1065,56 +1065,61 @@ export function Ventas(props: VentasProps) {
                 </Sheet>
             </div>
 
-            {/* ── Navegación móvil: floating pill ── */}
-            <div className="lg:hidden fixed bottom-[88px] left-4 right-4 rounded-3xl overflow-hidden flex border-2 border-indigo-500 shadow-[0_8px_30px_rgb(0,0,0,0.3)] bg-white dark:bg-slate-900 z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}>
-                {/* Catálogo */}
-                <button
-                    onClick={() => setShowMobileCart(false)}
-                    className={cn(
-                        'flex-1 flex flex-col items-center justify-center gap-1 py-4 text-[10px] font-black uppercase tracking-widest transition-colors',
-                        !showMobileCart
-                            ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/10'
-                            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
-                    )}
-                >
-                    <ShoppingCart className="w-6 h-6" />
-                    Catálogo
-                </button>
-
-                {/* Divisor */}
-                <div className="w-px bg-slate-200 dark:bg-slate-700 self-stretch" />
-
-                {/* Ticket */}
-                <button
-                    onClick={() => setShowMobileCart(true)}
-                    className={cn(
-                        'flex-[2] flex items-center justify-center gap-2 py-4 transition-all relative pr-28',
-                        showMobileCart
-                            ? 'bg-indigo-600 text-white'
-                            : cart.length > 0
-                                ? 'bg-indigo-600 text-white'
-                                : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500'
-                    )}
-                >
-                    {cart.length > 0 ? (
-                        <>
-                            <span className="w-6 h-6 rounded-full bg-white/25 text-white text-[11px] font-black flex items-center justify-center shrink-0">
-                                {cart.reduce((s, i) => s + i.cantidad, 0)}
-                            </span>
-                            <div className="flex flex-col items-start leading-none">
-                                <span className="text-[11px] font-black">
+            {/* ── Navegación móvil: Barra flotante express estilo fintech ── */}
+            <div className="lg:hidden fixed bottom-[88px] left-3 right-3 rounded-2xl overflow-hidden flex items-center p-1.5 border border-slate-200/80 dark:border-slate-800 shadow-[0_12px_36px_rgba(0,0,0,0.22)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}>
+                {cart.length > 0 ? (
+                    <>
+                        {/* Botón Ver Ticket / Ajustar cantidades */}
+                        <button
+                            onClick={() => setShowMobileCart(true)}
+                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all text-left min-w-0 flex-1 mr-2"
+                        >
+                            <div className="relative shrink-0">
+                                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                    <ShoppingCart className="w-5 h-5" />
+                                </div>
+                                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shadow-md">
+                                    {cart.reduce((s, i) => s + i.cantidad, 0)}
+                                </span>
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ticket</span>
+                                <span className="text-sm font-black text-slate-900 dark:text-white truncate">
                                     {formatCurrency(totalACobrar)}
                                 </span>
-                                <span className="text-[9px] opacity-70 font-bold uppercase">Ver ticket</span>
                             </div>
-                        </>
-                    ) : (
-                        <>
-                            <ShoppingCart className="w-5 h-5 opacity-50" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Ver Ticket</span>
-                        </>
-                    )}
-                </button>
+                        </button>
+
+                        {/* Botón Cobro Express Directo */}
+                        <button
+                            onClick={() => {
+                                setMetodoPago('efectivo');
+                                setTipoTransaccion('efectivo');
+                                setDineroRecibido(0);
+                                setShowPagoModal(true);
+                            }}
+                            className="h-12 px-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 shrink-0 transition-all"
+                        >
+                            <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                            <span>Cobrar {formatCurrency(totalACobrar)}</span>
+                        </button>
+                    </>
+                ) : (
+                    <div className="flex items-center justify-between w-full px-3 py-2">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
+                                <ShoppingCart className="w-4 h-4" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-xs font-black text-slate-700 dark:text-slate-200">Ticket Vacío</span>
+                                <span className="text-[10px] font-bold text-slate-400">Toca productos para agregar</span>
+                            </div>
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400">
+                            POS Activo
+                        </span>
+                    </div>
+                )}
             </div>
 
             {/* Modal de Pago Profesional */}
@@ -1220,15 +1225,22 @@ export function Ventas(props: VentasProps) {
                                         className="h-14 text-3xl font-extrabold text-right rounded-xl bg-slate-50 dark:bg-slate-800 border-slate-200" />
                                 </div>
                                 {/* Billetes rápidos */}
-                                <div className="flex flex-wrap gap-1.5">
-                                    {[1000, 2000, 5000, 10000, 20000, 50000].map(b => (
-                                        <button key={b} onClick={() => setDineroRecibido(b)}
-                                            className="px-3 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-xs font-bold text-slate-600 hover:border-primary hover:text-primary transition-colors">
+                                <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
+                                    {[2000, 5000, 10000, 20000, 50000, 100000].map(b => (
+                                        <button
+                                            key={b}
+                                            type="button"
+                                            onClick={() => setDineroRecibido(b)}
+                                            className="h-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-black text-slate-700 dark:text-slate-200 hover:border-emerald-500 hover:text-emerald-600 active:scale-95 transition-all flex items-center justify-center shadow-sm"
+                                        >
                                             {formatCurrency(b)}
                                         </button>
                                     ))}
-                                    <button onClick={() => setDineroRecibido(totalACobrar)}
-                                        className="px-3 py-1.5 rounded-lg bg-emerald-100 border border-emerald-200 text-xs font-bold text-emerald-700 hover:bg-emerald-200 transition-colors">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDineroRecibido(totalACobrar)}
+                                        className="h-11 rounded-xl bg-emerald-100 dark:bg-emerald-950/40 border-2 border-emerald-300 dark:border-emerald-700 text-xs font-black text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 active:scale-95 transition-all flex items-center justify-center shadow-sm"
+                                    >
                                         Exacto
                                     </button>
                                 </div>
