@@ -57,6 +57,8 @@ interface MobileDashboardViewProps {
   onViewInventario: () => void;
   onViewProductos: () => void;
   onViewProveedores: () => void;
+  onViewRecepciones?: () => void;
+  onViewPrePedidos?: () => void;
   onViewAlertas: () => void;
   onViewRecetas?: () => void;
   onViewReportes?: () => void;
@@ -192,7 +194,7 @@ export function MobileDashboardView({
         <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 px-1">
           Acciones Rápidas
         </p>
-        <div className="grid grid-cols-4 gap-2 text-center">
+        <div className="grid grid-cols-3 gap-3 text-center">
           {/* Vender */}
           <button
             onClick={onViewVentas}
@@ -245,6 +247,32 @@ export function MobileDashboardView({
             </div>
             <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight">
               Stock
+            </span>
+          </button>
+
+          {/* Recepciones (Recibir Proveedor) */}
+          <button
+            onClick={onViewRecepciones || onViewProveedores} 
+            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-rose-50 dark:hover:bg-rose-950/20"
+          >
+            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/25 flex items-center justify-center">
+              <Truck className="w-6 h-6" />
+            </div>
+            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight leading-tight">
+              Recibir
+            </span>
+          </button>
+
+          {/* Pedidos (Hacer Pedido) */}
+          <button
+            onClick={onViewPrePedidos || onViewProveedores}
+            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-violet-50 dark:hover:bg-violet-950/20"
+          >
+            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-violet-500 to-fuchsia-500 text-white shadow-md shadow-violet-500/25 flex items-center justify-center">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight leading-tight">
+              Pedidos
             </span>
           </button>
         </div>

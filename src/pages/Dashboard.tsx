@@ -218,7 +218,7 @@ export default function Dashboard(props: DashboardProps) {
 
   return (
     <>
-      {/* ═══ VISTA MÓVIL MODERNA ERGONÓMICA (Solo en pantallas < 768px) ═══ */}
+      {/* Vista Exclusiva Móvil */}
       <MobileDashboardView
         estadisticas={estadisticas}
         alertas={alertas}
@@ -234,6 +234,8 @@ export default function Dashboard(props: DashboardProps) {
         onViewInventario={onViewInventario}
         onViewProductos={onViewProductos}
         onViewProveedores={onViewProveedores}
+        onViewRecepciones={onViewRecepciones}
+        onViewPrePedidos={onViewPrePedidos}
         onViewAlertas={onViewAlertas}
         onViewRecetas={onViewRecetas}
         onViewReportes={onViewReportes}

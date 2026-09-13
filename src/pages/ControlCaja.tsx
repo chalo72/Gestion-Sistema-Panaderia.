@@ -1178,7 +1178,7 @@ export function ControlCaja({
 
     // ─────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+        <div className="min-h-full flex flex-col gap-5 p-4 pb-32 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
 
             {/* ══ HEADER ══ */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -2403,6 +2403,35 @@ export function ControlCaja({
                     </div>
                 </DialogContent>
             </Dialog>
+            {/* ══ BARRA FLOTANTE MÓVIL (Control de Caja) ══ */}
+            {hayJornada && cajaActiva && (
+                <div className="md:hidden fixed bottom-[72px] left-0 right-0 p-3 z-40 bg-gradient-to-t from-white via-white to-transparent dark:from-slate-950 dark:via-slate-950 pb-6 pointer-events-none">
+                    <div className="bg-slate-900 dark:bg-slate-800 rounded-[2rem] p-2.5 flex items-center gap-2 shadow-2xl border border-white/10 pointer-events-auto shadow-black/30">
+                        {/* Resumen Visual de Saldo */}
+                        <div className="flex-1 bg-black/30 rounded-2xl p-2.5 flex flex-col justify-center px-4 border border-white/5">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Saldo en Caja</span>
+                            <span className="text-lg font-black text-white tabular-nums tracking-tight leading-none mt-1">{formatCurrency(balanceEsperado)}</span>
+                        </div>
+                        
+                        {/* Botones Táctiles Grandes */}
+                        <Button 
+                            onClick={() => setMovementModal({ isOpen: true, tipo: 'entrada' })}
+                            className="h-[60px] w-16 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white shrink-0 shadow-inner flex flex-col items-center justify-center gap-1 p-0 transition-transform active:scale-95"
+                        >
+                            <ArrowUpCircle className="w-6 h-6" />
+                            <span className="text-[9px] font-black uppercase">Ingreso</span>
+                        </Button>
+
+                        <Button 
+                            onClick={() => setMovementModal({ isOpen: true, tipo: 'salida' })}
+                            className="h-[60px] w-16 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white shrink-0 shadow-inner flex flex-col items-center justify-center gap-1 p-0 transition-transform active:scale-95"
+                        >
+                            <ArrowDownCircle className="w-6 h-6" />
+                            <span className="text-[9px] font-black uppercase">Salida</span>
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
