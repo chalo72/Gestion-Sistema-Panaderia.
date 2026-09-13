@@ -10,6 +10,8 @@ import { SupabaseDatabase } from './supabase-db';
 import { registerSelfWrite } from './deviceId';
 import { encolarOutbox, flushOutbox } from './sync-outbox';
 import { stampUpdatedAt } from './sync-merge-local-gana';
+import { validarBackupNube } from './boveda-produccion-inmutable';
+import { enviarTelemetria } from './telemetria-nexus';
 
 let patched = false;
 
@@ -203,6 +205,18 @@ export function applySyncPatch(): void {
   };
 
   db.saveBackup = async (key: string, val: unknown) => {
+    // CAPA 4: Barrera de Nube (Bóveda Inmutable)
+    const check = validarBackupNube(key, val);
+    if (!check.permitido) {
+      console.warn(`🛡️ [Bóveda Bridge] Guardado en '${key}' bloqueado: ${check.motivo}`);
+      enviarTelemetria(
+        'INTENTO_DEGRADACION_BOVEDA',
+        `Intento de sobreescritura bloqueado en '${key}': ${check.motivo}`,
+        'BovedaGuardian'
+      );
+      return;
+    }
+
     await originalSaveBackup(key, val);
     if (key === 'formulaciones_data' || key === 'modelosPan_data' || key === 'cajas_config') {
       registerSelfWrite('configuracion', key);

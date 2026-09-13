@@ -45,168 +45,217 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
         const localMod = JSON.parse(localStorage.getItem('modelosPan') || '[]');
 
         // 1.5 Cargar forzosamente desde Supabase por si la caché está rota
-        let cloudForm: any[] = [];
-        let cloudMod: any[] = [];
+        let cloudForm = [];
+        let cloudMod = [];
         try {
           const { supabaseDB } = await import('@/lib/supabase-sync-bridge');
-          if (supabaseDB) {
-            const [backupForm, backupMod, serverConf] = await Promise.all([
-              supabaseDB.getBackup('formulaciones_data').catch(() => null),
-              supabaseDB.getBackup('modelosPan_data').catch(() => null),
-              supabaseDB.getAllConfiguraciones().catch(() => [])
-            ]);
-
-            if (backupForm && (Array.isArray(backupForm) || typeof backupForm === 'object')) {
-              cloudForm = Array.isArray(backupForm) ? backupForm : Object.values(backupForm);
-            }
-            if (backupMod && (Array.isArray(backupMod) || typeof backupMod === 'object')) {
-              cloudMod = Array.isArray(backupMod) ? backupMod : Object.values(backupMod);
-            }
-
-            if (cloudForm.length === 0 && Array.isArray(serverConf)) {
-              const sf = serverConf.find((c: any) => c.id === 'formulaciones_data');
-              if (sf && sf.categorias) cloudForm = Array.isArray(sf.categorias) ? sf.categorias : Object.values(sf.categorias);
-            }
-            if (cloudMod.length === 0 && Array.isArray(serverConf)) {
-              const sm = serverConf.find((c: any) => c.id === 'modelosPan_data');
-              if (sm && sm.categorias) cloudMod = Array.isArray(sm.categorias) ? sm.categorias : Object.values(sm.categorias);
-            }
-          }
+          const serverConf = await supabaseDB.getAllConfiguraciones();
+          const sf = serverConf.find((c: any) => c.id === 'formulaciones_data');
+          const sm = serverConf.find((c: any) => c.id === 'modelosPan_data');
+          if (sf && sf.categorias) cloudForm = Array.isArray(sf.categorias) ? sf.categorias : Object.values(sf.categorias);
+          if (sm && sm.categorias) cloudMod = Array.isArray(sm.categorias) ? sm.categorias : Object.values(sm.categorias);
         } catch (e) {
           console.warn('No se pudo contactar a Supabase para fusión en caliente', e);
         }
 
-        // 2. Fusión inteligente
-        const mergeData = (idb: any[], backup: any, local: any[], cloud: any[], defaults: any[]) => {
-           const map = new Map<string, any>();
-           
-           const procesarArr = (arr: any[]) => {
-             if (!arr || !arr.length) return;
-             arr.forEach(d => {
-               if (typeof d !== 'object' || !d.id) return;
-               const existente = map.get(d.id);
-               if (!existente) {
-                 map.set(d.id, d);
-               } else {
-                 // Si ambos tienen fecha de actualización, gana el más reciente
-                 if (d.fechaActualizacion && existente.fechaActualizacion) {
-                   if (new Date(d.fechaActualizacion) > new Date(existente.fechaActualizacion)) {
-                     map.set(d.id, { ...existente, ...d });
-                   }
-                 } else if (d.fechaActualizacion && !existente.fechaActualizacion) {
-                   map.set(d.id, { ...existente, ...d });
-                 } else if (!d.fechaActualizacion && existente.fechaActualizacion) {
-                   // El existente ya tiene fecha confirmada, preservarlo
-                 } else {
-                   // Ninguno tiene fecha: preferir el que tenga más insumos o configuración más completa
-                   const dIngCount = Array.isArray(d.ingredientes) ? d.ingredientes.length : 0;
-                   const exIngCount = Array.isArray(existente.ingredientes) ? existente.ingredientes.length : 0;
-                   if (dIngCount >= exIngCount) {
-                     map.set(d.id, { ...existente, ...d });
-                   }
-                 }
-               }
-             });
-           };
-
-           // El orden base: defaults -> local -> backup -> idb -> cloud (la nube sincroniza el estado más actual entre dispositivos)
-           procesarArr(defaults);
-           procesarArr(local);
-           procesarArr(backup);
-           procesarArr(idb);
-           procesarArr(cloud);
-           
-           return Array.from(map.values()).filter(d => d && typeof d === 'object' && d.id && d.nombre);
+        // 2. Fusión: gana la versión MÁS RECIENTE (fechaActualizacion).
+        // Orden de empate (sin fecha): nube → backup → localStorage → IndexedDB
+        // (así el celular recibe lo que la PC ya subió a la nube).
+        // Datos de ejemplo SOLO si no hay nada real en ninguna fuente.
+        type RegistroProd = { id?: string; nombre?: string; fechaActualizacion?: string; createdAt?: string; activo?: boolean };
+        const toArr = (raw: unknown): RegistroProd[] => {
+          if (!raw) return [];
+          if (Array.isArray(raw)) return raw as RegistroProd[];
+          if (typeof raw === 'object') return Object.values(raw as Record<string, RegistroProd>);
+          return [];
+        };
+        const tsDe = (d: RegistroProd): number => {
+          const raw = d.fechaActualizacion || d.createdAt || '';
+          const t = raw ? Date.parse(raw) : NaN;
+          return Number.isFinite(t) ? t : 0;
+        };
+        const getIngCount = (item: any): number => {
+          if (!item) return 0;
+          if (Array.isArray(item.ingredientes)) return item.ingredientes.length;
+          if (item.ingredientes && typeof item.ingredientes === 'object') return Object.keys(item.ingredientes).length;
+          return 0;
         };
 
-        const finalFormulaciones = mergeData(
-          formulacionesIDB || [], 
-          oldBackupForm, 
-          localForm, 
-          cloudForm,
-          DATOS_EJEMPLO.formulaciones || []
-        );
+        const mergePorRecencia = (
+          fuentes: { label: string; data: RegistroProd[]; prioridadEmpate: number }[],
+          defaults: RegistroProd[],
+        ): RegistroProd[] => {
+          const map = new Map<string, { item: RegistroProd; ts: number; prio: number }>();
+          const aplicar = (arr: RegistroProd[], prio: number) => {
+            for (const d of arr) {
+              if (!d || typeof d !== 'object' || !d.id || !d.nombre) continue;
+              const ts = tsDe(d);
+              const prev = map.get(d.id);
+              if (!prev) {
+                map.set(d.id, { item: d, ts, prio });
+                continue;
+              }
 
-        const finalModelos = mergeData(
-          modelosIDB || [], 
-          oldBackupMod, 
-          localMod, 
-          cloudMod,
-          DATOS_EJEMPLO.modelosPan || []
-        );
+              // GUARDIÁN ANTI-RETROCESO ESTRICTO:
+              const prevIngCount = getIngCount(prev.item);
+              const newIngCount = getIngCount(d);
 
-        setFormulaciones(finalFormulaciones);
-        setModelosPan(finalModelos);
+              // 1. Si la versión existente tiene más de 2 ingredientes y la nueva viene degradada (<= 2), PROHIBIR sobreescritura
+              if (prevIngCount > 2 && newIngCount <= 2) {
+                console.warn(`[Anti-Retroceso] Protegido ${d.nombre}: se mantiene versión con ${prevIngCount} ingredientes frente a versión degradada con ${newIngCount}`);
+                continue;
+              }
+
+              // 2. Si la nueva versión tiene significativamente más ingredientes, gana automáticamente
+              if (newIngCount > prevIngCount) {
+                map.set(d.id, { item: d, ts, prio });
+                continue;
+              }
+
+              // 3. Si ambas tienen los mismos ingredientes (o son modelos de pan sin campo ingredientes):
+              // Fecha más nueva gana; si empatan o no hay fecha, gana mayor prioridadEmpate
+              if (ts > prev.ts || (ts === prev.ts && prio >= prev.prio)) {
+                map.set(d.id, { item: d, ts, prio });
+              }
+            }
+          };
+          // Defaults primero (más débiles)
+          aplicar(defaults, 0);
+          for (const f of fuentes) aplicar(f.data, f.prioridadEmpate);
+          return Array.from(map.values()).map((v) => v.item);
+        };
+
+        const formIDB = toArr(formulacionesIDB);
+        const formBackup = toArr(oldBackupForm);
+        const formLocal = toArr(localForm);
+        const formCloud = toArr(cloudForm);
+        const hasRealForm =
+          formIDB.length > 0 || formBackup.length > 0 || formLocal.length > 0 || formCloud.length > 0;
+        const finalFormulaciones = mergePorRecencia(
+          [
+            { label: 'local', data: formLocal, prioridadEmpate: 2 },
+            { label: 'backup', data: formBackup, prioridadEmpate: 3 },
+            { label: 'idb', data: formIDB, prioridadEmpate: 4 },
+            // Nube con máxima prioridad de enlace
+            { label: 'cloud', data: formCloud, prioridadEmpate: 10 },
+          ],
+          hasRealForm ? [] : toArr(DATOS_EJEMPLO.formulaciones),
+        ) as FormulacionBase[];
+
+        const modIDB = toArr(modelosIDB);
+        const modBackup = toArr(oldBackupMod);
+        const modLocal = toArr(localMod);
+        const modCloud = toArr(cloudMod);
+        const hasRealMod =
+          modIDB.length > 0 || modBackup.length > 0 || modLocal.length > 0 || modCloud.length > 0;
+        const finalModelos = mergePorRecencia(
+          [
+            { label: 'local', data: modLocal, prioridadEmpate: 2 },
+            { label: 'backup', data: modBackup, prioridadEmpate: 3 },
+            { label: 'idb', data: modIDB, prioridadEmpate: 4 },
+            { label: 'cloud', data: modCloud, prioridadEmpate: 10 },
+          ],
+          hasRealMod ? [] : toArr(DATOS_EJEMPLO.modelosPan),
+        ) as ModeloPan[];
+
+        // CAPA DE BÓVEDA INMUTABLE: Auto-reparar si falta alguna masa maestra o insumo
+        const { blindarYRepararFormulaciones, blindarYRepararModelos } = await import('@/lib/boveda-produccion-inmutable');
+        const { resultado: blindadasForm } = blindarYRepararFormulaciones(finalFormulaciones);
+        const { resultado: blindadosMod } = blindarYRepararModelos(finalModelos);
+
+        setFormulaciones(blindadasForm);
+        setModelosPan(blindadosMod);
         if (planesDiariosIDB && planesDiariosIDB.length > 0) {
           setPlanesDiarios(planesDiariosIDB);
         }
-        
-        // Disparar sincronización para asegurar que la base unificada se propague a la nube
-        if (finalFormulaciones.length > 0) db.saveBackup('formulaciones_data', finalFormulaciones).catch(() => {});
-        if (finalModelos.length > 0) db.saveBackup('modelosPan_data', finalModelos).catch(() => {});
+
+        // Persistir SIEMPRE las versiones blindadas y completas (NUNCA las degradadas)
+        localStorage.setItem('formulaciones', JSON.stringify(blindadasForm));
+        localStorage.setItem('modelosPan', JSON.stringify(blindadosMod));
+
+        // Espejo en IndexedDB para que la próxima apertura coincida
+        Promise.all([
+          ...blindadasForm.map((f) => db.updateFormulacion(f).catch(() => {})),
+          ...blindadosMod.map((m) => db.updateModeloPan(m).catch(() => {})),
+        ]).catch(() => {});
+
+        // Sincronizar hacia la nube si la lista blindada está completa
+        const totalIngredientes = (list: any[]) =>
+          list.reduce((acc, f) => acc + getIngCount(f), 0);
+        const cloudFormIngCount = totalIngredientes(formCloud);
+        const blindadasIngCount = totalIngredientes(blindadasForm);
+
+        const debeSubirForm =
+          blindadasForm.length > 0 &&
+          (formCloud.length === 0 || blindadasIngCount >= cloudFormIngCount) &&
+          blindadasIngCount >= 25;
+
+        const debeSubirMod =
+          blindadosMod.length > 0 &&
+          (modCloud.length === 0 || blindadosMod.length >= modCloud.length) &&
+          blindadosMod.length >= 10;
+
+        if (debeSubirForm) db.saveBackup('formulaciones_data', blindadasForm).catch(() => {});
+        if (debeSubirMod) db.saveBackup('modelosPan_data', blindadosMod).catch(() => {});
 
       } catch {
-        // Si IndexedDB falla, usar localStorage
-        const savedFormulaciones = localStorage.getItem('formulaciones');
-        const savedModelos = localStorage.getItem('modelosPan');
-        if (savedFormulaciones && JSON.parse(savedFormulaciones).length > 0) {
-          setFormulaciones(JSON.parse(savedFormulaciones));
-        } else if (DATOS_EJEMPLO.formulaciones) {
-          setFormulaciones(DATOS_EJEMPLO.formulaciones as FormulacionBase[]);
-        }
-        if (savedModelos && JSON.parse(savedModelos).length > 0) {
-          setModelosPan(JSON.parse(savedModelos));
-        } else if (DATOS_EJEMPLO.modelosPan) {
-          setModelosPan(DATOS_EJEMPLO.modelosPan as ModeloPan[]);
+        // Si falla IndexedDB/Merge, rescatar desde Bóveda Inmutable
+        try {
+          const savedFormulaciones = localStorage.getItem('formulaciones');
+          const savedModelos = localStorage.getItem('modelosPan');
+          const rawForm = savedFormulaciones ? JSON.parse(savedFormulaciones) : [];
+          const rawMod = savedModelos ? JSON.parse(savedModelos) : [];
+          const { blindarYRepararFormulaciones, blindarYRepararModelos } = await import('@/lib/boveda-produccion-inmutable');
+          const { resultado: blindadasForm } = blindarYRepararFormulaciones(rawForm);
+          const { resultado: blindadosMod } = blindarYRepararModelos(rawMod);
+          setFormulaciones(blindadasForm);
+          setModelosPan(blindadosMod);
+        } catch {
+          const { BOVEDA_FORMULACIONES, BOVEDA_MODELOS_PAN } = await import('@/lib/boveda-produccion-inmutable');
+          setFormulaciones(BOVEDA_FORMULACIONES);
+          setModelosPan(BOVEDA_MODELOS_PAN);
         }
       } finally {
         setIsLoaded(true);
       }
     };
+
     cargarDatos();
 
-    // Escuchar cambios en tiempo real desde Supabase Realtime
-    const handleRealtimeChange = (e: any) => {
-      const table = e?.detail?.table;
-      if (table === 'formulaciones_data' || table === 'modelosPan_data' || table === 'formulaciones' || table === 'modelosPan') {
+    const handleRealtime = (e: any) => {
+      const dt = e.detail;
+      if (!dt) return;
+      if (dt.table === 'configuracion' || dt.table === 'formulaciones' || dt.id === 'formulaciones_data' || dt.id === 'modelosPan_data') {
         cargarDatos();
       }
     };
-    window.addEventListener('nexus-realtime-change', handleRealtimeChange);
+    window.addEventListener('nexus-realtime-change', handleRealtime);
+    
     return () => {
-      window.removeEventListener('nexus-realtime-change', handleRealtimeChange);
+      window.removeEventListener('nexus-realtime-change', handleRealtime);
     };
   }, []);
 
-  // Sincronizar hacia la nube a través de saveBackup cuando cambien localmente
+  // Sincronizar hacia la nube y localmente SOLO si los datos no están degradados
   useEffect(() => {
-    if (isLoaded && formulaciones.length > 0) {
-      db.saveBackup('formulaciones_data', formulaciones).catch(console.error);
-    }
-  }, [formulaciones, isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded && modelosPan.length > 0) {
-      db.saveBackup('modelosPan_data', modelosPan).catch(console.error);
-    }
-  }, [modelosPan, isLoaded]);
-
-
-  // Persistir formulaciones en localStorage + IndexedDB (doble capa)
-  useEffect(() => {
-    if (!isLoaded) return;
-    if (formulaciones.length > 0 || localStorage.getItem('formulaciones')) {
+    if (!isLoaded || formulaciones.length === 0) return;
+    const totalIngs = formulaciones.reduce((acc, f) => acc + (Array.isArray(f.ingredientes) ? f.ingredientes.length : 0), 0);
+    // GUARDIÁN: no guardar en nube ni sobreescribir si vienen menos de 20 ingredientes totales
+    if (totalIngs >= 20) {
       localStorage.setItem('formulaciones', JSON.stringify(formulaciones));
-      db.saveBackup('formulaciones_data', formulaciones).catch(() => {});
+      db.saveBackup('formulaciones_data', formulaciones).catch(console.error);
+    } else {
+      console.warn(`[Anti-Retroceso] Intento de sincronizar formulaciones degradadas (${totalIngs} ingredientes) bloqueado.`);
     }
   }, [formulaciones, isLoaded]);
 
-  // Persistir modelos en localStorage + IndexedDB (doble capa)
   useEffect(() => {
-    if (!isLoaded) return;
-    if (modelosPan.length > 0 || localStorage.getItem('modelosPan')) {
+    if (!isLoaded || modelosPan.length === 0) return;
+    if (modelosPan.length >= 10) {
       localStorage.setItem('modelosPan', JSON.stringify(modelosPan));
-      db.saveBackup('modelosPan_data', modelosPan).catch(() => {});
+      db.saveBackup('modelosPan_data', modelosPan).catch(console.error);
+    } else {
+      console.warn(`[Anti-Retroceso] Intento de sincronizar lista degradada de modelos (${modelosPan.length}) bloqueado.`);
     }
   }, [modelosPan, isLoaded]);
 
@@ -339,10 +388,11 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
 
   // --- Formulaciones ---
   const addFormulacion = useCallback(async (data: Omit<import('@/types').FormulacionBase, 'id'>) => {
+    const ahora = new Date().toISOString();
     const formulacion: import('@/types').FormulacionBase = {
       ...data,
       id: generateUUID(),
-      fechaActualizacion: new Date().toISOString(),
+      fechaActualizacion: ahora,
     };
     setFormulaciones(prev => {
       const newList = [...prev, formulacion];
@@ -355,6 +405,13 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
   }, []);
 
   const updateFormulacion = useCallback(async (id: string, updates: Partial<import('@/types').FormulacionBase>) => {
+    const { esActualizacionSeguraFormulacion } = await import('@/lib/boveda-produccion-inmutable');
+    const existing = formulaciones.find(f => f.id === id);
+    const check = esActualizacionSeguraFormulacion(existing, updates);
+    if (!check.segura) {
+      toast.error(check.error || 'Actualización bloqueada por el Centinela de Integridad.');
+      return;
+    }
     setFormulaciones(prev => {
       const updatedList = prev.map(f => f.id === id ? { ...f, ...updates, fechaActualizacion: new Date().toISOString() } : f);
       const updatedModel = updatedList.find(f => f.id === id);
@@ -363,9 +420,15 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
       return updatedList;
     });
     toast.success('Formulación actualizada');
-  }, []);
+  }, [formulaciones]);
 
   const deleteFormulacion = useCallback(async (id: string) => {
+    const { puedeEliminarFormulacion } = await import('@/lib/boveda-produccion-inmutable');
+    const check = puedeEliminarFormulacion(id);
+    if (!check.permitido) {
+      toast.error(check.error || 'Esta formulación está protegida por la Bóveda Inmutable.');
+      return;
+    }
     setFormulaciones(prev => {
       const newList = prev.filter(f => f.id !== id);
       db.saveBackup('formulaciones_data', newList).catch(() => {});
@@ -377,10 +440,12 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
 
   // --- Modelos de Pan ---
   const addModeloPan = useCallback(async (data: Omit<import('@/types').ModeloPan, 'id'>) => {
-    const modelo: import('@/types').ModeloPan = {
+    const ahora = new Date().toISOString();
+    const modelo: ModeloPan & { fechaActualizacion?: string } = {
       ...data,
       id: generateUUID(),
-      fechaActualizacion: new Date().toISOString(),
+      createdAt: data.createdAt || ahora,
+      fechaActualizacion: ahora,
     };
     setModelosPan(prev => {
       const newList = [...prev, modelo];
@@ -393,8 +458,13 @@ export function useProduccionHook({ onAjustarStock, recetas }: UseProduccionPara
   }, []);
 
   const updateModeloPan = useCallback(async (id: string, updates: Partial<import('@/types').ModeloPan>) => {
+    const ahora = new Date().toISOString();
     setModelosPan(prev => {
-      const updatedList = prev.map(m => m.id === id ? { ...m, ...updates, fechaActualizacion: new Date().toISOString() } : m);
+      const updatedList = prev.map((m) =>
+        m.id === id
+          ? ({ ...m, ...updates, fechaActualizacion: ahora } as ModeloPan & { fechaActualizacion?: string })
+          : m,
+      );
       const updatedModel = updatedList.find(m => m.id === id);
       if (updatedModel) db.updateModeloPan(updatedModel).catch(console.error);
       db.saveBackup('modelosPan_data', updatedList).catch(() => {});
