@@ -15,7 +15,8 @@ import {
     Save,
     Mic,
     Volume2,
-    ShieldAlert
+    ShieldAlert,
+    Zap
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VendedoraQuickPicker, VendedoraMesaModal, type VendedoraOption } from '@/components/ventas/VendedoraQuickPicker';
@@ -141,6 +142,7 @@ export function Ventas(props: VentasProps) {
     }, [usuarios]);
 
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
+    const [mobileActiveView, setMobileActiveView] = useState<'catalogo' | 'ticket'>('catalogo');
     const [showMobileCart, setShowMobileCart] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -776,7 +778,8 @@ export function Ventas(props: VentasProps) {
             setShowPagoModal(false);
             setShowSuccessModal(true);
             setNequiComprobante(null);
-            setShowMobileCart(false); // volver al catálogo en móvil tras cobrar
+            setShowMobileCart(false);
+            setMobileActiveView('catalogo'); // volver al catálogo en móvil tras cobrar
 
             // Si era una mesa, liberarla y cerrar la pestaña
             const activeTab = tabs.find(t => t.id === activeTabId);
@@ -977,25 +980,30 @@ export function Ventas(props: VentasProps) {
                 descuento={descuento}
                 setDescuento={handleSetDescuento}
                 rolUsuario={usuario?.rol}
+                onGoToCatalog={() => setMobileActiveView('catalogo')}
             />
         </>
     );
 
     return (
         <div className="flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
-            {/* Cabecera de Pestañas Compacta - Restaurada */}
+            {/* Cabecera de Pestañas Compacta */}
             <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm z-10">
                 <POSHeader
                     viewMode={viewMode}
                     setViewMode={(mode) => {
                         setViewMode(mode);
-                        // Al cambiar a mesas en móvil, asegurar que el panel izquierdo sea visible
-                        if (mode === 'mesas') setShowMobileCart(false);
+                        if (mode === 'mesas') {
+                            setShowMobileCart(false);
+                            setMobileActiveView('catalogo');
+                        }
                     }}
                     formatCurrency={formatCurrency}
                     tabs={tabs}
                     activeTabId={activeTabId}
-                    onSelectTab={handleSelectTab}
+                    onSelectTab={(id) => {
+                        handleSelectTab(id);
+                    }}
                     onCloseTab={handleCloseTab}
                     onAddVentaRapida={handleAddVentaRapida}
                     vendedoras={vendedorasDisponibles}
@@ -1003,7 +1011,7 @@ export function Ventas(props: VentasProps) {
                     onSelectVendedora={setVendedoraActiva}
                     onShowChecklistVitrina={() => setShowChecklistVitrina(true)}
                 />
-                {/* ── Selector Rápido de Vendedora — solo desktop (en móvil está en el panel) ── */}
+                {/* ── Selector Rápido de Vendedora — solo desktop ── */}
                 {vendedorasDisponibles.length >= 1 && (
                     <div className="hidden lg:flex items-center gap-3 px-4 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800">
                         <VendedoraQuickPicker
@@ -1017,29 +1025,51 @@ export function Ventas(props: VentasProps) {
                 )}
             </div>
 
-            <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3 pb-[140px] lg:pb-3">
-                {/* Panel izquierdo: Catálogo o Mesas — pantalla completa en móvil */}
-                <div className={cn(
-                    "flex-1 flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden",
-                    "flex"
-                )} style={{ minHeight: '0' }}>
-                    {viewMode === 'pos' ? (
-                        <ProductCatalog
-                            productos={productosVenta}
-                            inventario={inventario}
-                            onAddToCart={addToCart}
-                            formatCurrency={formatCurrency}
-                            searchTerm={searchTerm}
-                            setSearchTerm={setSearchTerm}
-                            selectedCategory={selectedCategory}
-                            setSelectedCategory={setSelectedCategory}
-                            categorias={categorias}
-                            onEditProduct={onUpdateProducto}
-                            onAjustarStock={onAjustarStock}
-                            onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
-                            cart={cart}
-                        />
-                    ) : (
+            {/* ── Selector Táctil Móvil: [🛍️ Catálogo] vs [🧾 Ticket / Cliente] ── */}
+            {viewMode === 'pos' && (
+                <div className="flex lg:hidden items-center p-1 mx-3 mt-2 bg-slate-200/80 dark:bg-slate-800/80 rounded-2xl border border-slate-300/50 dark:border-slate-700/50 shrink-0">
+                    <button
+                        onClick={() => setMobileActiveView('catalogo')}
+                        className={cn(
+                            "flex-1 py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95",
+                            mobileActiveView === 'catalogo'
+                                ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm border border-slate-200/60 dark:border-slate-700/60"
+                                : "text-slate-500 dark:text-slate-400 hover:text-slate-700"
+                        )}
+                    >
+                        <Package className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Catálogo</span>
+                    </button>
+                    <button
+                        onClick={() => setMobileActiveView('ticket')}
+                        className={cn(
+                            "flex-1 py-2 px-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all active:scale-95 relative",
+                            mobileActiveView === 'ticket'
+                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                                : "text-slate-500 dark:text-slate-400 hover:text-slate-700"
+                        )}
+                    >
+                        <ShoppingCart className="w-3.5 h-3.5" />
+                        <span>Ticket / Cliente</span>
+                        {cart.length > 0 && (
+                            <span className={cn(
+                                "px-1.5 py-0.2 rounded-full text-[10px] font-black leading-tight",
+                                mobileActiveView === 'ticket' ? "bg-white text-indigo-600" : "bg-indigo-600 text-white"
+                            )}>
+                                {cart.reduce((s, i) => s + i.cantidad, 0)}
+                            </span>
+                        )}
+                    </button>
+                </div>
+            )}
+
+            <div className={cn(
+                "flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-2 sm:p-3 lg:pb-3",
+                viewMode === 'pos' && mobileActiveView === 'catalogo' ? "pb-[140px]" : "pb-3"
+            )}>
+                {/* Panel principal: Catálogo o Mesas o Ticket en móvil */}
+                <div className="flex-1 flex flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden" style={{ minHeight: '0' }}>
+                    {viewMode === 'mesas' ? (
                         <MuroPedidos
                             mesas={mesas}
                             pedidosActivos={pedidosActivos}
@@ -1049,6 +1079,50 @@ export function Ventas(props: VentasProps) {
                             onAddMesa={onAddMesa}
                             onDeleteMesa={onDeleteMesa}
                         />
+                    ) : (
+                        <>
+                            {/* Móvil: Mostrar ticket o catálogo según mobileActiveView */}
+                            <div className="lg:hidden flex-1 flex flex-col min-h-0 h-full">
+                                {mobileActiveView === 'ticket' ? (
+                                    renderCartPanel()
+                                ) : (
+                                    <ProductCatalog
+                                        productos={productosVenta}
+                                        inventario={inventario}
+                                        onAddToCart={addToCart}
+                                        formatCurrency={formatCurrency}
+                                        searchTerm={searchTerm}
+                                        setSearchTerm={setSearchTerm}
+                                        selectedCategory={selectedCategory}
+                                        setSelectedCategory={setSelectedCategory}
+                                        categorias={categorias}
+                                        onEditProduct={onUpdateProducto}
+                                        onAjustarStock={onAjustarStock}
+                                        onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
+                                        cart={cart}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Desktop (lg:flex): Siempre catálogo a la izquierda */}
+                            <div className="hidden lg:flex flex-1 flex-col min-h-0 h-full">
+                                <ProductCatalog
+                                    productos={productosVenta}
+                                    inventario={inventario}
+                                    onAddToCart={addToCart}
+                                    formatCurrency={formatCurrency}
+                                    searchTerm={searchTerm}
+                                    setSearchTerm={setSearchTerm}
+                                    selectedCategory={selectedCategory}
+                                    setSelectedCategory={setSelectedCategory}
+                                    categorias={categorias}
+                                    onEditProduct={onUpdateProducto}
+                                    onAjustarStock={onAjustarStock}
+                                    onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
+                                    cart={cart}
+                                />
+                            </div>
+                        </>
                     )}
                 </div>
 
@@ -1057,7 +1131,7 @@ export function Ventas(props: VentasProps) {
                     {renderCartPanel()}
                 </div>
 
-                {/* Mobile Sheet Cart */}
+                {/* Mobile Sheet Cart (respaldo) */}
                 <Sheet open={showMobileCart} onOpenChange={setShowMobileCart}>
                     <SheetContent side="bottom" className="h-[85vh] p-0 pb-[80px] flex flex-col bg-slate-50 dark:bg-slate-950 border-t-0 rounded-t-3xl border-x-0 outline-none z-[60]">
                         {renderCartPanel()}
@@ -1065,62 +1139,71 @@ export function Ventas(props: VentasProps) {
                 </Sheet>
             </div>
 
-            {/* ── Navegación móvil: Barra flotante express estilo fintech ── */}
-            <div className="lg:hidden fixed bottom-[88px] left-3 right-3 rounded-2xl overflow-hidden flex items-center p-1.5 border border-slate-200/80 dark:border-slate-800 shadow-[0_12px_36px_rgba(0,0,0,0.22)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}>
-                {cart.length > 0 ? (
-                    <>
-                        {/* Botón Ver Ticket / Ajustar cantidades */}
-                        <button
-                            onClick={() => setShowMobileCart(true)}
-                            className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all text-left min-w-0 flex-1 mr-2"
-                        >
-                            <div className="relative shrink-0">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
-                                    <ShoppingCart className="w-5 h-5" />
+            {/* ── Navegación móvil: Barra flotante express cuando está en vista de catálogo ── */}
+            {viewMode === 'pos' && mobileActiveView === 'catalogo' && (
+                <div className="lg:hidden fixed bottom-[88px] left-3 right-3 rounded-2xl overflow-hidden flex items-center p-1.5 border border-slate-200/80 dark:border-slate-800 shadow-[0_12px_36px_rgba(0,0,0,0.22)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-40" style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 6px)' }}>
+                    {cart.length > 0 ? (
+                        <>
+                            {/* Botón Ver Ticket / Ajustar cantidades */}
+                            <button
+                                onClick={() => setMobileActiveView('ticket')}
+                                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all text-left min-w-0 flex-1 mr-2"
+                            >
+                                <div className="relative shrink-0">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                                        <ShoppingCart className="w-5 h-5" />
+                                    </div>
+                                    <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shadow-md">
+                                        {cart.reduce((s, i) => s + i.cantidad, 0)}
+                                    </span>
                                 </div>
-                                <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shadow-md">
-                                    {cart.reduce((s, i) => s + i.cantidad, 0)}
-                                </span>
-                            </div>
-                            <div className="flex flex-col min-w-0">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ticket</span>
-                                <span className="text-sm font-black text-slate-900 dark:text-white truncate">
-                                    {formatCurrency(totalACobrar)}
-                                </span>
-                            </div>
-                        </button>
+                                <div className="flex flex-col min-w-0">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ver Ticket</span>
+                                    <span className="text-sm font-black text-slate-900 dark:text-white truncate">
+                                        {formatCurrency(totalACobrar)}
+                                    </span>
+                                </div>
+                            </button>
 
-                        {/* Botón Cobro Express Directo */}
+                            {/* Botón Cobro Express Directo */}
+                            <button
+                                onClick={() => {
+                                    setMetodoPago('efectivo');
+                                    setTipoTransaccion('efectivo');
+                                    setDineroRecibido(0);
+                                    setShowPagoModal(true);
+                                }}
+                                className="h-12 px-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 shrink-0 transition-all"
+                            >
+                                <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+                                <span>Cobrar {formatCurrency(totalACobrar)}</span>
+                            </button>
+                        </>
+                    ) : (
                         <button
-                            onClick={() => {
-                                setMetodoPago('efectivo');
-                                setTipoTransaccion('efectivo');
-                                setDineroRecibido(0);
-                                setShowPagoModal(true);
-                            }}
-                            className="h-12 px-5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:scale-95 text-white font-black text-xs uppercase tracking-wider rounded-xl shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2 shrink-0 transition-all"
+                            onClick={() => setMobileActiveView('ticket')}
+                            className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-[0.99] transition-all rounded-xl"
                         >
-                            <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
-                            <span>Cobrar {formatCurrency(totalACobrar)}</span>
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-500">
+                                    <ShoppingCart className="w-4 h-4" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="text-xs font-black text-slate-700 dark:text-slate-200">
+                                        Ticket Vacío {cliente ? `(${cliente})` : ''}
+                                    </span>
+                                    <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                                        Toca para ver ticket, cliente o fiado →
+                                    </span>
+                                </div>
+                            </div>
+                            <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50">
+                                Ver Ticket
+                            </span>
                         </button>
-                    </>
-                ) : (
-                    <div className="flex items-center justify-between w-full px-3 py-2">
-                        <div className="flex items-center gap-2.5">
-                            <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400">
-                                <ShoppingCart className="w-4 h-4" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="text-xs font-black text-slate-700 dark:text-slate-200">Ticket Vacío</span>
-                                <span className="text-[10px] font-bold text-slate-400">Toca productos para agregar</span>
-                            </div>
-                        </div>
-                        <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400">
-                            POS Activo
-                        </span>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
+            )}
 
             {/* Modal de Pago Profesional */}
             <Dialog open={showPagoModal} onOpenChange={setShowPagoModal}>

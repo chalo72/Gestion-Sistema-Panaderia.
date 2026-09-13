@@ -119,27 +119,31 @@ export function POSHeader({
                     {/* Botón activo — toca para abrir panel */}
                     <button
                         onClick={() => setPanelOpen(true)}
-                        className="flex-1 flex items-center gap-2.5 h-11 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 active:scale-[0.98] transition-all"
+                        className="flex-1 flex items-center gap-2.5 h-11 px-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 active:scale-[0.98] transition-all"
                     >
                         <div className={cn(
-                            "w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-white",
+                            "w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-white shadow-sm",
                             activeTab?.tipo === 'venta-rapida' ? "bg-emerald-500" : "bg-blue-500"
                         )}>
                             {activeTab?.tipo === 'venta-rapida' ? <Zap className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                         </div>
                         <div className="flex-1 text-left min-w-0">
-                            <p className="text-sm font-black text-slate-800 dark:text-white truncate leading-tight">
+                            <p className="text-xs sm:text-sm font-black text-slate-800 dark:text-white truncate leading-tight">
                                 {activeTab?.label ?? 'Venta Rápida'}
                             </p>
-                            {activeVendedora && (
-                                <p className="text-[10px] font-bold text-orange-500 truncate leading-tight">
+                            {activeVendedora ? (
+                                <p className="text-[9px] font-bold text-orange-500 truncate leading-tight">
                                     {activeVendedora.nombre.split(' ')[0]} — asignada
+                                </p>
+                            ) : (
+                                <p className="text-[9px] font-bold text-slate-400 truncate leading-tight">
+                                    {tabs.length > 1 ? `${tabs.length} tickets activos (cambiar)` : 'Toca para cambiar de ticket'}
                                 </p>
                             )}
                         </div>
                         <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                         {tabs.length > 1 && (
-                            <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center shrink-0">
+                            <span className="w-5 h-5 rounded-full bg-indigo-600 text-white text-[9px] font-black flex items-center justify-center shrink-0 shadow-sm">
                                 {tabs.length}
                             </span>
                         )}
@@ -148,7 +152,7 @@ export function POSHeader({
                     {/* Mesas */}
                     <button
                         onClick={() => setViewMode(viewMode === 'mesas' ? 'pos' : 'mesas')}
-                        className={cn("w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0",
+                        className={cn("w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 shadow-sm",
                             viewMode === 'mesas' ? "bg-indigo-600 text-white border-indigo-700" : "bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
                         )}
                         title="Mesas"
@@ -159,7 +163,7 @@ export function POSHeader({
                     {onShowChecklistVitrina && (
                         <button
                             onClick={onShowChecklistVitrina}
-                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 shadow-sm"
                             title="Checklist Rotación Vitrina"
                         >
                             <span className="text-[18px]">📝</span>
@@ -175,12 +179,12 @@ export function POSHeader({
                 <>
                     {/* Overlay */}
                     <div
-                        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden"
+                        className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm lg:hidden"
                         onClick={() => setPanelOpen(false)}
                     />
 
                     {/* Panel desde abajo */}
-                    <div className="fixed bottom-0 left-0 right-0 z-50 lg:hidden bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl border-t border-slate-200 dark:border-slate-700 animate-in slide-in-from-bottom duration-200">
+                    <div className="fixed bottom-0 left-0 right-0 z-[75] lg:hidden bg-white dark:bg-slate-900 rounded-t-3xl shadow-2xl border-t border-slate-200 dark:border-slate-700 animate-in slide-in-from-bottom duration-200">
 
                         {/* Handle */}
                         <div className="flex justify-center pt-3 pb-1">

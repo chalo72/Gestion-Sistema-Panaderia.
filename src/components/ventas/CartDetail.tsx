@@ -25,6 +25,7 @@ interface CartDetailProps {
     descuento?: number;
     setDescuento?: (v: number) => void;
     rolUsuario?: string;
+    onGoToCatalog?: () => void;
 }
 
 export function CartDetail({
@@ -33,6 +34,7 @@ export function CartDetail({
     clientesNombres = [],
     activeTabLabel, activeTabTipo, onLiberarMesa, onTraspasarMesa,
     descuento = 0, setDescuento, rolUsuario,
+    onGoToCatalog,
 }: CartDetailProps) {
 
     const [billeteRecibido, setBilleteRecibido] = useState('');
@@ -52,68 +54,85 @@ export function CartDetail({
 
     return (
         <div className="flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-slate-900">
-            {/* Header Fusionado - Estirado hacia arriba con Identificador */}
-            <div className="shrink-0 h-10 px-3 bg-slate-900 border-b border-slate-800 flex items-center gap-3">
-                <div className="flex items-center gap-2 shrink-0">
-                    <div className="w-5 h-5 bg-indigo-500/20 rounded-md flex items-center justify-center border border-indigo-500/20">
-                        <ShoppingCart className="w-3 h-3 text-indigo-400" />
+            {/* Header: Pestaña activa + Controles */}
+            <div className="shrink-0 h-11 px-3.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-white shadow-sm">
+                <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-6 h-6 bg-indigo-500/25 rounded-lg flex items-center justify-center border border-indigo-500/30 shrink-0">
+                        {isMesa ? <Users className="w-3.5 h-3.5 text-blue-400" /> : <ShoppingCart className="w-3.5 h-3.5 text-indigo-400" />}
                     </div>
-                    <span className="text-[9px] font-black text-indigo-300 uppercase tracking-tighter">
-                        {isMesa ? 'Servicio Mesa' : 'Venta Rápida'}
-                    </span>
+                    <div className="truncate">
+                        <span className="text-xs font-black uppercase tracking-tight block truncate">
+                            {tabLabel}
+                        </span>
+                    </div>
                 </div>
 
-                <div className="flex items-center gap-2 bg-white/5 rounded-md px-2 py-1 flex-1 h-7 border border-white/5">
-                    {!isMesa ? (
-                        <div className="flex items-center gap-2 w-full">
-                            <Zap className="w-3 h-3 text-slate-600 shrink-0" />
-                            <input
-                                className="flex-1 bg-transparent border-none p-0 focus:ring-0 text-[10px] font-bold text-white placeholder:text-slate-600 min-w-0"
-                                placeholder="Cliente..."
-                                value={cliente}
-                                onChange={e => setCliente(e.target.value)}
-                                list="cart-clientes-list"
-                                autoComplete="off"
-                            />
-                            {cliente && (
-                                <button
-                                    onClick={() => setCliente('')}
-                                    className="shrink-0 text-slate-500 hover:text-rose-400 transition-colors"
-                                    title="Quitar cliente"
-                                >
-                                    <X className="w-3 h-3" />
-                                </button>
-                            )}
-                            {clientesNombres.length > 0 && (
-                                <datalist id="cart-clientes-list">
-                                    {clientesNombres.map(nombre => (
-                                        <option key={nombre} value={nombre} />
-                                    ))}
-                                </datalist>
-                            )}
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                                <Users className="w-3 h-3 text-blue-400 shrink-0" />
-                                <p className="text-[10px] font-bold text-white uppercase truncate">{tabLabel}</p>
-                            </div>
-                            {onTraspasarMesa && (
-                                <button
-                                    onClick={onTraspasarMesa}
-                                    className="shrink-0 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded transition-colors text-[9px] font-bold flex items-center gap-1"
-                                    title="Traspasar Mesa"
-                                >
-                                    <UserCircle className="w-3 h-3" /> Traspasar
-                                </button>
-                            )}
-                        </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    {onGoToCatalog && (
+                        <button
+                            onClick={onGoToCatalog}
+                            className="text-[10px] font-black uppercase tracking-wider bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded-lg shadow-sm flex items-center gap-1 active:scale-95 transition-all"
+                        >
+                            <span>+ Catálogo</span>
+                        </button>
+                    )}
+                    {cart.length > 0 && (
+                        <button
+                            onClick={onClearCart}
+                            className="w-7 h-7 rounded-lg bg-slate-800 hover:bg-rose-500 hover:text-white text-slate-400 flex items-center justify-center transition-all active:scale-90"
+                            title="Vaciar ticket"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                     )}
                 </div>
-                {cart.length > 0 && (
-                    <button onClick={onClearCart} className="text-slate-500 hover:text-rose-500 transition-colors shrink-0">
-                        <X className="w-3.5 h-3.5" />
-                    </button>
+            </div>
+
+            {/* Barra de Registro de Cliente / Fiado — Ultra clara y táctil */}
+            <div className="shrink-0 p-2.5 bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                        <Users className="w-4 h-4 text-indigo-500 dark:text-indigo-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                        <input
+                            className="w-full h-10 pl-9 pr-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-white placeholder:text-slate-400 focus:ring-2 focus:ring-indigo-500/30 outline-none transition-all shadow-sm"
+                            placeholder="Cliente / A quién se le fía (nombre)..."
+                            value={cliente}
+                            onChange={e => setCliente(e.target.value)}
+                            list="cart-clientes-list"
+                            autoComplete="off"
+                        />
+                        {cliente && (
+                            <button
+                                onClick={() => setCliente('')}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                                title="Limpiar cliente"
+                            >
+                                <X className="w-3.5 h-3.5" />
+                            </button>
+                        )}
+                        {clientesNombres.length > 0 && (
+                            <datalist id="cart-clientes-list">
+                                {clientesNombres.map(nombre => (
+                                    <option key={nombre} value={nombre} />
+                                ))}
+                            </datalist>
+                        )}
+                    </div>
+                    {isMesa && onTraspasarMesa && (
+                        <button
+                            onClick={onTraspasarMesa}
+                            className="shrink-0 h-10 px-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10px] font-black uppercase flex items-center gap-1 hover:bg-slate-200 transition-all active:scale-95"
+                            title="Traspasar Mesa"
+                        >
+                            <UserCircle className="w-3.5 h-3.5 text-indigo-500" /> Traspasar
+                        </button>
+                    )}
+                </div>
+                {cliente && (
+                    <div className="mt-1 px-1 flex items-center justify-between text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                        <span>👤 Ticket asociado a: <strong className="text-slate-900 dark:text-white">{cliente}</strong></span>
+                        <span className="text-[9px] uppercase tracking-wider text-slate-400">Listo para fiar o cobrar</span>
+                    </div>
                 )}
             </div>
 
@@ -121,12 +140,22 @@ export function CartDetail({
                 {/* Lista de productos con más espacio vertical */}
                 <div className="flex-1 overflow-y-auto no-scrollbar space-y-1">
                     {cart.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-full text-center opacity-40">
-                            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-3">
-                                <ShoppingCart className="w-8 h-8 text-slate-400" />
+                        <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                            <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800/80 rounded-2xl flex items-center justify-center mb-3 border border-slate-200/60 dark:border-slate-700/60 text-slate-400">
+                                <ShoppingCart className="w-8 h-8" />
                             </div>
-                            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest leading-none">Esperando Pedido</p>
-                            <p className="text-[10px] text-slate-400 mt-2">Agregue productos del catálogo para comenzar</p>
+                            <p className="text-sm font-black text-slate-700 dark:text-slate-200 uppercase tracking-wider">Ticket Vacío</p>
+                            <p className="text-xs text-slate-400 mt-1 max-w-xs leading-relaxed">
+                                {cliente ? `Cliente asignado: "${cliente}". Agrega productos del catálogo para procesar venta o fiado.` : 'Toca productos del catálogo para agregarlos a este ticket.'}
+                            </p>
+                            {onGoToCatalog && (
+                                <Button
+                                    onClick={onGoToCatalog}
+                                    className="mt-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider h-10 px-4 shadow-md shadow-indigo-600/20 active:scale-95 transition-all"
+                                >
+                                    🛍️ Ver Catálogo de Productos
+                                </Button>
+                            )}
                         </div>
                     ) : (
                         cart.map((item, idx) => (
@@ -256,20 +285,26 @@ export function CartDetail({
                     </div>
 
                     {/* Botones de Acción */}
-                    <div className="grid grid-cols-[1fr_2fr] gap-3">
+                    <div className="grid grid-cols-[1.1fr_2fr] gap-2.5">
                         <Button
                             variant="outline"
                             disabled={cart.length === 0}
                             onClick={() => onProcessPayment('efectivo', 'credito')}
-                            className="h-16 rounded-3xl border-2 border-slate-200 dark:border-slate-700 text-slate-500 font-bold uppercase text-[10px] tracking-widest hover:bg-slate-50"
+                            className={cn(
+                                "h-14 sm:h-16 rounded-2xl border-2 font-black uppercase text-xs tracking-wider flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-all shadow-sm",
+                                cart.length === 0
+                                    ? "border-slate-200 dark:border-slate-800 text-slate-400 bg-slate-50 dark:bg-slate-800/40"
+                                    : "border-amber-400 dark:border-amber-600 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-700 dark:text-amber-300"
+                            )}
                         >
-                            {cart.length === 0 ? 'Vacío' : 'Fiado / Nota'}
+                            <span className="flex items-center gap-1">📋 Fiado / Nota</span>
+                            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 lowercase font-sans">a crédito</span>
                         </Button>
                         {isMesa && cart.length === 0 ? (
                             // Botón dedicado para liberar mesa sin consumo
                             <Button
                                 onClick={onLiberarMesa}
-                                className="h-16 rounded-3xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20"
+                                className="h-14 sm:h-16 rounded-2xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/20"
                             >
                                 Liberar Mesa
                             </Button>
@@ -277,9 +312,9 @@ export function CartDetail({
                             <Button
                                 disabled={cart.length === 0}
                                 onClick={() => onProcessPayment('efectivo', 'efectivo')}
-                                className="h-16 rounded-3xl font-black uppercase text-sm tracking-widest transition-all active:scale-95 bg-emerald-500 hover:bg-emerald-600 text-white shadow-xl shadow-emerald-500/30 border-2 border-emerald-400"
+                                className="h-14 sm:h-16 rounded-2xl font-black uppercase text-xs sm:text-sm tracking-widest transition-all active:scale-95 bg-emerald-600 hover:bg-emerald-500 text-white shadow-xl shadow-emerald-600/30 border-2 border-emerald-400"
                             >
-                                💰 COBRAR
+                                💰 COBRAR {cart.length > 0 ? formatCurrency(totalConDescuento) : ''}
                             </Button>
                         )}
                     </div>

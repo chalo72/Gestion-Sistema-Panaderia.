@@ -125,41 +125,41 @@ export function ProductCatalog({
     return (
         <div className="flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-slate-900">
             {/* Header Pro: Búsqueda Stitch */}
-            <div className="shrink-0 p-5 border-b border-slate-100 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur-md relative z-10">
-                <div className="flex gap-3 items-center">
+            <div className="shrink-0 p-2.5 sm:p-4 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 relative z-10 shadow-sm">
+                <div className="flex gap-1.5 sm:gap-2.5 items-center">
                     {selectedCategory && (
                         <button onClick={() => setSelectedCategory(null)}
-                            className="shrink-0 w-12 h-12 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 transition-all active:scale-90 shadow-sm">
-                            <ArrowLeft className="w-5 h-5 text-slate-600" />
+                            className="shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center hover:bg-slate-200 transition-all active:scale-90 shadow-sm">
+                            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600 dark:text-slate-300" />
                         </button>
                     )}
-                    <div className="relative flex-1 group">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors" />
+                    <div className="relative flex-1 group min-w-0">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400 group-focus-within:text-emerald-500 transition-colors pointer-events-none" />
                         <input
-                            placeholder="Buscar producto por nombre o código..."
+                            placeholder="Buscar producto o código..."
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full h-12 pl-12 pr-4 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl text-sm font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-inner"
+                            className="w-full h-9 sm:h-11 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-inner"
                         />
                     </div>
                     {/* Multiplicador de cantidad */}
                     <div title="Multiplicador: el próximo producto se agregará esta cantidad de veces"
                         className={cn(
-                            "shrink-0 flex items-center gap-1 h-12 rounded-2xl px-3 transition-all",
-                            multiplier > 1 ? "bg-amber-500 shadow-lg shadow-amber-500/30" : "bg-slate-100 dark:bg-slate-800"
+                            "shrink-0 flex items-center gap-0.5 h-9 sm:h-11 rounded-xl sm:rounded-2xl px-1.5 sm:px-2.5 transition-all border border-slate-200/50 dark:border-slate-700/50",
+                            multiplier > 1 ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 border-amber-600" : "bg-slate-100 dark:bg-slate-800"
                         )}>
-                        {multiplier > 1 && <span className="text-white text-xs font-black">×</span>}
+                        <span className={cn("text-[10px] font-black", multiplier > 1 ? "text-white" : "text-slate-400")}>×</span>
                         <input
                             type="number" min={1} max={99} value={multiplier}
                             onChange={e => setMultiplier(Math.max(1, parseInt(e.target.value) || 1))}
                             className={cn(
-                                "w-8 text-center text-sm font-black bg-transparent border-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
-                                multiplier > 1 ? "text-white" : "text-slate-500 dark:text-slate-400"
+                                "w-6 sm:w-7 text-center text-xs sm:text-sm font-black bg-transparent border-none outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none p-0",
+                                multiplier > 1 ? "text-white" : "text-slate-700 dark:text-slate-300"
                             )}
                         />
                         {multiplier > 1 && (
-                            <button onClick={() => setMultiplier(1)} className="text-white/70 hover:text-white transition-colors">
-                                <X className="w-3 h-3" />
+                            <button onClick={() => setMultiplier(1)} className="text-white/80 hover:text-white transition-colors ml-0.5">
+                                <X className="w-2.5 h-2.5" />
                             </button>
                         )}
                     </div>
@@ -168,44 +168,44 @@ export function ProductCatalog({
                         onClick={() => setModoHoraPico(!modoHoraPico)}
                         title="Modo Hora Pico (Teclado Relámpago)"
                         className={cn(
-                            "shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-all active:scale-90",
-                            modoHoraPico ? "bg-amber-500 text-white shadow-lg shadow-amber-500/30" : "bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-amber-500"
+                            "shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all active:scale-90 border",
+                            modoHoraPico ? "bg-amber-500 text-white shadow-md shadow-amber-500/30 border-amber-600" : "bg-slate-100 dark:bg-slate-800 border-slate-200/60 dark:border-slate-700/60 text-slate-500 hover:text-amber-500"
                         )}
                     >
-                        <Zap className="w-5 h-5" />
+                        <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
                     </button>
                     {/* Botón producto ad-hoc */}
                     {onOpenAdHoc && (
                         <button
                             onClick={onOpenAdHoc}
                             title="Agregar producto no listado"
-                            className="shrink-0 w-12 h-12 rounded-2xl bg-violet-100 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-all active:scale-90"
+                            className="shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-violet-100 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-all active:scale-90"
                         >
-                            <Plus className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                            <Plus className="w-4 h-4 sm:w-5 sm:h-5 text-violet-600 dark:text-violet-400" />
                         </button>
                     )}
                 </div>
 
                 {/* Stats & Breadcrumb */}
-                <div className="flex items-center justify-between mt-3 px-1">
-                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.15em] flex items-center gap-2">
-                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="flex items-center justify-between mt-2 px-0.5">
+                    <p className="text-[10px] text-slate-400 font-black uppercase tracking-wider flex items-center gap-1.5 truncate">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                         {selectedCategory
-                            ? <><span className="text-emerald-600 dark:text-emerald-400">{selectedCategory}</span> • {productos.length} items</>
+                            ? <><span className="text-emerald-600 dark:text-emerald-400 truncate">{selectedCategory}</span> • {productos.length} items</>
                             : <>{categoriasConProductos.length} categorías • {productos.length} productos</>
                         }
                     </p>
                     {!selectedCategory && !isSearching && (
-                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest hidden sm:block">Explore el catálogo</span>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest hidden sm:block shrink-0">Catálogo</span>
                     )}
                 </div>
 
                 {/* ── Carrusel horizontal de categorías (Acceso rápido táctil) ── */}
-                <div className="flex lg:hidden items-center gap-2 overflow-x-auto no-scrollbar pt-3 pb-1 -mx-2 px-2">
+                <div className="flex lg:hidden items-center gap-1.5 overflow-x-auto no-scrollbar pt-2 pb-0.5">
                     <button
                         onClick={() => setSelectedCategory(null)}
                         className={cn(
-                            "px-3.5 py-1.5 rounded-xl text-xs font-black shrink-0 transition-all active:scale-95 flex items-center gap-1.5 shadow-sm border",
+                            "px-3 py-1 rounded-xl text-xs font-black shrink-0 transition-all active:scale-95 flex items-center gap-1 shadow-sm border",
                             !selectedCategory
                                 ? "bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/20"
                                 : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700"
