@@ -39,6 +39,8 @@ export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
   { id: 'precios',          label: 'Historial de Costos',   seccion: 'Finanzas' },
   { id: 'alertas',          label: 'Alertas de Costos',     seccion: 'Finanzas' },
   { id: 'gastos',           label: 'Egresos y Facturas',    seccion: 'Finanzas' },
+  { id: 'boveda',           label: 'Bóveda / Tesorería',    seccion: 'Finanzas' },
+  { id: 'inversiones',      label: 'Inversión y Crecimiento', seccion: 'Finanzas' },
   { id: 'reportes',         label: 'Análisis Financiero',   seccion: 'Finanzas' },
   { id: 'ahorro',           label: 'Mis Ahorros',            seccion: 'Finanzas' },
   { id: 'trabajadores',     label: 'Trabajadores',           seccion: 'Admin' },
@@ -48,15 +50,36 @@ export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
 ];
 
 export const ROLES_CONFIGURABLES = [
-  { id: 'GERENTE',   label: 'Gerente',   color: 'bg-violet-500' },
-  { id: 'COMPRADOR', label: 'Comprador', color: 'bg-blue-500' },
-  { id: 'VENDEDOR',  label: 'Vendedor',  color: 'bg-emerald-500' },
-  { id: 'PANADERO',  label: 'Panadero',  color: 'bg-amber-500' },
-  { id: 'AUXILIAR',  label: 'Auxiliar',  color: 'bg-slate-500' },
+  { id: 'GERENTE',            label: 'Gerente',            color: 'bg-violet-500' },
+  { id: 'CONTROL_FINANCIERO', label: 'Control Financiero', color: 'bg-sky-500' },
+  { id: 'COMPRADOR',          label: 'Comprador',          color: 'bg-blue-500' },
+  { id: 'VENDEDOR',           label: 'Vendedor',           color: 'bg-emerald-500' },
+  { id: 'PANADERO',           label: 'Panadero',           color: 'bg-amber-500' },
+  { id: 'AUXILIAR',           label: 'Auxiliar',           color: 'bg-slate-500' },
 ];
 
 const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos'];
 const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas'];
+const VER_CONTROL_FINANCIERO = [
+  'dashboard',
+  'caja',
+  'boveda',
+  'gastos',
+  'nomina',
+  'creditos',
+  'proveedores',
+  'prepedidos',
+  'recepciones',
+  'reportes',
+  'precios',
+  'alertas',
+  'ahorro',
+  'inversiones',
+  'trabajadores',
+  'historial-ventas',
+  'ventas',
+  'clientes',
+];
 const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes'];
 const VER_AUXILIAR   = ['dashboard','ventas'];
 const TODOS          = MODULOS_CONFIGURABLES.map(m => m.id);
@@ -68,15 +91,18 @@ function defaultParaRol(ids: string[]): PermisosRol {
 }
 
 const DEFAULT_PERMISOS: PermisosModulos = {
-  GERENTE:   Object.fromEntries(MODULOS_CONFIGURABLES.map(m => [m.id, { ver: true, eliminar: true }])),
-  COMPRADOR: defaultParaRol(VER_COMPRADOR),
-  VENDEDOR:  defaultParaRol(VER_VENDEDOR),
-  PANADERO:  defaultParaRol(VER_PANADERO),
-  AUXILIAR:  defaultParaRol(VER_AUXILIAR),
+  GERENTE:            Object.fromEntries(MODULOS_CONFIGURABLES.map(m => [m.id, { ver: true, eliminar: true }])),
+  CONTROL_FINANCIERO: defaultParaRol(VER_CONTROL_FINANCIERO),
+  COMPRADOR:          defaultParaRol(VER_COMPRADOR),
+  VENDEDOR:           defaultParaRol(VER_VENDEDOR),
+  PANADERO:           defaultParaRol(VER_PANADERO),
+  AUXILIAR:           defaultParaRol(VER_AUXILIAR),
 };
 
 /** Parche único: el menú de módulos ocultaba Reportes al Panadero aunque la matriz ya lo permitía. */
 const PATCH_PANADERO_REPORTES = 'dp_patch_panadero_reportes_20260810';
+/** Parche: Rol Control Financiero y módulos Bóveda/Inversiones */
+const PATCH_CONTROL_FINANCIERO = 'dp_patch_control_financiero_20260913';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -84,9 +110,11 @@ export function cargarPermisos(): PermisosModulos {
   try {
     const raw = localStorage.getItem(PERMISOS_KEY);
     if (raw) {
-      const parsed = JSON.parse(raw) as PermisosModulos;
+      let parsed = JSON.parse(raw) as PermisosModulos;
+      let changed = false;
+
       if (!localStorage.getItem(PATCH_PANADERO_REPORTES)) {
-        const next: PermisosModulos = {
+        parsed = {
           ...parsed,
           PANADERO: {
             ...(parsed.PANADERO || DEFAULT_PERMISOS.PANADERO),
@@ -96,9 +124,30 @@ export function cargarPermisos(): PermisosModulos {
             },
           },
         };
-        localStorage.setItem(PERMISOS_KEY, JSON.stringify(next));
         localStorage.setItem(PATCH_PANADERO_REPORTES, '1');
-        return next;
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_CONTROL_FINANCIERO) || !parsed.CONTROL_FINANCIERO) {
+        parsed = {
+          ...parsed,
+          CONTROL_FINANCIERO: {
+            ...defaultParaRol(VER_CONTROL_FINANCIERO),
+            ...(parsed.CONTROL_FINANCIERO || {}),
+          },
+          // Asegurar que Gerente tenga boveda e inversiones
+          GERENTE: {
+            ...(parsed.GERENTE || DEFAULT_PERMISOS.GERENTE),
+            boveda: { ver: true, eliminar: true },
+            inversiones: { ver: true, eliminar: true },
+          },
+        };
+        localStorage.setItem(PATCH_CONTROL_FINANCIERO, '1');
+        changed = true;
+      }
+
+      if (changed) {
+        localStorage.setItem(PERMISOS_KEY, JSON.stringify(parsed));
       }
       return parsed;
     }

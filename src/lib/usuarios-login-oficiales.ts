@@ -11,6 +11,7 @@ const createdAt = '2026-08-10T00:00:00.000Z';
 export const EMAILS_LOGIN_OFICIALES: string[] = [
   'chalo8321@gmail.com',
   'gerente@dulceplacer.com',
+  'control.financiero@dulceplacer.com',
   'panadero@dulceplacer.com',
   'vendedor.manana@dulceplacer.com',
   'vendedor.tarde@dulceplacer.com',
@@ -39,6 +40,16 @@ export const USUARIOS_LOGIN_OFICIALES: Usuario[] = [
     rol: 'GERENTE',
     activo: true,
     password: '2580',
+    createdAt,
+  },
+  {
+    id: 'control-financiero-oficial-id',
+    email: 'control.financiero@dulceplacer.com',
+    nombre: 'Control Financiero',
+    apellido: 'Tesorería',
+    rol: 'CONTROL_FINANCIERO',
+    activo: true,
+    password: '4321',
     createdAt,
   },
   {
@@ -194,10 +205,16 @@ export const etiquetaRolLogin = (rol: UserRole): string => {
       return 'Administrador';
     case 'GERENTE':
       return 'Gerente';
+    case 'CONTROL_FINANCIERO':
+      return 'Control Financiero';
+    case 'COMPRADOR':
+      return 'Comprador';
     case 'PANADERO':
       return 'Panadero';
     case 'VENDEDOR':
       return 'Vendedor';
+    case 'AUXILIAR':
+      return 'Auxiliar';
     default:
       return rol;
   }

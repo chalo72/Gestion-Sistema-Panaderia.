@@ -304,6 +304,7 @@ export function Usuarios({ publicAppUrl }: { publicAppUrl?: string }) {
                     <SelectContent className="rounded-xl">
                       <SelectItem value="ADMIN" className="font-bold uppercase text-[10px] tracking-widest">Administrador</SelectItem>
                       <SelectItem value="GERENTE" className="font-bold uppercase text-[10px] tracking-widest">Gerente</SelectItem>
+                      <SelectItem value="CONTROL_FINANCIERO" className="font-bold uppercase text-[10px] tracking-widest">Control Financiero</SelectItem>
                       <SelectItem value="COMPRADOR" className="font-bold uppercase text-[10px] tracking-widest">Comprador</SelectItem>
                       <SelectItem value="VENDEDOR" className="font-bold uppercase text-[10px] tracking-widest">Vendedor</SelectItem>
                       <SelectItem value="PANADERO" className="font-bold uppercase text-[10px] tracking-widest">Panadero</SelectItem>

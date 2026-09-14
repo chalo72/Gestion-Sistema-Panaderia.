@@ -371,6 +371,7 @@ export const useCan = () => {
   return {
     check: hasPermission, checkAny: hasAnyPermission, checkAll: hasAllPermissions,
     role, isAdmin: role === 'ADMIN', isGerente: role === 'GERENTE',
+    isControlFinanciero: role === 'CONTROL_FINANCIERO',
     isComprador: role === 'COMPRADOR', isVendedor: role === 'VENDEDOR', usuario
   };
 };

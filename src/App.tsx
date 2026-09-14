@@ -257,11 +257,12 @@ const App = () => {
   // Vista de aterrizaje según el rol del usuario
   const getVistaInicial = (rol: string | null | undefined): ViewType => {
     switch (rol) {
-      case 'PANADERO':  return 'produccion';
-      case 'VENDEDOR':  return 'ventas';
-      case 'COMPRADOR': return 'recepciones';
-      case 'AUXILIAR':  return 'ventas';
-      default:          return 'dashboard';
+      case 'PANADERO':           return 'produccion';
+      case 'VENDEDOR':           return 'ventas';
+      case 'COMPRADOR':          return 'recepciones';
+      case 'CONTROL_FINANCIERO': return 'boveda';
+      case 'AUXILIAR':           return 'ventas';
+      default:                   return 'dashboard';
     }
   };
 
@@ -919,16 +920,16 @@ const App = () => {
       )}
 
       <main className={cn(
-        "transition-all duration-300",
+        "transition-all duration-300 relative",
         // En móvil no hay padding left, el sidebar está oculto y hay un BottomNavBar
         user ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-64") : "pl-0",
         // En ventas y móvil dejamos padding bottom para el BottomNavBar
         "pb-[72px] md:pb-0",
-        currentView === 'ventas' ? 'h-[calc(100dvh-72px)] md:h-screen overflow-hidden' : ''
+        currentView === 'ventas' ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-[100dvh]'
       )}>
         {/* Header Superior (Solo si hay usuario) */}
         {user && (
-          <header className="sticky top-0 z-40 w-full h-16 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 pl-16 pr-4 md:px-8 flex items-center justify-between">
+          <header className="flex-none sticky top-0 z-40 w-full h-16 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 pl-16 pr-4 md:px-8 flex items-center justify-between">
             <div className="flex items-center gap-4">
                {/* Breadcrumbs dinámicos */}
                <div className="flex items-center gap-2">
@@ -1028,7 +1029,7 @@ const App = () => {
           </header>
         )}
 
-        <div className={currentView === 'ventas' ? 'h-[calc(100dvh-4rem)] overflow-hidden' : 'p-4 md:p-8'}>
+        <div className={currentView === 'ventas' ? 'flex-1 overflow-hidden relative' : 'p-4 md:p-8'}>
           <ErrorBoundary moduleName={currentView}>
             <Suspense fallback={<PageLoader />}>
               <PageTransition viewKey={currentView} className={currentView === 'ventas' ? 'h-full min-h-0' : ''}>

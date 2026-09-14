@@ -34,6 +34,7 @@ export const VISTA_PERMISO: Partial<Record<ViewType, Permission>> = {
   cargamasiva: 'CREAR_PRODUCTOS',
   oficina: 'VER_USUARIOS',
   trabajadores: 'VER_USUARIOS',
+  expedientes: 'VER_USUARIOS',
   asistencia: 'VER_USUARIOS',
   nomina: 'VER_FINANZAS',
   usuarios: 'VER_USUARIOS',

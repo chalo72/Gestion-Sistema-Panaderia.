@@ -37,14 +37,15 @@ const PERMISSION_GROUPS: { name: string; permissions: Permission[]; icon?: any }
     { name: 'Ventas y Caja',             permissions: ['VER_VENTAS','GESTIONAR_VENTAS','ABRIR_CERRAR_CAJA'] },
 ];
 
-const ROLES_GRANULARES: UserRole[] = ['ADMIN', 'GERENTE', 'COMPRADOR', 'VENDEDOR', 'PANADERO', 'AUXILIAR'];
+const ROLES_GRANULARES: UserRole[] = ['ADMIN', 'GERENTE', 'CONTROL_FINANCIERO', 'COMPRADOR', 'VENDEDOR', 'PANADERO', 'AUXILIAR'];
 
 const PASS_ROLES = [
-    { key: 'GERENTE',   label: '👔 Gerente' },
-    { key: 'PANADERO',  label: '🍞 Panadero' },
-    { key: 'COMPRADOR', label: '🛒 Comprador' },
-    { key: 'VENDEDOR',  label: '💰 Vendedor/a' },
-    { key: 'AUXILIAR',  label: '🔧 Auxiliar' },
+    { key: 'GERENTE',            label: '👔 Gerente' },
+    { key: 'CONTROL_FINANCIERO', label: '💼 Control Financiero' },
+    { key: 'PANADERO',           label: '🍞 Panadero' },
+    { key: 'COMPRADOR',          label: '🛒 Comprador' },
+    { key: 'VENDEDOR',           label: '💰 Vendedor/a' },
+    { key: 'AUXILIAR',           label: '🔧 Auxiliar' },
 ];
 
 type TabId = 'acciones' | 'modulos' | 'sensibles' | 'claves';
@@ -544,8 +545,8 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
                                 <Share2 className="w-4 h-4" /> Enviar Accesos por WhatsApp
                             </h2>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {(['GERENTE','COMPRADOR','VENDEDOR','PANADERO'] as UserRole[]).map(role => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                            {(['GERENTE','CONTROL_FINANCIERO','COMPRADOR','VENDEDOR','PANADERO'] as UserRole[]).map(role => (
                                 <Card
                                     key={`share-${role}`}
                                     className="rounded-3xl border-none bg-white dark:bg-slate-900 shadow-xl overflow-hidden group hover:scale-[1.03] transition-all cursor-pointer"

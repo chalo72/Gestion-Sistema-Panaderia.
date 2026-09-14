@@ -714,7 +714,7 @@ export interface LogActividad {
 // SISTEMA DE ROLES Y PERMISOS
 // ============================================
 
-export type UserRole = 'ADMIN' | 'GERENTE' | 'COMPRADOR' | 'VENDEDOR' | 'PANADERO' | 'AUXILIAR';
+export type UserRole = 'ADMIN' | 'GERENTE' | 'CONTROL_FINANCIERO' | 'COMPRADOR' | 'VENDEDOR' | 'PANADERO' | 'AUXILIAR';
 
 export interface Usuario {
   id: string;
@@ -818,6 +818,24 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_PRODUCCION', 'GESTIONAR_PRODUCCION',
     'EXPORTAR_DATOS',
   ],
+  CONTROL_FINANCIERO: [
+    // Bóvedas, Cajas, Gastos y Nómina
+    'VER_DASHBOARD', 'VER_ESTADISTICAS',
+    'VER_FINANZAS', 'VER_REPORTES',
+    'ABRIR_CERRAR_CAJA',
+    'VER_VENTAS', // Para arqueos y cuadre de caja
+    // Pagos y relación con proveedores
+    'VER_PROVEEDORES', 'CREAR_PROVEEDORES', 'EDITAR_PROVEEDORES',
+    'VER_PREPEDIDOS', 'CREAR_PREPEDIDOS', 'EDITAR_PREPEDIDOS',
+    'VER_RECEPCIONES', 'CREAR_RECEPCIONES',
+    // Costos e Insumos
+    'VER_PRECIOS', 'VER_PRECIO_VENTA', 'VER_PRECIO_COSTO', 'VER_MARGEN', 'EDITAR_PRECIOS',
+    'VER_ALERTAS',
+    // Trabajadores (para préstamos de empleados y liquidación de nómina)
+    'VER_USUARIOS',
+    // Exportación de informes contables y balances
+    'EXPORTAR_DATOS',
+  ],
   COMPRADOR: [
     'VER_PRODUCTOS',
     'VER_PRECIOS', 'VER_PRECIO_VENTA', 'VER_PRECIO_COSTO', 'EDITAR_PRECIOS',
@@ -854,6 +872,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
 export const ROLE_DESCRIPTIONS: Record<UserRole, { nombre: string; descripcion: string; color: string }> = {
   ADMIN: { nombre: 'Administrador', descripcion: 'Acceso total al sistema', color: '#8b5cf6' },
   GERENTE: { nombre: 'Gerente', descripcion: 'Gestión completa excepto configuración crítica', color: '#3b82f6' },
+  CONTROL_FINANCIERO: { nombre: 'Control Financiero', descripcion: 'Manejo de bóvedas, arqueo de cajas, compras a proveedores, control de gastos, préstamos y nómina', color: '#0284c7' },
   COMPRADOR: { nombre: 'Comprador', descripcion: 'Gestión de proveedores y costos', color: '#22c55e' },
   VENDEDOR: { nombre: 'Vendedor', descripcion: 'Ventas, caja y consulta de precios de venta', color: '#f59e0b' },
   PANADERO: { nombre: 'Panadero', descripcion: 'Producción, recetas, inventario y auditoría de panes', color: '#d97706' },
