@@ -6,8 +6,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
-import { Calculator, PieChart, ArrowRight, Wand2, PlusCircle, CheckCircle2, AlertTriangle, Layers3, Flame, Trash2, Plus, ClipboardCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { Calculator, PieChart, ArrowRight, Wand2, PlusCircle, CheckCircle2, AlertTriangle, Layers3, Flame, Trash2, Plus, ClipboardCheck, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FormulacionBase, ModeloPan, Venta, Producto } from '@/types';
 import { ARROBA_KG } from '@/types';
@@ -35,6 +35,15 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
   // Masa disponible en la base
   const formulacion = formulaciones.find(f => f.id === formId);
   const modelosHijos = useMemo(() => modelos.filter(m => m.formulacionId === formId), [modelos, formId]);
+
+  // Si cambia la lista de formulaciones y solo hay una (o formId no está seteado), auto-seleccionar
+  useEffect(() => {
+    if (!formId && formulaciones.length > 0) {
+      setFormId(formulaciones[0].id);
+    } else if (formId && !formulaciones.some(f => f.id === formId) && formulaciones.length > 0) {
+      setFormId(formulaciones[0].id);
+    }
+  }, [formulaciones, formId]);
 
   // Si cambia la formulación o arrobas, notificar al padre
   useEffect(() => {
@@ -193,17 +202,44 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
         {/* Paso 1: Seleccionar Masa y Cantidad */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="md:col-span-2 space-y-2">
-            <Label className="text-xs font-black uppercase tracking-widest text-slate-500">1. ¿Qué masa vas a mojar?</Label>
-            <Select value={formId} onValueChange={setFormId}>
-              <SelectTrigger className="h-14 rounded-2xl bg-white dark:bg-slate-900 border-slate-200">
-                <SelectValue placeholder="Seleccionar Fórmula Maestra..." />
-              </SelectTrigger>
-              <SelectContent>
-                {formulaciones.map(f => (
-                  <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-black uppercase tracking-widest text-slate-500">1. ¿Qué masa vas a mojar?</Label>
+              {formulaciones.length === 0 && (
+                <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">Sin fórmulas registradas</span>
+              )}
+            </div>
+
+            {/* Selector nativo táctil de alto rendimiento para móviles + Radix Select para escritorio */}
+            <div className="relative">
+              {/* Selector nativo para móvil */}
+              <div className="md:hidden relative">
+                <select
+                  value={formId}
+                  onChange={(e) => setFormId(e.target.value)}
+                  className="w-full h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-4 pr-10 text-sm font-bold text-slate-900 dark:text-white shadow-sm appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                >
+                  <option value="" disabled>Seleccionar Fórmula Maestra...</option>
+                  {formulaciones.map(f => (
+                    <option key={f.id} value={f.id}>{f.nombre}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+              </div>
+
+              {/* Selector Radix estilizado para tablets y pantallas medianas/grandes */}
+              <div className="hidden md:block">
+                <Select value={formId} onValueChange={setFormId}>
+                  <SelectTrigger className="h-14 rounded-2xl bg-white dark:bg-slate-900 border-slate-200">
+                    <SelectValue placeholder="Seleccionar Fórmula Maestra..." />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="z-[9999] max-h-72">
+                    {formulaciones.map(f => (
+                      <SelectItem key={f.id} value={f.id}>{f.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </div>
           <div className="space-y-2">
             <Label className="text-xs font-black uppercase tracking-widest text-slate-500">2. Cantidad (Arrobas)</Label>
