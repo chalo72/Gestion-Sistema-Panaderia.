@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1146",
-  "buildTime": "2026-09-14T13:42:00.000Z",
-  "description": "Permitir seleccion fluida de masa a mojar en Libreta del Horno con selector nativo movil y auto-seleccion",
-  "timestamp": 1789392120000,
+  "version": "1.1.1147",
+  "buildTime": "2026-09-14T14:02:00.000Z",
+  "description": "Organizacion limpia de tarjetas de formulas, sincronizacion de recetas tecnicas vinculadas y scroll fluido para subir y bajar panes en la libreta",
+  "timestamp": 1789393320000,
   "buildDate": "2026-09-14"
 }

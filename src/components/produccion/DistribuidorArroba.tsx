@@ -133,6 +133,20 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
     }
   };
 
+  const addAllModelosToList = () => {
+    if (modelosHijos.length === 0) return;
+    setCortes(prev => {
+      const next = { ...prev };
+      modelosHijos.forEach(m => {
+        if (next[m.id] === undefined) {
+          next[m.id] = 0;
+        }
+      });
+      return next;
+    });
+    toast.success(`Se agregaron todos los ${modelosHijos.length} panes de esta masa`);
+  };
+
   const removeModeloFromList = (modeloId: string) => {
     setCortes(prev => {
       const next = { ...prev };
@@ -314,21 +328,51 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                 <Label className="text-xs font-black uppercase tracking-widest text-slate-500 flex items-center gap-2">
                   <Layers3 className="w-4 h-4 text-indigo-500" /> 3. Asignar panes a fabricar
                 </Label>
-                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                  {/* Botón rápido para agregar todos los panes de la masa */}
+                  {modelosHijos.length > 1 && (
+                    <Button
+                      onClick={addAllModelosToList}
+                      variant="outline"
+                      size="sm"
+                      className="h-9 rounded-xl border-slate-200 text-slate-700 dark:text-slate-200 hover:bg-slate-100 font-bold text-xs"
+                      title="Agregar todos los panes de esta fórmula a la lista"
+                    >
+                      <Layers3 className="w-3.5 h-3.5 mr-1.5 text-amber-500" />
+                      Cargar todos ({modelosHijos.length})
+                    </Button>
+                  )}
+
+                  {/* Menú desplegable deslizable (subir y bajar) con buscador/scroll suave */}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-9 rounded-xl border-dashed border-indigo-300 text-indigo-600 bg-white hover:bg-indigo-50 font-bold shadow-sm">
                         <Plus className="w-3.5 h-3.5 mr-2" /> Agregar Pan a Fabricar
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 rounded-xl">
+                    <DropdownMenuContent
+                      align="end"
+                      className="w-72 max-h-72 overflow-y-auto overscroll-contain rounded-2xl p-1.5 shadow-2xl z-[9999] border-slate-200 dark:border-slate-800"
+                    >
+                      <div className="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 mb-1">
+                        Panes disponibles ({modelosHijos.filter(m => cortes[m.id] === undefined).length})
+                      </div>
                       {modelosHijos.filter(m => cortes[m.id] === undefined).map(m => (
-                        <DropdownMenuItem key={m.id} onClick={() => addModeloToList(m.id)} className="font-medium cursor-pointer">
-                          {m.nombre}
+                        <DropdownMenuItem
+                          key={m.id}
+                          onClick={() => addModeloToList(m.id)}
+                          className="flex items-center justify-between p-2 rounded-xl font-bold cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                        >
+                          <span className="truncate text-slate-800 dark:text-slate-100 text-xs">{m.nombre}</span>
+                          <span className="shrink-0 ml-2 text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full">
+                            {m.pesoUnitarioGr}g
+                          </span>
                         </DropdownMenuItem>
                       ))}
                       {modelosHijos.filter(m => cortes[m.id] === undefined).length === 0 && (
-                        <div className="px-2 py-4 text-xs text-center text-slate-500">Todos los panes asignados</div>
+                        <div className="px-3 py-5 text-xs text-center text-slate-500 font-medium">
+                          Todos los panes de esta masa ya están agregados
+                        </div>
                       )}
                     </DropdownMenuContent>
                   </DropdownMenu>

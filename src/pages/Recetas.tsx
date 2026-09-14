@@ -1253,24 +1253,63 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                                                     </div>
                                                     {f.descripcion && <p className="text-xs text-slate-400 mt-0.5 truncate">{f.descripcion}</p>}
                                                     
-                                                    {/* Vista previa inmediata de insumos */}
+                                                    {/* Vista previa limpia y organizada de insumos */}
                                                     {(f.ingredientes || []).length > 0 && (
-                                                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                                                            {(f.ingredientes || []).map((ing, iIdx) => {
-                                                                const prod = getProductoById(ing.productoId);
-                                                                const nombreInsumo = prod?.nombre || ing.productoId;
-                                                                return (
-                                                                    <span
-                                                                        key={iIdx}
-                                                                        className="inline-flex items-center text-[10px] font-medium bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 px-2 py-0.5 rounded-md border border-slate-200/60 dark:border-slate-700/60"
+                                                        <div className="mt-3">
+                                                            <div className="flex items-center justify-between mb-1.5">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                                                                    Fórmula base (1 arroba)
+                                                                </span>
+                                                                {(f.ingredientes || []).length > 6 && (
+                                                                    <button
+                                                                        onClick={() => setExpandedFormulacion(isExpanded ? null : f.id)}
+                                                                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
                                                                     >
-                                                                        <span className="font-bold text-indigo-600 dark:text-indigo-400 mr-1">
-                                                                            {ing.cantidadPorArroba ?? (ing as any).cantidadKg} {ing.unidad || (ing as any).unidadMedida || 'kg'}
-                                                                        </span>
-                                                                        {nombreInsumo}
+                                                                        {isExpanded ? 'Ver menos' : `+${(f.ingredientes || []).length - 6} insumos más...`}
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5">
+                                                                {(f.ingredientes || []).slice(0, isExpanded ? undefined : 6).map((ing, iIdx) => {
+                                                                    const prod = getProductoById(ing.productoId);
+                                                                    const nombreInsumo = prod?.nombre || ing.productoId;
+                                                                    return (
+                                                                        <div
+                                                                            key={iIdx}
+                                                                            className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-700/60 text-[11px] gap-2"
+                                                                            title={`${ing.cantidadPorArroba ?? (ing as any).cantidadKg} ${ing.unidad || (ing as any).unidadMedida || 'kg'} de ${nombreInsumo}`}
+                                                                        >
+                                                                            <span className="truncate text-slate-700 dark:text-slate-300 font-medium">
+                                                                                {nombreInsumo}
+                                                                            </span>
+                                                                            <span className="shrink-0 font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-1.5 py-0.5 rounded text-[10px]">
+                                                                                {ing.cantidadPorArroba ?? (ing as any).cantidadKg} {ing.unidad || (ing as any).unidadMedida || 'kg'}
+                                                                            </span>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Sincronización visible de recetas técnicas de panes vinculados a esta masa */}
+                                                    {modelos.length > 0 && (
+                                                        <div className="mt-2.5 flex items-center gap-1.5 flex-wrap">
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 flex items-center gap-1">
+                                                                <Croissant className="w-3 h-3 text-amber-500" /> Panes vinculados ({modelos.length}):
+                                                            </span>
+                                                            {modelos.map(m => (
+                                                                <span
+                                                                    key={m.id}
+                                                                    className="inline-flex items-center gap-1 text-[10px] font-bold bg-amber-50/80 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-md border border-amber-200/60 dark:border-amber-800/40"
+                                                                    title={`${m.nombre} - ${m.pesoUnitarioGr}g | Costo: ${formatCurrency(m.costoUnitario)} | Venta: ${formatCurrency(m.precioVentaUnitario)} | ${m.piezasPorLata || 0} cortes/lata`}
+                                                                >
+                                                                    <span>{m.nombre}</span>
+                                                                    <span className="text-[9px] font-black text-indigo-600 dark:text-indigo-400">
+                                                                        ({m.pesoUnitarioGr}g · {m.piezasPorLata ? `${m.piezasPorLata} c/lata` : 'sin lata'})
                                                                     </span>
-                                                                );
-                                                            })}
+                                                                </span>
+                                                            ))}
                                                         </div>
                                                     )}
                                                 </div>
