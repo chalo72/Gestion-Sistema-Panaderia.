@@ -23,23 +23,60 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error };
   }
 
+  // Desinstalar Service Workers para romper el cach terco (causa de los Chunk Errors)
+  private clearCacheAndWorkers = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (const key of keys) {
+          await caches.delete(key);
+        }
+      }
+    } catch (e) {
+      console.error('Error limpiando cach:', e);
+    }
+  };
+
+  private safeReload = async () => {
+    const lastReload = sessionStorage.getItem('dp_last_reload_time');
+    const now = Date.now();
+    
+    // ANTI-BAN VERCEL: Prevenir que el usuario recargue ms de 1 vez cada 5 segundos
+    if (lastReload && (now - parseInt(lastReload)) < 5000) {
+        console.warn('Recarga bloqueada por seguridad (Anti-Ban Vercel)');
+        return;
+    }
+    
+    sessionStorage.setItem('dp_last_reload_time', now.toString());
+    await this.clearCacheAndWorkers();
+    
+    // Forzar bypass de cach agregando un timestamp a la URL
+    const url = new URL(window.location.href);
+    url.searchParams.set('_v', now.toString());
+    window.location.replace(url.toString());
+  };
+
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Error atrapado por ErrorBoundary en', this.props.moduleName, ':', error, errorInfo);
     
-    // Auto-recargar silenciosamente si es un error de chunk (PWA cache inválido tras update)
     const msg = error.message || '';
     const isChunkError =
       error.name === 'ChunkLoadError' ||
       msg.includes('Failed to fetch dynamically imported module') ||
       msg.includes("reading 'default'") ||
-      msg.includes('posible caché PWA');
+      msg.includes('posible cach PWA');
 
     if (isChunkError) {
-      // Evita bucle infinito de recarga
       const key = 'dp_chunk_reload_once';
       if (!sessionStorage.getItem(key)) {
         sessionStorage.setItem(key, '1');
-        window.location.reload();
+        this.safeReload();
       }
     }
   }
@@ -51,7 +88,7 @@ export class ErrorBoundary extends Component<Props, State> {
         this.state.error?.name === 'ChunkLoadError' ||
         msg.includes('Failed to fetch dynamically imported module') ||
         msg.includes("reading 'default'") ||
-        msg.includes('posible caché PWA');
+        msg.includes('posible cach PWA');
       
       return (
         <div className="p-6 flex items-center justify-center min-h-[400px]">
@@ -63,15 +100,15 @@ export class ErrorBoundary extends Component<Props, State> {
               </CardTitle>
               <CardDescription className="text-red-800/70 dark:text-red-300/70">
                 {isChunkError 
-                  ? 'Hay una nueva versión de la aplicación disponible. Debes recargar la página.'
-                  : 'El sistema de protección interceptó un error para evitar que toda la aplicación colapse.'}
+                  ? 'Hay una nueva versin del sistema y el navegador se atasc con la versin vieja.'
+                  : 'El sistema de proteccin intercept un error para evitar que la app colapse.'}
               </CardDescription>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 {isChunkError
-                  ? 'Esto suele pasar después de un actualización. Pulsa recargar (o Ctrl+F5) para cargar la versión nueva.'
-                  : 'Puedes intentar recargar este módulo o volver al menú principal. Tu información en otras secciones sigue estando segura.'}
+                  ? 'Esto suele pasar tras una actualizacin. Ya limpiamos la red por ti. Pulsa el botn de abajo una sola vez para continuar.'
+                  : 'Puedes intentar cargar este mdulo de nuevo. Tu informacin est segura.'}
               </p>
               <div className="bg-slate-100 dark:bg-slate-900 p-3 rounded-md text-xs font-mono overflow-auto max-h-32 text-red-500">
                 {this.state.error?.message}
@@ -79,16 +116,15 @@ export class ErrorBoundary extends Component<Props, State> {
               <Button 
                 onClick={() => {
                   if (isChunkError) {
-                    sessionStorage.removeItem('dp_chunk_reload_once');
-                    window.location.reload();
+                    this.safeReload();
                   } else {
                     this.setState({ hasError: false, error: null });
                   }
                 }} 
-                className="w-full gap-2 bg-red-600 hover:bg-red-700"
+                className="w-full gap-2 bg-red-600 hover:bg-red-700 active:scale-95 transition-all"
               >
                 <RefreshCw className="w-4 h-4" />
-                {isChunkError ? 'Recargar Aplicación' : 'Intentar cargar de nuevo'}
+                {isChunkError ? 'Descargar Versin Sólida (Seguro)' : 'Intentar cargar de nuevo'}
               </Button>
             </CardContent>
           </Card>
