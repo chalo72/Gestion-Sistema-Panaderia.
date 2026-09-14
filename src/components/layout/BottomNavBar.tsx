@@ -1,4 +1,4 @@
-import { LayoutDashboard, ShoppingCart, Wallet, ChefHat, Menu } from 'lucide-react';
+import { LayoutDashboard, ShoppingCart, Wallet, ChefHat, Clock, Menu } from 'lucide-react';
 import type { ViewType } from '@/types';
 import { cn } from '@/lib/utils';
 import { useCan } from '@/contexts/AuthContext';
@@ -34,6 +34,12 @@ export function BottomNavBar({ currentView, onViewChange, alertasNoLeidas, onOpe
       label: 'Caja',
       icon: Wallet,
       view: 'caja' as ViewType,
+    },
+    {
+      id: 'asistencia',
+      label: 'Turno',
+      icon: Clock,
+      view: 'asistencia' as ViewType,
     },
     {
       id: 'produccion',

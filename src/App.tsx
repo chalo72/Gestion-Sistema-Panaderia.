@@ -10,6 +10,7 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Bell,
+  Clock,
 } from 'lucide-react';
 
 import { usePriceControl } from '@/hooks/usePriceControl';
@@ -54,6 +55,7 @@ const PrePedidos         = lazy(() => import('@/pages/PrePedidos'));
 const Recepciones        = lazy(() => import('@/pages/Recepciones'));
 const PlanNegocio        = lazy(() => import('@/pages/PlanNegocio').then(m => ({ default: m.PlanNegocio })));
 const Expedientes        = lazy(() => import('@/pages/Expedientes'));
+const WhatsAppHub        = lazy(() => import('@/pages/WhatsAppHub'));
 
 // Carga Inmediata — Módulos principales del negocio (Navegación instantánea a costo de un inicio un poco más pesado)
 const Productos = lazy(() => import('@/pages/Productos'));
@@ -847,6 +849,8 @@ const App = () => {
         return <Comunicaciones />;
       case 'expedientes':
         return <Expedientes />;
+      case 'whatsapp-hub':
+        return <WhatsAppHub trabajadores={trabajadores} onAddGasto={addGasto} />;
       case 'seguridad':
         return <Seguridad userRole={user?.rol} ventas={ventas} />;
       case 'login':
@@ -971,6 +975,22 @@ const App = () => {
                    </button>
                  </div>
                )}
+
+                {/* Acceso Rápido: Marcar Turno */}
+                <button
+                   onClick={() => setCurrentView('asistencia')}
+                   className={cn(
+                     "flex items-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-xl border font-bold text-xs transition-all select-none shadow-sm",
+                     currentView === 'asistencia'
+                       ? "bg-amber-500 text-white border-amber-500 shadow-amber-500/20"
+                       : "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                   )}
+                   title="Marcar Asistencia / Turno"
+                >
+                   <Clock className="w-3.5 h-3.5" />
+                   <span className="text-[10px] font-black uppercase tracking-wider hidden xs:inline">Turno</span>
+                </button>
+
                {/* Alertas Inteligentes de Stock */}
                <div className="relative">
                  <button

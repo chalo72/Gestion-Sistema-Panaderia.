@@ -22,6 +22,7 @@ export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
   { id: 'agentes-ia',       label: 'Mando Superior (IA)',   seccion: 'General' },
   { id: 'videovigilancia',  label: 'Videovigilancia',       seccion: 'General' },
   { id: 'cctv',             label: 'Auditoría Digital (CCTV)', seccion: 'General' },
+  { id: 'whatsapp-hub',     label: 'Comandos WhatsApp & IA',   seccion: 'General' },
   { id: 'ventas',           label: 'Ventas / POS',           seccion: 'Ventas' },
   { id: 'historial-ventas', label: 'Historial de Ventas',   seccion: 'Ventas' },
   { id: 'caja',             label: 'Control de Caja',        seccion: 'Ventas' },
@@ -58,8 +59,8 @@ export const ROLES_CONFIGURABLES = [
   { id: 'AUXILIAR',           label: 'Auxiliar',           color: 'bg-slate-500' },
 ];
 
-const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos'];
-const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas'];
+const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub'];
+const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas','asistencia'];
 const VER_CONTROL_FINANCIERO = [
   'dashboard',
   'caja',
@@ -79,9 +80,11 @@ const VER_CONTROL_FINANCIERO = [
   'historial-ventas',
   'ventas',
   'clientes',
+  'asistencia',
+  'whatsapp-hub',
 ];
-const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes'];
-const VER_AUXILIAR   = ['dashboard','ventas'];
+const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes','asistencia','whatsapp-hub'];
+const VER_AUXILIAR   = ['dashboard','ventas','asistencia'];
 const TODOS          = MODULOS_CONFIGURABLES.map(m => m.id);
 
 function defaultParaRol(ids: string[]): PermisosRol {
@@ -103,6 +106,8 @@ const DEFAULT_PERMISOS: PermisosModulos = {
 const PATCH_PANADERO_REPORTES = 'dp_patch_panadero_reportes_20260810';
 /** Parche: Rol Control Financiero y módulos Bóveda/Inversiones */
 const PATCH_CONTROL_FINANCIERO = 'dp_patch_control_financiero_20260913';
+/** Parche: WhatsApp Hub y Asistencia rápida para todos los roles clave */
+const PATCH_WHATSAPP_HUB = 'dp_patch_whatsapp_hub_20260913_v2';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -143,6 +148,42 @@ export function cargarPermisos(): PermisosModulos {
           },
         };
         localStorage.setItem(PATCH_CONTROL_FINANCIERO, '1');
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_WHATSAPP_HUB)) {
+        parsed = {
+          ...parsed,
+          GERENTE: {
+            ...(parsed.GERENTE || DEFAULT_PERMISOS.GERENTE),
+            'whatsapp-hub': { ver: true, eliminar: true },
+            'asistencia': { ver: true, eliminar: true },
+          },
+          CONTROL_FINANCIERO: {
+            ...(parsed.CONTROL_FINANCIERO || DEFAULT_PERMISOS.CONTROL_FINANCIERO),
+            'whatsapp-hub': { ver: true, eliminar: false },
+            'asistencia': { ver: true, eliminar: false },
+          },
+          VENDEDOR: {
+            ...(parsed.VENDEDOR || DEFAULT_PERMISOS.VENDEDOR),
+            'whatsapp-hub': { ver: true, eliminar: false },
+            'asistencia': { ver: true, eliminar: false },
+          },
+          PANADERO: {
+            ...(parsed.PANADERO || DEFAULT_PERMISOS.PANADERO),
+            'whatsapp-hub': { ver: true, eliminar: false },
+            'asistencia': { ver: true, eliminar: false },
+          },
+          COMPRADOR: {
+            ...(parsed.COMPRADOR || DEFAULT_PERMISOS.COMPRADOR),
+            'asistencia': { ver: true, eliminar: false },
+          },
+          AUXILIAR: {
+            ...(parsed.AUXILIAR || DEFAULT_PERMISOS.AUXILIAR),
+            'asistencia': { ver: true, eliminar: false },
+          },
+        };
+        localStorage.setItem(PATCH_WHATSAPP_HUB, '1');
         changed = true;
       }
 

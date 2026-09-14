@@ -107,9 +107,16 @@ export function CCTVDigital() {
                                         className={`w-full text-left p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex items-center justify-between group ${sesionActiva === s.id ? 'bg-indigo-50 dark:bg-indigo-900/20 border-l-4 border-indigo-500' : ''}`}
                                     >
                                         <div>
-                                            <p className="text-sm font-bold text-slate-900 dark:text-white">
-                                                {s.date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
-                                            </p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-sm font-bold text-slate-900 dark:text-white">
+                                                    {s.date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                                                </p>
+                                                {s.isCloud && (
+                                                    <span className="text-[9px] px-1.5 py-0.5 bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400 rounded font-black uppercase tracking-wider">
+                                                        Nube
+                                                    </span>
+                                                )}
+                                            </div>
                                             <p className="text-xs text-slate-500">
                                                 {s.date.toLocaleDateString('es-CO')}
                                             </p>
