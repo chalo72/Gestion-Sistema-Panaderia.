@@ -313,32 +313,50 @@ export function Ventas(props: VentasProps) {
         if (!textoDictado.trim()) return;
         setIsHermesProcessing(true);
         try {
-            const res = await fetch('/api/agente', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tipo: 'hermes',
-                    mensaje: `Analiza esta comanda por voz y extrae los productos y cantidades. Devuelve ÚNICAMENTE un array JSON plano de objetos con campos "nombre" (string) y "cantidad" (número). Ejemplo: [{"nombre": "pan de queso", "cantidad": 2}]. Comanda: "${textoDictado}"`,
-                    aiMode: 'hybrid'
-                })
-            });
-
-            if (!res.ok) throw new Error('Error al procesar audio por Hermes');
-            
-            const rawText = await res.text();
-            
             let parsedItems: { nombre: string; cantidad: number }[] = [];
+            
             try {
+                const res = await fetch('/api/agente', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tipo: 'hermes',
+                        mensaje: `Analiza esta comanda por voz y extrae los productos y cantidades. Devuelve ÚNICAMENTE un array JSON plano de objetos con campos "nombre" (string) y "cantidad" (número). Ejemplo: [{"nombre": "pan de queso", "cantidad": 2}]. Comanda: "${textoDictado}"`,
+                        aiMode: 'hybrid'
+                    })
+                });
+    
+                if (!res.ok) throw new Error('API status not ok');
+                
+                const rawText = await res.text();
                 const jsonMatch = rawText.match(/\[\s*\{.*\}\s*\]/s);
                 const jsonStr = jsonMatch ? jsonMatch[0] : rawText;
                 parsedItems = JSON.parse(jsonStr);
-            } catch (jsonErr) {
-                console.warn('Hermes no retornó JSON perfecto, intentando parse manual básico:', rawText);
+            } catch (apiErr) {
+                console.warn('Hermes API fallback (sin conexión o JSON inválido):', apiErr);
+                // Fallback offline súper robusto
+                const words = textoDictado.toLowerCase();
+                const numbersMap: Record<string, number> = { 'un': 1, 'una': 1, 'dos': 2, 'tres': 3, 'cuatro': 4, 'cinco': 5, 'seis': 6, 'siete': 7, 'ocho': 8, 'nueve': 9, 'diez': 10, 'doce': 12, 'quince': 15, 'veinte': 20 };
+                
                 productos.forEach(p => {
-                    const regex = new RegExp(`(\\d+)\\s*(?:unidades de\\s*)?(${p.nombre.toLowerCase()})`, 'i');
-                    const match = rawText.toLowerCase().match(regex);
-                    if (match) {
-                        parsedItems.push({ nombre: p.nombre, cantidad: parseInt(match[1] || '1') });
+                    const nombre = p.nombre.toLowerCase();
+                    if (words.includes(nombre) && nombre.length > 2) {
+                        const idx = words.indexOf(nombre);
+                        const before = words.substring(Math.max(0, idx - 25), idx).trim();
+                        let cantidad = 1;
+                        
+                        const match = before.match(/(\d+)/);
+                        if (match) {
+                            cantidad = parseInt(match[1]);
+                        } else {
+                            for (const [word, num] of Object.entries(numbersMap)) {
+                                if (new RegExp(`\\b${word}\\b`).test(before)) {
+                                    cantidad = num;
+                                    break;
+                                }
+                            }
+                        }
+                        parsedItems.push({ nombre: p.nombre, cantidad });
                     }
                 });
             }
@@ -361,7 +379,7 @@ export function Ventas(props: VentasProps) {
                 toast.error('Hermes no pudo asociar los productos dictados a productos del catálogo.');
             }
         } catch (err) {
-            toast.error('Error de enlace con el Copiloto Hermes.');
+            toast.error('Error al procesar la comanda con Hermes.');
         } finally {
             setIsHermesProcessing(false);
             setShowHermesMic(false);
@@ -988,7 +1006,7 @@ export function Ventas(props: VentasProps) {
     return (
         <div className="flex flex-col h-full overflow-hidden bg-slate-50 dark:bg-slate-950">
             {/* Cabecera de Pestañas Compacta */}
-            <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm z-10">
+            <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 shadow-sm relative">
                 <POSHeader
                     viewMode={viewMode}
                     setViewMode={(mode) => {
