@@ -1323,33 +1323,37 @@ export function ControlCaja({
                                 <p className="text-[11px] text-blue-100 font-bold mb-4 opacity-80">
                                     Apertura: {formatCurrency(cajaActiva.montoApertura)}
                                 </p>
-                                
                                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">Balance en Sistema</p>
                                 <div className="text-4xl font-black tracking-tight mt-0.5 tabular-nums">
-                                    {formatCurrency(balanceEsperado)}
+                                    {formatCurrency(
+                                        cajaActiva.montoApertura +
+                                        cajaActiva.totalVentas +
+                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0) -
+                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0)
+                                    )}
                                 </div>
                             </div>
                         </div>
 
-                        {/* Entradas / Salidas / Ventas */}
+                        {/* Entradas / Salidas */}
                         <div className="grid grid-cols-2 gap-3">
                             <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-800/30">
                                 <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1 mb-1">
-                                    <TrendingUp className="w-3 h-3" /> Ingresos
+                                    <TrendingUp className="w-3 h-3" /> Ventas
                                 </p>
                                 <p className="text-lg font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
-                                    {formatCurrency(totalVentasHoyCaja + totalEntradasVista)}
+                                    {formatCurrency(cajaActiva.totalVentas)}
                                 </p>
-                                <p className="text-[9px] text-emerald-500/70 font-bold mt-0.5">Ventas + Entradas</p>
+                                <p className="text-[9px] text-emerald-500/70 font-bold mt-0.5">Total del turno</p>
                             </div>
                             <div className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl p-4 border border-rose-100 dark:border-rose-800/30">
                                 <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 mb-1">
-                                    <TrendingDown className="w-3 h-3" /> Egresos
+                                    <TrendingDown className="w-3 h-3" /> Salidas
                                 </p>
                                 <p className="text-lg font-black text-rose-700 dark:text-rose-400 tabular-nums">
-                                    -{formatCurrency(totalSalidasVista)}
+                                    -{formatCurrency((cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0))}
                                 </p>
-                                <p className="text-[9px] text-rose-500/70 font-bold mt-0.5">Salidas registradas</p>
+                                <p className="text-[9px] text-rose-500/70 font-bold mt-0.5">Egresos registrados</p>
                             </div>
                         </div>
 
@@ -1364,15 +1368,15 @@ export function ControlCaja({
                                 <ArrowDownCircle className="w-5 h-5" /> Salida
                             </Button>
                         </div>
-                        
-                        <Button 
+
+                        <Button
                             onClick={() => { setCajaEntregando(cajaActiva); setShowEntregaModal(true); }}
                             className="w-full h-14 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white font-black uppercase shadow-lg active:scale-95 transition-all text-xs gap-2 mt-2"
                         >
                             <Handshake className="w-5 h-5" /> Arqueo Ágil / Cerrar Turno
                         </Button>
-                        
-                        <Button 
+
+                        <Button
                             onClick={() => setShowCierreJornada(true)}
                             variant="outline"
                             className="w-full h-14 rounded-2xl border-2 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-black uppercase active:scale-95 transition-all text-xs gap-2"
@@ -1391,6 +1395,7 @@ export function ControlCaja({
                     </div>
                 )}
             </div>
+
 
             {/* ══ CONTENIDO PRINCIPAL CON TABS (DESKTOP) ══ */}
             <Tabs defaultValue="cajas" className="hidden md:flex flex-1 flex-col">
