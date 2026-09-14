@@ -1309,8 +1309,91 @@ export function ControlCaja({
                 </div>
             )}
 
-            {/* ══ CONTENIDO PRINCIPAL CON TABS ══ */}
-            <Tabs defaultValue="cajas" className="flex-1">
+            {/* ══ MÓVIL: DASHBOARD DE CAJA (PASO 4) ══ */}
+            <div className="md:hidden flex flex-col gap-4">
+                {hayJornada && cajaActiva ? (
+                    <>
+                        {/* Hero Card: Balance */}
+                        <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-3xl p-5 shadow-xl shadow-blue-900/20 text-white relative overflow-hidden">
+                            <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                            <div className="relative z-10">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-200 mb-1 flex items-center gap-1.5">
+                                    <Store className="w-3.5 h-3.5" /> {cajaActiva.cajaNombre || 'Caja Principal'}
+                                </p>
+                                <p className="text-[11px] text-blue-100 font-bold mb-4 opacity-80">
+                                    Apertura: {formatCurrency(cajaActiva.montoApertura)}
+                                </p>
+                                
+                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">Balance en Sistema</p>
+                                <div className="text-4xl font-black tracking-tight mt-0.5 tabular-nums">
+                                    {formatCurrency(balanceEsperado)}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Entradas / Salidas / Ventas */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-800/30">
+                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1 mb-1">
+                                    <TrendingUp className="w-3 h-3" /> Ingresos
+                                </p>
+                                <p className="text-lg font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
+                                    {formatCurrency(totalVentasHoyCaja + totalEntradasVista)}
+                                </p>
+                                <p className="text-[9px] text-emerald-500/70 font-bold mt-0.5">Ventas + Entradas</p>
+                            </div>
+                            <div className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl p-4 border border-rose-100 dark:border-rose-800/30">
+                                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 mb-1">
+                                    <TrendingDown className="w-3 h-3" /> Egresos
+                                </p>
+                                <p className="text-lg font-black text-rose-700 dark:text-rose-400 tabular-nums">
+                                    -{formatCurrency(totalSalidasVista)}
+                                </p>
+                                <p className="text-[9px] text-rose-500/70 font-bold mt-0.5">Salidas registradas</p>
+                            </div>
+                        </div>
+
+                        {/* Botones de Acción */}
+                        <div className="grid grid-cols-2 gap-3 mt-1">
+                            <Button onClick={() => setMovementModal({ isOpen: true, tipo: 'entrada' })}
+                                className="h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase shadow-lg shadow-emerald-500/20 active:scale-95 transition-all text-sm gap-2">
+                                <ArrowUpCircle className="w-5 h-5" /> Entrada
+                            </Button>
+                            <Button onClick={() => setMovementModal({ isOpen: true, tipo: 'salida' })}
+                                className="h-14 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-black uppercase shadow-lg shadow-rose-500/20 active:scale-95 transition-all text-sm gap-2">
+                                <ArrowDownCircle className="w-5 h-5" /> Salida
+                            </Button>
+                        </div>
+                        
+                        <Button 
+                            onClick={() => { setCajaEntregando(cajaActiva); setShowEntregaModal(true); }}
+                            className="w-full h-14 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white font-black uppercase shadow-lg active:scale-95 transition-all text-xs gap-2 mt-2"
+                        >
+                            <Handshake className="w-5 h-5" /> Arqueo Ágil / Cerrar Turno
+                        </Button>
+                        
+                        <Button 
+                            onClick={() => setShowCierreJornada(true)}
+                            variant="outline"
+                            className="w-full h-14 rounded-2xl border-2 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-black uppercase active:scale-95 transition-all text-xs gap-2"
+                        >
+                            <LogOut className="w-5 h-5" /> Cerrar Jornada Global
+                        </Button>
+                    </>
+                ) : (
+                    <div className="py-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <Store className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Caja Cerrada</p>
+                        <Button onClick={() => setShowAperturaModal(true)}
+                            className="mt-6 h-12 px-8 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase gap-2 shadow-lg shadow-blue-200 active:scale-95">
+                            <PlusCircle className="w-4 h-4" /> Iniciar Jornada
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+            {/* ══ CONTENIDO PRINCIPAL CON TABS (DESKTOP) ══ */}
+            <Tabs defaultValue="cajas" className="hidden md:flex flex-1 flex-col">
                 <TabsList className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-1.5 h-auto gap-1 shadow-sm flex overflow-x-auto no-scrollbar justify-start">
                     <TabsTrigger value="cajas"
                         className="flex-1 rounded-xl text-xs font-black uppercase tracking-wide py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm relative">
