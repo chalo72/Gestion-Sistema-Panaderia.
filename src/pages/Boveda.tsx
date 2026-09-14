@@ -311,13 +311,13 @@ export default function BovedaPage() {
               <p className="text-sm font-bold text-slate-500 mt-1">Gestión del dinero físico y cuentas bancarias</p>
             </div>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            <Button onClick={handleExportarRespaldo} variant="outline" className="rounded-xl font-black text-xs uppercase h-11 border-slate-200 text-slate-600 hover:bg-slate-50 gap-2">
+          <div className="flex gap-2 flex-wrap sm:flex-nowrap overflow-x-auto no-scrollbar w-full sm:w-auto pb-1">
+            <Button onClick={handleExportarRespaldo} variant="outline" className="rounded-xl font-black text-xs uppercase h-10 sm:h-11 border-slate-200 text-slate-600 hover:bg-slate-50 gap-2 shrink-0">
               <Download className="w-4 h-4" /> Exportar
             </Button>
             <Button
               variant="outline"
-              className="rounded-xl font-black text-xs uppercase h-11 border-slate-200 text-slate-600 hover:bg-slate-50 gap-2"
+              className="rounded-xl font-black text-xs uppercase h-10 sm:h-11 border-slate-200 text-slate-600 hover:bg-slate-50 gap-2 shrink-0"
               onClick={() => document.getElementById('boveda-import-file')?.click()}
             >
               <Upload className="w-4 h-4" /> Importar
@@ -332,28 +332,28 @@ export default function BovedaPage() {
                 e.target.value = '';
               }}
             />
-            <Button onClick={pedirAuditoriaIA} variant="outline" className="rounded-xl font-black text-xs uppercase h-11 border-indigo-200 text-indigo-600 hover:bg-indigo-50 gap-2">
+            <Button onClick={pedirAuditoriaIA} variant="outline" className="rounded-xl font-black text-xs uppercase h-10 sm:h-11 border-indigo-200 text-indigo-600 hover:bg-indigo-50 gap-2 shrink-0">
               <BrainCircuit className="w-4 h-4" /> Auditoría IA
             </Button>
-            <Button onClick={() => setShowConciliacion(true)} variant="outline" className="rounded-xl font-black text-xs uppercase h-11 border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2">
+            <Button onClick={() => setShowConciliacion(true)} variant="outline" className="rounded-xl font-black text-xs uppercase h-10 sm:h-11 border-emerald-200 text-emerald-600 hover:bg-emerald-50 gap-2 shrink-0">
               <CheckCircle className="w-4 h-4" /> Conciliar
             </Button>
-            <Button onClick={() => setShowNuevaBoveda(true)} variant="outline" className="rounded-xl font-black text-xs uppercase h-11 border-indigo-200 text-indigo-600 hover:bg-indigo-50">
+            <Button onClick={() => setShowNuevaBoveda(true)} variant="outline" className="rounded-xl font-black text-xs uppercase h-10 sm:h-11 border-indigo-200 text-indigo-600 hover:bg-indigo-50 shrink-0">
               <PlusCircle className="w-4 h-4 mr-2" /> Nueva Bóveda
             </Button>
-            <Button onClick={() => { setTipoMov('Transferencia'); setShowMovimiento(true); }} className="rounded-xl font-black text-xs uppercase h-11 bg-indigo-600 hover:bg-indigo-700 text-white">
+            <Button onClick={() => { setTipoMov('Transferencia'); setShowMovimiento(true); }} className="rounded-xl font-black text-xs uppercase h-10 sm:h-11 bg-indigo-600 hover:bg-indigo-700 text-white shrink-0">
               <ArrowRightLeft className="w-4 h-4 mr-2" /> Transferir
             </Button>
           </div>
         </div>
 
-        {/* Aviso: datos solo en este aparato */}
-        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        {/* Aviso de Sincronización en la Nube */}
+        <div className="flex items-start gap-3 rounded-2xl border border-indigo-200 dark:border-indigo-800/50 bg-indigo-50/80 dark:bg-indigo-950/30 px-4 py-3">
+          <CheckCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
           <div className="min-w-0">
-            <p className="text-sm font-black text-amber-800 dark:text-amber-200">Solo en este celular o PC</p>
-            <p className="text-xs font-medium text-amber-700/90 dark:text-amber-300/80 mt-0.5">
-              La bóveda aún no se copia sola a la nube. Si cambias de aparato, usa Exportar aquí e Importar allá (como pasar la libreta de saldos).
+            <p className="text-sm font-black text-indigo-900 dark:text-indigo-200">Sincronización Nube Activa</p>
+            <p className="text-xs font-medium text-indigo-700/90 dark:text-indigo-300/80 mt-0.5">
+              Tus cuentas de bóveda, transferencias y movimientos ahora se respaldan en la nube para que puedas consultarlas desde tu celular o cualquier PC.
             </p>
           </div>
         </div>

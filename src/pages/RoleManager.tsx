@@ -176,20 +176,20 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
             </header>
 
             {/* ── Tabs ───────────────────────────────────────────────────── */}
-            <div className="flex gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+            <div className="flex gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-x-auto no-scrollbar">
                 {TABS.map(t => (
                     <button
                         key={t.id}
                         onClick={() => setActiveTab(t.id)}
                         className={cn(
-                            'flex-1 flex items-center justify-center gap-2 h-10 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all',
+                            'flex-1 min-w-[130px] sm:min-w-0 flex items-center justify-center gap-2 h-10 px-3 rounded-xl font-black text-[11px] uppercase tracking-wider transition-all shrink-0 sm:shrink',
                             activeTab === t.id
                                 ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
                                 : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                         )}
                     >
                         <t.icon className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">{t.label}</span>
+                        <span className="inline">{t.label}</span>
                     </button>
                 ))}
             </div>

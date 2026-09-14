@@ -422,7 +422,8 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
                   </div>
 
                   {/* Grid 7 días */}
-                  <div className="grid grid-cols-7 divide-x divide-gray-100 dark:divide-gray-700/50">
+                  <div className="overflow-x-auto no-scrollbar">
+                    <div className="grid grid-cols-7 min-w-[320px] divide-x divide-gray-100 dark:divide-gray-700/50">
                     {porDia.map((d, i) => {
                       const esHoy = d.fecha === hoy;
                       const esFuturo = d.fecha > hoy;
@@ -454,6 +455,7 @@ export default function Asistencia({ trabajadores, asistencia, onAddRegistro }: 
                         </div>
                       );
                     })}
+                    </div>
                   </div>
 
                   {/* Footer resumen */}

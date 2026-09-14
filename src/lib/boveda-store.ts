@@ -1,4 +1,5 @@
 import { generateUUID } from '@/lib/safe-utils';
+import { db } from '@/lib/database';
 
 export type TipoBoveda = 'Caja Fuerte' | 'Base' | 'Banco' | 'Provisión' | 'Otro';
 
@@ -35,6 +36,13 @@ export function getBovedas(): Boveda[] {
   try {
     const raw = localStorage.getItem(KEY_BOVEDAS);
     if (!raw) {
+      // Intentar cargar de copia en la nube si está disponible
+      db.getBackup('bovedas_lista_data').then(cloud => {
+        if (cloud && Array.isArray(cloud) && cloud.length > 0) {
+          localStorage.setItem(KEY_BOVEDAS, JSON.stringify(cloud));
+        }
+      }).catch(() => {});
+
       // Inicializar con la Caja Principal
       const init: Boveda[] = [{
         id: 'boveda-principal',
@@ -52,6 +60,9 @@ export function getBovedas(): Boveda[] {
 
 export function saveBovedas(list: Boveda[]): void {
   localStorage.setItem(KEY_BOVEDAS, JSON.stringify(list));
+  try {
+    db.saveBackup('bovedas_lista_data', list).catch(() => {});
+  } catch (_) {}
 }
 
 export function addBoveda(data: Omit<Boveda, 'id' | 'saldo' | 'creadoEn'>): Boveda {
@@ -79,7 +90,14 @@ export function updateBovedaSaldo(id: string, montoCambio: number): void {
 export function getMovimientosBoveda(): MovimientoBoveda[] {
   try {
     const raw = localStorage.getItem(KEY_MOVIMIENTOS);
-    if (!raw) return [];
+    if (!raw) {
+      db.getBackup('bovedas_movimientos_data').then(cloud => {
+        if (cloud && Array.isArray(cloud) && cloud.length > 0) {
+          localStorage.setItem(KEY_MOVIMIENTOS, JSON.stringify(cloud));
+        }
+      }).catch(() => {});
+      return [];
+    }
     const list = JSON.parse(raw) as MovimientoBoveda[];
     return list.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   } catch { return []; }
@@ -87,6 +105,9 @@ export function getMovimientosBoveda(): MovimientoBoveda[] {
 
 export function saveMovimientos(list: MovimientoBoveda[]): void {
   localStorage.setItem(KEY_MOVIMIENTOS, JSON.stringify(list));
+  try {
+    db.saveBackup('bovedas_movimientos_data', list).catch(() => {});
+  } catch (_) {}
 }
 
 export function addMovimientoBoveda(data: Omit<MovimientoBoveda, 'id' | 'fecha'>): MovimientoBoveda {
