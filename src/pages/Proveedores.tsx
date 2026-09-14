@@ -1386,65 +1386,76 @@ export function Proveedores({
                               <button onClick={() => handleEdit(prov)} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-black hover:bg-blue-700">+ Agregar</button>
                             </div>
                           ) : (
-                            <div className="overflow-hidden rounded-[2rem] border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-sm overflow-x-auto m-4">
-                              <table className="w-full text-left border-collapse">
-                                <thead>
-                                  <tr className="bg-slate-50 dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800">
-                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Producto / Insumo</th>
-                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Und/Pack</th>
-                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">Costo Aliado</th>
-                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 text-center">Ganancia %</th>
-                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600 text-right">Precio Venta</th>
-                                    <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 text-right">Ganancia Est.</th>
-                                    <th className="px-6 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-center">Acción</th>
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                  {insumos.map((precio) => {
-                                    const prodItem = getProductoById(precio.productoId);
-                                    if (!prodItem) return null;
-                                    
-                                    const nombre = prodItem.nombre;
-                                    const categoria = prodItem.categoria;
-                                    const destino = precio.destino || (prodItem.tipo === 'ingrediente' ? 'insumo' : 'venta');
-                                    const cantidadEmbalaje = precio.cantidadEmbalaje || 1;
-                                    const tipoEmbalaje = precio.tipoEmbalaje || 'unidad';
-                                    const precioCosto = precio.precioCosto;
-                                    const costoUnitario = cantidadEmbalaje > 1 ? Math.round(precioCosto / cantidadEmbalaje) : precioCosto;
-                                    const margenVenta = prodItem.margenUtilidad || 0;
-                                    const costoReal = cantidadEmbalaje > 1 ? precioCosto / cantidadEmbalaje : precioCosto;
-                                    // Usar precio guardado si > 0; si no, calcularlo desde costo + margen
-                                    const precioVentaGuardado = prodItem.precioVenta || 0;
-                                    const precioVenta = precioVentaGuardado > 0
-                                      ? precioVentaGuardado
-                                      : (costoReal > 0 && margenVenta > 0 ? Math.round(costoReal * (1 + margenVenta / 100)) : 0);
-                                    const gananciaU = precioVenta > 0 && costoReal > 0 ? precioVenta - costoReal : 0;
-                                    
-                                    return (
-                                      <tr key={precio.id} className="transition-all hover:bg-blue-50/30 dark:hover:bg-blue-900/10 border-l-4 border-transparent group">
-                                        <td className="px-6 py-4">
-                                          <div className="flex items-center gap-4">
-                                            <div className={cn(
-                                              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-sm transition-transform group-hover:scale-110", 
-                                              destino === 'insumo' ? "bg-amber-50 text-amber-500 border-amber-100" : "bg-emerald-50 text-emerald-500 border-emerald-100"
-                                            )}>
-                                              {destino === 'insumo' ? <FlaskConical className="w-5 h-5" /> : <Store className="w-5 h-5" />}
-                                            </div>
-                                            <div className="min-w-0">
-                                              <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-tight truncate">{nombre}</p>
-                                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{categoria}</p>
-                                            </div>
+                              <div className="flex flex-col gap-2 m-4">
+                                {insumos.map((precio) => {
+                                  const prodItem = getProductoById(precio.productoId);
+                                  if (!prodItem) return null;
+                                  
+                                  const nombre = prodItem.nombre;
+                                  const categoria = prodItem.categoria;
+                                  const destino = precio.destino || (prodItem.tipo === 'ingrediente' ? 'insumo' : 'venta');
+                                  const cantidadEmbalaje = precio.cantidadEmbalaje || 1;
+                                  const tipoEmbalaje = precio.tipoEmbalaje || 'unidad';
+                                  const precioCosto = precio.precioCosto;
+                                  const costoUnitario = cantidadEmbalaje > 1 ? Math.round(precioCosto / cantidadEmbalaje) : precioCosto;
+                                  const margenVenta = prodItem.margenUtilidad || 0;
+                                  const costoReal = cantidadEmbalaje > 1 ? precioCosto / cantidadEmbalaje : precioCosto;
+                                  const precioVentaGuardado = prodItem.precioVenta || 0;
+                                  const precioVenta = precioVentaGuardado > 0
+                                    ? precioVentaGuardado
+                                    : (costoReal > 0 && margenVenta > 0 ? Math.round(costoReal * (1 + margenVenta / 100)) : 0);
+                                  const gananciaU = precioVenta > 0 && costoReal > 0 ? precioVenta - costoReal : 0;
+                                  
+                                  return (
+                                    <div key={precio.id} className="flex flex-col bg-white dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl p-4 gap-3 hover:border-blue-200 transition-colors">
+                                      {/* Header: Icon, Name, and Actions */}
+                                      <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3 min-w-0">
+                                          <div className={cn(
+                                            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border shadow-sm",
+                                            destino === 'insumo' ? "bg-amber-50 text-amber-500 border-amber-100" : "bg-emerald-50 text-emerald-500 border-emerald-100"
+                                          )}>
+                                            {destino === 'insumo' ? <FlaskConical className="w-5 h-5" /> : <Store className="w-5 h-5" />}
                                           </div>
-                                        </td>
-                                        <td className="px-4 py-4 text-center">
-                                          <Badge variant="secondary" className="bg-slate-100 dark:bg-slate-800 text-[10px] font-black uppercase tracking-widest px-2.5 py-1">
+                                          <div className="min-w-0">
+                                            <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-tight truncate">{nombre}</p>
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{categoria}</p>
+                                          </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setHistorialModalInfo({ open: true, productoId: precio.productoId, proveedorId: prov.id, nombreProducto: nombre });
+                                            }}
+                                            className="w-8 h-8 rounded-lg text-indigo-500 hover:bg-indigo-50 bg-slate-50 dark:bg-slate-800 flex items-center justify-center"
+                                            title="Historial de Costos"
+                                          >
+                                            <TrendingUp className="w-4 h-4" />
+                                          </button>
+                                          <button
+                                            onClick={() => { if (window.confirm(`¿Eliminar "${nombre}"?`)) onDeletePrecio(precio.id); }}
+                                            className="w-8 h-8 rounded-lg text-rose-500 hover:bg-rose-50 bg-slate-50 dark:bg-slate-800 flex items-center justify-center"
+                                            title="Eliminar"
+                                          >
+                                            <Trash2 className="w-4 h-4" />
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      {/* Content grid */}
+                                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-50 dark:border-slate-800">
+                                        <div className="flex flex-col">
+                                          <span className="text-[9px] uppercase font-bold text-slate-400">Und/Pack</span>
+                                          <Badge variant="secondary" className="w-fit bg-slate-100 dark:bg-slate-800 text-[10px] font-black uppercase tracking-widest px-2 py-0.5 mt-0.5">
                                             {EMBALAJES.find(e => e.value === tipoEmbalaje)?.emoji} {cantidadEmbalaje}
                                             {precio.notas && /x[\d.]+ (kg|lb|gr|L|ml)/.test(precio.notas)
                                               ? ` ${precio.notas.match(/x[\d.]+ (kg|lb|gr|L|ml)/)?.[0]?.split(' ')[1] || ''}`
                                               : ''}
                                           </Badge>
-                                        </td>
-                                        <td className="px-4 py-4 text-right">
+                                        </div>
+                                        <div className="flex flex-col text-right">
+                                          <span className="text-[9px] uppercase font-bold text-slate-400">Costo Aliado</span>
                                           <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{formatCurrency(precioCosto)}</p>
                                           {cantidadEmbalaje > 1 && (
                                             <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">
@@ -1458,58 +1469,25 @@ export function Proveedores({
                                               })()}: {formatCurrency(costoUnitario)}
                                             </p>
                                           )}
-                                        </td>
-                                        <td className="px-4 py-4 text-center font-black text-[10px] text-emerald-600">
-                                          {Number(margenVenta).toFixed(1)}%
-                                        </td>
-                                        <td className="px-4 py-4 text-right">
-                                          {precioVenta > 0
-                                            ? <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(precioVenta)}</p>
-                                            : <p className="text-sm text-slate-300 dark:text-slate-600">—</p>
-                                          }
-                                        </td>
-                                        <td className="px-4 py-4 text-right">
-                                          {gananciaU > 0
-                                            ? <p className="text-sm font-black text-amber-500 tabular-nums">+{formatCurrency(Math.round(gananciaU))}<span className="text-[9px] text-slate-400">/u</span></p>
-                                            : <p className="text-sm text-slate-300 dark:text-slate-600">—</p>
-                                          }
-                                        </td>
-                                        <td className="px-6 py-4 text-center">
-                                          <div className="flex items-center justify-center gap-1">
-                                            <button
-                                              onClick={(e) => {
-                                                e.stopPropagation();
-                                                setHistorialModalInfo({
-                                                  open: true,
-                                                  productoId: precio.productoId,
-                                                  proveedorId: prov.id,
-                                                  nombreProducto: nombre
-                                                });
-                                              }}
-                                              className="w-9 h-9 rounded-xl text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 flex items-center justify-center transition-all bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 border"
-                                              title="Ver Historial de Costos"
-                                            >
-                                              <TrendingUp className="w-4 h-4" />
-                                            </button>
-                                            <button
-                                              onClick={() => {
-                                                if (window.confirm(`¿Eliminar "${nombre}" del catálogo de ${prov.nombre}?`)) {
-                                                  onDeletePrecio(precio.id);
-                                                }
-                                              }}
-                                              className="w-9 h-9 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex items-center justify-center transition-all bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700 border"
-                                              title="Eliminar"
-                                            >
-                                              <Trash2 className="w-4 h-4" />
-                                            </button>
-                                          </div>
-                                        </td>
-                                      </tr>
-                                    );
-                                  })}
-                                </tbody>
-                              </table>
-                            </div>
+                                        </div>
+                                        {destino !== 'insumo' && (
+                                          <>
+                                            <div className="flex flex-col">
+                                              <span className="text-[9px] uppercase font-bold text-slate-400">Ganancia %</span>
+                                              <span className="text-sm font-black text-emerald-600">{Number(margenVenta).toFixed(1)}%</span>
+                                            </div>
+                                            <div className="flex flex-col text-right">
+                                              <span className="text-[9px] uppercase font-bold text-slate-400">Precio Venta</span>
+                                              <span className="text-sm font-black text-emerald-600">{precioVenta > 0 ? formatCurrency(precioVenta) : '-'}</span>
+                                              {gananciaU > 0 && <span className="text-[9px] font-bold text-amber-500">+{formatCurrency(Math.round(gananciaU))}/u</span>}
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                           )}
 
                           {/* ── Asistente de Negocio ── */}
