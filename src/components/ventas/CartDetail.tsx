@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ShoppingCart, Users, Minus, Plus, Trash2, CreditCard, DollarSign, Banknote, Zap, X, Tag, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import type { Producto, MetodoPago } from '@/types';
 import { safeNumber } from '@/lib/safe-utils';
@@ -38,6 +39,7 @@ export function CartDetail({
 }: CartDetailProps) {
 
     const [billeteRecibido, setBilleteRecibido] = useState('');
+    const [quantityNumpadTarget, setQuantityNumpadTarget] = useState<{ id: string, val: number } | null>(null);
 
     const totalCart = useMemo(() => cart.reduce((sum, item) => {
         return sum + (safeNumber(item.producto?.precioVenta) * (item.cantidad || 0));
@@ -193,18 +195,12 @@ export function CartDetail({
                                             <button className="h-8 w-8 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition-all active:scale-75 rounded-l-xl" onClick={() => onUpdateQuantity(item.producto.id, -1)}>
                                                 <Minus className="w-3.5 h-3.5" />
                                             </button>
-                                            <input
-                                                type="number"
-                                                min={1}
-                                                value={item.cantidad}
-                                                onChange={e => {
-                                                    const val = parseInt(e.target.value);
-                                                    if (!isNaN(val) && val > 0) {
-                                                        onUpdateQuantity(item.producto.id, val - item.cantidad);
-                                                    }
-                                                }}
-                                                className="w-10 text-center text-sm font-black tabular-nums bg-transparent border-none outline-none text-slate-900 dark:text-white [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                            />
+                                            <button 
+                                                onClick={() => setQuantityNumpadTarget({ id: item.producto.id, val: item.cantidad })}
+                                                className="w-10 text-center text-sm font-black tabular-nums bg-transparent border-none outline-none text-slate-900 dark:text-white active:scale-95 transition-all"
+                                            >
+                                                {item.cantidad}
+                                            </button>
                                             <button className="h-8 w-8 flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-300 transition-all active:scale-75 rounded-r-xl" onClick={() => onUpdateQuantity(item.producto.id, 1)}>
                                                 <Plus className="w-3.5 h-3.5" />
                                             </button>
@@ -320,6 +316,55 @@ export function CartDetail({
                     </div>
                 </div>
             </div>
+
+            {/* Modal de Teclado Numérico Táctil para Cantidades (Paso 3) */}
+            <Dialog open={!!quantityNumpadTarget} onOpenChange={(open) => !open && setQuantityNumpadTarget(null)}>
+                <DialogContent className="max-w-[300px] rounded-3xl p-0 border border-slate-200 dark:border-slate-800 shadow-2xl bg-slate-50 dark:bg-slate-950 hide-close-button">
+                    <div className="p-5 flex flex-col items-center border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-3xl">
+                        <span className="text-xs font-black uppercase text-slate-400 tracking-widest mb-2">Cantidad</span>
+                        <span className="text-5xl font-black tabular-nums text-indigo-600 dark:text-indigo-400">
+                            {quantityNumpadTarget?.val || 0}
+                        </span>
+                    </div>
+                    <div className="p-4 grid grid-cols-3 gap-3">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => (
+                            <button
+                                key={n}
+                                onClick={() => setQuantityNumpadTarget(prev => prev ? { ...prev, val: parseInt(`${prev.val === 0 ? '' : prev.val}${n}`) } : null)}
+                                className="h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-2xl font-black shadow-sm active:scale-95 transition-all text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                            >
+                                {n}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setQuantityNumpadTarget(prev => prev ? { ...prev, val: 0 } : null)}
+                            className="h-14 rounded-2xl bg-rose-50 dark:bg-rose-900/30 border border-rose-200 dark:border-rose-900/50 text-rose-500 font-black uppercase active:scale-95 transition-all text-sm"
+                        >
+                            Borrar
+                        </button>
+                        <button
+                            onClick={() => setQuantityNumpadTarget(prev => prev ? { ...prev, val: parseInt(`${prev.val === 0 ? '' : prev.val}0`) } : null)}
+                            className="h-14 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-2xl font-black shadow-sm active:scale-95 transition-all text-slate-700 dark:text-slate-200 hover:bg-slate-100"
+                        >
+                            0
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (quantityNumpadTarget && quantityNumpadTarget.val > 0) {
+                                    const currentCartItem = cart.find(i => i.producto.id === quantityNumpadTarget.id);
+                                    if (currentCartItem) {
+                                        onUpdateQuantity(quantityNumpadTarget.id, quantityNumpadTarget.val - currentCartItem.cantidad);
+                                    }
+                                }
+                                setQuantityNumpadTarget(null);
+                            }}
+                            className="h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white border border-emerald-600 font-black uppercase shadow-lg shadow-emerald-500/30 active:scale-95 transition-all text-sm"
+                        >
+                            OK
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
