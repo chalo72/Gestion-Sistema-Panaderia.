@@ -422,6 +422,19 @@ export function Sidebar({
   // ─── MENÚ MÓVIL REDISEÑADO (PASO 5) ─────────────────────────────────────────
   const mobileCategories = [
     {
+      section: 'Centro de Mando',
+      emoji: '🏛️',
+      activeClass: 'bg-indigo-600 text-white border-transparent shadow-lg',
+      items: [
+        { id: 'dashboard' as ViewType,       label: 'Centro de Mando',        icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+        { id: 'agentes-ia' as ViewType,      label: 'Mando Superior (IA)',    icon: Shield,          permission: 'VER_DASHBOARD' },
+        { id: 'whatsapp-hub' as ViewType,    label: 'WhatsApp & IA',          icon: MessageSquare,   permission: 'VER_DASHBOARD' },
+        { id: 'comunicaciones' as ViewType,  label: 'Equipo & Checklist',     icon: MessageCircle,   permission: 'VER_DASHBOARD' },
+        { id: 'videovigilancia' as ViewType, label: 'Videovigilancia',        icon: Video,           permission: 'VER_DASHBOARD' },
+        { id: 'cctv' as ViewType,            label: 'Auditoría Digital',      icon: Shield,          permission: 'VER_DASHBOARD' },
+      ],
+    },
+    {
       section: 'Ventas y Caja',
       emoji: '💰',
       activeClass: 'bg-emerald-600 text-white border-transparent shadow-lg',
@@ -473,15 +486,14 @@ export function Sidebar({
       emoji: '👥',
       activeClass: 'bg-rose-600 text-white border-transparent shadow-lg',
       items: [
-        { id: 'trabajadores' as ViewType,   label: 'Trabajadores',    icon: UserCircle2,     permission: 'VER_USUARIOS' },
-        { id: 'asistencia' as ViewType,     label: 'Asistencia',      icon: CalendarCheck,   permission: 'VER_DASHBOARD' },
-        { id: 'nomina' as ViewType,         label: 'Nómina',          icon: Wallet,          permission: 'VER_FINANZAS' },
-        { id: 'seguridad' as ViewType,      label: 'Anti-Fraude',     icon: Shield,          permission: 'VER_FINANZAS' },
-        { id: 'configuracion' as ViewType,  label: 'Configuración',   icon: Settings,        permission: 'VER_CONFIGURACION' },
-        { id: 'usuarios' as ViewType,       label: 'Equipo',          icon: Users,           permission: 'VER_USUARIOS' },
-        { id: 'comunicaciones' as ViewType, label: 'Comunicaciones',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
-        { id: 'whatsapp-hub' as ViewType,    label: 'WhatsApp & IA',   icon: MessageSquare,   permission: 'VER_DASHBOARD' },
-        { id: 'dashboard' as ViewType,      label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+        { id: 'trabajadores' as ViewType,   label: 'Trabajadores',         icon: UserCircle2,     permission: 'VER_USUARIOS' },
+        { id: 'expedientes' as ViewType,    label: 'Expediente Empleadas', icon: FileCheck,       permission: 'VER_DASHBOARD' },
+        { id: 'asistencia' as ViewType,     label: 'Asistencia',           icon: CalendarCheck,   permission: 'VER_DASHBOARD' },
+        { id: 'nomina' as ViewType,         label: 'Nómina',               icon: Wallet,          permission: 'VER_FINANZAS' },
+        { id: 'seguridad' as ViewType,      label: 'Anti-Fraude',          icon: Shield,          permission: 'VER_FINANZAS' },
+        { id: 'roles' as ViewType,          label: 'Seguridad y Roles',    icon: Shield,          permission: 'VER_USUARIOS' },
+        { id: 'configuracion' as ViewType,  label: 'Configuración',        icon: Settings,        permission: 'VER_CONFIGURACION' },
+        { id: 'usuarios' as ViewType,       label: 'Equipo',               icon: Users,           permission: 'VER_USUARIOS' },
       ],
     },
   ];

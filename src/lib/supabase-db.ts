@@ -937,19 +937,25 @@ export class SupabaseDatabase implements IDatabase {
 
     // --- Sentinel Backups ---
     async saveBackup(id: string, data: any): Promise<void> { 
-        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config') {
-            const payload = Array.isArray(data) ? data : [data];
+        if (id) {
+            const payload = Array.isArray(data) ? data : (typeof data === 'object' ? data : [data]);
             const { error } = await supabase.from('configuracion').upsert({
                 id: id,
                 categorias: payload
             });
-            if (error) throw error;
+            if (error) {
+                console.warn(`[SupabaseDatabase] Error guardando backup ${id}:`, error);
+                throw error;
+            }
         }
     }
     async getBackup(id: string): Promise<any> {
-        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config') {
+        if (id) {
             const { data, error } = await supabase.from('configuracion').select('categorias').eq('id', id).maybeSingle();
-            if (error) throw error;
+            if (error) {
+                console.warn(`[SupabaseDatabase] Error obteniendo backup ${id}:`, error);
+                return null;
+            }
             return data ? data.categorias : null;
         }
         return null;

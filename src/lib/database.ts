@@ -537,42 +537,117 @@ class NexusDatabase implements IDatabase {
   async updateSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
   async getBackup(key: string) { 
     const doc = await this.adapter.getDocument<any>('backups', key);
-    if (doc && doc.data && Array.isArray(doc.data)) return doc.data;
+    if (doc && doc.data && Array.isArray(doc.data) && doc.data.length > 0) return doc.data;
     // Soporte para legacy arrays que se guardaron accidentalmente como objetos con keys numéricas
     if (doc && !doc.data && Object.keys(doc).some(k => !isNaN(Number(k)))) {
       const arr: any[] = [];
       Object.keys(doc).forEach(k => {
         if (!isNaN(Number(k))) arr[Number(k)] = doc[k];
       });
-      return arr.length > 0 ? arr : doc;
+      if (arr.length > 0) return arr;
     }
-    return doc;
+    // Si no está en local (ej. celular nuevo o Vercel), consultar en Supabase
+    try {
+      const supaDB = new SupabaseDatabase();
+      const cloud = await supaDB.getBackup(key);
+      if (cloud && (Array.isArray(cloud) ? cloud.length > 0 : true)) {
+        await this.adapter.setDocument('backups', key, { id: key, data: cloud });
+        return cloud;
+      }
+    } catch (_) {}
+    return doc?.data ?? doc ?? null;
   }
   async saveBackup(key: string, val: any) {
+    let res;
     if (Array.isArray(val)) {
-      return this.adapter.setDocument('backups', key, { id: key, data: val });
+      res = await this.adapter.setDocument('backups', key, { id: key, data: val });
+    } else {
+      res = await this.adapter.setDocument('backups', key, { id: key, ...val });
     }
-    return this.adapter.setDocument('backups', key, { id: key, ...val });
+    // 🔀 Sincronizar en Supabase para que el celular y cualquier dispositivo lo vean
+    try {
+      const supaDB = new SupabaseDatabase();
+      await supaDB.saveBackup(key, val);
+    } catch (e) {
+      console.warn(`⚠️ [NEXUS] Error sincronizando backup '${key}' a la nube:`, e);
+    }
+    return res;
   }
 
   // CCTV
-  async getAllCamaras() { return this.adapter.getCollection('camaras_cctv'); }
+  async getAllCamaras() {
+    let locals = await this.adapter.getCollection('camaras_cctv');
+    if (!locals || locals.length === 0) {
+      try {
+        const supaDB = new SupabaseDatabase();
+        const cloud = await supaDB.getBackup('camaras_config');
+        if (cloud && Array.isArray(cloud) && cloud.length > 0) {
+          for (const c of cloud) {
+            await this.adapter.setDocument('camaras_cctv', c.id, c);
+          }
+          return cloud;
+        }
+      } catch (_) {}
+    }
+    return locals || [];
+  }
   async saveCamara(c: any) {
     if (!c.id) c.id = generateUUID();
-    return this.adapter.setDocument('camaras_cctv', c.id, c);
+    const res = await this.adapter.setDocument('camaras_cctv', c.id, c);
+    try {
+      const all = await this.adapter.getCollection('camaras_cctv');
+      const supaDB = new SupabaseDatabase();
+      await supaDB.saveBackup('camaras_config', all);
+    } catch (_) {}
+    return res;
   }
   async deleteCamara(id: string) {
-      return this.adapter.deleteDocument('camaras_cctv', id);
-    }
+    const res = await this.adapter.deleteDocument('camaras_cctv', id);
+    try {
+      const all = await this.adapter.getCollection('camaras_cctv');
+      const supaDB = new SupabaseDatabase();
+      await supaDB.saveBackup('camaras_config', all);
+    } catch (_) {}
+    return res;
+  }
 
-    // Expedientes de Empleadas (Vigilancia Conductual)
-    async getAllEmpleadasPerfil() { return this.adapter.getCollection('empleadas_perfil'); }
-    async saveEmpleadaPerfil(e: any) {
-      if (!e.id) e.id = generateUUID();
-      e.updatedAt = new Date().toISOString();
-      return this.adapter.setDocument('empleadas_perfil', e.id, e);
+  // Expedientes de Empleadas (Vigilancia Conductual)
+  async getAllEmpleadasPerfil() {
+    let locals = await this.adapter.getCollection('empleadas_perfil');
+    if (!locals || locals.length === 0) {
+      try {
+        const supaDB = new SupabaseDatabase();
+        const cloud = await supaDB.getBackup('empleadas_perfil_data');
+        if (cloud && Array.isArray(cloud) && cloud.length > 0) {
+          for (const emp of cloud) {
+            await this.adapter.setDocument('empleadas_perfil', emp.id, emp);
+          }
+          return cloud;
+        }
+      } catch (_) {}
     }
-    async deleteEmpleadaPerfil(id: string) { return this.adapter.deleteDocument('empleadas_perfil', id); }
+    return locals || [];
+  }
+  async saveEmpleadaPerfil(e: any) {
+    if (!e.id) e.id = generateUUID();
+    e.updatedAt = new Date().toISOString();
+    const res = await this.adapter.setDocument('empleadas_perfil', e.id, e);
+    try {
+      const all = await this.adapter.getCollection('empleadas_perfil');
+      const supaDB = new SupabaseDatabase();
+      await supaDB.saveBackup('empleadas_perfil_data', all);
+    } catch (_) {}
+    return res;
+  }
+  async deleteEmpleadaPerfil(id: string) {
+    const res = await this.adapter.deleteDocument('empleadas_perfil', id);
+    try {
+      const all = await this.adapter.getCollection('empleadas_perfil');
+      const supaDB = new SupabaseDatabase();
+      await supaDB.saveBackup('empleadas_perfil_data', all);
+    } catch (_) {}
+    return res;
+  }
     async getAllMeritosEmpleada(empleadaId?: string) {
       const all = await this.adapter.getCollection<any>('meritos_empleada');
       if (empleadaId) return all.filter((m: any) => m.empleadaId === empleadaId);
@@ -612,15 +687,81 @@ class NexusDatabase implements IDatabase {
   async deleteReceta(id: string) { return this._delete('recetas', id); }
 
   // Producción & Formulaciones
-  async getAllFormulaciones() { return this.adapter.getCollection('formulaciones'); }
-  async addFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
-  async updateFormulacion(f: any) { return this.adapter.setDocument('formulaciones', f.id, f); }
-  async deleteFormulacion(id: string) { return this._delete('formulaciones', id); }
+  async getAllFormulaciones() {
+    let locals = await this.adapter.getCollection('formulaciones');
+    if (!locals || locals.length === 0) {
+      const backup = await this.getBackup('formulaciones_data');
+      if (backup && Array.isArray(backup) && backup.length > 0) {
+        for (const f of backup) {
+          await this.adapter.setDocument('formulaciones', f.id, f);
+        }
+        return backup;
+      }
+    }
+    return locals || [];
+  }
+  async addFormulacion(f: any) {
+    const res = await this.adapter.setDocument('formulaciones', f.id, f);
+    try {
+      const all = await this.adapter.getCollection('formulaciones');
+      await this.saveBackup('formulaciones_data', all);
+    } catch (_) {}
+    return res;
+  }
+  async updateFormulacion(f: any) {
+    const res = await this.adapter.setDocument('formulaciones', f.id, f);
+    try {
+      const all = await this.adapter.getCollection('formulaciones');
+      await this.saveBackup('formulaciones_data', all);
+    } catch (_) {}
+    return res;
+  }
+  async deleteFormulacion(id: string) {
+    const res = await this._delete('formulaciones', id);
+    try {
+      const all = await this.adapter.getCollection('formulaciones');
+      await this.saveBackup('formulaciones_data', all);
+    } catch (_) {}
+    return res;
+  }
 
-  async getAllModelosPan() { return this.adapter.getCollection('modelosPan'); }
-  async addModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
-  async updateModeloPan(m: any) { return this.adapter.setDocument('modelosPan', m.id, m); }
-  async deleteModeloPan(id: string) { return this._delete('modelosPan', id); }
+  async getAllModelosPan() {
+    let locals = await this.adapter.getCollection('modelosPan');
+    if (!locals || locals.length === 0) {
+      const backup = await this.getBackup('modelosPan_data');
+      if (backup && Array.isArray(backup) && backup.length > 0) {
+        for (const m of backup) {
+          await this.adapter.setDocument('modelosPan', m.id, m);
+        }
+        return backup;
+      }
+    }
+    return locals || [];
+  }
+  async addModeloPan(m: any) {
+    const res = await this.adapter.setDocument('modelosPan', m.id, m);
+    try {
+      const all = await this.adapter.getCollection('modelosPan');
+      await this.saveBackup('modelosPan_data', all);
+    } catch (_) {}
+    return res;
+  }
+  async updateModeloPan(m: any) {
+    const res = await this.adapter.setDocument('modelosPan', m.id, m);
+    try {
+      const all = await this.adapter.getCollection('modelosPan');
+      await this.saveBackup('modelosPan_data', all);
+    } catch (_) {}
+    return res;
+  }
+  async deleteModeloPan(id: string) {
+    const res = await this._delete('modelosPan', id);
+    try {
+      const all = await this.adapter.getCollection('modelosPan');
+      await this.saveBackup('modelosPan_data', all);
+    } catch (_) {}
+    return res;
+  }
 
   async getAllOrdenesProduccion() { return this.adapter.getCollection('produccion'); }
   async addOrdenProduccion(o: any) { await this.syncSet('produccion', o.id, o); }

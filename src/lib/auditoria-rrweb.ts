@@ -59,15 +59,18 @@ export async function saveCurrentSession() {
         // Sincronizar en Firestore para acceso remoto en Vercel
         if (firestore && newSession.length > 0) {
             try {
-                // Guardar los últimos 350 eventos más relevantes de la sesión
-                const serialized = JSON.stringify(newSession.slice(-350));
+                // Preservar siempre los eventos estructurales iniciales (Meta=0 y FullSnapshot=2)
+                const baseSnapshots = newSession.filter((e: any) => e.type === 0 || e.type === 1 || e.type === 2);
+                const incrementals = newSession.filter((e: any) => e.type > 2).slice(-350);
+                const eventsToSync = [...baseSnapshots, ...incrementals];
+                const serialized = JSON.stringify(eventsToSync);
                 const ts = parseInt(currentSessionId.split('_')[1] || `${Date.now()}`);
                 await setDoc(fbDoc(firestore, 'auditoria_sesiones', currentSessionId), {
                     id: currentSessionId,
                     timestamp: ts,
                     fecha: new Date(ts).toISOString(),
                     eventsJson: serialized,
-                    eventCount: newSession.length,
+                    eventCount: eventsToSync.length,
                     updatedAt: new Date().toISOString(),
                 }, { merge: true });
             } catch (cloudErr) {

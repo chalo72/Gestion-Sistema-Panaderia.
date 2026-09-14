@@ -77,6 +77,7 @@ const VER_CONTROL_FINANCIERO = [
   'ahorro',
   'inversiones',
   'trabajadores',
+  'expedientes',
   'historial-ventas',
   'ventas',
   'clientes',
@@ -158,11 +159,13 @@ export function cargarPermisos(): PermisosModulos {
             ...(parsed.GERENTE || DEFAULT_PERMISOS.GERENTE),
             'whatsapp-hub': { ver: true, eliminar: true },
             'asistencia': { ver: true, eliminar: true },
+            'expedientes': { ver: true, eliminar: true },
           },
           CONTROL_FINANCIERO: {
             ...(parsed.CONTROL_FINANCIERO || DEFAULT_PERMISOS.CONTROL_FINANCIERO),
             'whatsapp-hub': { ver: true, eliminar: false },
             'asistencia': { ver: true, eliminar: false },
+            'expedientes': { ver: true, eliminar: false },
           },
           VENDEDOR: {
             ...(parsed.VENDEDOR || DEFAULT_PERMISOS.VENDEDOR),
