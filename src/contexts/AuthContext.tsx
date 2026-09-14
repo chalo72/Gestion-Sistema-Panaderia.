@@ -301,13 +301,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = [...usuarios, nuevo];
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
-    if (firestore) {
-      try {
-        await setDoc(fbDoc(firestore, 'usuarios_sistema', nuevo.id), toFirestoreDoc(nuevo));
-      } catch (e) {
-        console.warn('⚠️ [Auth] No se pudo guardar en nube (guardado localmente):', e);
+      if (firestore) {
+        try {
+          setDoc(fbDoc(firestore, 'usuarios_sistema', nuevo.id), toFirestoreDoc(nuevo)).catch(e => {
+            console.warn('⚠️ [Auth] No se pudo guardar en nube (guardado localmente):', e);
+          });
+        } catch (e) {}
       }
-    }
     toast.success('Usuario guardado');
     return true;
   }, [usuarios]);
@@ -321,14 +321,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUsuario(updatedMe);
       localStorage.setItem('pricecontrol_local_user', JSON.stringify(updatedMe));
     }
-    if (firestore) {
-      try {
-        const updated = newList.find(u => u.id === id);
-        if (updated) await setDoc(fbDoc(firestore, 'usuarios_sistema', id), toFirestoreDoc(updated));
-      } catch (e) {
-        console.warn('⚠️ [Auth] No se pudo actualizar en nube:', e);
+      if (firestore) {
+        try {
+          const updated = newList.find(u => u.id === id);
+          if (updated) {
+             setDoc(fbDoc(firestore, 'usuarios_sistema', id), toFirestoreDoc(updated)).catch(e => console.warn(e));
+          }
+        } catch (e) {}
       }
-    }
     return true;
   }, [usuarios, usuario]);
 
@@ -340,13 +340,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = usuarios.filter(u => u.id !== id);
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
-    if (firestore) {
-      try {
-        await deleteDoc(fbDoc(firestore, 'usuarios_sistema', id));
-      } catch (e) {
-        console.warn('⚠️ [Auth] No se pudo eliminar de nube:', e);
+      if (firestore) {
+        try {
+          deleteDoc(fbDoc(firestore, 'usuarios_sistema', id)).catch(e => console.warn(e));
+        } catch (e) {}
       }
-    }
     return true;
   }, [usuarios, usuario]);
 
