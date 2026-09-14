@@ -1,0 +1,147 @@
+import { useState, useEffect } from 'react';
+import { 
+  LogOut, 
+  Sun, 
+  Moon,
+  LayoutDashboard,
+  ShieldCheck,
+  Database
+} from 'lucide-react';
+
+import { usePriceControl } from '@/hooks/usePriceControl';
+import { useAuth, useCan } from '@/contexts/AuthContext';
+import { useTheme } from '@/hooks/useTheme';
+import { Toaster, toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { Button } from '@/components/ui/button';
+import { PageTransition } from '@/components/layout/PageTransition';
+import type { ViewType } from '@/types';
+
+// Páginas
+import Dashboard from '@/pages/Dashboard';
+import Productos from '@/pages/Productos';
+import { Ventas } from '@/pages/Ventas';
+import Inventario from '@/pages/Inventario';
+import PrePedidos from '@/pages/PrePedidos';
+import Recepciones from '@/pages/Recepciones';
+import { Alertas } from '@/pages/Alertas';
+import { Produccion } from '@/pages/Produccion';
+import Recetas from '@/pages/Recetas';
+import Configuracion from '@/pages/Configuracion';
+import { Usuarios } from '@/pages/Usuarios';
+import RoleManager from '@/pages/RoleManager';
+import { ControlCaja } from '@/pages/ControlCaja';
+import Ahorros from '@/pages/Ahorros';
+import CreditosClientes from '@/pages/CreditosClientes';
+import { Login } from '@/pages/Login';
+import AgentesIA from '@/pages/AgentesIA';
+import HistorialVentas from '@/pages/HistorialVentas';
+import Oficina from '@/pages/Oficina';
+import Trabajadores from '@/pages/Trabajadores';
+import Gastos from '@/pages/Gastos';
+import Proveedores from '@/pages/Proveedores';
+import Mayoristas from '@/pages/Mayoristas';
+import Reportes from '@/pages/Reportes';
+import Precios from '@/pages/Precios';
+import CargaMasiva from '@/pages/CargaMasiva';
+import ListaPreciosProvincial from '@/pages/ListaPreciosProvincial';
+
+const App = () => {
+  const { theme, setTheme } = useTheme();
+  const { usuario: user, logout, isLoading: isAuthLoading } = useAuth();
+  const { 
+    productos, 
+    proveedores, 
+    precios,
+    historial: historialPrecios,
+    alertas,
+    estadisticas,
+    configuracion,
+    loaded,
+    addProducto,
+    updateProducto,
+    deleteProducto,
+    getMejorPrecio,
+    getPreciosByProducto,
+    getProveedorById,
+    getProductoById,
+    formatCurrency,
+    marcarAlertaLeida,
+    marcarTodasAlertasLeidas,
+    deleteAlerta,
+    clearAllAlertas,
+    syncWithCloud,
+    clearAllData,
+    addProveedor,
+    addCategoria,
+    deleteCategoria,
+    updateCategoria,
+    addOrUpdatePrecio,
+    deletePrecio,
+    updateConfiguracion,
+    // De useInventario
+    recetas,
+    produccion,
+    formulaciones,
+    modelosPan,
+    addReceta,
+    updateReceta,
+    deleteReceta,
+    addOrdenProduccion,
+    updateOrdenProduccion,
+    finalizarProduccion,
+    addFormulacion,
+    updateFormulacion,
+    deleteFormulacion,
+    addModeloPan,
+    updateModeloPan,
+    deleteModeloPan,
+    inventario,
+    movimientos,
+    recepciones,
+    onAjustarStock,
+    generarSugerenciasPedido as onGenerarSugerencias,
+    addRecepcion as onAddRecepcion,
+    confirmarRecepcion as onConfirmarRecepcion,
+    updateRecepcion as onUpdateRecepcion,
+    // De useVentas
+    ventas,
+    sesionesCaja,
+    pedidosActivos,
+    ahorros,
+    cajaActiva,
+    registrarVenta,
+    abrirCaja,
+    cerrarCaja,
+    registrarMovimientoCaja,
+    addPedidoActivo as onAddPedidoActivo,
+    updatePedidoActivo as onUpdatePedidoActivo,
+    deletePedidoActivo as onDeletePedidoActivo,
+    prepedidos,
+    addPrePedido,
+    updatePrePedido,
+    deletePrePedido,
+    addItemToPrePedido,
+    removeItemFromPrePedido,
+    updateItemCantidad,
+    // De useFinanzas
+    creditosClientes,
+    creditosTrabajadores,
+    addCreditoCliente,
+    updateCreditoCliente,
+    deleteCreditoCliente,
+    registrarPagoCredito,
+    addCreditoTrabajador,
+    updateCreditoTrabajador,
+    deleteCreditoTrabajador,
+    registrarPagoCreditoTrabajador,
+    trabajadores,
+    gastos,
+    addGasto,
+    deleteGasto,
+    updateGasto,
+    addTrabajador,
+    updateTrabajador,
+    deleteTrabajador
+  } = usePriceControl();

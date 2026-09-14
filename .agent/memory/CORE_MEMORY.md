@@ -60,3 +60,4 @@
 - **Validación Visual**: Nunca corregir sin verificar visualmente primero
 - **Auto-Evolución**: Crear skills nuevas al 3er intento de tarea repetida
 
+9. 🧠 **Prompt Master** - Generador de prompts ultra optimizados 9-D

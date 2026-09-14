@@ -134,3 +134,4 @@ Desktop.ini
 brain/*
 .vercel
 groq.txt
+.env.vercel

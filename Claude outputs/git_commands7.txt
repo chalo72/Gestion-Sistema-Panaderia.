@@ -1,0 +1,27 @@
+git add src/components/reportes/ArqueoCajas.tsx src/pages/Reportes.tsx src/components/reportes/GraficosEstadisticos.tsx src/components/ventas/HistorialVentasCategoria.tsx src/components/reportes/DiagnosticoFinanciero.tsx
+git commit -m "feat: Arqueo de Caja con referencia real, avisos de datos limitados y reorganizacion de Gestion de Control de Datos
+
+1) Arqueo de Caja (ArqueoCajas.tsx): para el mismo rango de fechas que
+ya se filtra, ahora muestra tambien una referencia de los cierres
+reales de Control de Caja (solo lectura, no se fusiona con el arqueo
+manual) y avisa si hay dias ya pasados del rango sin ningun registro
+(ni manual ni Control de Caja) - mismo criterio ya usado en el puente
+de Gestion de Control de Datos.
+
+2) Rentabilidad (GraficosEstadisticos.tsx) y Por Categoria
+(HistorialVentasCategoria.tsx): cuando no hay datos, ahora explican
+que esa ficha depende del POS especificamente (necesita saber que
+producto se vendio) y no se puede completar con los cierres
+manuales, en vez de verse vacia sin explicacion.
+
+3) Gestion de Control de Datos (DiagnosticoFinanciero.tsx): el menu
+interno de 6 botones ahora esta agrupado por tipo de decision (Dia a
+dia / Planeacion / Produccion / Consejo) en vez de todos al mismo
+nivel. Mismos botones, misma funcionalidad, solo reorganizados.
+
+Documentado en el proyecto Claude, doc
+analisis-financiera-8-fichas-mejoras-dulce-placer.md.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01M9LfB9SkwqtRU4YVWbLbxr"
+git push

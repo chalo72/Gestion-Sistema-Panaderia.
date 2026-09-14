@@ -1,0 +1,824 @@
+import React, { useState, useEffect } from 'react';
+import {
+    Plus, Minus, Edit2, X, DollarSign, Store, Info,
+    ShoppingCart, Warehouse, Check, Percent,
+    Package, ImageIcon, Tag, TrendingUp, ChefHat,
+    AlertCircle, CheckCircle2, ChevronDown
+} from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import type { Categoria, Proveedor } from '@/types';
+
+const COLORES_RAPIDOS = [
+    '#f97316', '#3b82f6', '#10b981', '#8b5cf6',
+    '#f59e0b', '#ef4444', '#06b6d4', '#ec4899',
+    '#84cc16', '#6366f1',
+];
+
+const UNIDADES = [
+    { value: 'unidad',  label: 'Unidad' },
+    { value: 'kg',      label: 'Kilogramo (kg)' },
+    { value: 'g',       label: 'Gramo (g)' },
+    { value: 'lt',      label: 'Litro (lt)' },
+    { value: 'ml',      label: 'Mililitro (ml)' },
+    { value: 'lb',      label: 'Libra (lb)' },
+    { value: 'arroba',  label: 'Arroba' },
+    { value: 'docena',  label: 'Docena' },
+    { value: 'caja',    label: 'Caja' },
+    { value: 'bolsa',   label: 'Bolsa' },
+];
+
+interface ProductFormModalProps {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+    editingProducto: any;
+    categorias: Categoria[];
+    proveedores: Proveedor[];
+    formData: any;
+    setFormData: (data: any) => void;
+    onSubmit: (e: React.FormEvent) => void;
+    formatCurrency: (val: number) => string;
+    onAddCategoria?: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<Categoria>;
+    isSubmitting?: boolean;
+}
+
+export function ProductFormModal({
+    isOpen, onOpenChange, editingProducto, categorias, proveedores,
+    formData, setFormData, onSubmit, formatCurrency, onAddCategoria,
+    isSubmitting = false
+}: ProductFormModalProps) {
+    const tipoActual = formData.tipo || 'elaborado';
+
+    // Estado mini-formulario de nueva categoría inline
+    const [showNueva,    setShowNueva]    = useState(false);
+    const [showAnalisisIA, setShowAnalisisIA] = useState(true);
+    const [miniNombre,   setMiniNombre]   = useState('');
+    const [miniColor,    setMiniColor]    = useState(COLORES_RAPIDOS[0]);
+    const [guardandoCat, setGuardandoCat] = useState(false);
+
+    // Preview de imagen
+    const [imgError, setImgError] = useState(false);
+    useEffect(() => { setImgError(false); }, [formData.imagen]);
+
+    // Cálculos de rentabilidad
+    const costoInput  = parseFloat(formData.precioCosto)     || 0;
+    const costoCaja   = parseFloat(formData.costoCaja)       || 0;
+    const rend        = parseFloat(formData.unidadesPorCaja) || 1;
+    const extra       = parseFloat(formData.costoInsumoExtra) || 0;
+
+    // Si la calculadora está activa, el costo real es el calculado
+    const costoReal = formData.useHeladeriaCalc && rend > 0
+        ? (costoCaja / rend) + extra
+        : costoInput;
+
+    const margen      = parseFloat(formData.margenUtilidad) || 0;
+    const pvpManual   = parseFloat(formData.precioVenta)    || 0;
+    const pvpSugerido = costoReal > 0 && margen > 0 ? (margen < 100 ? costoReal / (1 - margen / 100) : costoReal * (1 + margen / 100)) : null;
+    const margenReal  = pvpManual > 0 && costoReal > 0
+        ? ((pvpManual - costoReal) / pvpManual) * 100
+        : null;
+
+    // Sincronizar costo calculado con el campo principal si la calculadora está activa
+    useEffect(() => {
+        if (formData.useHeladeriaCalc && costoReal > 0 && costoReal.toString() !== formData.precioCosto) {
+            setFormData({ ...formData, precioCosto: costoReal.toFixed(2) });
+        }
+    }, [formData.useHeladeriaCalc, costoCaja, rend, extra]);
+
+    const imagenUrl      = formData.imagen?.trim();
+    const mostrarPreview = imagenUrl && imagenUrl.startsWith('http') && !imgError;
+
+    // Analisis IA Mayorista
+    const descMayorista = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
+    const precioMayoristaFinal = pvpManual > 0 ? pvpManual * (1 - descMayorista / 100) : 0;
+    const margenMayoristaFinal = costoReal > 0 && precioMayoristaFinal > 0 ? ((precioMayoristaFinal - costoReal) / precioMayoristaFinal) * 100 : 0;
+
+    const handleCrearCategoria = async () => {
+        if (!miniNombre.trim() || !onAddCategoria) return;
+        setGuardandoCat(true);
+        try {
+            const tipoCat = tipoActual === 'ingrediente' ? 'insumo' : 'venta';
+            await onAddCategoria(miniNombre.trim(), miniColor, tipoCat);
+            setFormData({ ...formData, categoria: miniNombre.trim() });
+            setMiniNombre('');
+            setMiniColor(COLORES_RAPIDOS[0]);
+            setShowNueva(false);
+        } finally {
+            setGuardandoCat(false);
+        }
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl p-0 border border-slate-200 dark:border-slate-700 shadow-2xl bg-white dark:bg-slate-900">
+
+                {/* ── HEADER con color dinámico por tipo ── */}
+                <div className={cn(
+                    "p-4 sm:p-6 text-white relative",
+                    tipoActual === 'elaborado'
+                        ? "bg-gradient-to-r from-orange-500 to-orange-600"
+                        : "bg-gradient-to-r from-blue-500 to-blue-600"
+                )}>
+                    <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-white/20 rounded-xl backdrop-blur-sm">
+                            {editingProducto ? <Edit2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                        </div>
+                        <div>
+                            <DialogTitle className="text-xl font-black">
+                                {editingProducto ? 'Editar Producto' : 'Nuevo Producto'}
+                            </DialogTitle>
+                            <DialogDescription className="text-white/70 text-xs font-semibold uppercase tracking-wider mt-0.5">
+                                {tipoActual === 'elaborado' ? 'Producto para venta' : 'Insumo / Materia prima'}
+                            </DialogDescription>
+                        </div>
+                    </div>
+                    <Button
+                        variant="ghost" size="icon"
+                        className="absolute right-4 top-4 text-white/60 hover:text-white hover:bg-white/10"
+                        onClick={() => onOpenChange(false)}
+                    >
+                        <X className="w-5 h-5" />
+                    </Button>
+                </div>
+
+                <form onSubmit={onSubmit} className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+
+                    {/* ── TIPO ── */}
+                    <div className="space-y-2">
+                        <Label className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                            Tipo de Producto <span className="text-red-400">*</span>
+                        </Label>
+                        <div className="grid grid-cols-2 gap-3">
+                            {/* Para Venta */}
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, tipo: 'elaborado' })}
+                                className={cn(
+                                    "flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left group",
+                                    tipoActual === 'elaborado'
+                                        ? "border-orange-400 bg-orange-50 dark:bg-orange-900/20 shadow-sm"
+                                        : "border-slate-200 dark:border-slate-700 hover:border-orange-300 hover:bg-orange-50/50"
+                                )}
+                            >
+                                <div className={cn(
+                                    "p-2 rounded-lg transition-all",
+                                    tipoActual === 'elaborado'
+                                        ? "bg-orange-500 text-white"
+                                        : "bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:bg-orange-100 group-hover:text-orange-500"
+                                )}>
+                                    <ShoppingCart className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className={cn("text-sm font-bold", tipoActual === 'elaborado' ? "text-orange-700 dark:text-orange-400" : "text-slate-700 dark:text-slate-300")}>
+                                        Para Venta
+                                    </p>
+                                    <p className="text-xs text-slate-400 truncate">Pan, bebidas, postres</p>
+                                </div>
+                                {tipoActual === 'elaborado' && <CheckCircle2 className="w-4 h-4 text-orange-500 flex-shrink-0" />}
+                            </button>
+
+                            {/* Insumo */}
+                            <button
+                                type="button"
+                                onClick={() => setFormData({ ...formData, tipo: 'ingrediente' })}
+                                className={cn(
+                                    "flex items-center gap-3 p-4 rounded-xl border-2 transition-all text-left group",
+                                    tipoActual === 'ingrediente'
+                                        ? "border-blue-400 bg-blue-50 dark:bg-blue-900/20 shadow-sm"
+                                        : "border-slate-200 dark:border-slate-700 hover:border-blue-300 hover:bg-blue-50/50"
+                                )}
+                            >
+                                <div className={cn(
+                                    "p-2 rounded-lg transition-all",
+                                    tipoActual === 'ingrediente'
+                                        ? "bg-blue-500 text-white"
+                                        : "bg-slate-100 dark:bg-slate-700 text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-500"
+                                )}>
+                                    <Warehouse className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className={cn("text-sm font-bold", tipoActual === 'ingrediente' ? "text-blue-700 dark:text-blue-400" : "text-slate-700 dark:text-slate-300")}>
+                                        Insumo
+                                    </p>
+                                    <p className="text-xs text-slate-400 truncate">Harina, azúcar, huevos</p>
+                                </div>
+                                {tipoActual === 'ingrediente' && <CheckCircle2 className="w-4 h-4 text-blue-500 flex-shrink-0" />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* ── INFORMACIÓN BÁSICA ── */}
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Tag className="w-4 h-4 text-slate-400" />
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Información Básica</span>
+                        </div>
+
+                        {/* Nombre */}
+                        <div className="space-y-1.5">
+                            <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                Nombre del Producto <span className="text-red-400">*</span>
+                            </Label>
+                            <Input
+                                value={formData.nombre}
+                                onChange={e => setFormData({ ...formData, nombre: e.target.value })}
+                                placeholder="Ej: Pan Francés, Café Americano, Harina de Trigo..."
+                                required
+                                className="h-12 text-base font-medium rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4"
+                            />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Categoría */}
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+                                        Categoría <span className="text-red-400">*</span>
+                                    </Label>
+                                    {onAddCategoria && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowNueva(v => !v)}
+                                            className={cn(
+                                                "flex items-center gap-1 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg transition-all",
+                                                showNueva
+                                                    ? "bg-slate-200 text-slate-600 dark:bg-slate-700"
+                                                    : "text-primary hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                                            )}
+                                        >
+                                            <Plus className="w-3 h-3" /> Nueva
+                                        </button>
+                                    )}
+                                </div>
+
+                                <Select value={formData.categoria} onValueChange={v => setFormData({ ...formData, categoria: v })}>
+                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium">
+                                        <SelectValue placeholder="Seleccionar categoría..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {/* Si la categoría guardada no existe en la lista, mostrarla como opción para que sea visible */}
+                                        {formData.categoria && !categorias.find(c => c.nombre === formData.categoria) && (
+                                            <SelectItem value={formData.categoria} className="text-sm text-amber-600 font-bold">
+                                                <div className="flex items-center gap-2">
+                                                    <span>⚠️</span>
+                                                    {formData.categoria} (sin registrar — cambia aquí)
+                                                </div>
+                                            </SelectItem>
+                                        )}
+                                        {categorias.map(c => (
+                                            <SelectItem key={c.id} value={c.nombre} className="text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: c.color }} />
+                                                    {c.nombre}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {/* Aviso si la categoría no está registrada en el sistema */}
+                                {formData.categoria && !categorias.find(c => c.nombre === formData.categoria) && (
+                                    <p className="text-xs text-amber-600 font-semibold mt-1 pl-1">
+                                        ⚠️ Categoría "{formData.categoria}" no está registrada. Selecciona una de la lista.
+                                    </p>
+                                )}
+
+                                {/* Mini-formulario inline para nueva categoría */}
+                                {showNueva && (
+                                    <div className="mt-2 p-4 rounded-xl border-2 border-dashed border-primary/30 bg-orange-50/50 dark:bg-orange-900/10 space-y-3 animate-ag-fade-in">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-primary">Nueva Categoría</p>
+                                        <Input
+                                            value={miniNombre}
+                                            onChange={e => setMiniNombre(e.target.value)}
+                                            placeholder="Ej: Repostería Fina"
+                                            className="h-10 text-sm font-bold rounded-lg border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800"
+                                            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleCrearCategoria(); } }}
+                                            autoFocus
+                                        />
+                                        <div className="flex gap-2 flex-wrap">
+                                            {COLORES_RAPIDOS.map(color => (
+                                                <button
+                                                    key={color}
+                                                    type="button"
+                                                    onClick={() => setMiniColor(color)}
+                                                    className={cn(
+                                                        "w-7 h-7 rounded-lg transition-all",
+                                                        miniColor === color ? "ring-2 ring-offset-1 ring-slate-700 scale-110" : "hover:scale-105"
+                                                    )}
+                                                    style={{ backgroundColor: color }}
+                                                />
+                                            ))}
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <Button
+                                                type="button" size="sm"
+                                                onClick={handleCrearCategoria}
+                                                disabled={!miniNombre.trim() || guardandoCat}
+                                                className="flex-1 h-9 bg-primary hover:bg-orange-600 text-white rounded-lg text-xs font-black uppercase"
+                                            >
+                                                <Check className="w-3.5 h-3.5 mr-1" />
+                                                {guardandoCat ? 'Creando...' : 'Crear y Seleccionar'}
+                                            </Button>
+                                            <Button
+                                                type="button" size="sm" variant="outline"
+                                                onClick={() => setShowNueva(false)}
+                                                className="h-9 rounded-lg text-xs"
+                                            >
+                                                Cancelar
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Unidad de medida */}
+                            <div className="space-y-1.5">
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Unidad de Medida</Label>
+                                <Select
+                                    value={formData.unidadMedida || 'unidad'}
+                                    onValueChange={v => setFormData({ ...formData, unidadMedida: v })}
+                                >
+                                    <SelectTrigger className="h-12 rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium">
+                                        <SelectValue placeholder="Unidad..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {UNIDADES.map(u => (
+                                            <SelectItem key={u.value} value={u.value} className="text-sm">
+                                                {u.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+
+                        {/* Descripción como Textarea */}
+                        <div className="space-y-1.5">
+                            <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Descripción</Label>
+                            <Textarea
+                                value={formData.descripcion}
+                                onChange={e => setFormData({ ...formData, descripcion: e.target.value })}
+                                placeholder="Descripción del producto, ingredientes destacados, presentación..."
+                                rows={2}
+                                className="text-sm rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 resize-none"
+                            />
+                        </div>
+                    </div>
+
+                    {/* ── PROVEEDOR Y COSTO ── */}
+                    <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Store className="w-4 h-4 text-slate-400" />
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Proveedor y Costo</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Proveedor */}
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-semibold text-slate-500">Proveedor</Label>
+                                <Select value={formData.proveedorId} onValueChange={v => setFormData({ ...formData, proveedorId: v })}>
+                                    <SelectTrigger className="h-11 rounded-lg bg-white dark:bg-slate-900 text-sm border-slate-200 dark:border-slate-700">
+                                        <SelectValue placeholder="Sin proveedor..." />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        {proveedores.map(p => (
+                                            <SelectItem key={p.id} value={p.id} className="text-sm">{p.nombre}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {/* Precio de costo con ícono $ y Toggle Heladería */}
+                            <div className="space-y-1.5">
+                                <div className="flex items-center justify-between">
+                                    <Label className="text-xs font-semibold text-slate-500">Precio de Costo</Label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, useHeladeriaCalc: !formData.useHeladeriaCalc })}
+                                        className={cn(
+                                            "text-[9px] font-black uppercase tracking-tighter px-2 py-0.5 rounded-full border transition-all",
+                                            formData.useHeladeriaCalc 
+                                                ? "bg-indigo-600 text-white border-indigo-500" 
+                                                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-indigo-50 hover:text-indigo-600"
+                                        )}
+                                    >
+                                        {formData.useHeladeriaCalc ? '🎯 Calculadora Activa' : '🪄 Modo Heladería'}
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <Input
+                                        type="number" step="0.01" min="0"
+                                        readOnly={formData.useHeladeriaCalc}
+                                        value={formData.precioCosto}
+                                        onChange={e => {
+                                            const newCosto = e.target.value;
+                                            const costoNum = parseFloat(newCosto);
+                                            const precioNum = parseFloat(formData.precioVenta);
+                                            // Si hay precio de venta, recalcular el margen
+                                            if (!isNaN(costoNum) && costoNum > 0 && !isNaN(precioNum) && precioNum > 0) {
+                                                const nuevoMargen = ((precioNum - costoNum) / precioNum) * 100;
+                                                setFormData({ ...formData, precioCosto: newCosto, margenUtilidad: nuevoMargen.toFixed(1) });
+                                            } else {
+                                                setFormData({ ...formData, precioCosto: newCosto });
+                                            }
+                                        }}
+                                        className={cn(
+                                            "h-11 pl-9 text-base font-bold rounded-lg bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700",
+                                            formData.useHeladeriaCalc && "bg-slate-50 text-indigo-600 border-indigo-200 cursor-not-allowed"
+                                        )}
+                                        placeholder="0.00"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* [Nexus-Volt] Heladería Smart Calculator Mini-Form */}
+                        {formData.useHeladeriaCalc && (
+                            <div className="mt-3 p-4 bg-indigo-50/50 dark:bg-indigo-950/20 border-2 border-indigo-200/50 dark:border-indigo-800/40 rounded-2xl space-y-4 animate-ag-slide-up">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <ChefHat className="w-4 h-4 text-indigo-600" />
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700 dark:text-indigo-400">Calculadora de Rendimiento (Helados/Varios)</p>
+                                </div>
+                                <div className="grid grid-cols-3 gap-3">
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] font-black text-slate-400 uppercase">Costo Caja/Bulto</Label>
+                                        <Input
+                                            type="number"
+                                            value={formData.costoCaja}
+                                            onChange={e => setFormData({ ...formData, costoCaja: e.target.value })}
+                                            className="h-10 text-xs font-bold rounded-lg border-indigo-100"
+                                            placeholder="90000"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] font-black text-slate-400 uppercase">Rendimiento (Vasos)</Label>
+                                        <Input
+                                            type="number"
+                                            value={formData.unidadesPorCaja}
+                                            onChange={e => setFormData({ ...formData, unidadesPorCaja: e.target.value })}
+                                            className="h-10 text-xs font-bold rounded-lg border-indigo-100"
+                                            placeholder="50"
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <Label className="text-[9px] font-black text-slate-400 uppercase">Extra (Vaso+Cuch)</Label>
+                                        <Input
+                                            type="number"
+                                            value={formData.costoInsumoExtra}
+                                            onChange={e => setFormData({ ...formData, costoInsumoExtra: e.target.value })}
+                                            className="h-10 text-xs font-bold rounded-lg border-indigo-100"
+                                            placeholder="150"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-between items-center pt-2 border-t border-indigo-100/50">
+                                    <span className="text-[9px] font-black text-indigo-400 uppercase">Costo real por unidad:</span>
+                                    <span className="text-sm font-black text-indigo-600">{formatCurrency(costoReal)}</span>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── PRECIO DE VENTA Y MARGEN (solo Para Venta) ── */}
+                    {tipoActual === 'elaborado' && (
+                        <div className="p-5 rounded-xl bg-orange-50/60 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/40 space-y-4">
+                            <div className="flex items-center gap-2">
+                                <TrendingUp className="w-4 h-4 text-orange-500" />
+                                <span className="text-xs font-black uppercase tracking-widest text-orange-600 dark:text-orange-400">Precio de Venta y Margen</span>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                {/* Precio de Venta */}
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                        Precio de Venta
+                                        {costoReal > 0 && <span className="ml-1 text-orange-400 font-bold">↔ margen</span>}
+                                    </Label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" />
+                                        <Input
+                                            type="number" step="100" min="0"
+                                            value={formData.precioVenta}
+                                            onChange={e => {
+                                                const newPrecio = e.target.value;
+                                                const precioNum = parseFloat(newPrecio);
+                                                // Si hay costo base, recalcular el margen automáticamente
+                                                if (costoReal > 0 && !isNaN(precioNum) && precioNum > 0) {
+                                                    const nuevoMargen = ((precioNum - costoReal) / precioNum) * 100;
+                                                    setFormData({ ...formData, precioVenta: newPrecio, margenUtilidad: nuevoMargen.toFixed(1) });
+                                                } else {
+                                                    setFormData({ ...formData, precioVenta: newPrecio });
+                                                }
+                                            }}
+                                            className="h-12 pl-9 text-lg font-bold rounded-xl border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900 focus:border-orange-400"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Margen con ícono % */}
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                                        Margen Utilidad
+                                        {costoReal > 0 && <span className="ml-1 text-orange-400 font-bold">↔ precio</span>}
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            type="number" min="0" max="999" step="1"
+                                            value={formData.margenUtilidad}
+                                            onChange={e => {
+                                                const newMargen = e.target.value;
+                                                const margenNum = parseFloat(newMargen);
+                                                // Si hay costo base, recalcular el precio automáticamente
+                                                if (costoReal > 0 && !isNaN(margenNum)) {
+                                                    const nuevoPrecio = margenNum < 100 ? Math.round(costoReal / (1 - margenNum / 100) / 100) * 100 : Math.round(costoReal * (1 + margenNum / 100) / 100) * 100;
+                                                    setFormData({ ...formData, margenUtilidad: newMargen, precioVenta: nuevoPrecio > 0 ? nuevoPrecio.toString() : formData.precioVenta });
+                                                } else {
+                                                    setFormData({ ...formData, margenUtilidad: newMargen });
+                                                }
+                                            }}
+                                            className="h-12 pr-9 text-base font-bold text-center rounded-xl border-orange-200 dark:border-orange-800/40 bg-white dark:bg-slate-900 focus:border-orange-400"
+                                            placeholder="30"
+                                        />
+                                        <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-orange-400" />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                {/* Descuento Mayorista */}
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-indigo-500 uppercase tracking-wide flex items-center gap-1">
+                                        <Store className="w-3 h-3" /> Descuento Mayorista
+                                    </Label>
+                                    <div className="flex items-center bg-white dark:bg-slate-900 rounded-xl border border-indigo-200 dark:border-indigo-800/40 focus-within:border-indigo-400 overflow-hidden">
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                const current = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
+                                                const newValue = Math.max(0, current - 1);
+                                                setFormData({ ...formData, descuentoMayorista: newValue.toString() });
+                                            }}
+                                            className="w-12 h-12 flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors"
+                                        >
+                                            <Minus className="w-4 h-4" />
+                                        </button>
+                                        <Input
+                                            type="text" inputMode="decimal"
+                                            value={formData.descuentoMayorista || ''}
+                                            onChange={e => {
+                                                const val = e.target.value;
+                                                if (/^[0-9.,]*$/.test(val)) {
+                                                    setFormData({ ...formData, descuentoMayorista: val });
+                                                }
+                                            }}
+                                            className="flex-1 h-12 text-center text-base font-bold border-0 focus-visible:ring-0 bg-transparent text-indigo-700 dark:text-indigo-400"
+                                            placeholder="0"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                const current = parseFloat(String(formData.descuentoMayorista).replace(',', '.')) || 0;
+                                                const newValue = Math.min(100, current + 1);
+                                                setFormData({ ...formData, descuentoMayorista: newValue.toString() });
+                                            }}
+                                            className="w-12 h-12 flex items-center justify-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 active:bg-indigo-200 transition-colors"
+                                        >
+                                            <Plus className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Preview de Precio Mayorista */}
+                                <div className="space-y-1.5">
+                                    <Label className="text-xs font-semibold text-indigo-500 uppercase tracking-wide">
+                                        Precio Mayorista Final
+                                    </Label>
+                                    <div className="h-12 flex items-center px-4 rounded-xl border border-dashed border-indigo-300 bg-indigo-50 dark:bg-indigo-900/20">
+                                        <span className="text-lg font-black text-indigo-600 dark:text-indigo-400">
+                                            {formatCurrency(precioMayoristaFinal)}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* AGENTE IA: Análisis de Descuento Mayorista */}
+                            {descMayorista > 0 && (
+                                <div className="rounded-xl border border-indigo-100 dark:border-indigo-800/40 bg-gradient-to-br from-indigo-50 to-white dark:from-indigo-950/40 dark:to-slate-900 shadow-sm relative overflow-hidden">
+                                    <button type="button" onClick={() => setShowAnalisisIA(!showAnalisisIA)} className="w-full flex items-center justify-between p-4 text-left hover:bg-white/50 transition-colors relative z-20">
+                                        <div className="flex items-center gap-3">
+                                            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/50 rounded-lg text-indigo-600 dark:text-indigo-400 shrink-0 shadow-sm border border-indigo-200/50">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>
+                                            </div>
+                                            <div>
+                                                <h4 className="text-[10px] font-black uppercase tracking-widest text-indigo-600 dark:text-indigo-400 leading-none mb-1">Agente IA</h4>
+                                                <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-none">Análisis de Descuento</p>
+                                            </div>
+                                        </div>
+                                        <ChevronDown className={`w-5 h-5 text-indigo-400 transition-transform ${showAnalisisIA ? 'rotate-180' : ''}`} />
+                                    </button>
+
+                                    {showAnalisisIA && (
+                                        <div className="p-4 pt-0 relative z-10">
+                                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+                                            <div className="space-y-3">
+                                                {precioMayoristaFinal < costoReal ? (
+                                                    <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-lg">
+                                                        <p className="text-xs font-bold text-red-700 dark:text-red-400 flex items-start gap-1.5">
+                                                            <span className="text-base leading-none">🚨</span> 
+                                                            ¡ADVERTENCIA CRÍTICA! Estás vendiendo por debajo de tu costo de producción ({formatCurrency(costoReal)}). ¡Estás perdiendo dinero en cada unidad vendida a los mayoristas!
+                                                        </p>
+                                                    </div>
+                                                ) : margenMayoristaFinal < 15 ? (
+                                                    <div className="p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/30 rounded-lg">
+                                                        <p className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+                                                            <span className="text-base leading-none">⚠️</span> 
+                                                            Cuidado: Tu margen de ganancia es muy bajo ({margenMayoristaFinal.toFixed(1)}%). Estás en el límite y un pequeño aumento en los insumos te hará perder dinero.
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/30 rounded-lg">
+                                                        <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400 flex items-start gap-1.5">
+                                                            <span className="text-base leading-none">✅</span> 
+                                                            ¡Excelente! Tienes un margen mayorista sano del {margenMayoristaFinal.toFixed(1)}%. Este descuento es sostenible para tu panadería.
+                                                        </p>
+                                                    </div>
+                                                )}
+
+                                                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-800/30">
+                                                    <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 leading-relaxed flex items-start gap-1.5">
+                                                        <span className="text-base leading-none opacity-80">💡</span> 
+                                                        <span><strong>Sugerencia (Estándar Colombia):</strong> Lo ideal es ofrecer a los revendedores/mayoristas un descuento de entre <strong>10% y 25%</strong> sobre el precio al público, asegurándote de que tu margen final nunca baje del 20% para que ambos negocios ganen y estén contentos.</span>
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Panel de rentabilidad */}
+                            {costoReal > 0 && (
+                                <div className="grid grid-cols-2 gap-3">
+                                    {pvpSugerido && (
+                                        <div className={cn(
+                                            "flex items-start gap-2 p-3 rounded-xl border text-sm",
+                                            pvpManual > 0 && pvpManual >= pvpSugerido
+                                                ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400"
+                                                : "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-400"
+                                        )}>
+                                            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                            <div>
+                                                <p className="font-semibold text-[10px] uppercase tracking-wide">PVP Sugerido</p>
+                                                <p className="text-base font-black">{formatCurrency(pvpSugerido)}</p>
+                                                <p className="text-[10px] opacity-70">con {margen}% de margen</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                    {margenReal !== null && (
+                                        <div className={cn(
+                                            "flex items-start gap-2 p-3 rounded-xl border text-sm",
+                                            margenReal >= 20
+                                                ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800/40 text-emerald-700 dark:text-emerald-400"
+                                                : margenReal >= 10
+                                                    ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-400"
+                                                    : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/40 text-red-700 dark:text-red-400"
+                                        )}>
+                                            {margenReal >= 10
+                                                ? <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                                : <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                                            }
+                                            <div>
+                                                <p className="font-semibold text-[10px] uppercase tracking-wide">Margen Real</p>
+                                                <p className="text-base font-black">{margenReal.toFixed(1)}%</p>
+                                                <p className="text-[10px] opacity-70">
+                                                    {margenReal >= 20 ? 'Rentable' : margenReal >= 10 ? 'Bajo' : 'Riesgo'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── GESTIÓN DE INVENTARIO ── */}
+                    <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 space-y-4">
+                        <div className="flex items-center gap-2">
+                            <Package className="w-4 h-4 text-slate-400" />
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-400">Gestión de Inventario</span>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {/* Stock Actual */}
+                            <div className="space-y-1.5">
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Actual</Label>
+                                <div className="relative">
+                                    <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <Input
+                                        type="number" min="0" step="0.01"
+                                        value={formData.stockActual || ''}
+                                        onChange={e => setFormData({ ...formData, stockActual: e.target.value })}
+                                        className="h-11 pl-9 text-base font-bold rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:border-primary"
+                                        placeholder="Ej: 100"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-400 pl-1 italic">Cantidad física disponible en este momento.</p>
+                            </div>
+
+                            {/* Stock Mínimo */}
+                            <div className="space-y-1.5">
+                                <Label className="text-sm font-semibold text-slate-700 dark:text-slate-300">Stock Mínimo (Alerta)</Label>
+                                <div className="relative">
+                                    <AlertCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400" />
+                                    <Input
+                                        type="number" min="0" step="0.01"
+                                        value={formData.stockMinimo || '5'}
+                                        onChange={e => setFormData({ ...formData, stockMinimo: e.target.value })}
+                                        className="h-11 pl-9 text-base font-bold rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:border-amber-400"
+                                        placeholder="Ej: 5"
+                                    />
+                                </div>
+                                <p className="text-[10px] text-slate-400 pl-1 italic">Nivel para disparar alertas de reabastecimiento.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* ── IMAGEN CON PREVIEW ── */}
+                    <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4 text-slate-400" />
+                            <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Imagen del Producto</Label>
+                            <Badge variant="outline" className="text-[10px] font-bold ml-auto">Opcional</Badge>
+                        </div>
+                        <Input
+                            value={formData.imagen}
+                            onChange={e => setFormData({ ...formData, imagen: e.target.value })}
+                            placeholder="https://ejemplo.com/imagen.jpg"
+                            className="h-11 text-sm rounded-xl border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4"
+                        />
+                        {imagenUrl && (
+                            mostrarPreview ? (
+                                <div className="flex items-center gap-4 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+                                    <img
+                                        src={imagenUrl}
+                                        alt="Preview"
+                                        className="w-16 h-16 object-cover rounded-xl shadow"
+                                        onError={() => setImgError(true)}
+                                    />
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Vista previa</p>
+                                        <p className="text-xs text-slate-400 truncate">{imagenUrl}</p>
+                                    </div>
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/40 text-red-600">
+                                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                                    <p className="text-xs font-medium">URL inválida o imagen no disponible.</p>
+                                </div>
+                            )
+                        )}
+                    </div>
+
+                    {/* ── BOTONES ── */}
+                    <div className="flex gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <Button
+                            type="button" variant="outline"
+                            className="h-12 flex-1 rounded-xl text-sm font-semibold border-slate-200 dark:border-slate-700"
+                            onClick={() => onOpenChange(false)}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            type="submit"
+                            disabled={isSubmitting || !formData.nombre?.trim() || !formData.categoria}
+                            className={cn(
+                                "h-12 flex-[2] text-white rounded-xl text-sm font-black shadow-lg transition-all",
+                                tipoActual === 'elaborado'
+                                    ? "bg-orange-500 hover:bg-orange-600 shadow-orange-200 disabled:bg-orange-300"
+                                    : "bg-blue-500 hover:bg-blue-600 shadow-blue-200 disabled:bg-blue-300"
+                            )}
+                        >
+                            {isSubmitting
+                                ? (editingProducto ? '⏳ Guardando...' : '⏳ Creando...')
+                                : (editingProducto ? '✓ Guardar Cambios' : '+ Crear Producto')
+                            }
+                        </Button>
+                    </div>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+
+
+

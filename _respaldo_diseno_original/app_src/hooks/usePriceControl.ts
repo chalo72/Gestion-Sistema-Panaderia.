@@ -1,0 +1,1484 @@
+import { generateUUID } from '@/lib/safe-utils';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { db } from '@/lib/database';
+import type {
+  Producto,
+  Proveedor,
+  PrecioProveedor,
+  HistorialPrecio,
+  AlertaPrecio,
+  Configuracion,
+  PrePedido,
+  PrePedidoItem,
+  Categoria,
+  InventarioItem,
+  Receta,
+  Recepcion,
+  Cliente,
+  RegistroAsistencia,
+  Gasto,
+} from '@/types';
+import { ARROBA_KG } from '@/types';
+import { toast } from 'sonner';
+
+import { safeNumber } from '@/lib/safe-utils';
+import { esMismoDiaLocal } from '@/lib/fecha-ventas';
+import { fusionarGastosEnEstado, hidratarGastosCompletos } from '@/lib/gastos-hidratacion';
+import { calcularCostoLineaInsumo, precioPorKg } from '@/lib/costo-insumo';
+import { sincronizarProduccionesNube } from '@/lib/finanzas-personales';
+import { useFinanzas } from './useFinanzas';
+import { useProduccionHook } from './useProduccionHook';
+import { useVentas } from './useVentas';
+import { useInventario } from './useInventario';
+import { backupService } from '@/lib/backupService';
+import { useRef } from 'react';
+
+import {
+  CATEGORIAS_DEFAULT,
+  DATOS_EJEMPLO,
+} from '@/lib/seed-data';
+
+import { MONEDAS } from '@/types';
+
+const defaultConfig: Configuracion = {
+  margenUtilidadDefault: 30,
+  ajusteAutomatico: true,
+  notificarSubidas: true,
+  umbralAlerta: 5,
+  categorias: CATEGORIAS_DEFAULT,
+  moneda: 'COP',
+  nombreNegocio: 'Dulce Placer',
+  impuestoPorcentaje: 0,
+  mostrarUtilidadEnLista: true,
+  presupuestoMensual: 0,
+  aiMode: 'hybrid', // ✅ Campo requerido por la interfaz Configuracion
+  latasPorHorno: 4,
+  pesoArrobaKg: ARROBA_KG, // 12.5 kg — báscula oficial
+};
+
+// PROTEGIDO: No modificar sin revisión. Hook principal de gestión de precios, inventario y ventas validado en producción.
+export function usePriceControl() {
+  // Estados
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
+  const [precios, setPrecios] = useState<PrecioProveedor[]>([]);
+  const [historial, setHistorial] = useState<HistorialPrecio[]>([]);
+  const [alertas, setAlertas] = useState<AlertaPrecio[]>([]);
+  const [configuracion, setConfiguracion] = useState<Configuracion>(defaultConfig);
+  const [prepedidos, setPrepedidos] = useState<PrePedido[]>([]);
+
+  const [recetas, setRecetas] = useState<Receta[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [asistencia, setAsistencia] = useState<RegistroAsistencia[]>([]);
+  const [nominas, setNominas]       = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  
+  // 🛡️ PATRÓN: BACKUP PENDING (Trigger System)
+  const [backupPending, setBackupPending] = useState<{ ts: number; trigger: string } | null>(null);
+  const triggerBackup = (trigger: string) => setBackupPending({ ts: Date.now(), trigger });
+
+  // 📦 PATRÓN: LATEST DATA REF (Soberanía de Datos)
+  const latestDataRef = useRef({ productos, proveedores, precios, configuracion, recetas, clientes });
+  useEffect(() => {
+    latestDataRef.current = { productos, proveedores, precios, configuracion, recetas, clientes };
+  }, [productos, proveedores, precios, configuracion, recetas, clientes]);
+
+  // 🛡️ PATRÓN: DEBOUNCED SIDE EFFECT (Auto-Backup Universal de 600ms)
+  useEffect(() => {
+    if (!loaded || !backupPending) return;
+    const timer = setTimeout(() => {
+      backupService.createBackup(latestDataRef.current, backupPending.trigger);
+      setBackupPending(null);
+    }, 600); // 600ms según patrón maestro
+    return () => clearTimeout(timer);
+  }, [backupPending, loaded]);
+
+  // Sub-hooks delegados (Fase 4 de refactoring)
+  // onAjustarStock se define más abajo, así que usamos un ref para romper la dependencia circular
+  const onAjustarStockRef = { current: async (_pid: string, _q: number, _t: 'entrada' | 'salida' | 'ajuste', _m: string) => { return; } };
+  const inventarioHook = useInventario({ productos });
+  const finanzas = useFinanzas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
+  const produccionHook = useProduccionHook({ onAjustarStock: (...args) => onAjustarStockRef.current(...args), recetas });
+  const ventasHook = useVentas({ onAjustarStock: (...args) => onAjustarStockRef.current(...args) });
+
+  // Escuchar cambios Realtime de otros dispositivos y actualizar estado en memoria sin recargar
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { table, eventType, id } = (e as CustomEvent<{ table: string; eventType: string; id: string }>).detail;
+      if (eventType === 'DELETE') {
+        if (table === 'proveedores') setProveedores(p => p.filter(x => x.id !== id));
+        else if (table === 'productos') { setProductos(p => p.filter(x => x.id !== id)); db.getAllPrecios().then(setPrecios).catch(() => {}); }
+        else if (table === 'precios') setPrecios(p => p.filter(x => x.id !== id));
+        else if (table === 'prepedidos') setPrepedidos(p => p.filter(x => x.id !== id));
+        else if (table === 'recetas') setRecetas(p => p.filter(x => x.id !== id));
+      } else {
+        if (table === 'proveedores') db.getAllProveedores().then(p => setProveedores(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {});
+        else if (table === 'productos') { db.getAllProductos().then(p => setProductos(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {}); db.getAllPrecios().then(setPrecios).catch(() => {}); }
+        else if (table === 'precios') { db.getAllPrecios().then(setPrecios).catch(() => {}); db.getAllProductos().then(p => setProductos(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {}); }
+        else if (table === 'prepedidos') db.getAllPrePedidos().then(setPrepedidos).catch(() => {});
+        else if (table === 'recetas') db.getAllRecetas().then(setRecetas).catch(() => {});
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
+  }, []);
+
+  // Inicializar base de datos y cargar datos
+  useEffect(() => {
+    const initDB = async () => {
+      const safetyTimeout = setTimeout(() => {
+        if (!loaded) {
+          console.warn('⚠️ [Nexus-Shield] Carga lenta detectada. Forzando inicio...');
+          setLoaded(true);
+        }
+      }, 5000);
+
+      try {
+        await db.init();
+        await loadCriticalData();
+        clearTimeout(safetyTimeout);
+        
+        // Cargar secundarios inmediatamente después de desbloquear la UI
+        loadSecondaryDataInBackground();
+      } catch (error) {
+        console.error('Error inicializando sistema:', error);
+        setLoaded(true);
+      }
+    };
+    initDB();
+  }, []);
+
+  // ⚡ DATOS CRÍTICOS = Mostrar UI rápido (Productos, Precios, Config)
+  const loadCriticalData = async () => {
+    try {
+      const isOnline = navigator.onLine;
+      
+      // 1. Carga inmediata desde IndexedDB
+      const [configData, productosDB, proveedoresDB, preciosDB, gastosDB] = await Promise.all([
+        db.getConfiguracion(),
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllPrecios(),
+        db.getAllGastos(),
+      ]);
+
+      const hasLocalData = productosDB.length > 0;
+      if (gastosDB.length > 0) {
+        finanzas.setGastos((prev) => fusionarGastosEnEstado(prev, gastosDB as Gasto[]));
+      }
+      
+      // Función auxiliar para procesar y aplicar datos al estado
+      const applyData = async (config: any, prods: Producto[], provs: Proveedor[], prcs: PrecioProveedor[]) => {
+        let finalConfig = config ? {
+          ...defaultConfig,
+          ...config,
+          categorias: config.categorias || defaultConfig.categorias,
+          unidades: config.unidades || config.metadata?.unidades || defaultConfig.unidades,
+          destinos: config.destinos || config.metadata?.destinos || (defaultConfig as any).destinos,
+        } as Configuracion : defaultConfig;
+
+        // Migración suave: báscula oficial 12.5 kg (antes 11.5 en varias pantallas)
+        if (finalConfig.pesoArrobaKg == null || finalConfig.pesoArrobaKg === 11.5) {
+          finalConfig = { ...finalConfig, pesoArrobaKg: ARROBA_KG };
+        }
+
+        // ✅ FIX: Normalizar nombres para comparación (evitar duplicados por mayúsculas/espacios)
+        const normalizar = (s: string) => s.toLowerCase().trim();
+
+        // Validar y actualizar categorías si es necesario (comparación normalizada)
+        const categoriasNuevas = CATEGORIAS_DEFAULT.filter(
+          cDef => !finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(cDef.nombre))
+        );
+        if (categoriasNuevas.length > 0 || finalConfig.categorias.length === 0) {
+          const categoriasActualizadas = finalConfig.categorias.map(catExistente => {
+            const catDefault = CATEGORIAS_DEFAULT.find(cd => normalizar(cd.nombre) === normalizar(catExistente.nombre));
+            return catDefault && !catExistente.icono ? { ...catExistente, icono: catDefault.icono } : catExistente;
+          });
+          finalConfig.categorias = [...categoriasActualizadas, ...categoriasNuevas];
+        }
+
+        // Limpieza de datos de ejemplo (fantasmas)
+        let prodsFinal = prods;
+        let provsFinal = provs;
+        prodsFinal = prods;
+        provsFinal = provs;
+
+        // [Nexus-Volt] Sincronizar categorías huérfanas de los productos (Autocuración normalizada)
+        // IMPORTANTE: detectar tipo de categoría huérfana por si sus productos son insumos
+        const catsDeProductos = Array.from(new Set(prodsFinal.map(p => p.categoria).filter(Boolean)));
+        const catsFaltantes = catsDeProductos.filter(
+          catName => !finalConfig.categorias.some(c => normalizar(c.nombre) === normalizar(catName))
+        );
+        if (catsFaltantes.length > 0) {
+          const nuevasCats = catsFaltantes.map(catName => {
+            // Detectar tipo real: si el nombre empieza con 'INS:' o la mayoría de sus productos son ingredientes
+            const esInsumoPorNombre = catName.toUpperCase().startsWith('INS:');
+            const productosEnCat = prodsFinal.filter(p => normalizar(p.categoria || '') === normalizar(catName));
+            const esInsumoPorProductos = productosEnCat.length > 0 && productosEnCat.every(p => p.tipo === 'ingrediente');
+            const tipoDetectado = (esInsumoPorNombre || esInsumoPorProductos) ? 'insumo' as const : 'venta' as const;
+            return {
+              id: generateUUID(),
+              nombre: catName,
+              color: tipoDetectado === 'insumo' ? '#f59e0b' : '#6b7280',
+              tipo: tipoDetectado,
+            };
+          });
+          finalConfig.categorias = [...finalConfig.categorias, ...nuevasCats];
+        }
+
+        // ✅ NEXUS-DEDUP FINAL: Deduplicación de categorías con estrategia inteligente
+        // - Agrupa por nombre normalizado
+        // - Prioriza: (1) categorías con tipo explícito ≠ 'venta', (2) las del sistema (CATEGORIAS_DEFAULT), (3) la primera encontrada
+        // - Elimina duplicados de 'Bicola', 'Pasabocas', etc. que llegan con diferentes IDs desde la nube
+        const catsPorNombre = new Map<string, typeof finalConfig.categorias[0]>();
+        const NOMBRES_DEFAULT_SET = new Set(CATEGORIAS_DEFAULT.map(c => normalizar(c.nombre)));
+        for (const cat of finalConfig.categorias) {
+          const key = normalizar(cat.nombre);
+          const existente = catsPorNombre.get(key);
+          if (!existente) {
+            catsPorNombre.set(key, cat);
+          } else {
+            // Estrategia: ganar la que tiene tipo más específico o es del sistema por defecto
+            const catEsDefault = NOMBRES_DEFAULT_SET.has(key);
+            const existenteEsDefault = NOMBRES_DEFAULT_SET.has(normalizar(existente.nombre));
+            const catTieneInsumo = cat.tipo === 'insumo';
+            const existenteTieneInsumo = existente.tipo === 'insumo';
+            // Ganar la del sistema o la que tiene tipo=insumo (más específico)
+            if ((!existenteEsDefault && catEsDefault) || (!existenteTieneInsumo && catTieneInsumo)) {
+              catsPorNombre.set(key, cat);
+            }
+            // En todos los otros casos conservamos la existente (primera encontrada)
+          }
+        }
+        finalConfig.categorias = Array.from(catsPorNombre.values());
+        await db.saveConfiguracion({ ...finalConfig, id: 'main' });
+
+        setConfiguracion(finalConfig);
+        setProductos(prodsFinal.sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setProveedores(provsFinal.sort((a, b) => a.nombre.localeCompare(b.nombre)));
+        setPrecios(prcs);
+      };
+
+      // 2. Renderizado instantáneo si hay datos locales
+      if (hasLocalData) {
+        await applyData(configData, productosDB, proveedoresDB, preciosDB);
+        setLoaded(true);
+      }
+
+      // 3. Gestión de Sincronización Remota
+      if (isOnline) {
+        const performSync = async () => {
+          if (!hasLocalData) toast.info('Sincronizando con Dulce Placer...');
+          
+          try {
+            await db.syncCloudToLocal?.();
+            
+            // Recargar datos tras sync (solo si es necesario actualizar la UI)
+            const [c, p, pr, prc] = await Promise.all([
+              db.getConfiguracion(),
+              db.getAllProductos(),
+              db.getAllProveedores(),
+              db.getAllPrecios(),
+            ]);
+            
+            await applyData(c, p, pr, prc);
+            await loadSecondaryDataInBackground();
+            
+            if (!hasLocalData) {
+              setLoaded(true);
+              toast.success('¡Catálogo recuperado!');
+            }
+          } catch (e) {
+            console.warn('⚠️ Error en sync inicial:', e);
+            if (!hasLocalData) setLoaded(true);
+          }
+        };
+
+        if (hasLocalData) {
+          performSync(); // background
+        } else {
+          await performSync(); // foreground (bloquea solo si está vacío)
+        }
+      } else if (!hasLocalData) {
+        setLoaded(true); // Offline y vacío
+      }
+
+      // Finalización de setup
+      localStorage.setItem('dulceplacer_setup_done', 'true');
+      await db.saveBackup('dulceplacer_setup_done', true);
+      
+    } catch (error) {
+      console.error('Error crítivo en carga:', error);
+      setLoaded(true);
+    }
+  };
+
+  // 🌱 Auto-seed PARALELIZADO (PROTEGIDO: Respeta tombstones de eliminación)
+  // ═══════════════════════════════════════════════════════════════════
+  // CAPA DE PROTECCIÓN 2: Guard runtime contra re-seed de datos eliminados
+  // Si alguien llama autoSeedData() fuera de contexto, los tombstones
+  // siguen bloqueando la reaparición de productos/proveedores eliminados.
+  // ═══════════════════════════════════════════════════════════════════
+  const autoSeedData = async () => {
+    try {
+      // Guard TRIPLE: verificar en localStorage + IndexedDB + tombstones
+      const yaSetupLS = localStorage.getItem('dulceplacer_setup_done');
+      const yaSetupIDB = await db.getBackup('dulceplacer_setup_done');
+      if (yaSetupLS === 'true' || yaSetupIDB === true) {
+        return;
+      }
+      const [productosEnDB, provsEnDB, ventasEnDB, recepcionesEnDB, tombsProductos, tombsProveedores, tombsPrecios] = await Promise.all([
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllVentas(),
+        db.getAllRecepciones(),
+        db.getTombstones('productos'),
+        db.getTombstones('proveedores'),
+        db.getTombstones('precios'),
+      ]);
+
+      // 🛡️ NEXUS-GUARD: NO borrar productos con categorías personalizadas.
+      // El usuario puede crear sus propias categorías (ej: "INS: HELADOS", "Especiales").
+      // Solo se eliminan productos de ejemplo (seed) que el usuario ya no quiere,
+      // identificados por su ID exacto, NO por su categoría.
+      // (bloque de limpieza por categoría eliminado — causaba borrado de datos reales)
+
+      // PROTEGIDO: Filtrar seed data excluyendo items eliminados por el usuario (tombstones)
+      const productosParaAgregar = DATOS_EJEMPLO.productos.filter(
+        p => !productosEnDB.some(db_p => db_p.id === p.id) && !tombsProductos.includes(p.id)
+      );
+      const proveedoresParaAgregar = DATOS_EJEMPLO.proveedores.filter(
+        prov => !provsEnDB.some(p => p.id === prov.id) && !tombsProveedores.includes(prov.id)
+      );
+      const preciosParaAgregar = DATOS_EJEMPLO.precios.filter(
+        p => !tombsPrecios.includes(p.id)
+      );
+      
+      await Promise.all([
+        Promise.allSettled(proveedoresParaAgregar.map(p => db.addProveedor(p as Proveedor).catch(() => {}))),
+        Promise.allSettled(productosParaAgregar.map(p => db.addProducto(p as Producto).catch(() => {}))),
+        Promise.allSettled(preciosParaAgregar.map(p => db.addPrecio(p as PrecioProveedor).catch(() => {}))),
+        ventasEnDB.length === 0 ? Promise.allSettled(DATOS_EJEMPLO.ventas?.map(v => db.addVenta(v as any).catch(() => {})) ?? []) : Promise.resolve(),
+        recepcionesEnDB.length === 0 ? Promise.allSettled(DATOS_EJEMPLO.recepciones?.map(r => db.addRecepcion(r as any).catch(() => {})) ?? []) : Promise.resolve(),
+      ]);
+
+      // Actualizar estado LOCAL con los datos reales (re-query para consistencia)
+      const [prodFinal, provFinal, precFinal] = await Promise.all([
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllPrecios(),
+      ]);
+      setProductos(prodFinal as Producto[]);
+      setProveedores(provFinal as Proveedor[]);
+      setPrecios(precFinal as PrecioProveedor[]);
+    } catch (error) {
+      console.error('Error en auto-seed:', error);
+    }
+  };
+
+  // 📦 DATOS SECUNDARIOS = Cargar en background para no bloquear el inicio
+  const loadSecondaryDataInBackground = async () => {
+    try {
+      const [
+        alertas, inventario, movimientos, gastos, recepciones, historial, recetas, 
+        ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, 
+        produccion, creditosClientes, creditosTrabajadoresData, trabajadores, prepedidos,
+        clientesData, asistenciaData, nominasData
+      ] = await Promise.all([
+        db.getAllAlertas(),
+        db.getAllInventario(),
+        db.getAllMovimientos(),
+        db.getAllGastos(),
+        db.getAllRecepciones(),
+        db.getAllHistorial(),
+        db.getAllRecetas(),
+        db.getAllVentas(),
+        db.getAllSesionesCaja(),
+        db.getSesionCajaActiva(),
+        db.getAllAhorros(),
+        db.getAllMesas(),
+        db.getAllPedidosActivos(),
+        db.getAllOrdenesProduccion(),
+        db.getAllCreditosClientes(),
+        db.getAllCreditosTrabajadores(),
+        db.getAllTrabajadores(),
+        db.getAllPrePedidos(),
+        db.getAllClientes(),
+        db.getAllAsistencia(),
+        db.getAllNominas(),
+      ]);
+
+      setAlertas(alertas);
+      setPrepedidos(prepedidos);
+      inventarioHook.setInventario(inventario);
+      inventarioHook.setMovimientos(movimientos);
+      finanzas.setGastos((prev) => fusionarGastosEnEstado(prev, gastos as Gasto[]));
+      if ((gastos as Gasto[]).length === 0) {
+        void hidratarGastosCompletos().then((lista) => {
+          if (lista.length > 0) finanzas.setGastos((prev) => fusionarGastosEnEstado(prev, lista));
+        });
+      }
+      inventarioHook.setRecepciones(recepciones as Recepcion[]);
+      setHistorial(historial);
+      setRecetas(recetas as Receta[]);
+      ventasHook.setVentas(ventas);
+      ventasHook.setSesionesCaja(sesionesCaja as any);
+      ventasHook.setCajaActiva(cajaActiva as any);
+      finanzas.setAhorros(ahorros);
+      ventasHook.setMesas(mesas);
+      ventasHook.setPedidosActivos(pedidosActivos);
+      produccionHook.setProduccion(produccion);
+      // Auto-inicializar InventarioItem para productos sin registro
+      const idsConInventario = new Set(inventario.map((i: any) => i.productoId));
+      const productosSinInventario = productos.filter((p: any) => !idsConInventario.has(p.id));
+      if (productosSinInventario.length > 0) {
+        const now = new Date().toISOString();
+        const nuevosItems: InventarioItem[] = productosSinInventario.map((p: any) => ({
+          id: generateUUID(),
+          productoId: p.id,
+          stockActual: 0,
+          stockMinimo: 5,
+          ubicacion: 'Almacén General',
+          ultimoMovimiento: now,
+        }));
+        await Promise.all(nuevosItems.map(item => db.updateInventarioItem(item)));
+        inventarioHook.setInventario(prev => [...prev, ...nuevosItems]);
+      }
+
+      // MIGRACIÓN: Vincular Créditos Huérfanos a Clientes (CRM)
+      const creditosHuerfanos = creditosClientes.filter((c: any) => !c.clienteId);
+      if (creditosHuerfanos.length > 0) {
+        let clientesActualizados = [...clientesData] as Cliente[];
+        const creditosActualizados = [...creditosClientes] as CreditoCliente[];
+        
+        for (const credito of creditosHuerfanos) {
+          // Buscar cliente existente por nombre exacto (case insensitive)
+          let cliente = clientesActualizados.find(c => c.nombre.toLowerCase() === credito.clienteNombre.toLowerCase());
+          
+          if (!cliente) {
+            // Crear nuevo cliente
+            cliente = {
+              id: generateUUID(),
+              nombre: credito.clienteNombre,
+              telefono: credito.clienteTelefono,
+              tipo: 'particular',
+              createdAt: new Date().toISOString(),
+            };
+            await db.addCliente(cliente);
+            clientesActualizados.push(cliente);
+          }
+          
+          // Actualizar crédito
+          credito.clienteId = cliente.id;
+          await db.updateCreditoCliente(credito);
+        }
+        setClientes(clientesActualizados);
+        finanzas.setCreditosClientes(creditosActualizados as any);
+      } else {
+        setClientes(clientesData);
+        finanzas.setCreditosClientes(creditosClientes as any);
+      }
+
+      finanzas.setCreditosTrabajadores(creditosTrabajadoresData as any);
+      finanzas.setTrabajadores(trabajadores as any);
+      setAsistencia(asistenciaData as RegistroAsistencia[]);
+      setNominas(nominasData as any[]);
+
+      // Sincronizar producciones / libreta del horno desde la nube (PC <-> Celular)
+      void sincronizarProduccionesNube().catch(() => {});
+
+    } catch (error) {
+      console.error('Error cargando datos secundarios:', error);
+    }
+  };
+
+  // Cargar datos de ejemplo (PROTEGIDO: Limpia tombstones porque el usuario pide explícitamente recargar)
+  const cargarDatosEjemplo = useCallback(async () => {
+    try {
+      // Limpiar tombstones porque el usuario QUIERE datos de ejemplo de vuelta
+      const [tombsP, tombsProv, tombsPre] = await Promise.all([
+        db.getTombstones('productos'),
+        db.getTombstones('proveedores'),
+        db.getTombstones('precios'),
+      ]);
+      await Promise.allSettled([
+        ...tombsP.map(id => db.removeTombstone('productos', id)),
+        ...tombsProv.map(id => db.removeTombstone('proveedores', id)),
+        ...tombsPre.map(id => db.removeTombstone('precios', id)),
+      ]);
+
+      // Agregar TODO en PARALELO
+      await Promise.all([
+        Promise.allSettled(DATOS_EJEMPLO.proveedores.map(p => db.addProveedor(p as Proveedor).catch(() => {}))),
+        Promise.allSettled(DATOS_EJEMPLO.productos.map(p => db.addProducto(p as Producto).catch(() => {}))),
+        Promise.allSettled(DATOS_EJEMPLO.precios.map(p => db.addPrecio(p as PrecioProveedor).catch(() => {}))),
+        DATOS_EJEMPLO.ventas ? Promise.allSettled(DATOS_EJEMPLO.ventas.map(v => db.addVenta(v as any).catch(() => {}))) : Promise.resolve(),
+        DATOS_EJEMPLO.recepciones ? Promise.allSettled(DATOS_EJEMPLO.recepciones.map(r => db.addRecepcion(r as any).catch(() => {}))) : Promise.resolve(),
+      ]);
+      
+      // Guardar categorías
+      await db.saveConfiguracion({ ...configuracion, categorias: CATEGORIAS_DEFAULT, id: 'main' });
+
+      // Recargar datos críticos localmente
+      const [productos, proveedores, precios] = await Promise.all([
+        db.getAllProductos(),
+        db.getAllProveedores(),
+        db.getAllPrecios(),
+      ]);
+      setProductos(productos);
+      setProveedores(proveedores);
+      setPrecios(precios);
+
+      // Cargar resto en background
+      loadSecondaryDataInBackground();
+      
+      toast.success('Datos de ejemplo cargados correctamente');
+    } catch (error) {
+      console.error('Error cargando datos de ejemplo:', error);
+      toast.error('Error al cargar datos de ejemplo');
+    }
+  }, [configuracion]);
+
+  // Funciones de Categorías
+  const addCategoria = useCallback(async (nombre: string, color: string, tipo?: 'venta' | 'insumo') => {
+    const nuevaCategoria: Categoria = {
+      id: generateUUID(),
+      nombre,
+      color,
+      tipo,
+    };
+    const newCategorias = [...configuracion.categorias, nuevaCategoria];
+    const newConfig = { ...configuracion, categorias: newCategorias };
+    await db.saveConfiguracion({ ...newConfig, id: 'main' });
+    setConfiguracion(newConfig);
+    return nuevaCategoria;
+  }, [configuracion]);
+
+  const deleteCategoria = useCallback(async (id: string) => {
+    const newCategorias = configuracion.categorias.filter(c => c.id !== id);
+    const newConfig = { ...configuracion, categorias: newCategorias };
+    await db.saveConfiguracion({ ...newConfig, id: 'main' });
+    setConfiguracion(newConfig);
+  }, [configuracion]);
+
+  const updateCategoria = useCallback(async (id: string, nuevoNombre: string, color: string, tipo?: 'venta' | 'insumo') => {
+    const newCategorias = configuracion.categorias.map(c => 
+      c.id === id ? { ...c, nombre: nuevoNombre, color, tipo } : c
+    );
+    const newConfig = { ...configuracion, categorias: newCategorias };
+    await db.saveConfiguracion({ ...newConfig, id: 'main' });
+    setConfiguracion(newConfig);
+  }, [configuracion]);
+
+  const updateConfiguracion = useCallback(async (updates: Partial<Configuracion>) => {
+    const newConfig = { ...configuracion, ...updates };
+    await db.saveConfiguracion({ ...newConfig, id: 'main' });
+    setConfiguracion(newConfig);
+  }, [configuracion]);
+
+  // Funciones de Productos
+  const addProducto = useCallback(async (producto: Omit<Producto, 'id' | 'createdAt' | 'updatedAt'>) => {
+    // Validar duplicados por nombre
+    const existe = productos.find(p => p.nombre.toLowerCase() === producto.nombre.toLowerCase());
+    if (existe) {
+      toast.error(`Ya existe un producto con el nombre "${producto.nombre}"`);
+      return null;
+    }
+
+    const now = new Date().toISOString();
+    const nuevoProducto: Producto = {
+      ...producto,
+      id: generateUUID(),
+      createdAt: now,
+      updatedAt: now,
+    };
+    await db.addProducto(nuevoProducto);
+    setProductos(prev => [...prev, nuevoProducto]);
+    triggerBackup(`add_producto:${nuevoProducto.nombre}`);
+
+    // ── Sincronización automática: crear InventarioItem con stock 0 ──
+    // Así el producto aparece de inmediato en el módulo de Inventario
+    const existeEnInventario = await db.getInventarioItemByProducto(nuevoProducto.id).catch(() => null);
+    if (!existeEnInventario) {
+      const itemInventario: InventarioItem = {
+        id: generateUUID(),
+        productoId: nuevoProducto.id,
+        stockActual: 0,
+        stockMinimo: 5,
+        ubicacion: 'Almacén General',
+        ultimoMovimiento: now,
+      };
+      await db.updateInventarioItem(itemInventario);
+      inventarioHook.setInventario(prev => [...prev, itemInventario]);
+    }
+
+    return nuevoProducto;
+  }, []);
+
+  const updateProducto = useCallback(async (id: string, updates: Partial<Producto>) => {
+    // 🛡️ NEXUS-FRESH-READ: Siempre leer desde DB para evitar closure stale.
+    // Si usáramos `productos` del estado React, podríamos obtener un snapshot viejo
+    // y revertir cambios recientes al hacer merge. La DB siempre tiene el dato más fresco.
+    const productosDB = await db.getAllProductos();
+    const producto = productosDB.find(p => p.id === id);
+    if (!producto) {
+      console.warn(`⚠️ [Nexus] No se pudo actualizar: Producto ${id} no encontrado en DB.`);
+      return;
+    }
+    const updatedProducto = { ...producto, ...updates, updatedAt: new Date().toISOString() };
+    await db.updateProducto(updatedProducto);
+    setProductos(prev => prev.map(p => p.id === id ? updatedProducto : p));
+
+    // Sincronizar stock con InventarioItem si se proporcionó
+    if (updates.stockActual !== undefined || updates.stockMinimo !== undefined) {
+      let invItem = await db.getInventarioItemByProducto(id).catch(() => null);
+      if (invItem) {
+        if (updates.stockActual !== undefined) invItem.stockActual = updates.stockActual;
+        if (updates.stockMinimo !== undefined) invItem.stockMinimo = updates.stockMinimo;
+        await db.updateInventarioItem(invItem);
+        inventarioHook.setInventario(prev => prev.map(i => i.id === invItem.id ? invItem : i));
+      } else {
+        const newItem: InventarioItem = {
+          id: generateUUID(),
+          productoId: id,
+          stockActual: updates.stockActual ?? 0,
+          stockMinimo: updates.stockMinimo ?? 5,
+          ubicacion: 'Almacén General',
+          ultimoMovimiento: new Date().toISOString(),
+        };
+        await db.updateInventarioItem(newItem);
+        inventarioHook.setInventario(prev => [...prev, newItem]);
+      }
+    }
+
+    triggerBackup(`update_producto:${updatedProducto.nombre}`);
+  }, [inventarioHook]);
+
+  // PROTEGIDO: Capa 2 — Guard defensivo: tombstone se crea SIEMPRE, sin importar errores parciales
+  const deleteProducto = useCallback(async (id: string) => {
+    try {
+      await db.deleteProducto(id);
+      await db.addTombstone('productos', id).catch(() => {});
+    } catch (err) {
+      // Aunque falle la eliminación en DB, asegurar el tombstone
+      console.warn('⚠️ deleteProducto parcial, forzando tombstone:', err);
+      await db.addTombstone('productos', id).catch(() => {});
+    }
+    setProductos(prev => prev.filter(p => p.id !== id));
+    triggerBackup(`delete_producto:${id}`);
+    // También eliminar precios asociados
+    const preciosProducto = precios.filter(p => p.productoId === id);
+    for (const precio of preciosProducto) {
+      try {
+        await db.deletePrecio(precio.id);
+        await db.addTombstone('precios', precio.id).catch(() => {});
+      } catch {
+        await db.addTombstone('precios', precio.id).catch(() => {});
+      }
+    }
+    setPrecios(prev => prev.filter(p => p.productoId !== id));
+  }, [precios]);
+
+  // Funciones de Proveedores
+  const addProveedor = useCallback(async (proveedor: Omit<Proveedor, 'id' | 'createdAt'>) => {
+    const nuevoProveedor: Proveedor = {
+      ...proveedor,
+      id: generateUUID(),
+      createdAt: new Date().toISOString(),
+    };
+    await db.addProveedor(nuevoProveedor);
+    setProveedores(prev => [...prev, nuevoProveedor]);
+    triggerBackup(`add_proveedor:${nuevoProveedor.nombre}`);
+    return nuevoProveedor;
+  }, []);
+
+  const updateProveedor = useCallback(async (id: string, updates: Partial<Proveedor>) => {
+    const proveedor = proveedores.find(p => p.id === id);
+    if (!proveedor) return;
+    const updatedProveedor = { ...proveedor, ...updates };
+    await db.updateProveedor(updatedProveedor);
+    setProveedores(prev => prev.map(p => p.id === id ? updatedProveedor : p));
+  }, [proveedores]);
+
+  // PROTEGIDO: Capa 2 — Guard defensivo: tombstone se crea SIEMPRE, sin importar errores parciales
+  const deleteProveedor = useCallback(async (id: string) => {
+    try {
+      await db.deleteProveedor(id);
+      await db.addTombstone('proveedores', id).catch(() => {});
+    } catch (err) {
+      console.warn('⚠️ deleteProveedor parcial, forzando tombstone:', err);
+      await db.addTombstone('proveedores', id).catch(() => {});
+    }
+    setProveedores(prev => prev.filter(p => p.id !== id));
+    // También eliminar precios asociados
+    const preciosProveedor = precios.filter(p => p.proveedorId === id);
+    for (const precio of preciosProveedor) {
+      try {
+        await db.deletePrecio(precio.id);
+        await db.addTombstone('precios', precio.id).catch(() => {});
+      } catch {
+        await db.addTombstone('precios', precio.id).catch(() => {});
+      }
+    }
+    setPrecios(prev => prev.filter(p => p.proveedorId !== id));
+  }, [precios]);
+
+  // Funciones de Precios
+  const addOrUpdatePrecio = useCallback(async (data: {
+    id?: string;
+    productoId: string;
+    proveedorId: string;
+    precioCosto: number;
+    notas?: string;
+    destino?: 'venta' | 'insumo';
+    tipoEmbalaje?: string;
+    cantidadEmbalaje?: number;
+  }) => {
+    const { id, productoId, proveedorId, notas, destino, tipoEmbalaje, cantidadEmbalaje } = data;
+    const precioCosto = safeNumber(data.precioCosto);
+    
+    // 🔥 CORRECCIÓN: Evitar sobrescribir otras presentaciones del mismo producto
+    const allPrecios = await db.getAllPrecios();
+    let existingPrecio = id ? allPrecios.find(p => p.id === id) : undefined;
+    
+    if (!existingPrecio) {
+      existingPrecio = allPrecios.find(p => 
+        p.productoId === productoId && 
+        p.proveedorId === proveedorId &&
+        (p.tipoEmbalaje || 'unidad') === (tipoEmbalaje || 'unidad') &&
+        (p.cantidadEmbalaje || 1) === (cantidadEmbalaje || 1)
+      );
+    }
+
+    const now = new Date().toISOString();
+
+    if (existingPrecio) {
+      // Si el precio cambió, registrar en historial y crear alerta
+      if (existingPrecio.precioCosto !== precioCosto) {
+        const diferencia = precioCosto - existingPrecio.precioCosto;
+        const porcentajeCambio = (diferencia / existingPrecio.precioCosto) * 100;
+
+        // Registrar en historial y PERSISTIR en IndexedDB
+        const historialEntry: HistorialPrecio = {
+          id: generateUUID(),
+          productoId,
+          proveedorId,
+          precioAnterior: existingPrecio.precioCosto,
+          precioNuevo: precioCosto,
+          fechaCambio: now,
+        };
+        await db.addHistorial(historialEntry as any);
+        setHistorial(prev => [historialEntry, ...prev].slice(0, 1000));
+
+        // Crear alerta si supera el umbral
+        if (Math.abs(porcentajeCambio) >= configuracion.umbralAlerta) {
+          const alerta: AlertaPrecio = {
+            id: generateUUID(),
+            productoId,
+            proveedorId,
+            tipo: diferencia > 0 ? 'subida' : 'bajada',
+            precioAnterior: existingPrecio.precioCosto,
+            precioNuevo: precioCosto,
+            diferencia,
+            porcentajeCambio: Math.abs(porcentajeCambio),
+            fecha: now,
+            leida: false,
+          };
+          await db.addAlerta(alerta);
+          setAlertas(prev => [alerta, ...prev]);
+        }
+
+        // SINCRONIZACIÓN: Actualizar costoBase (NUNCA precioVenta — el precio de venta lo gestiona el usuario)
+        // PROTECCIÓN-PRECIO-001: precioVenta NO se recalcula automáticamente para preservar precios manuales
+        if (configuracion.ajusteAutomatico) {
+          let producto = productos.find(p => p.id === productoId);
+          if (!producto) {
+            const allP = await db.getAllProductos();
+            producto = allP.find(px => px.id === productoId);
+          }
+          if (producto) {
+            const costoUnitario = Math.round((safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1)) * 100) / 100;
+            await updateProducto(productoId, { costoBase: costoUnitario });
+          }
+        }
+      }
+
+      // Actualizar precio existente
+      // Actualizar precio existente asegurando persistencia de campos opcionales
+      const updatedPrecio: PrecioProveedor = { 
+        ...existingPrecio, 
+        precioCosto, 
+        fechaActualizacion: now, 
+        notas: notas !== undefined ? notas : existingPrecio.notas,
+        destino: destino !== undefined ? destino : existingPrecio.destino,
+        tipoEmbalaje: tipoEmbalaje !== undefined ? tipoEmbalaje : existingPrecio.tipoEmbalaje,
+        cantidadEmbalaje: cantidadEmbalaje !== undefined ? cantidadEmbalaje : existingPrecio.cantidadEmbalaje
+      };
+      await db.updatePrecio(updatedPrecio);
+      setPrecios(prev => prev.map(p => p.id === existingPrecio.id ? updatedPrecio : p));
+    } else {
+      // Crear nuevo precio
+      const nuevoPrecio: PrecioProveedor = {
+        id: id || generateUUID(),
+        productoId,
+        proveedorId,
+        precioCosto,
+        fechaActualizacion: now,
+        notas,
+        destino,
+        tipoEmbalaje,
+        cantidadEmbalaje,
+      };
+      await db.addPrecio(nuevoPrecio);
+      setPrecios(prev => [...prev, nuevoPrecio]);
+
+      // SINCRONIZACIÓN: Registrar costoBase para nuevo precio (NUNCA precioVenta — lo gestiona el usuario)
+      // PROTECCIÓN-PRECIO-002: precioVenta NO se toca al crear precio nuevo para preservar precios manuales
+      if (configuracion.ajusteAutomatico) {
+        let producto = productos.find(p => p.id === productoId);
+        if (!producto) {
+          const allP = await db.getAllProductos();
+          producto = allP.find(px => px.id === productoId);
+        }
+        if (producto) {
+          const costoUnitario = Math.round((safeNumber(precioCosto) / (safeNumber(cantidadEmbalaje) || 1)) * 100) / 100;
+          await updateProducto(productoId, { costoBase: costoUnitario });
+        }
+      }
+    }
+  }, [precios, productos, configuracion, updateProducto]);
+
+  const deletePrecio = useCallback(async (id: string) => {
+    try {
+      await db.deletePrecio(id);
+      await db.addTombstone('precios', id).catch(() => {});
+    } catch {
+      await db.addTombstone('precios', id).catch(() => {});
+    }
+    setPrecios(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  // Funciones de Pre-Pedidos
+  const addPrePedido = useCallback(async (data: Omit<PrePedido, 'id' | 'fechaCreacion' | 'fechaActualizacion'>) => {
+    const now = new Date().toISOString();
+    const nuevoPrePedido: PrePedido = {
+      ...data,
+      id: generateUUID(),
+      fechaCreacion: now,
+      fechaActualizacion: now,
+    };
+    await db.addPrePedido(nuevoPrePedido);
+    setPrepedidos(prev => [...prev, nuevoPrePedido]);
+    return nuevoPrePedido;
+  }, []);
+
+  const updatePrePedido = useCallback(async (id: string, updates: Partial<PrePedido>) => {
+    const prepedido = prepedidos.find(p => p.id === id);
+    if (!prepedido) return;
+    const updatedPrePedido = { ...prepedido, ...updates, fechaActualizacion: new Date().toISOString() };
+    await db.updatePrePedido(updatedPrePedido);
+    setPrepedidos(prev => prev.map(p => p.id === id ? updatedPrePedido : p));
+  }, [prepedidos]);
+
+  const deletePrePedido = useCallback(async (id: string) => {
+    try {
+      await db.deletePrePedido(id);
+      await db.addTombstone('prepedidos', id).catch(() => {});
+    } catch {
+      await db.addTombstone('prepedidos', id).catch(() => {});
+    }
+    setPrepedidos(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  const addItemToPrePedido = useCallback(async (prePedidoId: string, item: { productoId: string; proveedorId: string; cantidad: number; precioUnitario: number }) => {
+    const prepedido = prepedidos.find(p => p.id === prePedidoId);
+    if (!prepedido) return;
+
+    const newItem: PrePedidoItem = {
+      ...item,
+      id: generateUUID(),
+      subtotal: item.cantidad * item.precioUnitario,
+    };
+
+    const newItems = [...prepedido.items, newItem];
+    const newTotal = newItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const updatedPrePedido = {
+      ...prepedido,
+      items: newItems,
+      total: newTotal,
+      fechaActualizacion: new Date().toISOString(),
+    };
+
+    await db.updatePrePedido(updatedPrePedido);
+    setPrepedidos(prev => prev.map(p => p.id === prePedidoId ? updatedPrePedido : p));
+    return newItem;
+  }, [prepedidos]);
+
+  const removeItemFromPrePedido = useCallback(async (prePedidoId: string, itemId: string) => {
+    // 🛡️ Buscar en state, y si no existe (stale closure), buscar en DB
+    let prepedido = prepedidos.find(p => p.id === prePedidoId);
+    if (!prepedido) {
+      const allPP = await db.getAllPrePedidos();
+      prepedido = allPP.find(p => p.id === prePedidoId);
+      if (!prepedido) {
+        console.warn('⚠️ [Nexus] removeItem: PrePedido no encontrado:', prePedidoId);
+        return;
+      }
+    }
+
+    const newItems = prepedido.items.filter(i => i.id !== itemId);
+    const newTotal = newItems.reduce((sum, i) => sum + (i.subtotal || i.cantidad * i.precioUnitario), 0);
+    const updatedPrePedido = {
+      ...prepedido,
+      items: newItems,
+      total: newTotal,
+      fechaActualizacion: new Date().toISOString(),
+    };
+
+    await db.updatePrePedido(updatedPrePedido);
+    setPrepedidos(prev => {
+      const exists = prev.some(p => p.id === prePedidoId);
+      if (exists) return prev.map(p => p.id === prePedidoId ? updatedPrePedido : p);
+      return [...prev.filter(p => p.id !== prePedidoId), updatedPrePedido];
+    });
+  }, [prepedidos]);
+
+  const updateItemCantidad = useCallback(async (prePedidoId: string, itemId: string, cantidad: number) => {
+    if (cantidad < 1) return;
+
+    const prepedido = prepedidos.find(p => p.id === prePedidoId);
+    if (!prepedido) return;
+
+    const newItems = prepedido.items.map(i => {
+      if (i.id !== itemId) return i;
+      return { ...i, cantidad, subtotal: cantidad * i.precioUnitario };
+    });
+    const newTotal = newItems.reduce((sum, i) => sum + i.subtotal, 0);
+    const updatedPrePedido = {
+      ...prepedido,
+      items: newItems,
+      total: newTotal,
+      fechaActualizacion: new Date().toISOString(),
+    };
+
+    await db.updatePrePedido(updatedPrePedido);
+    setPrepedidos(prev => prev.map(p => p.id === prePedidoId ? updatedPrePedido : p));
+  }, [prepedidos]);
+
+  // Funciones de Clientes (CRM)
+  const addCliente = useCallback(async (cliente: Omit<Cliente, 'id' | 'createdAt'>) => {
+    const nuevo: Cliente = {
+      ...cliente,
+      id: generateUUID(),
+      createdAt: new Date().toISOString(),
+    };
+    await db.addCliente(nuevo);
+    setClientes(prev => [...prev, nuevo]);
+    triggerBackup(`add_cliente:${nuevo.nombre}`);
+    return nuevo;
+  }, []);
+
+  const updateCliente = useCallback(async (id: string, updates: Partial<Cliente>) => {
+    const cliente = clientes.find(c => c.id === id);
+    if (!cliente) return;
+    const updated = { ...cliente, ...updates };
+    await db.updateCliente(updated);
+    setClientes(prev => prev.map(c => c.id === id ? updated : c));
+    triggerBackup(`update_cliente:${updated.nombre}`);
+  }, [clientes]);
+
+  const deleteCliente = useCallback(async (id: string) => {
+    await db.deleteCliente(id);
+    setClientes(prev => prev.filter(c => c.id !== id));
+    triggerBackup(`delete_cliente:${id}`);
+  }, []);
+
+  // Asistencia
+  const addRegistroAsistencia = useCallback(async (registro: Omit<RegistroAsistencia, 'id' | 'createdAt'>) => {
+    const nuevo: RegistroAsistencia = {
+      ...registro,
+      id: generateUUID(),
+      createdAt: new Date().toISOString(),
+    };
+    await db.addRegistroAsistencia(nuevo);
+    setAsistencia(prev => [...prev, nuevo]);
+    return nuevo;
+  }, []);
+
+  // Nóminas
+  const addNomina = useCallback(async (data: any) => {
+    const nueva = { ...data, id: generateUUID(), createdAt: new Date().toISOString() };
+    await db.addNomina(nueva);
+    setNominas(prev => [...prev, nueva]);
+    return nueva;
+  }, []);
+
+  const updateNomina = useCallback(async (nomina: any) => {
+    await db.updateNomina(nomina);
+    setNominas(prev => prev.map(n => n.id === nomina.id ? nomina : n));
+  }, []);
+
+  // Funciones de Alertas
+  const marcarAlertaLeida = useCallback(async (id: string) => {
+    const alerta = alertas.find(a => a.id === id);
+    if (!alerta) return;
+    const updatedAlerta = { ...alerta, leida: true };
+    await db.updateAlerta(updatedAlerta);
+    setAlertas(prev => prev.map(a => a.id === id ? updatedAlerta : a));
+  }, [alertas]);
+
+  const marcarTodasAlertasLeidas = useCallback(async () => {
+    const updatedAlertas = alertas.map(a => ({ ...a, leida: true }));
+    for (const alerta of updatedAlertas) {
+      await db.updateAlerta(alerta);
+    }
+    setAlertas(updatedAlertas);
+  }, [alertas]);
+
+  const deleteAlerta = useCallback(async (id: string) => {
+    await db.deleteAlerta(id);
+    setAlertas(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const clearAllAlertas = useCallback(async () => {
+    await db.clearAllAlertas();
+    setAlertas([]);
+  }, []);
+
+  // Utilidades de moneda
+  const formatCurrency = useCallback((value: any) => {
+    try {
+      if (value === null || value === undefined) return '$ 0';
+      let numValue = typeof value === 'number' ? value : Number(value) || 0;
+      // Fallback robusto: si moneda no está configurada, usar COP por defecto
+      const monedaCode = configuracion.moneda || 'COP';
+      const monedaConfig = MONEDAS.find(m => m.code === monedaCode) || MONEDAS[0];
+      
+      // Los precios de venta ya se redondean al guardar.
+      // No redondear aquí para permitir ver costos exactos.
+      return new Intl.NumberFormat(monedaConfig.locale, {
+        style: 'currency',
+        currency: monedaConfig.code,
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+      }).format(numValue);
+    } catch (error) {
+      console.error('Error en formatCurrency:', error);
+      return '$ 0';
+    }
+  }, [configuracion.moneda]);
+
+  const getMonedaActual = useCallback(() => {
+    return MONEDAS.find(m => m.code === configuracion.moneda) || MONEDAS[0];
+  }, [configuracion.moneda]);
+
+  // Funciones de utilidad
+  const getPreciosByProducto = useCallback((productoId: string) => {
+    return precios.filter(p => p.productoId === productoId);
+  }, [precios]);
+
+  const getPreciosByProveedor = useCallback((proveedorId: string) => {
+    return precios.filter(p => p.proveedorId === proveedorId);
+  }, [precios]);
+
+  const getMejorPrecio = useCallback((productoId: string) => {
+    const preciosProducto = precios.filter(p => p.productoId === productoId);
+    if (preciosProducto.length === 0) return null;
+    // Comparar por costo UNITARIO REAL (precio bulto ÷ cantidad en embalaje)
+    return preciosProducto.reduce((min, p) => {
+      const costoUnitP   = p.precioCosto   / (p.cantidadEmbalaje   || 1);
+      const costoUnitMin = min.precioCosto / (min.cantidadEmbalaje || 1);
+      return costoUnitP < costoUnitMin ? p : min;
+    });
+  }, [precios]);
+
+  const getMejorPrecioByProveedor = useCallback((productoId: string, proveedorId: string) => {
+    return precios.find(p => p.productoId === productoId && p.proveedorId === proveedorId);
+  }, [precios]);
+
+  // Costo por porción: precio unitario real (bulto ÷ embalaje) × cantidad en kg/lb/gr
+  const getCostoReceta = useCallback((productoId: string) => {
+    const receta = recetas.find(r => r.productoId === productoId);
+    if (!receta) {
+      const producto = productos.find(p => p.id === productoId);
+      if (producto?.tipo === 'ingrediente') {
+        const mejorPrecio = getMejorPrecio(productoId);
+        return precioPorKg(
+          mejorPrecio
+            ? { precioCosto: mejorPrecio.precioCosto, cantidadEmbalaje: mejorPrecio.cantidadEmbalaje }
+            : null,
+          producto.costoBase || 0
+        );
+      }
+      return producto?.costoBase || 0;
+    }
+
+    const ings = Array.isArray(receta.ingredientes) ? receta.ingredientes : [];
+    const costoTotal = ings.reduce((sum, ing) => {
+      const mejorPrecio = getMejorPrecio(ing.productoId);
+      const prodIng = productos.find(p => p.id === ing.productoId);
+      return (
+        sum +
+        calcularCostoLineaInsumo({
+          cantidad: Number(ing.cantidad) || 0,
+          unidad: ing.unidad || 'gr',
+          mejorPrecio: mejorPrecio
+            ? { precioCosto: mejorPrecio.precioCosto, cantidadEmbalaje: mejorPrecio.cantidadEmbalaje }
+            : null,
+          costoBase: prodIng?.costoBase || 0,
+        })
+      );
+    }, 0);
+
+    return receta.porcionesResultantes > 0 ? costoTotal / receta.porcionesResultantes : costoTotal;
+  }, [recetas, getMejorPrecio, productos]);
+
+  // Sincronización proactiva de costos de productos elaborados
+  // SE OPTIMIZA: Se añade una guarda para evitar loops infinitos y se usa una comparación profunda
+  useEffect(() => {
+    if (!loaded) return;
+
+    const actualizarCostosElaborados = async () => {
+      let huboCambio = false;
+      const nuevosProductos = productos.map(p => {
+        if (p.tipo === 'elaborado') {
+          const nuevoCosto = getCostoReceta(p.id);
+          // Usar una pequeña tolerancia para floating point
+          if (Math.abs((p.costoBase || 0) - nuevoCosto) > 0.01) {
+            huboCambio = true;
+            return { ...p, costoBase: nuevoCosto, updatedAt: new Date().toISOString() };
+          }
+        } else if (p.tipo === 'ingrediente') {
+          // PROTECCIÓN-PRECIO-003: Solo actualiza costoBase (costo por unidad real).
+          // precioVenta NUNCA se recalcula automáticamente — es responsabilidad exclusiva del usuario.
+          // Bug anterior: usaba precioCosto del pack como costoBase → precio de venta inflado ×cantidadEmbalaje.
+          const mejorPrecio = getMejorPrecio(p.id);
+          if (mejorPrecio) {
+            const costoUnitario = Math.round(
+              (mejorPrecio.precioCosto / (mejorPrecio.cantidadEmbalaje || 1)) * 100
+            ) / 100;
+            const costoDistinto = Math.abs((p.costoBase || 0) - costoUnitario) > 0.01;
+            if (costoDistinto) {
+              huboCambio = true;
+              return { ...p, costoBase: costoUnitario, updatedAt: new Date().toISOString() };
+            }
+          }
+        }
+        return p;
+      });
+
+      if (huboCambio) {
+        setProductos(nuevosProductos);
+        // Persistir individualmente para evitar re-escritura masiva lenta
+        for (const p of nuevosProductos.filter((_, i) => nuevosProductos[i] !== productos[i])) {
+          await db.updateProducto(p);
+        }
+      }
+    };
+
+    // Usar un timeout pequeño para evitar disparos en ráfaga durante la carga inicial
+    const timer = setTimeout(actualizarCostosElaborados, 1000);
+    return () => clearTimeout(timer);
+  }, [precios, recetas, loaded]); // productos NO debe estar aquí para evitar el loop directo
+
+  // Funciones de Reabastecimiento Inteligente
+  const generarSugerenciasPedido = useCallback(async () => {
+    const productosBajoStock = inventarioHook.inventario.filter(item => item.stockActual <= item.stockMinimo);
+    if (productosBajoStock.length === 0) return 0;
+
+    const pedidosPorProveedor: Record<string, PrePedidoItem[]> = {};
+
+    for (const item of productosBajoStock) {
+      const producto = productos.find(p => p.id === item.productoId);
+      if (!producto) continue;
+
+      const stockObjetivo = Math.max(item.stockMinimo * 3, 10);
+      const cantidadNecesaria = stockObjetivo - item.stockActual;
+      if (cantidadNecesaria <= 0) continue;
+
+      const mejorPrecio = getMejorPrecio(item.productoId);
+      if (mejorPrecio) {
+        const proveedorId = mejorPrecio.proveedorId;
+        if (!pedidosPorProveedor[proveedorId]) {
+          pedidosPorProveedor[proveedorId] = [];
+        }
+        const precioUnitario = precioPorKg(
+          { precioCosto: mejorPrecio.precioCosto, cantidadEmbalaje: mejorPrecio.cantidadEmbalaje },
+          producto.costoBase || 0
+        );
+        pedidosPorProveedor[proveedorId].push({
+          id: generateUUID(),
+          productoId: item.productoId,
+          proveedorId: proveedorId,
+          cantidad: cantidadNecesaria,
+          precioUnitario,
+          subtotal: Math.round(cantidadNecesaria * precioUnitario * 100) / 100,
+        });
+      } else {
+        console.warn(`Producto ${producto.nombre} no tiene proveedores registrados.`);
+      }
+    }
+
+    let pedidosCreados = 0;
+    const now = new Date().toISOString();
+    for (const [proveedorId, items] of Object.entries(pedidosPorProveedor)) {
+      if (items.length === 0) continue;
+      const total = items.reduce((sum, i) => sum + i.subtotal, 0);
+      const nuevoPrePedido: PrePedido = {
+        id: generateUUID(),
+        nombre: `Pedido Auto ${new Date().toLocaleDateString()}`,
+        proveedorId, items, total,
+        presupuestoMaximo: 0,
+        estado: 'borrador',
+        notas: 'Generado automáticamente por Stock Bajo',
+        fechaCreacion: now,
+        fechaActualizacion: now
+      };
+      await db.addPrePedido(nuevoPrePedido);
+      setPrepedidos(prev => [...prev, nuevoPrePedido]);
+      pedidosCreados++;
+    }
+    return pedidosCreados;
+  }, [inventarioHook.inventario, productos, getMejorPrecio]);
+
+  const getProductoById = useCallback((id: string) => {
+    return productos.find(p => p.id === id);
+  }, [productos]);
+
+  const getProveedorById = useCallback((id: string) => {
+    return proveedores.find(p => p.id === id);
+  }, [proveedores]);
+
+  const getPrecioByIds = useCallback((productoId: string, proveedorId: string) => {
+    return precios.find(p => p.productoId === productoId && p.proveedorId === proveedorId);
+  }, [precios]);
+
+  const getPrePedidoById = useCallback((id: string) => {
+    return prepedidos.find(p => p.id === id);
+  }, [prepedidos]);
+
+  const getPrePedidosByProveedor = useCallback((proveedorId: string) => {
+    return prepedidos.filter(p => p.proveedorId === proveedorId);
+  }, [prepedidos]);
+
+  const getAlertasNoLeidas = useCallback(() => {
+    return alertas.filter(a => !a.leida);
+  }, [alertas]);
+
+  // CÁLCULO MEMOIZADO DE ESTADÍSTICAS (MAX PERFORMANCE)
+  const estadisticas = useMemo(() => {
+    const totalProductos = productos.length;
+    const totalProveedores = proveedores.length;
+    const alertasNoLeidasCount = alertas.filter(a => !a.leida).length;
+    const totalPrePedidos = prepedidos.length;
+    const prePedidosConfirmados = prepedidos.filter(p => p.estado === 'confirmado').length;
+
+    // Utilidad con costo UNITARIO (bulto ÷ embalaje), no precio del pack
+    const mejorPrecioCache = new Map<string, number>();
+    productos.forEach(p => {
+      const best = getMejorPrecio(p.id);
+      if (best) {
+        mejorPrecioCache.set(
+          p.id,
+          precioPorKg(
+            { precioCosto: best.precioCosto, cantidadEmbalaje: best.cantidadEmbalaje },
+            p.costoBase || 0
+          )
+        );
+      }
+    });
+
+    const productosConPrecio = productos.filter(p => p.precioVenta > 0 && mejorPrecioCache.has(p.id));
+    let utilidadPromedio = 0;
+
+    if (productosConPrecio.length > 0) {
+      const utilidades = productosConPrecio.map(p => {
+        try {
+          const mejorPrecioCosto = safeNumber(mejorPrecioCache.get(p.id));
+          const precioVenta = safeNumber(p.precioVenta);
+          if (mejorPrecioCosto <= 0) return 0;
+          return ((precioVenta - mejorPrecioCosto) / mejorPrecioCosto) * 100;
+        } catch {
+          return 0;
+        }
+      });
+      utilidadPromedio = utilidades.reduce((a, b) => a + safeNumber(b), 0) / utilidades.length;
+    }
+
+    const productosSinPrecio = productos.filter(p => !mejorPrecioCache.has(p.id)).length;
+
+    const totalEnPrePedidos = prepedidos
+      .filter(p => p.estado === 'borrador')
+      .reduce((sum, p) => sum + safeNumber(p.total), 0);
+
+    const totalItemsInventario = inventarioHook.inventario.length;
+    const itemsBajoStock = inventarioHook.inventario.filter(inv => inv.stockActual <= inv.stockMinimo).length;
+    const totalRecepciones = inventarioHook.recepciones.length;
+    const recepcionesPendientes = inventarioHook.recepciones.filter(r => r.estado === 'en_proceso').length;
+    const totalCambiosPrecios = historial.length;
+
+    // Detección Predictiva de Agotamiento
+    const prediccionAgotamiento = inventarioHook.inventario.filter(inv => {
+      try {
+        const movs = inventarioHook.movimientos.filter(m => m.productoId === inv.productoId && m.tipo === 'salida');
+        if (movs.length < 3) return false;
+        const consumoPromedio = movs.reduce((a, b) => a + safeNumber(b.cantidad), 0) / 30;
+        const diasRestantes = safeNumber(inv.stockActual) / (consumoPromedio || 1);
+        return diasRestantes < 7;
+      } catch {
+        return false;
+      }
+    }).length;
+
+    return {
+      totalProductos,
+      totalProveedores,
+      alertasNoLeidas: alertasNoLeidasCount,
+      utilidadPromedio: Math.round(utilidadPromedio * 100) / 100,
+      productosConPrecio: productosConPrecio.length,
+      productosSinPrecio,
+      totalPrePedidos,
+      prePedidosConfirmados,
+      totalEnPrePedidos: Math.round(totalEnPrePedidos * 100) / 100,
+      totalItemsInventario,
+      itemsBajoStock,
+      totalRecepciones,
+      recepcionesPendientes,
+      totalCambiosPrecios,
+      itemsEnRiesgo: prediccionAgotamiento,
+      totalRecetas: recetas.length,
+      // Estadísticas de Ventas
+      ventasHoy: ventasHook.ventas.filter((v) => esMismoDiaLocal(v.fecha)).length,
+      ingresosHoy: ventasHook.ventas
+        .filter((v) => esMismoDiaLocal(v.fecha))
+        .reduce((sum, v) => sum + safeNumber(v.total), 0),
+      gastosHoy: finanzas.gastos
+        .filter((g) => esMismoDiaLocal(g.fecha))
+        .reduce((sum, g) => sum + safeNumber(g.monto), 0),
+      ticketPromedio: ventasHook.ventas.length > 0
+        ? ventasHook.ventas.reduce((sum, v) => sum + safeNumber(v.total), 0) / ventasHook.ventas.length
+        : 0,
+    };
+  }, [productos, proveedores, alertas, precios, prepedidos, inventarioHook.inventario, inventarioHook.recepciones, historial, inventarioHook.movimientos, recetas, ventasHook.ventas, finanzas.gastos, getMejorPrecio]);
+
+  // Alias para mantener compatibilidad
+  const getEstadisticas = useCallback(() => estadisticas, [estadisticas]);
+
+  // Limpiar todos los datos
+  const clearAllData = useCallback(async () => {
+    await db.clearAll();
+    setProductos([]);
+    setProveedores([]);
+    setPrecios([]);
+    setPrepedidos([]);
+    setAlertas([]);
+    setConfiguracion(defaultConfig);
+    setHistorial([]);
+    setRecetas([]);
+    // Limpiar sub-hooks
+    finanzas.setGastos([]);
+    finanzas.setAhorros([]);
+    finanzas.setCreditosClientes([]);
+    finanzas.setCreditosTrabajadores([]);
+    finanzas.setTrabajadores([]);
+    produccionHook.setProduccion([]);
+    ventasHook.setVentas([]);
+    ventasHook.setSesionesCaja([]);
+    ventasHook.setCajaActiva(undefined);
+    ventasHook.setMesas([]);
+    ventasHook.setPedidosActivos([]);
+    inventarioHook.setInventario([]);
+    inventarioHook.setMovimientos([]);
+    inventarioHook.setRecepciones([]);
+  }, [finanzas, produccionHook, ventasHook, inventarioHook]);
+
+  // Sincronización Manual
+  const syncWithCloud = useCallback(async () => {
+    if (db.syncLocalToCloud) {
+      toast.promise(db.syncLocalToCloud(), {
+        loading: 'Subiendo datos a la nube...',
+        success: () => { 
+          loadSecondaryDataInBackground(); 
+          return 'Sincronizado correctamente'; 
+        },
+        error: 'Error al sincronizar. Revisa tu conexión.'
+      });
+    }
+  }, [loadSecondaryDataInBackground]);
+
+  const downloadFromCloud = useCallback(async () => {
+    if (db.syncCloudToLocal) {
+      toast.promise(db.syncCloudToLocal(), {
+        loading: 'Descargando datos desde la nube...',
+        success: () => { 
+          loadCriticalData();
+          loadSecondaryDataInBackground(); 
+          return 'Datos actualizados'; 
+        },
+        error: 'Error al descargar. ¿Está el proyecto activo?'
+      });
+    }
+  }, [loadCriticalData, loadSecondaryDataInBackground]);
+
+
+  // Wire onAjustarStock ref for sub-hooks
+  onAjustarStockRef.current = inventarioHook.onAjustarStock;
+
+
+  return {
+    // Datos Base
+    productos, proveedores, precios, historial, alertas, configuracion, prepedidos, estadisticas, loaded,
+    downloadFromCloud, syncWithCloud, cargarDatosEjemplo, clearAllData, MONEDAS,
+
+    // Recetas, Categorías, Productos, Proveedores, Precios, Pre-Pedidos
+    addReceta: async (r: Receta) => {
+      await db.addReceta(r as any);
+      setRecetas(prev => [...prev, r]);
+    },
+    updateReceta: async (r: Receta) => {
+      await db.updateReceta(r as any);
+      setRecetas(prev => prev.map(item => item.id === r.id ? r : item));
+    },
+    deleteReceta: async (id: string) => {
+      await db.deleteReceta(id);
+      setRecetas(prev => prev.filter(r => r.id !== id));
+    },
+    getRecetaByProducto: (pid: string) => recetas.find(r => r.productoId === pid),
+    recetas,
+    addCategoria, updateCategoria, deleteCategoria,
+
+    addProducto, updateProducto, deleteProducto,
+    addProveedor, updateProveedor, deleteProveedor,
+    addOrUpdatePrecio, deletePrecio,
+    addPrePedido, updatePrePedido, deletePrePedido, addItemToPrePedido, removeItemFromPrePedido, updateItemCantidad,
+    marcarAlertaLeida, marcarTodasAlertasLeidas, deleteAlerta, clearAllAlertas,
+    updateConfiguracion,
+    formatCurrency, getMonedaActual, getPreciosByProducto, getPreciosByProveedor, getMejorPrecio, getMejorPrecioByProveedor,
+    generarSugerenciasPedido, getProductoById, getProveedorById, getPrecioByIds, getPrePedidoById, getPrePedidosByProveedor,
+    getAlertasNoLeidas, getEstadisticas,
+
+    // --- CRM: CLIENTES ---
+    clientes, addCliente, updateCliente, deleteCliente,
+
+    // --- ASISTENCIA ---
+    asistencia, addRegistroAsistencia,
+
+    // --- NÓMINA ---
+    nominas, addNomina, updateNomina,
+
+    // --- DELEGACIÓN A SUB-HOOK: PRODUCCIÓN ---
+    ...produccionHook,
+
+    // --- DELEGACIÓN A SUB-HOOK: FINANZAS ---
+    ...finanzas,
+    // Sobrescribimos generarReporte para pasarle el estado ventas desde ventasHook
+    generarReporte: (periodo: string) => finanzas.generarReporte(periodo, ventasHook.ventas),
+
+    // --- DELEGACIÓN A SUB-HOOK: VENTAS, CAJA Y MESAS ---
+    ...ventasHook,
+
+    // --- DELEGACIÓN A SUB-HOOK: INVENTARIO Y RECEPCIONES ---
+    ...inventarioHook,
+  };
+}
+

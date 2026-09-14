@@ -1,0 +1,271 @@
+import { useState, useCallback } from 'react';
+import { consultarAgente as llamarAgente, type AgenteId } from '@/constants/agentes';
+import type { Node, Edge } from '@xyflow/react';
+
+export type EngineStatus = 'idle' | 'running' | 'paused' | 'completed' | 'error';
+
+export interface NodeExecution {
+  id: string;
+  status: 'pending' | 'running' | 'completed' | 'error';
+  result?: string;
+  error?: string;
+}
+
+// Ejecuta el código de un nodo "Código" dentro de un Web Worker aislado (sin acceso a
+// window/document/localStorage/cookies ni a funciones del resto de la app), con un
+// timeout de 10s para evitar que un loop infinito deje el workflow colgado.
+function ejecutarCodigoAislado(code: string, inputData: string | undefined): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const workerSrc = `
+      self.onmessage = async function(e) {
+        const input = e.data;
+        try {
+          const resultado = await (async () => { ${code} })();
+          self.postMessage({ ok: true, resultado });
+        } catch (err) {
+          self.postMessage({ ok: false, error: (err && err.message) ? err.message : String(err) });
+        }
+      };
+    `;
+    let worker: Worker;
+    let blobUrl: string;
+    try {
+      const blob = new Blob([workerSrc], { type: 'application/javascript' });
+      blobUrl = URL.createObjectURL(blob);
+      worker = new Worker(blobUrl);
+    } catch (err: any) {
+      reject(new Error(`No se pudo iniciar el entorno aislado: ${err.message}`));
+      return;
+    }
+    const limpiar = () => {
+      worker.terminate();
+      URL.revokeObjectURL(blobUrl);
+    };
+    const timeoutId = setTimeout(() => {
+      limpiar();
+      reject(new Error('El código tardó demasiado (más de 10s) y fue detenido.'));
+    }, 10000);
+    worker.onmessage = (e: MessageEvent) => {
+      clearTimeout(timeoutId);
+      limpiar();
+      if (e.data?.ok) resolve(e.data.resultado);
+      else reject(new Error(e.data?.error || 'Error desconocido en el código'));
+    };
+    worker.onerror = (err: ErrorEvent) => {
+      clearTimeout(timeoutId);
+      limpiar();
+      reject(new Error(err.message || 'Error al ejecutar el código'));
+    };
+    worker.postMessage(inputData);
+  });
+}
+
+export function useWorkflowEngine() {
+  const [status, setStatus] = useState<EngineStatus>('idle');
+  const [executions, setExecutions] = useState<Record<string, NodeExecution>>({});
+  const [currentLogs, setCurrentLogs] = useState<string[]>([]);
+
+  const log = (msg: string) => {
+    setCurrentLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
+  };
+
+  const executeNode = async (node: Node, inputData?: string): Promise<string> => {
+    setExecutions(prev => ({ ...prev, [node.id]: { id: node.id, status: 'running' } }));
+    
+    // Dispatch nexus-task to sync with Bitácora if it's an AI agent
+    let isAgent = false;
+    let agenteId: AgenteId = 'gerente';
+    
+    const nodeTitle = node.data?.title as string || '';
+    const nodeCategory = node.data?.category as string || '';
+    const prompt = (node.data?.prompt || node.data?.description || '') as string;
+
+    // Map node title to AgenteId for bitácora display
+    if (nodeTitle.includes('Analista') || nodeCategory.includes('IA') || nodeTitle.includes('Agente')) {
+       isAgent = true;
+       if (nodeTitle.includes('Datos') || nodeTitle.includes('Inventario')) agenteId = 'analista-datos';
+       else if (nodeTitle.includes('Marketing') || nodeTitle.includes('Redactor')) agenteId = 'redactor-creativo';
+       else if (nodeTitle.includes('Atención') || nodeTitle.includes('WhatsApp')) agenteId = 'atencion-cliente';
+       else agenteId = 'gerente';
+
+       window.dispatchEvent(new CustomEvent('nexus-engine-task', { 
+         detail: { agente: agenteId, tarea: prompt, estado: 'working' } 
+       }));
+    }
+
+    try {
+      let finalResult = '';
+
+      if (nodeCategory === 'Trigger' || nodeCategory === 'Eventos (Triggers)' || nodeTitle.includes('Trigger')) {
+        finalResult = 'Trigger activado. Contexto: ' + (inputData || 'Iniciado por el usuario');
+      } else if (nodeCategory === 'Lógica') {
+        if (nodeTitle.includes('Código') || nodeTitle.includes('Script')) {
+            const code = (node.data?.code as string) || 'return input;';
+            try {
+                // Candado de seguridad: solo ADMIN puede ejecutar código JS libre en un nodo de workflow
+                const rolActual = (() => {
+                  try {
+                    const u = localStorage.getItem('pricecontrol_local_user');
+                    return u ? JSON.parse(u)?.rol : null;
+                  } catch { return null; }
+                })();
+                if (rolActual !== 'ADMIN') {
+                  throw new Error('Este nodo de Código solo puede ejecutarlo un usuario con rol ADMIN (medida de seguridad).');
+                }
+                // Sandboxing real: el código corre en un Web Worker aislado, sin acceso a
+                // window/document/localStorage ni al resto de la app (antes corría con new Function
+                // directo en el hilo principal, con acceso completo a la página). Con timeout de
+                // seguridad para no dejar el workflow colgado si el código entra en loop infinito.
+                const res = await ejecutarCodigoAislado(code, inputData);
+                finalResult = typeof res === 'object' ? JSON.stringify(res, null, 2) : String(res);
+            } catch (err: any) {
+                throw new Error(`Error en código JS: ${err.message}`);
+            }
+        } else {
+            finalResult = `Lógica ejecutada con input: ${inputData}`;
+        }
+      } else if (nodeTitle.includes('Agente') || nodeTitle.includes('IA') || nodeTitle.includes('Bot')) {
+        let chunkResponse = '';
+        const instruction = `${prompt}\n\nDatos de entrada (Output del nodo anterior): ${inputData || ''}`;
+        
+        await llamarAgente(agenteId, instruction, (chunk) => {
+          chunkResponse += chunk;
+        });
+        finalResult = chunkResponse;
+      } else if (nodeTitle.includes('HTTP Request') || nodeTitle.includes('Webhook')) {
+        const method = (node.data?.httpMethod as string) || 'GET';
+        const url = (node.data?.httpUrl as string) || '';
+        
+        if (!url) {
+            throw new Error('URL no configurada para HTTP Request');
+        }
+
+        const options: RequestInit = { method };
+        if (method !== 'GET' && method !== 'HEAD' && inputData) {
+            try {
+                // Verificar si ya es un JSON string o enviar como texto
+                JSON.parse(inputData);
+                options.headers = { 'Content-Type': 'application/json' };
+            } catch {
+                options.headers = { 'Content-Type': 'text/plain' };
+            }
+            options.body = inputData;
+        }
+
+        const res = await fetch(url, options);
+        if (!res.ok) {
+            throw new Error(`HTTP Error ${res.status}: ${res.statusText}`);
+        }
+        
+        const text = await res.text();
+        try {
+            finalResult = JSON.stringify(JSON.parse(text), null, 2);
+        } catch {
+            finalResult = text;
+        }
+      } else {
+         // Fallback
+         finalResult = `Nodo ${nodeTitle} ejecutado correctamente. Input: ${inputData || 'N/A'}`;
+      }
+
+      setExecutions(prev => ({ ...prev, [node.id]: { id: node.id, status: 'completed', result: finalResult } }));
+      
+      if (isAgent) {
+        window.dispatchEvent(new CustomEvent('nexus-engine-task', { 
+          detail: { agente: agenteId, tarea: prompt, estado: 'done', respuesta: finalResult } 
+        }));
+      }
+
+      return finalResult;
+    } catch (err: any) {
+      setExecutions(prev => ({ ...prev, [node.id]: { id: node.id, status: 'error', error: err.message } }));
+      
+      if (isAgent) {
+        window.dispatchEvent(new CustomEvent('nexus-engine-task', { 
+          detail: { agente: agenteId, tarea: prompt, estado: 'error', respuesta: `Error: ${err.message}` } 
+        }));
+      }
+      throw err;
+    }
+  };
+
+  const runWorkflow = useCallback(async (nodes: Node[], edges: Edge[], initialData?: string) => {
+    if (nodes.length === 0) {
+      log('El lienzo está vacío. Agrega nodos primero.');
+      return;
+    }
+
+    setStatus('running');
+    setExecutions({});
+    setCurrentLogs([]);
+    log('Iniciando Motor de Workflows...');
+
+    try {
+      // Create execution session in Bitacora
+      window.dispatchEvent(new CustomEvent('nexus-engine-start', {
+        detail: {
+          comando: 'Ejecución de Flujo Visual (Motor de Workflows PRO)',
+          id: Date.now()
+        }
+      }));
+
+      // Encontrar el Trigger inicial (nodos que no son target de ningún edge)
+      const targets = new Set(edges.map(e => e.target));
+      let startNodes = nodes.filter(n => !targets.has(n.id) && (n.data?.category === 'Trigger' || n.data?.category === 'Eventos (Triggers)' || n.data?.title?.toString().includes('Trigger') || n.data?.title?.toString().includes('Webhook') || n.data?.title?.toString().includes('In')));
+
+      if (startNodes.length === 0) {
+        // Fallback: Si no hay un nodo marcado explícitamente como Trigger, tomar el primero que no sea Target
+        startNodes = nodes.filter(n => !targets.has(n.id));
+        if (startNodes.length === 0) {
+          throw new Error('No se encontró un nodo inicial. Revisa las conexiones.');
+        }
+      }
+
+      // BFS transversal simple
+      let queue: { node: Node, inputData: string | undefined }[] = startNodes.map(n => ({ node: n, inputData: initialData }));
+      
+      while (queue.length > 0) {
+        const { node, inputData } = queue.shift()!;
+        
+        log(`Ejecutando nodo: ${node.data?.title} (${node.id})`);
+        
+        const output = await executeNode(node, inputData);
+        log(`Nodo completado: ${node.data?.title}. Salida obtenida.`);
+
+        // Encontrar nodos siguientes
+        const outgoingEdges = edges.filter(e => e.source === node.id);
+        for (const edge of outgoingEdges) {
+          const targetNode = nodes.find(n => n.id === edge.target);
+          if (targetNode) {
+            queue.push({ node: targetNode, inputData: output });
+          }
+        }
+      }
+
+      log('Workflow completado con éxito.');
+      
+      // End session in Bitacora
+      window.dispatchEvent(new CustomEvent('nexus-engine-end', {}));
+      
+      setStatus('completed');
+    } catch (error: any) {
+      log(`Error crítico en Workflow: ${error.message}`);
+      window.dispatchEvent(new CustomEvent('nexus-engine-end', {}));
+      setStatus('error');
+    }
+  }, []);
+
+  const resetEngine = () => {
+    setStatus('idle');
+    setExecutions({});
+    setCurrentLogs([]);
+  };
+
+  return {
+    status,
+    executions,
+    currentLogs,
+    runWorkflow,
+    resetEngine
+  };
+}

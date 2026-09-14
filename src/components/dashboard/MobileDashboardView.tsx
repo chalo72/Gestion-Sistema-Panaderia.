@@ -191,90 +191,80 @@ export function MobileDashboardView({
         </div>
       </div>
 
-      {/* ── MUELLE DE ACCIONES RÁPIDAS (1 TOQUE CON EL PULGAR) ── */}
+      {/* ── ESTADO DE LA PRODUCCIÓN (PANEL RÁPIDO MÓVIL) ── */}
+      <div className="bg-gradient-to-r from-indigo-50 to-violet-50 dark:from-indigo-950/20 dark:to-violet-950/20 rounded-3xl p-4 border border-indigo-100 dark:border-indigo-900/30 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-indigo-500 text-white flex items-center justify-center shadow-md shadow-indigo-500/25">
+            <Scale className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-slate-800 dark:text-slate-200 uppercase tracking-tight">Estado Horno</h3>
+            <p className="text-[11px] font-bold text-slate-500">Producción del día lista</p>
+          </div>
+        </div>
+        <button
+          onClick={onViewProduccion || onViewRecetas}
+          className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-xl text-xs font-black text-indigo-600 dark:text-indigo-400 shadow-sm active:scale-95 transition-all"
+        >
+          Revisar
+        </button>
+      </div>
+
+      {/* ── MUELLE DE ACCIONES RÁPIDAS (GRANDES PARA 1 MANO) ── */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 border border-slate-200/80 dark:border-slate-800 shadow-sm">
         <p className="text-[11px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-3 px-1">
-          Acciones Rápidas
+          Acciones Principales
         </p>
-        <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="grid grid-cols-2 gap-3 text-center">
           {/* Vender */}
           <button
             onClick={onViewVentas}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-orange-50 dark:hover:bg-orange-950/20"
+            className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-orange-50 dark:hover:bg-orange-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
           >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white shadow-md shadow-orange-500/25 flex items-center justify-center">
-              <ShoppingCart className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-orange-500 to-amber-500 text-white flex items-center justify-center shrink-0">
+              <ShoppingCart className="w-5 h-5" />
             </div>
-            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight">
-              Vender
+            <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left">
+              Vender<br/><span className="text-[10px] text-slate-400 font-bold">POS Rápido</span>
             </span>
           </button>
 
           {/* Caja */}
           <button
             onClick={onViewCaja || onViewVentas}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+            className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-emerald-50 dark:hover:bg-emerald-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
           >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/25 flex items-center justify-center">
-              <Banknote className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0">
+              <Banknote className="w-5 h-5" />
             </div>
-            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight">
-              Caja
+            <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left">
+              Caja<br/><span className="text-[10px] text-slate-400 font-bold">Cuadre de hoy</span>
             </span>
           </button>
 
-          {/* Horno / Maestro Panadero */}
-          <button
-            onClick={onViewProduccion || onViewRecetas}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-indigo-50 dark:hover:bg-indigo-950/20"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/25 flex items-center justify-center">
-              <Scale className="w-6 h-6" />
-            </div>
-            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight">
-              Hornear
-            </span>
-          </button>
-
-          {/* Inventario */}
-          <button
-            onClick={onViewInventario}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-blue-50 dark:hover:bg-blue-950/20"
-          >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-blue-500 to-cyan-500 text-white shadow-md shadow-blue-500/25 flex items-center justify-center relative">
-              <Package className="w-6 h-6" />
-              {itemsBajoStock > 0 && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-red-500 ring-2 ring-white dark:ring-slate-900" />
-              )}
-            </div>
-            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight">
-              Stock
-            </span>
-          </button>
-
-          {/* Recepciones (Recibir Proveedor) */}
+          {/* Recibir (Proveedores) */}
           <button
             onClick={onViewRecepciones || onViewProveedores} 
-            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-rose-50 dark:hover:bg-rose-950/20"
+            className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-rose-50 dark:hover:bg-rose-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
           >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white shadow-md shadow-rose-500/25 flex items-center justify-center">
-              <Truck className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-rose-500 to-pink-500 text-white flex items-center justify-center shrink-0">
+              <Truck className="w-5 h-5" />
             </div>
-            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight leading-tight">
-              Recibir
+            <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
+              Recibir<br/><span className="text-[10px] text-slate-400 font-bold">Mercancía</span>
             </span>
           </button>
 
-          {/* Pedidos (Hacer Pedido) */}
+          {/* Pedidos */}
           <button
             onClick={onViewPrePedidos || onViewProveedores}
-            className="flex flex-col items-center gap-1.5 p-2 rounded-2xl active:scale-95 transition-all group hover:bg-violet-50 dark:hover:bg-violet-950/20"
+            className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-violet-50 dark:hover:bg-violet-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
           >
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-tr from-violet-500 to-fuchsia-500 text-white shadow-md shadow-violet-500/25 flex items-center justify-center">
-              <Sparkles className="w-6 h-6" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-violet-500 to-fuchsia-500 text-white flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5" />
             </div>
-            <span className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight leading-tight">
-              Pedidos
+            <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
+              Pedidos<br/><span className="text-[10px] text-slate-400 font-bold">A proveedor</span>
             </span>
           </button>
         </div>

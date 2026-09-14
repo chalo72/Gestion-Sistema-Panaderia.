@@ -1351,6 +1351,57 @@ export default function PrePedidos({
           )}
       </div>
 
+      {/* 📱 Barra flotante express en móvil (Cuando estamos en catálogo) 📱 */}
+      {mobileView === 'catalogo' && (
+        <div className="lg:hidden fixed bottom-[20px] left-3 right-3 rounded-2xl overflow-hidden flex items-center p-1.5 border border-slate-200/80 dark:border-slate-800 shadow-[0_12px_36px_rgba(0,0,0,0.22)] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl z-50">
+          {(activeDraft?.items?.reduce((s, i) => s + i.cantidad, 0) || 0) > 0 ? (
+            <>
+              <button
+                onClick={() => setMobileView('ticket')}
+                className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 active:scale-95 transition-all text-left min-w-0 flex-1 mr-2"
+              >
+                <div className="relative shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+                    <ShoppingCart className="w-5 h-5" />
+                  </div>
+                  <span className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full bg-indigo-600 text-white text-[10px] font-black flex items-center justify-center shadow-md">
+                    {activeDraft?.items?.reduce((s, i) => s + i.cantidad, 0)}
+                  </span>
+                </div>
+                <div className="flex flex-col min-w-0">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Ver Pedido</span>
+                  <span className="text-sm font-black text-slate-900 dark:text-white truncate">
+                    {formatCurrency(activeDraft?.total || 0)}
+                  </span>
+                </div>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setMobileView('ticket')}
+              className="flex items-center justify-between w-full px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50 active:scale-[0.99] transition-all rounded-xl"
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 flex items-center justify-center text-indigo-500">
+                  <ShoppingCart className="w-4 h-4" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs font-black text-slate-700 dark:text-slate-200">
+                    Pedido Vacío
+                  </span>
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400">
+                    Agrega insumos al borrador
+                  </span>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase tracking-widest px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50">
+                Ver Pedido
+              </span>
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Modal Historial de Pedidos (ELIMINADO - Ahora es vista central) */}
 
       <PrePedidoModal isOpen={isCreateModalOpen} onOpenChange={setIsCreateModalOpen} nuevoPedido={nuevoPedido} setNuevoPedido={setNuevoPedido} proveedores={proveedores} onSubmit={handleCrearPedido} />

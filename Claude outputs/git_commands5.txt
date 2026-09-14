@@ -1,0 +1,19 @@
+git add src/components/reportes/DiagnosticoFinanciero.tsx
+git commit -m "feat: sincronizar Ventas del Dia (manual) con Control de Caja (real)
+
+Al registrar un cierre en Ventas del Dia dentro de Gestion de Control
+de Datos, ahora se busca si ya existe un cierre REAL de Control de
+Caja para esa misma fecha y turno (solo lectura, no modifica nada de
+Control de Caja) y:
+- Muestra cuanto dio esa caja real, con un boton 'Usar' para
+  autocompletar el campo Principal en vez de volver a escribirlo.
+- Avisa con una alerta si el total que se escribio a mano no coincide
+  con el total real de caja, sin bloquear el guardado.
+
+Las dos listas de datos siguen siendo independientes a proposito (una
+es por linea de producto, la otra por caja fisica/turno) - esto es
+solo un puente de referencia entre las dos, no una fusion.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01M9LfB9SkwqtRU4YVWbLbxr"
+git push

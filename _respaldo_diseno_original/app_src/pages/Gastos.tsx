@@ -1,0 +1,668 @@
+import { useState, useMemo, useEffect } from 'react';
+import { toast } from 'sonner';
+
+import { ExpenseHeader }    from '@/components/gastos/ExpenseHeader';
+import { ExpenseKPIs }      from '@/components/gastos/ExpenseKPIs';
+import { ExpenseList }      from '@/components/gastos/ExpenseList';
+import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
+import { QuickEntryBar }    from '@/components/gastos/QuickEntryBar';
+import { TurboExpenseManager } from '@/components/gastos/TurboExpenseManager';
+import { Camera, Zap, TableProperties, ClipboardList } from 'lucide-react';
+import { EscanerFacturaIA, type ScanResult } from '@/components/agentes/EscanerFacturaIA';
+
+import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion } from '@/types';
+import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo } from '@/lib/ocr-service';
+import { getCompromisos } from '@/lib/finanzas-personales';
+import { getBovedas, addMovimientoBoveda, type Boveda } from '@/lib/boveda-store';
+import { recuperarGastosMultifuente } from '@/lib/recuperacion-gastos';
+import { db } from '@/lib/database';
+
+// ── Ingresos virtuales para el libro de caja ────────────────────────────────
+// Los ingresos se persisten en localStorage para no alterar el tipo Gasto en DB
+const INGRESOS_KEY = 'dulceplacer_ingresos_extra';
+
+function cargarIngresos(): (Gasto & { esIngreso: true })[] {
+    try {
+        const raw = localStorage.getItem(INGRESOS_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+}
+function guardarIngresos(lista: (Gasto & { esIngreso: true })[]) {
+    try { localStorage.setItem(INGRESOS_KEY, JSON.stringify(lista)); } catch {}
+}
+
+function exportarIngresosJson(lista: (Gasto & { esIngreso: true })[]): string {
+    return JSON.stringify({
+        version: 1,
+        exportadoEn: new Date().toISOString(),
+        ingresos: lista,
+    }, null, 2);
+}
+
+function importarIngresosJson(json: string): { ok: true; ingresos: (Gasto & { esIngreso: true })[] } | { ok: false; error: string } {
+    try {
+        const parsed: unknown = JSON.parse(json);
+        if (!parsed || typeof parsed !== 'object') {
+            return { ok: false, error: 'El archivo no es un JSON válido' };
+        }
+        const obj = parsed as Record<string, unknown>;
+        const lista = Array.isArray(obj.ingresos) ? obj.ingresos : Array.isArray(parsed) ? parsed : null;
+        if (!lista) return { ok: false, error: 'No se encontraron ingresos en el archivo' };
+        return {
+            ok: true,
+            ingresos: lista.map((item) => ({ ...(item as Gasto), esIngreso: true as const })),
+        };
+    } catch {
+        return { ok: false, error: 'No se pudo leer el archivo' };
+    }
+}
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+interface GastosProps {
+    gastos: Gasto[];
+    proveedores: Proveedor[];
+    cajaActiva: CajaSesion | undefined;
+    onAddGasto: (gasto: Omit<Gasto, 'id'>) => Promise<void>;
+    onUpdateGasto: (id: string, updates: Partial<Gasto>) => Promise<void>;
+    onDeleteGasto: (id: string) => Promise<void>;
+    formatCurrency: (value: number) => string;
+    usuario: Usuario;
+}
+
+// ── Tipo extendido para el formulario ────────────────────────────────────────
+type FormGasto = Partial<Gasto & { esIngreso?: boolean, bovedaId?: string }>;
+
+// ── Estado vacío del formulario ───────────────────────────────────────────────
+const formVacio = (): FormGasto => ({
+    descripcion: '',
+    monto: 0,
+    categoria: 'Otros',
+    fecha: new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
+    metodoPago: 'efectivo',
+    esIngreso: false,
+    bovedaId: '',
+});
+
+export default function Gastos({
+    gastos,
+    proveedores,
+    onAddGasto,
+    onUpdateGasto,
+    onDeleteGasto,
+    formatCurrency,
+    usuario,
+}: GastosProps) {
+    // ── Estado UI ─────────────────────────────────────────────────────────────
+    const [modoVista,        setModoVista]        = useState<'clasico' | 'turbo' | 'tabla'>('turbo');
+    const [showScannerModal, setShowScannerModal] = useState(false);
+    const [searchTerm,       setSearchTerm]       = useState('');
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+    const [isOnline,         setIsOnline]         = useState(navigator.onLine);
+    const [showModal,        setShowModal]        = useState(false);
+    const [isSaving,         setIsSaving]         = useState(false);
+    const [isScanning,       setIsScanning]       = useState(false);
+    const [formData,         setFormData]         = useState<FormGasto>(formVacio());
+    const [editingId,        setEditingId]        = useState<string | null>(null);
+    const [scanResult,       setScanResult]       = useState<FormGasto | null>(null);
+
+    // ── Ingresos locales ──────────────────────────────────────────────────────
+    const [ingresos, setIngresos] = useState<(Gasto & { esIngreso: true })[]>(cargarIngresos);
+    
+    // ── Bóvedas ─────────────────────────────────────────────────────────────
+    const [bovedas, setBovedas] = useState<Boveda[]>([]);
+    useEffect(() => {
+        setBovedas(getBovedas());
+    }, [showModal]); // Reload bovedas when modal opens
+
+    // ── Compromisos de salario (pagos rápidos) ────────────────────────────────
+    const salarioCompromisos = getCompromisos().filter(c => c.activo && c.esPropietario);
+
+    // ── Detectar online/offline ───────────────────────────────────────────────
+    useEffect(() => {
+        const onOnline  = () => setIsOnline(true);
+        const onOffline = () => setIsOnline(false);
+        window.addEventListener('online',  onOnline);
+        window.addEventListener('offline', onOffline);
+        return () => { window.removeEventListener('online', onOnline); window.removeEventListener('offline', onOffline); };
+    }, []);
+
+    // Recuperar gastos desde base antigua / nube si la lista llega vacía
+    useEffect(() => {
+        let cancel = false;
+        (async () => {
+            if ((gastos || []).length > 0) return;
+            try {
+                const r = await recuperarGastosMultifuente();
+                if (cancel) return;
+                if (r.gastos.length > 0) {
+                    window.dispatchEvent(new CustomEvent('nexus-realtime-change', { detail: { table: 'gastos' } }));
+                    toast.success(`Recuperados ${r.gastos.length} gastos`);
+                }
+            } catch {
+                try { await db.getAllGastos(); } catch { /* ignore */ }
+            }
+        })();
+        return () => { cancel = true; };
+    }, [gastos]);
+
+    // ── Lista unificada (egresos + ingresos locales) ──────────────────────────
+    const todosLosRegistros = useMemo(() => {
+        const egresos = gastos.map(g => ({ ...g, esIngreso: false as const }));
+        return [...egresos, ...ingresos];
+    }, [gastos, ingresos]);
+
+    // ── Filtrado ──────────────────────────────────────────────────────────────
+    const registrosFiltrados = useMemo(() => {
+        return todosLosRegistros.filter(r => {
+            const searchLower = searchTerm.toLowerCase();
+            const provName = r.proveedorId ? proveedores.find(p => p.id === r.proveedorId)?.nombre?.toLowerCase() || '' : '';
+            const itemsName = r.facturaItems ? r.facturaItems.map(i => i.nombre.toLowerCase()).join(' ') : '';
+            const matchSearch = r.descripcion.toLowerCase().includes(searchLower) || provName.includes(searchLower) || itemsName.includes(searchLower);
+            const matchCat    = !selectedCategory || r.categoria === selectedCategory;
+            return matchSearch && matchCat;
+        }).sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+    }, [todosLosRegistros, searchTerm, selectedCategory, proveedores]);
+
+    // ── Stats del mes ─────────────────────────────────────────────────────────
+    const stats = useMemo(() => {
+        const mesActual  = new Date().toISOString().slice(0, 7);
+        const mesAnterior = (() => {
+            const d = new Date(); d.setMonth(d.getMonth() - 1);
+            return d.toISOString().slice(0, 7);
+        })();
+
+        let totalEgresos = 0, totalIngresos = 0, totalEgresosAnt = 0;
+        const porCat: Record<string, number> = {};
+
+        todosLosRegistros.forEach(r => {
+            const mes = (r.fecha || '').slice(0, 7);
+            if (mes === mesActual) {
+                if (r.esIngreso) {
+                    totalIngresos += r.monto;
+                } else {
+                    totalEgresos += r.monto;
+                    porCat[r.categoria] = (porCat[r.categoria] || 0) + r.monto;
+                }
+            } else if (mes === mesAnterior && !r.esIngreso) {
+                totalEgresosAnt += r.monto;
+            }
+        });
+
+        return { totalEgresos, totalIngresos, totalEgresosAnt, porCat };
+    }, [todosLosRegistros]);
+
+    // ── Abrir modal para nuevo gasto/ingreso ──────────────────────────────────
+    const abrirNuevoGasto   = () => { setEditingId(null); setScanResult(null); setFormData(formVacio()); setShowModal(true); };
+    const abrirNuevoIngreso = () => { setEditingId(null); setScanResult(null); setFormData({ ...formVacio(), esIngreso: true, categoria: 'Venta' as GastoCategoria }); setShowModal(true); };
+
+    // ── Editar registro ───────────────────────────────────────────────────────
+    const handleEditGasto = (g: Gasto & { esIngreso?: boolean }) => {
+        setScanResult(null);
+        setFormData({ ...g });
+        setEditingId(g.id);
+        setShowModal(true);
+    };
+
+    // ── Guardar (nuevo o edición) ─────────────────────────────────────────────
+    const handleSave = async () => {
+        const data = scanResult || formData;
+        
+        // Reconstruir descripción si se editó como producto individual
+        if (!data.esIngreso && !(data.facturaItems?.length) && data.productoLibre) {
+            let finalDesc = data.productoLibre.trim();
+            if (data.cantidad && data.cantidad > 1) {
+                finalDesc = data.cantidad + 'x ' + finalDesc;
+            }
+            data.descripcion = finalDesc;
+        }
+
+        if (!data.descripcion?.trim() || !data.monto || data.monto <= 0) {
+            toast.error('Ingresa la descripción y un monto válido');
+            return;
+        }
+
+        setIsSaving(true);
+        try {
+            if (data.esIngreso) {
+                // Ingresos: persisten en localStorage
+                if (editingId) {
+                    const actualizados = ingresos.map(i =>
+                        i.id === editingId ? { ...i, ...data, esIngreso: true as const } : i
+                    );
+                    setIngresos(actualizados);
+                    guardarIngresos(actualizados);
+                } else {
+                    const nuevoIngreso = {
+                        id: `ing_${Date.now()}`,
+                        descripcion: data.descripcion!,
+                        monto: data.monto!,
+                        categoria: (data.categoria as GastoCategoria) || 'Venta',
+                        fecha: data.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
+                        metodoPago: (data.metodoPago as MetodoPago) || 'efectivo',
+                        usuarioId: usuario.id,
+                        estado: 'pagado' as const,
+                        esIngreso: true as const,
+                    };
+                    const actualizados = [...ingresos, nuevoIngreso];
+                    setIngresos(actualizados);
+                    guardarIngresos(actualizados);
+                    
+                    // Sincronizar con Bóveda si aplica (solo al crear)
+                    if (data.bovedaId && data.bovedaId !== '__ninguno__') {
+                        addMovimientoBoveda({
+                            bovedaDestinoId: data.bovedaId, // Entra a esta bóveda
+                            monto: data.monto!,
+                            motivo: `Ingreso Extra: ${data.descripcion}`,
+                            tipo: 'Ingreso',
+                            usuarioResponsable: usuario.nombre || 'Administrador',
+                            metodoPago: data.metodoPago || 'Efectivo',
+                        });
+                    }
+                }
+            } else {
+                // Egresos: van a la base de datos real
+                if (editingId) {
+                    await onUpdateGasto(editingId, {
+                        ...data,
+                        descripcion: data.descripcion!,
+                        monto: data.monto!,
+                        categoria: (data.categoria as GastoCategoria) || 'Otros',
+                        fecha: data.fecha || new Date().toISOString(),
+                        metodoPago: (data.metodoPago as MetodoPago) || 'efectivo',
+                        proveedorId: data.proveedorId,
+                    });
+                } else {
+                    await onAddGasto({
+
+                        ...data,
+                        descripcion: data.descripcion!,
+                        monto: data.monto!,
+                        categoria: (data.categoria as GastoCategoria) || 'Otros',
+                        fecha: data.fecha || new Date().toISOString(),
+                        metodoPago: (data.metodoPago as MetodoPago) || 'efectivo',
+                        usuarioId: usuario.id,
+                        proveedorId: data.proveedorId,
+                        estado: 'pagado',
+                    });
+                    
+                    // Sincronizar con Bóveda si aplica (solo al crear)
+                    if (data.bovedaId && data.bovedaId !== '__ninguno__') {
+                        addMovimientoBoveda({
+                            bovedaOrigenId: data.bovedaId, // Sale de esta bóveda
+                            monto: data.monto!,
+                            motivo: `Gasto: ${data.descripcion}`,
+                            tipo: 'Egreso',
+                            usuarioResponsable: usuario.nombre || 'Administrador',
+                            metodoPago: data.metodoPago || 'Efectivo',
+                        });
+                    }
+                }
+            }
+
+            setShowModal(false);
+            setScanResult(null);
+            setFormData(formVacio());
+            setEditingId(null);
+            toast.success(data.esIngreso ? 'Ingreso registrado ✓' : editingId ? 'Registro actualizado ✓' : 'Gasto registrado ✓');
+        } catch {
+            toast.error('Error al guardar. Intenta nuevamente.');
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // ── Eliminar registro ─────────────────────────────────────────────────────
+    const handleDelete = async (id: string) => {
+        const esIngresoLocal = ingresos.some(i => i.id === id);
+        if (esIngresoLocal) {
+            const actualizados = ingresos.filter(i => i.id !== id);
+            setIngresos(actualizados);
+            guardarIngresos(actualizados);
+            toast.success('Ingreso eliminado');
+        } else {
+            await onDeleteGasto(id);
+        }
+    };
+
+    // ── Entrada rápida (QuickEntryBar) ────────────────────────────────────────
+    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string , origenTipo?: string, cajaId?: string, bovedaId?: string }) => {
+        const fechaElegida = data.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        if (data.esIngreso) {
+            const nuevo = {
+                id: `ing_${Date.now()}`,
+                descripcion: data.descripcion,
+                monto: data.monto,
+                categoria: data.categoria,
+                fecha: fechaElegida,
+                metodoPago: data.metodoPago,
+                usuarioId: usuario.id,
+                estado: 'pagado' as const,
+                esIngreso: true as const,
+            };
+            const actualizados = [...ingresos, nuevo];
+            setIngresos(actualizados);
+            guardarIngresos(actualizados);
+            toast.success('Ingreso rápido guardado ✓');
+        } else {
+            await onAddGasto({
+                descripcion: data.descripcion,
+                monto: data.monto,
+                categoria: data.categoria,
+                fecha: fechaElegida,
+                metodoPago: data.metodoPago,
+                usuarioId: usuario.id,
+                estado: 'pagado',
+                proveedorId: data.proveedorId,
+                cajaId: data.cajaId,
+                bovedaId: data.bovedaId,
+                origenTipo: data.origenTipo,
+            });
+            toast.success('Gasto rápido guardado ✓');
+        }
+    };
+
+    // ── OCR / Escaneo ─────────────────────────────────────────────────────────
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        setIsScanning(true);
+        toast.info('Procesando comprobante con OCR...', { description: 'Puede tardar unos segundos.' });
+
+        try {
+            const resultado = await procesarImagenFactura(file, progreso => {
+                if (progreso > 0) toast.loading(`OCR: ${progreso}%`, { id: 'ocr-progress' });
+            });
+            toast.dismiss('ocr-progress');
+
+            if (resultado.errores.length > 0 && !resultado.total) {
+                toast.warning('OCR incompleto. Completa los datos manualmente.');
+            }
+
+            let proveedorMatch: typeof proveedores[0] | undefined;
+            if (resultado.proveedor?.nombre) {
+                const m = matchProveedorEnCatalogo(resultado.proveedor.nombre, proveedores, p => p.nombre, 0.52);
+                if (m.indice >= 0) proveedorMatch = proveedores[m.indice];
+            }
+
+            const descripcion = resultado.productos.length > 0
+                ? resultado.productos.map(p => p.nombre).join(', ')
+                : resultado.texto.substring(0, 80);
+            const categoria = resultado.productos[0] ? sugerirCategoria(resultado.productos[0].nombre) : 'Otros';
+
+            setScanResult({
+                descripcion: descripcion || '',
+                monto: resultado.total || 0,
+                categoria,
+                fecha: resultado.fechaFactura || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
+                proveedorId: proveedorMatch?.id,
+                metodoPago: 'efectivo',
+                esIngreso: false,
+            });
+            toast.success('OCR completado — revisa y confirma');
+        } catch {
+            toast.error('Error al procesar imagen. Ingresa los datos manualmente.');
+        } finally {
+            setIsScanning(false);
+            setEditingId(null);
+            setShowModal(true);
+        }
+    };
+
+    // ── Escáner de Factura IA ─────────────────────────────────────────────────
+    const handleScanComplete = (res: ScanResult) => {
+        let provMatch: Proveedor | undefined;
+        if (res.proveedorNombre) {
+            const m = matchProveedorEnCatalogo(res.proveedorNombre, proveedores, p => p.nombre, 0.52);
+            if (m.indice >= 0) provMatch = proveedores[m.indice];
+        }
+        const catInferida = sugerirCategoria(res.textoBruto?.slice(0, 100) || '');
+
+        const datosGasto: FormGasto = {
+            descripcion: res.proveedorNombre ? `Factura ${res.proveedorNombre}${res.facturaNum ? ` #${res.facturaNum}` : ''}` : 'Compra con factura',
+            monto: res.monto || 0,
+            categoria: catInferida,
+            fecha: res.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
+            proveedorId: provMatch?.id,
+            metodoPago: 'efectivo',
+            esIngreso: false,
+        };
+
+        setScanResult(datosGasto);
+        setFormData(datosGasto);
+        setEditingId(null);
+        setShowModal(true);
+        toast.success('Factura procesada con éxito — revisa y confirma el gasto');
+    };
+
+    // ── Render ────────────────────────────────────────────────────────────────
+    return (
+        <div className="min-h-full flex flex-col gap-5 p-4 pb-24 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+            <ExpenseHeader
+                onAddGasto={abrirNuevoGasto}
+                onAddIngreso={abrirNuevoIngreso}
+                onScanReceipt={() => setShowScannerModal(true)}
+                totalMensual={stats.totalEgresos}
+                totalIngresos={stats.totalIngresos}
+                formatCurrency={formatCurrency}
+                isOnline={isOnline}
+            />
+
+            {/* Selector de 3 Modos de Gestión de Gastos + Botón de Escaneo IA */}
+            <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 p-2.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl">
+                    <button
+                        type="button"
+                        onClick={() => setModoVista('clasico')}
+                        className={cn(
+                            "px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5",
+                            modoVista === 'clasico'
+                                ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                                : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+                        )}
+                    >
+                        <ClipboardList className="w-3.5 h-3.5" />
+                        Modo Clásico
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setModoVista('turbo')}
+                        className={cn(
+                            "px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5",
+                            modoVista === 'turbo'
+                                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/30"
+                                : "text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                        )}
+                    >
+                        <Zap className="w-3.5 h-3.5 fill-current" />
+                        Modo Turbo 🚀
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setModoVista('tabla')}
+                        className={cn(
+                            "px-3 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all flex items-center gap-1.5",
+                            modoVista === 'tabla'
+                                ? "bg-indigo-600 text-white shadow-sm shadow-indigo-500/30"
+                                : "text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                        )}
+                    >
+                        <TableProperties className="w-3.5 h-3.5" />
+                        Modo Masivo 📊
+                    </button>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => setShowScannerModal(true)}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm px-3.5 py-2 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center gap-2"
+                >
+                    <Camera className="w-4 h-4" />
+                    Escanear Factura IA
+                </button>
+            </div>
+
+            {modoVista === 'clasico' ? (
+                <QuickEntryBar onSave={handleQuickSave} />
+            ) : (
+                <TurboExpenseManager 
+                  esInline={true}
+                  modoForzado={modoVista}
+                  onOpenScanner={() => setShowScannerModal(true)}
+                  onSave={handleQuickSave} 
+                  proveedores={proveedores} 
+                  gastosList={gastos} 
+                  onDeleteGasto={handleDelete} 
+                  onEditGasto={handleEditGasto} 
+                />
+            )}
+
+            {/* Ingresos extras viven solo en este aparato */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-amber-50 dark:bg-amber-950/30 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                    <p className="text-sm font-black text-amber-800 dark:text-amber-200">Ingresos extras: solo en este aparato</p>
+                    <p className="text-xs font-medium text-amber-700/90 dark:text-amber-300/80 mt-0.5">
+                        No se copian solos a otro celular. Exporta un respaldo si vas a cambiar de equipo.
+                    </p>
+                </div>
+                <div className="flex gap-2 shrink-0">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            try {
+                                const blob = new Blob([exportarIngresosJson(ingresos)], { type: 'application/json' });
+                                const url = URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url;
+                                a.download = `ingresos-extras-${new Date().toISOString().slice(0, 10)}.json`;
+                                a.click();
+                                URL.revokeObjectURL(url);
+                                toast.success('Respaldo de ingresos descargado');
+                            } catch {
+                                toast.error('No se pudo exportar');
+                            }
+                        }}
+                        className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200"
+                    >
+                        Exportar
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => document.getElementById('ingresos-import-file')?.click()}
+                        className="px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200"
+                    >
+                        Importar
+                    </button>
+                    <input
+                        id="ingresos-import-file"
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (!file) return;
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                                const text = typeof reader.result === 'string' ? reader.result : '';
+                                const result = importarIngresosJson(text);
+                                if (!result.ok) {
+                                    toast.error(result.error);
+                                    return;
+                                }
+                                setIngresos(result.ingresos);
+                                guardarIngresos(result.ingresos);
+                                toast.success('Ingresos restaurados en este aparato');
+                            };
+                            reader.onerror = () => toast.error('No se pudo leer el archivo');
+                            reader.readAsText(file);
+                        }}
+                    />
+                </div>
+            </div>
+
+            <input
+                id="receipt-upload"
+                type="file"
+                accept="image/*,.pdf"
+                className="hidden"
+                onChange={handleFileUpload}
+            />
+
+            {/* Pagos rápidos de nómina */}
+            {salarioCompromisos.length > 0 && (
+                <div className="flex flex-wrap gap-2 px-1">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground self-center">Pago rápido:</span>
+                    {salarioCompromisos.map(c => (
+                        <button
+                            key={c.id}
+                            onClick={() => {
+                                setFormData({
+                                    descripcion: `Salario quincena${c.persona ? ` — ${c.persona}` : ''}`,
+                                    monto: c.monto,
+                                    categoria: 'Nómina' as GastoCategoria,
+                                    fecha: new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0],
+                                    metodoPago: 'efectivo',
+                                    esIngreso: false,
+                                });
+                                setScanResult(null);
+                                setEditingId(null);
+                                setShowModal(true);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-black hover:bg-amber-500/20 transition-all"
+                        >
+                            💰 {c.persona || c.nombre} — {formatCurrency(c.monto)}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            <ExpenseKPIs
+                totalMensual={stats.totalEgresos}
+                totalIngresos={stats.totalIngresos}
+                gastosPorCategoria={stats.porCat}
+                promedioMesAnterior={stats.totalEgresosAnt}
+                formatCurrency={formatCurrency}
+                onFilterCategoria={setSelectedCategory}
+                filtroActivo={selectedCategory}
+            />
+
+            <ExpenseList
+                gastos={registrosFiltrados}
+                searchTerm={searchTerm}
+                setSearchTerm={setSearchTerm}
+                selectedCategory={selectedCategory}
+                setSelectedCategory={setSelectedCategory}
+                onDeleteGasto={handleDelete}
+                onEditGasto={handleEditGasto}
+                formatCurrency={formatCurrency}
+                proveedores={proveedores}
+            />
+
+            <ExpenseFormModal
+                isOpen={showModal}
+                onOpenChange={open => { if (!open) { setShowModal(false); setScanResult(null); setEditingId(null); } }}
+                formData={scanResult || formData}
+                setFormData={data => scanResult ? setScanResult(data) : setFormData(data)}
+                onSubmit={handleSave}
+                isScanning={!!scanResult && !editingId}
+                isSaving={isSaving}
+                isEditMode={!!editingId}
+                proveedores={proveedores}
+                bovedas={bovedas}
+            />
+
+            <EscanerFacturaIA
+                isOpen={showScannerModal}
+                onClose={() => setShowScannerModal(false)}
+                modo="PROVEEDOR"
+                proveedoresLista={proveedores}
+                onScanComplete={handleScanComplete}
+            />
+        </div>
+    );
+}
+
+
+
+

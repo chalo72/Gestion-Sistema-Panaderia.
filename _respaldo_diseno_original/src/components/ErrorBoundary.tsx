@@ -1,0 +1,101 @@
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+
+interface Props {
+  children?: ReactNode;
+  moduleName?: string;
+}
+
+interface State {
+  hasError: boolean;
+  error: Error | null;
+}
+
+export class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+    error: null
+  };
+
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error atrapado por ErrorBoundary en', this.props.moduleName, ':', error, errorInfo);
+    
+    // Auto-recargar silenciosamente si es un error de chunk (PWA cache inválido tras update)
+    const msg = error.message || '';
+    const isChunkError =
+      error.name === 'ChunkLoadError' ||
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes("reading 'default'") ||
+      msg.includes('posible caché PWA');
+
+    if (isChunkError) {
+      // Evita bucle infinito de recarga
+      const key = 'dp_chunk_reload_once';
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, '1');
+        window.location.reload();
+      }
+    }
+  }
+
+  public render() {
+    if (this.state.hasError) {
+      const msg = this.state.error?.message || '';
+      const isChunkError =
+        this.state.error?.name === 'ChunkLoadError' ||
+        msg.includes('Failed to fetch dynamically imported module') ||
+        msg.includes("reading 'default'") ||
+        msg.includes('posible caché PWA');
+      
+      return (
+        <div className="p-6 flex items-center justify-center min-h-[400px]">
+          <Card className="max-w-md border-red-200 dark:border-red-900 shadow-xl">
+            <CardHeader className="bg-red-50 dark:bg-red-950/20 border-b border-red-100 dark:border-red-900/50 rounded-t-lg">
+              <CardTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+                <AlertTriangle className="w-5 h-5" />
+                Error en el módulo {this.props.moduleName || 'Desconocido'}
+              </CardTitle>
+              <CardDescription className="text-red-800/70 dark:text-red-300/70">
+                {isChunkError 
+                  ? 'Hay una nueva versión de la aplicación disponible. Debes recargar la página.'
+                  : 'El sistema de protección interceptó un error para evitar que toda la aplicación colapse.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-slate-600 dark:text-slate-400">
+                {isChunkError
+                  ? 'Esto suele pasar después de un actualización. Pulsa recargar (o Ctrl+F5) para cargar la versión nueva.'
+                  : 'Puedes intentar recargar este módulo o volver al menú principal. Tu información en otras secciones sigue estando segura.'}
+              </p>
+              <div className="bg-slate-100 dark:bg-slate-900 p-3 rounded-md text-xs font-mono overflow-auto max-h-32 text-red-500">
+                {this.state.error?.message}
+              </div>
+              <Button 
+                onClick={() => {
+                  if (isChunkError) {
+                    sessionStorage.removeItem('dp_chunk_reload_once');
+                    window.location.reload();
+                  } else {
+                    this.setState({ hasError: false, error: null });
+                  }
+                }} 
+                className="w-full gap-2 bg-red-600 hover:bg-red-700"
+              >
+                <RefreshCw className="w-4 h-4" />
+                {isChunkError ? 'Recargar Aplicación' : 'Intentar cargar de nuevo'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}

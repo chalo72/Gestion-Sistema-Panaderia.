@@ -1,0 +1,295 @@
+import { generateUUID } from '@/lib/safe-utils';
+/**
+ * useFinanzas — Sub-hook para gestión de gastos, créditos y trabajadores
+ * Extraído de usePriceControl.ts para reducir su tamaño
+ */
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { db } from '@/lib/database';
+import {
+  fusionarGastosEnEstado,
+  guardarCacheGastos,
+  hidratarGastosCompletos,
+  leerCacheGastos,
+} from '@/lib/gastos-hidratacion';
+import { fechaCalendarioLocalDesdeISO } from '@/lib/fecha-ventas';
+import type {
+  Gasto,
+  CreditoCliente,
+  CreditoTrabajador,
+  PagoCredito,
+  Trabajador,
+  Venta,
+} from '@/types';
+import { toast } from 'sonner';
+
+interface UseFinanzasParams {
+  onAjustarStock: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida', motivo: string) => Promise<void>;
+}
+
+export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
+  const [gastos, setGastos] = useState<Gasto[]>(() => leerCacheGastos());
+  const [ahorros, setAhorros] = useState<any[]>([]);
+  const [creditosClientes, setCreditosClientes] = useState<CreditoCliente[]>([]);
+  const [creditosTrabajadores, setCreditosTrabajadores] = useState<CreditoTrabajador[]>([]);
+  const [trabajadores, setTrabajadores] = useState<Trabajador[]>([]);
+
+  const aplicarGastos = useCallback((nuevos: Gasto[]) => {
+    setGastos((prev) => fusionarGastosEnEstado(prev, nuevos));
+  }, []);
+
+  // --- Gastos ---
+  const addGasto = useCallback(async (g: Omit<Gasto, 'id'>) => {
+    const newG = { ...g, id: generateUUID() };
+    await db.addGasto(newG as any);
+    setGastos((prev) => {
+      const merged = fusionarGastosEnEstado(prev, [newG as Gasto]);
+      guardarCacheGastos(merged);
+      return merged;
+    });
+  }, []);
+
+  const updateGasto = useCallback(async (id: string, updates: Partial<Gasto>) => {
+    const gasto = gastos.find(g => g.id === id);
+    if (!gasto) return;
+    const updated = { ...gasto, ...updates };
+    await db.updateGasto(updated as any);
+    setGastos((prev) => {
+      const merged = fusionarGastosEnEstado(prev, [updated]);
+      guardarCacheGastos(merged);
+      return merged;
+    });
+  }, [gastos]);
+
+  const deleteGasto = useCallback(async (id: string) => {
+    await db.deleteGasto(id);
+    setGastos((prev) => {
+      const merged = prev.filter((g) => g.id !== id);
+      guardarCacheGastos(merged);
+      return merged;
+    });
+  }, []);
+
+  // Recuperación crítica: gastos pueden estar en PriceControlDB (legacy) y no en dulce-placer-db
+  const recuperacionEnCurso = useRef(false);
+  const ejecutarRecuperacionGastos = useCallback(async (): Promise<number> => {
+    if (recuperacionEnCurso.current) return gastos.length;
+    recuperacionEnCurso.current = true;
+    try {
+      const lista = await hidratarGastosCompletos();
+      if (lista.length > 0) aplicarGastos(lista);
+      return lista.length;
+    } finally {
+      recuperacionEnCurso.current = false;
+    }
+  }, [aplicarGastos, gastos.length]);
+
+  useEffect(() => {
+    void ejecutarRecuperacionGastos();
+  }, [ejecutarRecuperacionGastos]);
+
+  useEffect(() => {
+    if (gastos.length > 0) return;
+    const timer = window.setTimeout(() => {
+      void ejecutarRecuperacionGastos();
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [gastos.length, ejecutarRecuperacionGastos]);
+
+  // Refrescar lista cuando otro módulo anula/edita gastos (Mi Quincena, etc.)
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const detail = (e as CustomEvent<{ table?: string }>).detail;
+      if (detail?.table !== 'gastos') return;
+      try {
+        const list = await db.getAllGastos();
+        aplicarGastos(list as Gasto[]);
+      } catch (err) {
+        console.warn('[useFinanzas] No se pudo refrescar gastos:', err);
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
+  }, []);
+
+  const generarReporte = useCallback((periodo: string, ventas: Venta[]) => {
+    const gastosPeriodo = gastos.filter((g) => fechaCalendarioLocalDesdeISO(g.fecha).startsWith(periodo));
+    const ventasPeriodo = ventas.filter((v) => fechaCalendarioLocalDesdeISO(v.fecha).startsWith(periodo));
+
+    const totalVentas = ventasPeriodo.reduce((s, v) => s + v.total, 0);
+    const totalGastos = gastosPeriodo.reduce((s, g) => s + g.monto, 0);
+
+    const gastosPorCategoria = gastosPeriodo.reduce((acc, g) => {
+      acc[g.categoria] = (acc[g.categoria] || 0) + g.monto;
+      return acc;
+    }, {} as any);
+
+    return {
+      periodo,
+      totalVentas,
+      totalGastos,
+      utilidadBruta: totalVentas - totalGastos,
+      gastosPorCategoria,
+      ventasPorMetodoPago: ventasPeriodo.reduce((acc, v) => {
+        acc[v.metodoPago] = (acc[v.metodoPago] || 0) + v.total;
+        return acc;
+      }, {} as any)
+    };
+  }, [gastos]);
+
+  // --- Créditos Clientes ---
+  const addCreditoCliente = useCallback(async (c: Omit<CreditoCliente, 'id' | 'createdAt'>) => {
+    // Preservar el ID si el caller lo pasa (ej: Mayoristas pasa su propio historialId
+    // para que DB y localStorage usen el mismo ID y los abonos se conecten).
+    const id = (c as any).id ?? generateUUID();
+    const nuevo: CreditoCliente = { ...c, id, createdAt: new Date().toISOString() };
+    await db.addCreditoCliente(nuevo);
+    setCreditosClientes(prev => {
+      if (prev.some(x => x.id === id)) return prev; // evitar duplicado si ya existe
+      return [nuevo, ...prev];
+    });
+  }, []);
+
+  const updateCreditoCliente = useCallback(async (id: string, updates: Partial<CreditoCliente>) => {
+    const credito = creditosClientes.find(c => c.id === id);
+    if (!credito) return;
+    const updated = { ...credito, ...updates };
+    await db.updateCreditoCliente(updated);
+    setCreditosClientes(prev => prev.map(c => c.id === id ? updated : c));
+  }, [creditosClientes]);
+
+  const deleteCreditoCliente = useCallback(async (id: string) => {
+    await db.deleteCreditoCliente(id);
+    setCreditosClientes(prev => prev.filter(c => c.id !== id));
+  }, []);
+
+  const registrarPagoCredito = useCallback(async (creditoId: string, pago: Omit<PagoCredito, 'id' | 'creditoId'>) => {
+    const credito = creditosClientes.find(c => c.id === creditoId);
+    if (!credito) return;
+    if (pago.monto <= 0) return;
+    const nuevoPago: PagoCredito = { ...pago, id: generateUUID(), creditoId };
+    const nuevoSaldo = Math.max(0, credito.saldo - pago.monto);
+    const updated: CreditoCliente = {
+      ...credito,
+      saldo: nuevoSaldo,
+      estado: nuevoSaldo <= 0 ? 'pagado' : credito.estado,
+      pagos: [...credito.pagos, nuevoPago]
+    };
+    await db.updateCreditoCliente(updated);
+    setCreditosClientes(prev => prev.map(c => c.id === creditoId ? updated : c));
+  }, [creditosClientes]);
+
+  // --- Créditos Trabajadores ---
+  const addCreditoTrabajador = useCallback(async (c: Omit<CreditoTrabajador, 'id' | 'createdAt'>) => {
+    const nuevo: CreditoTrabajador = { ...c, id: generateUUID(), createdAt: new Date().toISOString() };
+    await db.addCreditoTrabajador(nuevo);
+    setCreditosTrabajadores(prev => [nuevo, ...prev]);
+    // Descontar del inventario cada producto tomado
+    for (const item of c.items) {
+      if (item.productoId && item.cantidad > 0) {
+        await onAjustarStock(item.productoId, item.cantidad, 'salida', `Crédito trabajador: ${c.trabajadorNombre}`);
+      }
+    }
+  }, [onAjustarStock]);
+
+  const updateCreditoTrabajador = useCallback(async (id: string, updates: Partial<CreditoTrabajador>) => {
+    const credito = creditosTrabajadores.find(c => c.id === id);
+    if (!credito) return;
+    const updated = { ...credito, ...updates };
+    await db.updateCreditoTrabajador(updated);
+    setCreditosTrabajadores(prev => prev.map(c => c.id === id ? updated : c));
+  }, [creditosTrabajadores]);
+
+  const deleteCreditoTrabajador = useCallback(async (id: string) => {
+    await db.deleteCreditoTrabajador(id);
+    setCreditosTrabajadores(prev => prev.filter(c => c.id !== id));
+  }, []);
+
+  const registrarPagoCreditoTrabajador = useCallback(async (creditoId: string, pago: Omit<PagoCredito, 'id' | 'creditoId'>) => {
+    const credito = creditosTrabajadores.find(c => c.id === creditoId);
+    if (!credito) return;
+    if (pago.monto <= 0) return;
+    const nuevoPago: PagoCredito = { ...pago, id: generateUUID(), creditoId };
+    const nuevoSaldo = credito.saldo - pago.monto;
+    const nuevoEstado = nuevoSaldo <= 0 ? (credito.descontarDeSalario ? 'descontado' : 'pagado') : credito.estado;
+    const updated: CreditoTrabajador = {
+      ...credito,
+      saldo: Math.max(0, nuevoSaldo),
+      estado: nuevoEstado,
+      pagos: [...credito.pagos, nuevoPago],
+    };
+    await db.updateCreditoTrabajador(updated);
+    setCreditosTrabajadores(prev => prev.map(c => c.id === creditoId ? updated : c));
+  }, [creditosTrabajadores]);
+
+  // --- Trabajadores ---
+  const addTrabajador = useCallback(async (t: Omit<Trabajador, 'id' | 'createdAt'>) => {
+    const nuevo: Trabajador = { ...t, id: generateUUID(), createdAt: new Date().toISOString() };
+    await db.addTrabajador(nuevo);
+    setTrabajadores(prev => [nuevo, ...prev]);
+  }, []);
+
+  const updateTrabajador = useCallback(async (id: string, updates: Partial<Trabajador>) => {
+    const trab = trabajadores.find(t => t.id === id);
+    if (!trab) return;
+    const updated = { ...trab, ...updates };
+    await db.updateTrabajador(updated);
+    setTrabajadores(prev => prev.map(t => t.id === id ? updated : t));
+  }, [trabajadores]);
+
+  const deleteTrabajador = useCallback(async (id: string) => {
+    await db.deleteTrabajador(id);
+    setTrabajadores(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // Sync bidireccional: actualiza React state cuando otro dispositivo hace cambios
+  useEffect(() => {
+    const handle = async (e: Event) => {
+      const { table, eventType, id } = (e as CustomEvent<{ table: string; eventType: string; id: string }>).detail;
+
+      if (table === 'gastos') {
+        if (eventType === 'DELETE') {
+          setGastos((prev) => prev.filter((g) => g.id !== id));
+        } else {
+          db.getAllGastos()
+            .then((list) => aplicarGastos(list as Gasto[]))
+            .catch(() => {});
+        }
+      } else if (table === 'creditos_clientes') {
+        if (eventType === 'DELETE') {
+          setCreditosClientes(prev => prev.filter(c => c.id !== id));
+        } else {
+          db.getAllCreditosClientes().then(setCreditosClientes as any).catch(() => {});
+        }
+      } else if (table === 'creditos_trabajadores') {
+        if (eventType === 'DELETE') {
+          setCreditosTrabajadores(prev => prev.filter(c => c.id !== id));
+        } else {
+          db.getAllCreditosTrabajadores().then(setCreditosTrabajadores as any).catch(() => {});
+        }
+      } else if (table === 'trabajadores') {
+        if (eventType === 'DELETE') {
+          setTrabajadores(prev => prev.filter(t => t.id !== id));
+        } else {
+          db.getAllTrabajadores().then(setTrabajadores as any).catch(() => {});
+        }
+      }
+    };
+    window.addEventListener('nexus-realtime-change', handle);
+    return () => window.removeEventListener('nexus-realtime-change', handle);
+  }, []);
+
+  return {
+    // State
+    gastos, setGastos,
+    ahorros, setAhorros,
+    creditosClientes, setCreditosClientes,
+    creditosTrabajadores, setCreditosTrabajadores,
+    trabajadores, setTrabajadores,
+    // Actions
+    addGasto, updateGasto, deleteGasto, generarReporte,
+    ejecutarRecuperacionGastos,
+    addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito,
+    addCreditoTrabajador, updateCreditoTrabajador, deleteCreditoTrabajador, registrarPagoCreditoTrabajador,
+    addTrabajador, updateTrabajador, deleteTrabajador,
+  };
+}

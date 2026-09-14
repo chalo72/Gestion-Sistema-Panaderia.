@@ -1,0 +1,1299 @@
+import { supabase } from './supabase';
+import type { AgenteId } from '@/types/agente-id';
+import type {
+    IDatabase,
+    DBProducto,
+    DBProveedor,
+    DBPrecio,
+    DBPrePedido,
+    DBAlerta,
+    DBConfiguracion,
+    DBInventarioItem,
+    DBMovimientoInventario,
+    DBRecepcion,
+    DBHistorialPrecio,
+    DBVenta,
+    DBCajaSesion,
+    DBAgenteConfig,
+    DBMisionAgent,
+    DBHallazgoAgente
+} from './database';
+
+// BLINDAJE NEXUS-VOLT: Sanitizador de valores numéricos para evitar Error 22003 (Numeric Overflow)
+const safeN = (val: any): number => {
+    if (val === null || val === undefined || isNaN(val) || !isFinite(val)) return 0;
+    // Postgres numeric(10,2) soporta hasta 99,999,999.99
+    // Limitamos a 9,999,999 para dejar margen de seguridad
+    const LIMIT = 99999999;
+    if (val > LIMIT) return LIMIT;
+    if (val < -LIMIT) return -LIMIT;
+    return Number(Number(val).toFixed(2));
+};
+
+export class SupabaseDatabase implements IDatabase {
+
+    async init(): Promise<void> {
+        // No init needed for HTTP client
+        return Promise.resolve();
+    }
+
+    // --- Workflows ---
+    async saveWorkflow(w: any): Promise<void> {
+        const { error } = await supabase.from('workflows').upsert({
+            id: w.id,
+            name: w.name || 'Sin Título',
+            nodes: w.nodes || [],
+            edges: w.edges || [],
+            description: w.description || '',
+            category: w.category || '',
+            active: w.active ?? true,
+            updated_at: new Date().toISOString()
+        });
+        if (error) throw error;
+    }
+
+    async deleteWorkflow(id: string): Promise<void> {
+        const { error } = await supabase.from('workflows').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Productos ---
+    async getAllProductos(): Promise<DBProducto[]> {
+        const { data, error } = await supabase.from('productos').select('*');
+        if (error) throw error;
+        return data.map(this.mapProductoFromDB);
+    }
+
+    async addProducto(producto: DBProducto): Promise<void> {
+        const dbProducto = this.mapProductoToDB(producto);
+        const { error } = await supabase.from('productos').upsert(dbProducto);
+        if (error) throw error;
+    }
+
+    async updateProducto(producto: DBProducto): Promise<void> {
+        await this.addProducto(producto); // Reutilizamos upsert
+    }
+
+    async deleteProducto(id: string): Promise<void> {
+        const { error } = await supabase.from('productos').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Recetas ---
+    async getAllRecetas(): Promise<any[]> {
+        const { data, error } = await supabase.from('recetas').select('*');
+        if (error) throw error;
+        return data.map(r => {
+            let instrucciones = r.instrucciones || '';
+            let extraFields = {};
+            try {
+                const parsed = JSON.parse(r.instrucciones);
+                if (parsed && typeof parsed === 'object' && parsed.hasOwnProperty('rawInstrucciones') && parsed.metadata) {
+                    instrucciones = parsed.rawInstrucciones;
+                    extraFields = parsed.metadata;
+                }
+            } catch {}
+            return {
+                id: r.id,
+                productoId: r.producto_id,
+                ingredientes: r.ingredientes || [],
+                porcionesResultantes: r.porciones_resultantes,
+                instrucciones,
+                fechaActualizacion: r.fecha_actualizacion,
+                ...extraFields
+            };
+        });
+    }
+
+    async getRecetaByProducto(productoId: string): Promise<any | undefined> {
+        const { data, error } = await supabase.from('recetas').select('*').eq('producto_id', productoId).maybeSingle();
+        if (error) throw error;
+        if (!data) return undefined;
+        let instrucciones = data.instrucciones || '';
+        let extraFields = {};
+        try {
+            const parsed = JSON.parse(data.instrucciones);
+            if (parsed && typeof parsed === 'object' && parsed.hasOwnProperty('rawInstrucciones') && parsed.metadata) {
+                instrucciones = parsed.rawInstrucciones;
+                extraFields = parsed.metadata;
+            }
+        } catch {}
+        return {
+            id: data.id,
+            productoId: data.producto_id,
+            ingredientes: data.ingredientes || [],
+            porcionesResultantes: data.porciones_resultantes,
+            instrucciones,
+            fechaActualizacion: data.fecha_actualizacion,
+            ...extraFields
+        };
+    }
+
+    async addReceta(receta: any): Promise<void> {
+        const metadata = {
+            temperaturaHorno: receta.temperaturaHorno,
+            tiempoHorneado: receta.tiempoHorneado,
+            tiempoFermentacion: receta.tiempoFermentacion,
+            dificultad: receta.dificultad,
+            costoTotal: receta.costoTotal,
+            costoPorPorcion: receta.costoPorPorcion
+        };
+        const wrappedInstrucciones = JSON.stringify({
+            rawInstrucciones: receta.instrucciones || '',
+            metadata
+        });
+
+        const { error } = await supabase.from('recetas').upsert({
+            id: receta.id,
+            producto_id: receta.productoId,
+            ingredientes: receta.ingredientes,
+            porciones_resultantes: receta.porcionesResultantes,
+            instrucciones: wrappedInstrucciones,
+            fecha_actualizacion: receta.fechaActualizacion
+        });
+        if (error) throw error;
+    }
+
+    async updateReceta(receta: any): Promise<void> {
+        await this.addReceta(receta);
+    }
+
+    async deleteReceta(id: string): Promise<void> {
+        const { error } = await supabase.from('recetas').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Proveedores ---
+    async getAllProveedores(): Promise<DBProveedor[]> {
+        const { data, error } = await supabase.from('proveedores').select('*');
+        if (error) throw error;
+        return data.map(p => ({
+            id: p.id,
+            nombre: p.nombre,
+            contacto: p.contacto,
+            telefono: p.telefono,
+            email: p.email,
+            direccion: p.direccion,
+            createdAt: p.created_at
+        }));
+    }
+
+    async addProveedor(proveedor: DBProveedor): Promise<void> {
+        const { error } = await supabase.from('proveedores').upsert({
+            id: proveedor.id,
+            nombre: proveedor.nombre,
+            contacto: proveedor.contacto,
+            telefono: proveedor.telefono,
+            email: proveedor.email,
+            direccion: proveedor.direccion,
+            created_at: proveedor.createdAt
+        });
+        if (error) throw error;
+    }
+
+    async updateProveedor(proveedor: DBProveedor): Promise<void> {
+        await this.addProveedor(proveedor);
+    }
+
+    async deleteProveedor(id: string): Promise<void> {
+        const { error } = await supabase.from('proveedores').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Protocolo Sentinel: Lápidas (Tombstones) ---
+    async getTombstones(table: string): Promise<string[]> {
+        const { data, error } = await supabase.from('tombstones').select('item_id').eq('table', table);
+        if (error) {
+            console.warn(`⚠️ Error consultando lápidas en Supabase para ${table}:`, error);
+            return [];
+        }
+        return (data || []).map(t => t.item_id);
+    }
+
+    async addTombstone(table: string, id: string): Promise<void> {
+        const { error } = await supabase.from('tombstones').upsert({
+            id: `${table}:${id}`,
+            table: table,
+            item_id: id,
+        });
+        if (error) console.error(`❌ Error al crear lápida en Supabase (${table}:${id}):`, error);
+    }
+
+    async removeTombstone(table: string, id: string): Promise<void> {
+        const { error } = await supabase.from('tombstones').delete().eq('id', `${table}:${id}`);
+        if (error) console.error(`❌ Error al eliminar lápida en Supabase (${table}:${id}):`, error);
+    }
+
+    // --- Precios ---
+    async getAllPrecios(): Promise<DBPrecio[]> {
+        const { data, error } = await supabase.from('precios').select('*');
+        if (error) throw error;
+        return data.map(this.mapPrecioFromDB);
+    }
+
+    async getPreciosByProducto(productoId: string): Promise<DBPrecio[]> {
+        const { data, error } = await supabase.from('precios').select('*').eq('producto_id', productoId);
+        if (error) throw error;
+        return data.map(this.mapPrecioFromDB);
+    }
+
+    async getPreciosByProveedor(proveedorId: string): Promise<DBPrecio[]> {
+        const { data, error } = await supabase.from('precios').select('*').eq('proveedor_id', proveedorId);
+        if (error) throw error;
+        return data.map(this.mapPrecioFromDB);
+    }
+
+    async getPrecioByProductoProveedor(productoId: string, proveedorId: string): Promise<DBPrecio | undefined> {
+        // Puede haber varias presentaciones (bulto/unidad); tomamos la primera
+        const { data, error } = await supabase.from('precios')
+            .select('*')
+            .eq('producto_id', productoId)
+            .eq('proveedor_id', proveedorId)
+            .limit(1);
+        if (error) throw error;
+        const row = Array.isArray(data) ? data[0] : data;
+        return row ? this.mapPrecioFromDB(row) : undefined;
+    }
+
+    async addPrecio(precio: DBPrecio): Promise<void> {
+        // Upsert por `id` (no por producto+proveedor): permite varias presentaciones
+        // del mismo producto (ej. bulto 50 kg y unidad) sin aplastarse entre sí.
+        const { error } = await supabase.from('precios').upsert(this.mapPrecioToDB(precio), { onConflict: 'id' });
+        if (error) throw error;
+    }
+
+    async updatePrecio(precio: DBPrecio): Promise<void> {
+        await this.addPrecio(precio);
+    }
+
+    async deletePrecio(id: string): Promise<void> {
+        const { error } = await supabase.from('precios').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- PrePedidos ---
+    async getAllPrePedidos(): Promise<DBPrePedido[]> {
+        const { data, error } = await supabase.from('prepedidos').select(`
+            *,
+            items:prepedido_items(*)
+        `);
+        if (error) throw error;
+
+        return data.map((pp: any) => ({
+            id: pp.id,
+            nombre: pp.nombre,
+            proveedorId: pp.proveedor_id,
+            total: pp.total,
+            presupuestoMaximo: pp.presupuesto_maximo,
+            estado: pp.estado,
+            notas: pp.notas,
+            fechaCreacion: pp.fecha_creacion,
+            fechaActualizacion: pp.fecha_actualizacion,
+            items: (pp.items || []).map((i: any) => ({
+                id: i.id,
+                productoId: i.producto_id,
+                proveedorId: pp.proveedor_id, // Inherit
+                cantidad: i.cantidad,
+                precioUnitario: i.precio_unitario,
+                subtotal: i.subtotal
+            }))
+        }));
+    }
+
+    async addPrePedido(prepedido: DBPrePedido): Promise<void> {
+        // Upsert parent — handles both new inserts and duplicates from sync
+        const { error: ppError } = await supabase.from('prepedidos').upsert({
+            id: prepedido.id,
+            nombre: prepedido.nombre,
+            proveedor_id: prepedido.proveedorId,
+            total: prepedido.total,
+            presupuesto_maximo: prepedido.presupuestoMaximo,
+            estado: prepedido.estado,
+            notas: prepedido.notas,
+            fecha_creacion: prepedido.fechaCreacion,
+            fecha_actualizacion: prepedido.fechaActualizacion
+        });
+        if (ppError) throw ppError;
+
+        // Replace items: delete existing then re-insert (same strategy as updatePrePedido)
+        await supabase.from('prepedido_items').delete().eq('prepedido_id', prepedido.id);
+        if (prepedido.items.length > 0) {
+            const items = prepedido.items.map(i => ({
+                id: i.id,
+                prepedido_id: prepedido.id,
+                producto_id: i.productoId,
+                cantidad: i.cantidad,
+                precio_unitario: i.precioUnitario,
+                subtotal: i.subtotal
+            }));
+            const { error: itemsError } = await supabase.from('prepedido_items').upsert(items);
+            if (itemsError) throw itemsError;
+        }
+    }
+
+    async updatePrePedido(prepedido: DBPrePedido): Promise<void> {
+        // Update parent
+        const { error: ppError } = await supabase.from('prepedidos').update({
+            nombre: prepedido.nombre,
+            proveedor_id: prepedido.proveedorId,
+            total: prepedido.total,
+            presupuesto_maximo: prepedido.presupuestoMaximo,
+            estado: prepedido.estado,
+            notas: prepedido.notas,
+            fecha_actualizacion: prepedido.fechaActualizacion
+        }).eq('id', prepedido.id);
+        if (ppError) throw ppError;
+
+        // Replace items (Delete and Insert strategy for simplicity)
+        const { error: delError } = await supabase.from('prepedido_items').delete().eq('prepedido_id', prepedido.id);
+        if (delError) throw delError;
+
+        if (prepedido.items.length > 0) {
+            const items = prepedido.items.map(i => ({
+                id: i.id, // Reuse ID if possible, or new ID if generated clientside. 
+                // Note: DB generates UUID if null. If we pass existing ID, it's fine.
+                prepedido_id: prepedido.id,
+                producto_id: i.productoId,
+                cantidad: i.cantidad,
+                precio_unitario: i.precioUnitario,
+                subtotal: i.subtotal
+            }));
+            const { error: itemsError } = await supabase.from('prepedido_items').insert(items);
+            if (itemsError) throw itemsError;
+        }
+    }
+
+    async deletePrePedido(id: string): Promise<void> {
+        const { error } = await supabase.from('prepedidos').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Alertas ---
+    async getAllAlertas(): Promise<DBAlerta[]> {
+        const { data, error } = await supabase.from('alertas').select('*');
+        if (error) throw error;
+        return data.map((a: any) => ({
+            id: a.id,
+            productoId: a.producto_id,
+            proveedorId: a.proveedor_id,
+            tipo: a.tipo,
+            precioAnterior: a.precio_anterior,
+            precioNuevo: a.precio_nuevo,
+            diferencia: a.diferencia,
+            porcentajeCambio: a.porcentaje_cambio,
+            fecha: a.fecha,
+            leida: a.leida
+        }));
+    }
+
+    async addAlerta(alerta: DBAlerta): Promise<void> {
+        const { error } = await supabase.from('alertas').insert({
+            id: alerta.id,
+            producto_id: alerta.productoId,
+            proveedor_id: alerta.proveedorId,
+            tipo: alerta.tipo,
+            precio_anterior: alerta.precioAnterior,
+            precio_nuevo: alerta.precioNuevo,
+            diferencia: alerta.diferencia,
+            porcentaje_cambio: alerta.porcentajeCambio,
+            fecha: alerta.fecha,
+            leida: alerta.leida
+        });
+        if (error) throw error;
+    }
+
+    async updateAlerta(alerta: DBAlerta): Promise<void> {
+        const { error } = await supabase.from('alertas').update({
+            leida: alerta.leida
+        }).eq('id', alerta.id);
+        if (error) throw error;
+    }
+
+    async deleteAlerta(id: string): Promise<void> {
+        const { error } = await supabase.from('alertas').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    async clearAllAlertas(): Promise<void> {
+        const { data: allAlertas } = await supabase.from('alertas').select('id');
+        if (allAlertas && allAlertas.length > 0) {
+            const ids = allAlertas.map(a => a.id);
+            const { error } = await supabase.from('alertas').delete().in('id', ids);
+            if (error) throw error;
+        }
+    }
+
+    // --- Configuración ---
+    async getConfiguracion(): Promise<DBConfiguracion | undefined> {
+        const { data, error } = await supabase.from('configuracion').select('*').eq('id', 'main').maybeSingle();
+        if (error) throw error;
+        if (!data) return undefined;
+        return {
+            id: data.id,
+            nombreNegocio: data.nombre_negocio,
+            direccionNegocio: data.direccion_negocio,
+            telefonoNegocio: data.telefono_negocio,
+            emailNegocio: data.email_negocio,
+            moneda: data.moneda,
+            margenUtilidadDefault: data.margen_utilidad_default,
+            impuestoPorcentaje: data.impuesto_porcentaje || 0,
+            umbralAlerta: data.umbral_alerta || 5,
+            ajusteAutomatico: data.ajuste_automatico,
+            notificarSubidas: data.notificar_subidas,
+            mostrarUtilidadEnLista: data.mostrar_utilidad_en_lista ?? true,
+            categorias: data.categorias || [],
+            unidades: data.unidades || data.metadata?.unidades || [],
+            destinos: data.destinos || data.metadata?.destinos || [],
+            latasPorHorno: data.metadata?.latasPorHorno,
+            pesoArrobaKg: data.metadata?.pesoArrobaKg
+        };
+    }
+
+    async getAllConfiguraciones(): Promise<any[]> {
+        const { data, error } = await supabase.from('configuracion').select('*');
+        if (error) throw error;
+        return data || [];
+    }
+
+    async saveConfiguracion(config: DBConfiguracion): Promise<void> {
+        const baseConfig: Record<string, any> = {
+            id: 'main',
+            nombre_negocio: config.nombreNegocio,
+            direccion_negocio: config.direccionNegocio,
+            telefono_negocio: config.telefonoNegocio,
+            email_negocio: config.emailNegocio,
+            moneda: config.moneda,
+            margen_utilidad_default: config.margenUtilidadDefault,
+            impuesto_porcentaje: config.impuestoPorcentaje,
+            umbral_alerta: config.umbralAlerta,
+            ajuste_automatico: config.ajusteAutomatico,
+            notificar_subidas: config.notificarSubidas,
+            mostrar_utilidad_en_lista: config.mostrarUtilidadEnLista,
+            categorias: config.categorias,
+            unidades: (config as any).unidades || [],
+            destinos: (config as any).destinos || [],
+        };
+
+        const withMetadata = {
+            ...baseConfig,
+            metadata: {
+              ...(config as any).metadata,
+              unidades: (config as any).unidades,
+              destinos: (config as any).destinos,
+              latasPorHorno: config.latasPorHorno,
+              pesoArrobaKg: config.pesoArrobaKg
+            }
+        };
+
+        const { error } = await supabase.from('configuracion').upsert(withMetadata);
+        if (error) {
+            // Si la columna metadata no existe en la BD de Supabase, reintentar sin ella
+            if (error.message?.includes('metadata') || error.code === 'PGRST204') {
+                const { error: retryErr } = await supabase.from('configuracion').upsert(baseConfig);
+                if (retryErr) throw retryErr;
+            } else {
+                throw error;
+            }
+        }
+    }
+
+
+    // --- Inventario ---
+    async getAllInventario(): Promise<DBInventarioItem[]> {
+        const { data, error } = await supabase.from('inventario').select('*');
+        if (error) throw error;
+        return data.map((i: any) => ({
+            id: i.id,
+            productoId: i.producto_id,
+            stockActual: i.stock_actual,
+            stockMinimo: i.stock_minimo,
+            ubicacion: i.ubicacion,
+            ultimoMovimiento: i.ultimo_movimiento
+        }));
+    }
+
+    async getInventarioItemByProducto(productoId: string): Promise<DBInventarioItem | undefined> {
+        const { data, error } = await supabase.from('inventario').select('*').eq('producto_id', productoId).maybeSingle();
+        if (error) throw error;
+        if (!data) return undefined;
+        return {
+            id: data.id,
+            productoId: data.producto_id,
+            stockActual: data.stock_actual,
+            stockMinimo: data.stock_minimo,
+            ubicacion: data.ubicacion,
+            ultimoMovimiento: data.ultimo_movimiento
+        };
+    }
+
+    async updateInventarioItem(item: DBInventarioItem): Promise<void> {
+        const { error } = await supabase.from('inventario').upsert({
+            id: item.id,
+            producto_id: item.productoId,
+            stock_actual: item.stockActual,
+            stock_minimo: item.stockMinimo,
+            ubicacion: item.ubicacion,
+            ultimo_movimiento: item.ultimoMovimiento
+        }, { onConflict: 'producto_id' });
+        if (error) throw error;
+    }
+
+    // --- Movimientos ---
+    async getAllMovimientos(): Promise<DBMovimientoInventario[]> {
+        const { data, error } = await supabase.from('movimientos').select('*');
+        if (error) throw error;
+        return data.map((m: any) => ({
+            id: m.id,
+            productoId: m.producto_id,
+            tipo: m.tipo,
+            cantidad: m.cantidad,
+            motivo: m.motivo,
+            fecha: m.fecha,
+            usuario: 'system'
+        }));
+    }
+
+    async addMovimiento(movimiento: DBMovimientoInventario): Promise<void> {
+        const { error } = await supabase.from('movimientos').insert({
+            id: movimiento.id,
+            producto_id: movimiento.productoId,
+            tipo: movimiento.tipo,
+            cantidad: movimiento.cantidad,
+            motivo: movimiento.motivo,
+            fecha: movimiento.fecha
+        });
+        if (error) throw error;
+    }
+
+    // --- Recepciones ---
+    async getAllRecepciones(): Promise<DBRecepcion[]> {
+        const { data, error } = await supabase.from('recepciones').select('*');
+        if (error) throw error;
+        return data.map((r: any) => ({
+            id: r.id,
+            prePedidoId: r.pre_pedido_id,
+            proveedorId: r.proveedor_id,
+            numeroFactura: r.numero_factura,
+            fechaFactura: r.fecha_factura,
+            totalFactura: r.total_factura,
+            estado: r.estado,
+            recibidoPor: r.recibido_por,
+            firma: r.firma,
+            observaciones: r.observaciones,
+            fechaRecepcion: r.fecha_recepcion,
+            imagenFactura: r.imagen_factura,
+            items: r.items || []
+        }));
+    }
+
+    async addRecepcion(recepcion: DBRecepcion): Promise<void> {
+        const { error } = await supabase.from('recepciones').insert({
+            id: recepcion.id,
+            pre_pedido_id: recepcion.prePedidoId,
+            proveedor_id: recepcion.proveedorId,
+            numero_factura: recepcion.numeroFactura,
+            fecha_factura: recepcion.fechaFactura,
+            total_factura: recepcion.totalFactura,
+            estado: recepcion.estado,
+            recibido_por: recepcion.recibidoPor,
+            firma: recepcion.firma,
+            observaciones: recepcion.observaciones,
+            fecha_recepcion: recepcion.fechaRecepcion,
+            imagen_factura: recepcion.imagenFactura,
+            items: recepcion.items // Saving as JSONB
+        });
+        if (error) throw error;
+    }
+
+    async updateRecepcion(recepcion: DBRecepcion): Promise<void> {
+        const { error } = await supabase.from('recepciones').update({
+            numero_factura: recepcion.numeroFactura,
+            fecha_factura: recepcion.fechaFactura,
+            total_factura: recepcion.totalFactura,
+            estado: recepcion.estado,
+            recibido_por: recepcion.recibidoPor,
+            firma: recepcion.firma,
+            observaciones: recepcion.observaciones,
+            fecha_recepcion: recepcion.fechaRecepcion,
+            imagen_factura: recepcion.imagenFactura,
+            items: recepcion.items
+        }).eq('id', recepcion.id);
+        if (error) throw error;
+    }
+
+
+    // --- Historial ---
+    async getAllHistorial(): Promise<DBHistorialPrecio[]> {
+        const { data, error } = await supabase.from('historial_precios').select('*');
+        if (error) throw error;
+        return data.map((h: any) => ({
+            id: h.id,
+            productoId: h.producto_id,
+            proveedorId: h.proveedor_id,
+            precioAnterior: h.precio_anterior,
+            precioNuevo: h.precio_nuevo,
+            fechaCambio: h.fecha_cambio
+        }));
+    }
+
+    async addHistorial(entry: DBHistorialPrecio): Promise<void> {
+        const { error } = await supabase.from('historial_precios').insert({
+            id: entry.id,
+            producto_id: entry.productoId,
+            proveedor_id: entry.proveedorId,
+            precio_anterior: entry.precioAnterior,
+            precio_nuevo: entry.precioNuevo,
+            fecha_cambio: entry.fechaCambio
+        });
+        if (error) throw error;
+    }
+
+    async getHistorialByProducto(productoId: string): Promise<DBHistorialPrecio[]> {
+        const { data, error } = await supabase.from('historial_precios').select('*').eq('producto_id', productoId);
+        if (error) throw error;
+        return data.map((h: any) => ({
+            id: h.id,
+            productoId: h.producto_id,
+            proveedorId: h.proveedor_id,
+            precioAnterior: h.precio_anterior,
+            precioNuevo: h.precio_nuevo,
+            fechaCambio: h.fecha_cambio
+        }));
+    }
+
+    // --- Ventas ---
+    async getAllVentas(): Promise<DBVenta[]> {
+        const { data, error } = await supabase.from('ventas').select('*');
+        if (error) throw error;
+        return data.map(this.mapVentaFromDB);
+    }
+
+    async addVenta(venta: DBVenta): Promise<void> {
+        const { error } = await supabase.from('ventas').upsert(this.mapVentaToDB(venta));
+        if (error) throw error;
+    }
+
+    async getVentasByCaja(cajaId: string): Promise<DBVenta[]> {
+        const { data, error } = await supabase.from('ventas').select('*').eq('caja_id', cajaId);
+        if (error) throw error;
+        return data.map(this.mapVentaFromDB);
+    }
+
+    // --- Caja ---
+    async getAllSesionesCaja(): Promise<DBCajaSesion[]> {
+        const { data, error } = await supabase.from('caja').select('*');
+        if (error) throw error;
+        return data.map(this.mapCajaFromDB);
+    }
+
+    async getSesionCajaActiva(): Promise<DBCajaSesion | undefined> {
+        const { data, error } = await supabase.from('caja').select('*').eq('estado', 'abierta').maybeSingle();
+        if (error) throw error;
+        return data ? this.mapCajaFromDB(data) : undefined;
+    }
+
+    async addSesionCaja(sesion: DBCajaSesion): Promise<void> {
+        const { error } = await supabase.from('caja').upsert(this.mapCajaToDB(sesion));
+        if (error) throw error;
+    }
+
+    async updateSesionCaja(sesion: DBCajaSesion): Promise<void> {
+        await this.addSesionCaja(sesion);
+    }
+
+    // --- Ahorros ---
+    async getAllAhorros(): Promise<any[]> {
+        const { data, error } = await supabase.from('ahorros').select('*');
+        if (error) return [];
+        return data;
+    }
+    async addAhorro(ahorro: any): Promise<void> {
+        await supabase.from('ahorros').upsert(ahorro);
+    }
+    async updateAhorro(ahorro: any): Promise<void> {
+        await this.addAhorro(ahorro);
+    }
+    async deleteAhorro(id: string): Promise<void> {
+        await supabase.from('ahorros').delete().eq('id', id);
+    }
+
+    // --- Mesas ---
+    async getAllMesas(): Promise<any[]> {
+        const { data, error } = await supabase.from('mesas').select('*');
+        if (error) return [];
+        return data.map((m: any) => ({
+            id: m.id,
+            numero: m.numero,
+            capacidad: m.capacidad,
+            estado: m.estado,
+            pedidoActivoId: m.pedido_activo_id ?? undefined,
+            ubicacion: m.ubicacion ?? undefined,
+            abiertaPor: m.abierta_por ?? undefined,
+            abiertaPorId: m.abierta_por_id ?? undefined,
+            fechaApertura: m.fecha_apertura ?? undefined,
+        }));
+    }
+    async updateMesa(mesa: any): Promise<void> {
+        const row = {
+            id: mesa.id,
+            numero: mesa.numero,
+            capacidad: mesa.capacidad,
+            estado: mesa.estado,
+            pedido_activo_id: mesa.pedidoActivoId ?? null,
+            ubicacion: mesa.ubicacion ?? null,
+            abierta_por: mesa.abiertaPor ?? null,
+            abierta_por_id: mesa.abiertaPorId ?? null,
+            fecha_apertura: mesa.fechaApertura ?? null,
+        };
+        const { error } = await supabase.from('mesas').upsert(row);
+        if (error) throw error;
+    }
+    async deleteMesa(id: string): Promise<void> {
+        const { error } = await supabase.from('mesas').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Pedidos Activos ---
+    async getAllPedidosActivos(): Promise<any[]> {
+        const { data, error } = await supabase.from('pedidos_activos').select('*');
+        if (error) return [];
+        return data.map((p: any) => ({
+            id: p.id,
+            mesaId: p.mesa_id ?? undefined,
+            items: p.items ?? [],
+            cliente: p.cliente ?? undefined,
+            total: p.total ?? 0,
+            estado: p.estado,
+            notas: p.notas ?? undefined,
+            fechaInicio: p.fecha_inicio,
+            ultimoCambio: p.ultimo_cambio,
+        }));
+    }
+    async addPedidoActivo(pedido: any): Promise<void> {
+        const row = {
+            id: pedido.id,
+            mesa_id: pedido.mesaId ?? null,
+            items: pedido.items ?? [],
+            cliente: pedido.cliente ?? null,
+            total: pedido.total ?? 0,
+            estado: pedido.estado,
+            notas: pedido.notas ?? null,
+            fecha_inicio: pedido.fechaInicio,
+            ultimo_cambio: pedido.ultimoCambio ?? new Date().toISOString(),
+        };
+        await supabase.from('pedidos_activos').upsert(row);
+    }
+    async updatePedidoActivo(pedido: any): Promise<void> {
+        await this.addPedidoActivo(pedido);
+    }
+    async deletePedidoActivo(id: string): Promise<void> {
+        await supabase.from('pedidos_activos').delete().eq('id', id);
+    }
+
+    // --- Gastos ---
+    async getAllGastos(): Promise<any[]> {
+        const { data, error } = await supabase.from('gastos').select('*');
+        if (error) return [];
+        return data.map(g => {
+            const meta = g.metadata || {};
+            return {
+                ...meta,
+                id: g.id,
+                descripcion: g.descripcion,
+                monto: g.monto,
+                categoria: g.categoria,
+                fecha: g.fecha,
+                proveedorId: g.proveedor_id,
+                comprobanteUrl: g.comprobante_url,
+                metodoPago: g.metodo_pago,
+                usuarioId: g.usuario_id,
+                cajaId: g.caja_id,
+                metadata: meta
+            };
+        });
+    }
+    async addGasto(gasto: any): Promise<void> {
+        const {
+            id, descripcion, monto, categoria, fecha, proveedorId,
+            comprobanteUrl, metodoPago, usuarioId, cajaId, metadata,
+            proveedor_id, comprobante_url, metodo_pago, usuario_id, caja_id, // ignore db keys if present
+            ...rest
+        } = gasto;
+        
+        await supabase.from('gastos').upsert({
+            id: gasto.id,
+            descripcion: gasto.descripcion,
+            monto: gasto.monto,
+            categoria: gasto.categoria,
+            fecha: gasto.fecha,
+            proveedor_id: gasto.proveedorId,
+            comprobante_url: gasto.comprobanteUrl,
+            metodo_pago: gasto.metodoPago,
+            usuario_id: gasto.usuarioId,
+            caja_id: gasto.cajaId,
+            metadata: {
+                ...(metadata || {}),
+                ...rest
+            }
+        });
+    }
+    async updateGasto(gasto: any): Promise<void> {
+        await this.addGasto(gasto);
+    }
+    async deleteGasto(id: string): Promise<void> {
+        await supabase.from('gastos').delete().eq('id', id);
+    }
+
+    // --- Trabajadores ---
+    async getAllTrabajadores(): Promise<any[]> {
+        const { data, error } = await supabase.from('trabajadores').select('*');
+        if (error) return [];
+        return data.map((t: any) => ({
+            id: t.id,
+            nombre: t.nombre,
+            cargo: t.cargo,
+            telefono: t.telefono,
+            documento: t.documento,
+            salario: t.salario,
+            fechaIngreso: t.fecha_ingreso,
+            estado: t.estado,
+            horario: t.horario,
+            notas: t.notas,
+        }));
+    }
+    async addTrabajador(t: any): Promise<void> {
+        await supabase.from('trabajadores').upsert({
+            id: t.id,
+            nombre: t.nombre,
+            cargo: t.cargo,
+            telefono: t.telefono,
+            documento: t.documento,
+            salario: t.salario,
+            fecha_ingreso: t.fechaIngreso,
+            estado: t.estado,
+            horario: t.horario,
+            notas: t.notas,
+        });
+    }
+    async updateTrabajador(t: any): Promise<void> {
+        await this.addTrabajador(t);
+    }
+    async deleteTrabajador(id: string): Promise<void> {
+        await supabase.from('trabajadores').delete().eq('id', id);
+    }
+
+    // --- Créditos Trabajadores ---
+    async getAllCreditosTrabajadores(): Promise<any[]> {
+        const { data, error } = await supabase.from('creditos_trabajadores').select('*');
+        if (error) return [];
+        return data.map((c: any) => ({
+            id: c.id,
+            trabajadorId: c.trabajador_id,
+            monto: c.monto,
+            tipo: c.tipo,
+            descripcion: c.descripcion,
+            fecha: c.fecha,
+            estado: c.estado,
+        }));
+    }
+    async addCreditoTrabajador(c: any): Promise<void> {
+        await supabase.from('creditos_trabajadores').upsert({
+            id: c.id,
+            trabajador_id: c.trabajadorId,
+            monto: c.monto,
+            tipo: c.tipo,
+            descripcion: c.descripcion,
+            fecha: c.fecha,
+            estado: c.estado,
+        });
+    }
+    async updateCreditoTrabajador(c: any): Promise<void> {
+        await this.addCreditoTrabajador(c);
+    }
+    async deleteCreditoTrabajador(id: string): Promise<void> {
+        await supabase.from('creditos_trabajadores').delete().eq('id', id);
+    }
+
+    async clearAll(): Promise<void> {
+        // Not implemented for safety in cloud
+        console.warn('clearAll called on Supabase DB - operation ignored for safety');
+    }
+
+    // --- Ordenes Producción ---
+    async getAllOrdenesProduccion(): Promise<any[]> {
+        const { data, error } = await supabase.from('produccion').select('*');
+        if (error) return [];
+        return data;
+    }
+    async addOrdenProduccion(o: any): Promise<void> {
+        await supabase.from('produccion').upsert(o);
+    }
+    async updateOrdenProduccion(o: any): Promise<void> {
+        await this.addOrdenProduccion(o);
+    }
+    async deleteOrdenProduccion(id: string): Promise<void> {
+        await supabase.from('produccion').delete().eq('id', id);
+    }
+
+    // --- Facturas Escaneadas (Not synced to cloud by default) ---
+    async getAllFacturasEscaneadas(): Promise<any[]> { return []; }
+    async addFacturaEscaneada(): Promise<void> { }
+    async deleteFacturaEscaneada(): Promise<void> { }
+    async getFacturasEscaneadasByProveedor(): Promise<any[]> { return []; }
+    async getFacturasEscaneadasByFecha(): Promise<any[]> { return []; }
+
+    // --- Préstamos Caja ---
+    async getAllPrestamosCaja(): Promise<any[]> { return []; }
+    async addPrestamoCaja(): Promise<void> { }
+    async updatePrestamoCaja(): Promise<void> { }
+
+    // --- Sentinel Backups ---
+    async saveBackup(id: string, data: any): Promise<void> { 
+        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config' || id === 'dp_producciones_diarias') {
+            const payload = Array.isArray(data) ? data : [data];
+            const { error } = await supabase.from('configuracion').upsert({
+                id: id,
+                categorias: payload
+            });
+            if (error) throw error;
+        }
+    }
+    async getBackup(id: string): Promise<any> {
+        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config' || id === 'dp_producciones_diarias') {
+            const { data, error } = await supabase.from('configuracion').select('categorias').eq('id', id).maybeSingle();
+            if (error) throw error;
+            return data ? data.categorias : null;
+        }
+        return null;
+    }
+
+    // --- Agente Sovereignty ---
+    async getAgenteConfig(id: string): Promise<any | undefined> {
+        const { data, error } = await supabase.from('agente_configs').select('*').eq('id', id).maybeSingle();
+        if (error) throw error;
+        if (!data) return undefined;
+        return {
+            id: data.id,
+            directivaPrimaria: data.directiva_primaria,
+            autonomia: data.autonomia,
+            restricciones: data.restricciones || [],
+            habilidadesHabilitadas: data.habilidades_habilitadas || [],
+            conocimientoInyectado: data.conocimiento_inyectado,
+            ultimaActualizacion: data.ultima_actualizacion
+        };
+    }
+
+    async saveAgenteConfig(config: any): Promise<void> {
+        const { error } = await supabase.from('agente_configs').upsert({
+            id: config.id,
+            directiva_primaria: config.directivaPrimaria,
+            autonomia: config.autonomia,
+            restricciones: config.restricciones,
+            habilidades_habilitadas: config.habilidadesHabilitadas,
+            conocimiento_inyectado: config.conocimientoInyectado,
+            ultima_actualizacion: config.ultimaActualizacion
+        });
+        if (error) throw error;
+    }
+
+    async getAllAgenteConfigs(): Promise<DBAgenteConfig[]> {
+        const { data, error } = await supabase.from('agente_configs').select('*');
+        if (error) throw error;
+        return (data || []).map(d => ({
+            id: d.id as AgenteId, // Cast a AgenteId
+            directivaPrimaria: d.directiva_primaria,
+            autonomia: d.autonomia,
+            restricciones: d.restricciones || [],
+            habilidadesHabilitadas: d.habilidades_habilitadas || [],
+            conocimientoInyectado: d.conocimiento_inyectado,
+            ultimaActualizacion: d.ultima_actualizacion
+        }));
+    }
+
+    // --- Agente Centinela (Implementación Supabase) ---
+    async getAgenteMisiones(agenteId?: AgenteId): Promise<DBMisionAgent[]> {
+        let query = supabase.from('agente_misiones').select('*');
+        if (agenteId) query = query.eq('agente_id', agenteId);
+        const { data, error } = await query;
+        if (error) throw error;
+        return (data || []).map(m => ({
+            id: m.id,
+            agenteId: m.agente_id,
+            creadaPor: m.creada_por,
+            misionExplicita: m.mision_explicita,
+            frecuencia: m.frecuencia,
+            estado: m.estado,
+            ultimaEjecucion: m.ultima_ejecucion,
+            proximaEjecucion: m.proxima_ejecucion,
+            metadata: m.metadata
+        }));
+    }
+
+    async saveAgenteMision(mision: DBMisionAgent): Promise<void> {
+        const { error } = await supabase.from('agente_misiones').upsert({
+            id: mision.id,
+            agente_id: mision.agenteId,
+            creada_por: mision.creadaPor,
+            mision_explicita: mision.misionExplicita,
+            frecuencia: mision.frecuencia,
+            estado: mision.estado,
+            ultima_ejecucion: mision.ultimaEjecucion,
+            proxima_ejecucion: mision.proximaEjecucion,
+            metadata: mision.metadata
+        });
+        if (error) throw error;
+    }
+
+    async deleteAgenteMision(id: string): Promise<void> {
+        const { error } = await supabase.from('agente_misiones').delete().eq('id', id);
+        if (error) throw error;
+    }
+
+    async getAgenteHallazgos(limite: number = 50): Promise<DBHallazgoAgente[]> {
+        const { data, error } = await supabase
+            .from('agente_hallazgos')
+            .select('*')
+            .order('fecha', { ascending: false })
+            .limit(limite);
+        if (error) throw error;
+        return (data || []).map(h => ({
+            id: h.id,
+            agenteId: h.agente_id as AgenteId,
+            misionId: h.mision_id,
+            tipo: h.tipo,
+            gravedad: h.gravedad,
+            titulo: h.titulo,
+            descripcion: h.descripcion,
+            fecha: h.fecha,
+            revisado: h.revisado
+        }));
+    }
+
+    async saveAgenteHallazgo(hallazgo: DBHallazgoAgente): Promise<void> {
+        const { error } = await supabase.from('agente_hallazgos').upsert({
+            id: hallazgo.id,
+            agente_id: hallazgo.agenteId,
+            mision_id: hallazgo.misionId,
+            tipo: hallazgo.tipo,
+            gravedad: hallazgo.gravedad,
+            titulo: hallazgo.titulo,
+            descripcion: hallazgo.descripcion,
+            fecha: hallazgo.fecha,
+            revisado: hallazgo.revisado
+        });
+        if (error) throw error;
+    }
+
+    async marcarHallazgoLeido(id: string): Promise<void> {
+        const { error } = await supabase.from('agente_hallazgos').update({ revisado: true }).eq('id', id);
+        if (error) throw error;
+    }
+
+    // --- Créditos Clientes ---
+    async getAllCreditosClientes(): Promise<any[]> {
+        const { data, error } = await supabase.from('creditos').select('*');
+        if (error) return [];
+        return data;
+    }
+    async addCreditoCliente(c: any): Promise<void> {
+        // Detectar si viene en formato local (camelCase) y convertir a snake_case
+        const row = c.clienteNombre !== undefined ? {
+            id: c.id,
+            cliente_id: c.clienteId ?? null,
+            cliente_nombre: c.clienteNombre,
+            cliente_telefono: c.clienteTelefono ?? null,
+            categoria_cliente: c.categoriaCliente ?? null,
+            monto: c.monto,
+            saldo: c.saldo,
+            descripcion: c.descripcion,
+            fecha: c.fecha,
+            fecha_vencimiento: c.fechaVencimiento ?? null,
+            estado: c.estado,
+            items: c.items ?? [],
+            foto_evidencia: c.fotoEvidencia ?? null,
+            pagos: c.pagos ?? [],
+            usuario_id: c.usuarioId ?? null,
+            created_at: c.createdAt ?? new Date().toISOString(),
+        } : c; // ya está en snake_case (vino de Supabase)
+        const { error } = await supabase.from('creditos').upsert(row);
+        if (error) throw error;
+    }
+    async updateCreditoCliente(c: any): Promise<void> {
+        await this.addCreditoCliente(c);
+    }
+    async deleteCreditoCliente(id: string): Promise<void> {
+        await supabase.from('creditos').delete().eq('id', id);
+    }
+
+    // --- Clientes (CRM) ---
+    async getAllClientes(): Promise<any[]> {
+        const { data, error } = await supabase.from('clientes').select('*');
+        if (error) return [];
+        return data.map(this.mapClienteFromDB);
+    }
+    async addCliente(c: any): Promise<void> {
+        const { error } = await supabase.from('clientes').upsert(this.mapClienteToDB(c));
+        if (error) throw error;
+    }
+    async updateCliente(c: any): Promise<void> {
+        await this.addCliente(c);
+    }
+    async deleteCliente(id: string): Promise<void> {
+        await supabase.from('clientes').delete().eq('id', id);
+    }
+    private mapClienteFromDB(c: any): any {
+        return {
+            id: c.id,
+            nombre: c.nombre,
+            telefono: c.telefono ?? null,
+            tipo: c.tipo ?? 'mayorista',
+            direccion: c.direccion ?? null,
+            createdAt: c.created_at,
+            updatedAt: c.updated_at,
+        };
+    }
+    private mapClienteToDB(c: any): any {
+        return {
+            id: c.id,
+            nombre: c.nombre,
+            telefono: c.telefono ?? null,
+            tipo: c.tipo ?? 'mayorista',
+            direccion: c.direccion ?? null,
+            updated_at: new Date().toISOString(),
+            created_at: c.createdAt ?? c.created_at ?? new Date().toISOString(),
+        };
+    }
+
+    // --- Helpers (Mappers) ---
+    public mapProductoFromDB(p: any): DBProducto {
+        return {
+            id: p.id,
+            nombre: p.nombre,
+            categoria: p.categoria,
+            descripcion: p.descripcion,
+            precioVenta: p.precio_venta,
+            margenUtilidad: p.margen_utilidad,
+            tipo: p.tipo || 'elaborado',
+            costoBase: p.costo_base || 0,
+            createdAt: p.created_at,
+            updatedAt: p.updated_at
+        };
+    }
+
+    private mapProductoToDB(p: DBProducto): any {
+        return {
+            id: p.id,
+            nombre: p.nombre,
+            categoria: p.categoria,
+            descripcion: p.descripcion,
+            precio_venta: safeN(p.precioVenta),
+            margen_utilidad: safeN(p.margenUtilidad),
+            tipo: p.tipo,
+            costo_base: safeN(p.costoBase),
+            created_at: p.createdAt,
+            updated_at: p.updatedAt
+        };
+    }
+
+    public mapPrecioFromDB(p: any): DBPrecio {
+        return {
+            id: p.id,
+            productoId: p.producto_id,
+            proveedorId: p.proveedor_id,
+            precioCosto: p.precio_costo,
+            fechaActualizacion: p.fecha_actualizacion,
+            notas: p.notas,
+            destino: p.destino,
+            tipoEmbalaje: p.tipo_embalaje,
+            cantidadEmbalaje: p.cantidad_embalaje
+        };
+    }
+
+    private mapPrecioToDB(p: DBPrecio): any {
+        return {
+            id: p.id,
+            producto_id: p.productoId,
+            proveedor_id: p.proveedorId,
+            precio_costo: safeN(p.precioCosto),
+            fecha_actualizacion: p.fechaActualizacion,
+            notas: p.notas,
+            destino: p.destino,
+            tipo_embalaje: p.tipoEmbalaje,
+            cantidad_embalaje: p.cantidadEmbalaje
+        };
+    }
+
+    private mapVentaFromDB(v: any): DBVenta {
+        return {
+            id: v.id,
+            cajaId: v.caja_id,
+            items: v.items || [],
+            total: v.total,
+            metodoPago: v.metodo_pago,
+            usuarioId: v.usuario_id,
+            cliente: v.cliente,
+            notas: v.notas,
+            fecha: v.fecha
+        };
+    }
+
+    private mapVentaToDB(v: DBVenta): any {
+        return {
+            id: v.id,
+            caja_id: v.cajaId,
+            items: v.items,
+            total: safeN(v.total),
+            metodo_pago: v.metodoPago,
+            usuario_id: v.usuarioId,
+            cliente: v.cliente,
+            notas: v.notas,
+            fecha: v.fecha
+        };
+    }
+
+    private mapCajaFromDB(c: any): DBCajaSesion {
+        return {
+            id: c.id,
+            usuarioId: c.usuario_id,
+            fechaApertura: c.fecha_apertura,
+            fechaCierre: c.fecha_cierre,
+            montoApertura: c.monto_apertura,
+            montoCierre: c.monto_cierre,
+            totalVentas: c.total_ventas,
+            ventasIds: c.ventas_ids || [],
+            estado: c.estado
+        };
+    }
+
+    private mapCajaToDB(c: DBCajaSesion): any {
+        return {
+            id: c.id,
+            usuario_id: c.usuarioId,
+            fecha_apertura: c.fechaApertura,
+            fecha_cierre: c.fechaCierre,
+            monto_apertura: safeN(c.montoApertura),
+            monto_cierre: safeN(c.montoCierre),
+            total_ventas: safeN(c.totalVentas),
+            ventas_ids: c.ventasIds,
+            estado: c.estado
+        };
+    }
+
+    // ── Nóminas ────────────────────────────────────────────────────────────
+    async getAllNominas(): Promise<any[]> {
+        try {
+            const { data, error } = await supabase.from('nominas').select('*');
+            if (error) return [];
+            return (data ?? []).map((n: any) => ({
+                ...n,
+                items: n.items ?? [],
+            }));
+        } catch { return []; }
+    }
+    async addNomina(n: any): Promise<void> {
+        try { await supabase.from('nominas').upsert({ ...n }); } catch { /* tabla puede no existir */ }
+    }
+    async updateNomina(n: any): Promise<void> {
+        try { await supabase.from('nominas').upsert({ ...n }); } catch { /* tabla puede no existir */ }
+    }
+}

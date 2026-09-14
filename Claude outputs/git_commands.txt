@@ -1,0 +1,23 @@
+git add src/pages/Asistencia.tsx src/pages/Trabajadores.tsx src/pages/Nomina.tsx src/pages/HistorialVentas.tsx src/pages/Mayoristas.tsx
+git commit -m "fix: escapar HTML en exportaciones/PDFs (nomina, asistencia, ventas, mayoristas)
+
+Cierra el hueco de seguridad detectado en el informe de auditoria del
+proyecto: document.write() interpolaba nombres de trabajadores,
+clientes y productos sin escapar en los PDFs/tickets exportados.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01M9LfB9SkwqtRU4YVWbLbxr"
+git push
+
+git add src/pages/Proveedores.tsx
+git commit -m "fix: productos duplicados al guardar catalogo de proveedor en un mismo lote
+
+Mismo bug de 'productos fantasma' que en CargaMasiva.tsx pero en
+Proveedores.tsx: la lista de productos activos usada para detectar
+duplicados no se actualizaba entre items del mismo guardado, asi que
+una factura con lineas repetidas creaba productos duplicados. Ahora
+se reutiliza el id del que ya se creo antes en el mismo lote.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01M9LfB9SkwqtRU4YVWbLbxr"
+git push

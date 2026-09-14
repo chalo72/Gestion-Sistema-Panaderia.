@@ -1,0 +1,11 @@
+streams:
+  cam1: rtsp://admin:admin123@192.168.18.141:554/Streaming/Channels/101
+  cam2: rtsp://admin:admin123@192.168.18.141:554/Streaming/Channels/201
+  cam3: rtsp://admin:admin123@192.168.18.141:554/Streaming/Channels/301
+  cam4: rtsp://admin:admin123@192.168.18.141:554/Streaming/Channels/401
+
+api:
+  listen: ":1984"
+  
+webrtc:
+  listen: ":8555"
