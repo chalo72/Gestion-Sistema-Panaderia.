@@ -423,8 +423,7 @@ export function Sidebar({
     {
       section: 'Ventas y Caja',
       emoji: '💰',
-      color: 'from-emerald-600 to-teal-700',
-      borderColor: 'border-emerald-500/30',
+      activeClass: 'bg-emerald-600 text-white border-transparent shadow-lg',
       items: [
         { id: 'ventas' as ViewType,           label: 'Ventas / POS',        icon: ShoppingCart, permission: 'VER_VENTAS' },
         { id: 'historial-ventas' as ViewType, label: 'Historial Ventas',    icon: History,      permission: 'VER_VENTAS' },
@@ -437,8 +436,7 @@ export function Sidebar({
     {
       section: 'Producción',
       emoji: '🍞',
-      color: 'from-amber-600 to-orange-700',
-      borderColor: 'border-amber-500/30',
+      activeClass: 'bg-amber-600 text-white border-transparent shadow-lg',
       items: [
         { id: 'produccion' as ViewType, label: role === 'PANADERO' ? 'Libreta Horno' : 'Producción', icon: Utensils,  permission: 'VER_PRODUCCION' },
         { id: 'recetas' as ViewType,    label: 'Recetas',            icon: ChefHat,   permission: 'VER_PRODUCCION' },
@@ -449,8 +447,7 @@ export function Sidebar({
     {
       section: 'Compras',
       emoji: '🛒',
-      color: 'from-blue-600 to-indigo-700',
-      borderColor: 'border-blue-500/30',
+      activeClass: 'bg-blue-600 text-white border-transparent shadow-lg',
       items: [
         { id: 'proveedores' as ViewType, label: 'Proveedores',      icon: Truck,          permission: 'VER_PROVEEDORES' },
         { id: 'prepedidos' as ViewType,  label: 'Órdenes Compra',   icon: ShoppingCart,   permission: 'VER_PREPEDIDOS' },
@@ -460,8 +457,7 @@ export function Sidebar({
     {
       section: 'Finanzas',
       emoji: '📊',
-      color: 'from-violet-600 to-purple-700',
-      borderColor: 'border-violet-500/30',
+      activeClass: 'bg-violet-600 text-white border-transparent shadow-lg',
       items: [
         { id: 'reportes' as ViewType,    label: 'Análisis',         icon: BarChart3,  permission: 'VER_REPORTES' },
         { id: 'gastos' as ViewType,      label: 'Egresos',          icon: DollarSign, permission: 'VER_FINANZAS' },
@@ -474,16 +470,15 @@ export function Sidebar({
     {
       section: 'Admin',
       emoji: '👥',
-      color: 'from-rose-600 to-pink-700',
-      borderColor: 'border-rose-500/30',
+      activeClass: 'bg-rose-600 text-white border-transparent shadow-lg',
       items: [
-        { id: 'trabajadores' as ViewType,   label: 'Trabajadores',    icon: UserCircle2,   permission: 'VER_USUARIOS' },
-        { id: 'asistencia' as ViewType,     label: 'Asistencia',      icon: CalendarCheck, permission: 'VER_USUARIOS' },
-        { id: 'nomina' as ViewType,         label: 'Nómina',          icon: Wallet,        permission: 'VER_FINANZAS' },
-        { id: 'seguridad' as ViewType,      label: 'Anti-Fraude',     icon: Shield,        permission: 'VER_FINANZAS' },
-        { id: 'configuracion' as ViewType,  label: 'Configuración',   icon: Settings,      permission: 'VER_CONFIGURACION' },
-        { id: 'usuarios' as ViewType,       label: 'Equipo',          icon: Users,         permission: 'VER_USUARIOS' },
-        { id: 'comunicaciones' as ViewType, label: 'Comunicaciones',  icon: MessageCircle, permission: 'VER_DASHBOARD' },
+        { id: 'trabajadores' as ViewType,   label: 'Trabajadores',    icon: UserCircle2,     permission: 'VER_USUARIOS' },
+        { id: 'asistencia' as ViewType,     label: 'Asistencia',      icon: CalendarCheck,   permission: 'VER_USUARIOS' },
+        { id: 'nomina' as ViewType,         label: 'Nómina',          icon: Wallet,          permission: 'VER_FINANZAS' },
+        { id: 'seguridad' as ViewType,      label: 'Anti-Fraude',     icon: Shield,          permission: 'VER_FINANZAS' },
+        { id: 'configuracion' as ViewType,  label: 'Configuración',   icon: Settings,        permission: 'VER_CONFIGURACION' },
+        { id: 'usuarios' as ViewType,       label: 'Equipo',          icon: Users,           permission: 'VER_USUARIOS' },
+        { id: 'comunicaciones' as ViewType, label: 'Comunicaciones',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'dashboard' as ViewType,      label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
       ],
     },
@@ -626,7 +621,7 @@ export function Sidebar({
                           className={cn(
                             "relative flex flex-col items-center justify-center gap-1.5 rounded-2xl p-3 min-h-[72px] text-center transition-all active:scale-95 border",
                             isActive
-                              ? `bg-gradient-to-br ${cat.color} text-white border-transparent shadow-lg`
+                              ? cat.activeClass
                               : `bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/10`
                           )}
                         >
