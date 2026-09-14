@@ -924,7 +924,7 @@ const App = () => {
         user ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-64") : "pl-0",
         // En ventas y móvil dejamos padding bottom para el BottomNavBar
         "pb-[72px] md:pb-0",
-        currentView === 'ventas' ? 'h-[calc(100vh-72px)] md:h-screen overflow-hidden' : ''
+        currentView === 'ventas' ? 'h-[calc(100dvh-72px)] md:h-screen overflow-hidden' : ''
       )}>
         {/* Header Superior (Solo si hay usuario) */}
         {user && (
@@ -1028,7 +1028,7 @@ const App = () => {
           </header>
         )}
 
-        <div className={currentView === 'ventas' ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'p-4 md:p-8'}>
+        <div className={currentView === 'ventas' ? 'h-[calc(100dvh-4rem)] overflow-hidden' : 'p-4 md:p-8'}>
           <ErrorBoundary moduleName={currentView}>
             <Suspense fallback={<PageLoader />}>
               <PageTransition viewKey={currentView} className={currentView === 'ventas' ? 'h-full min-h-0' : ''}>
