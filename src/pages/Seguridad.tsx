@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Shield, AlertTriangle, Bell, Settings, CheckCircle2, Eye, Trash2, RefreshCw, Lock, TrendingDown, Clock, DollarSign, ChevronDown, ChevronUp, MessageSquare, Bot, Scan, Camera } from 'lucide-react';
+import { Shield, AlertTriangle, Bell, Settings, CheckCircle2, Eye, Trash2, RefreshCw, Lock, TrendingDown, Clock, DollarSign, ChevronDown, ChevronUp, MessageCircle, Bot, Scan, Camera } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
@@ -215,7 +215,7 @@ export default function Seguridad({ userRole, ventas = [] }: Props) {
       {/* Tabs */}
       <div className="flex gap-2 bg-slate-100 dark:bg-slate-800/50 rounded-2xl p-1">
         {[
-          { id: 'canal', label: 'Canal de alertas', Icon: MessageSquare, badge: noLeidas },
+          { id: 'canal', label: 'Canal de alertas', Icon: MessageCircle, badge: noLeidas },
           { id: 'cuadres', label: 'Cuadres de turno', Icon: DollarSign, badge: 0 },
           { id: 'config', label: 'Configuración', Icon: Settings, badge: 0 },
         ].map(({ id, label, Icon, badge }) => (

@@ -7,7 +7,7 @@ import {
     ShoppingCart, TrendingUp, TrendingDown, ArrowUpCircle,
     ArrowDownCircle, Timer, Banknote, Coins, RefreshCw,
     CalendarDays, Wallet, Store, Users, Handshake, AlertTriangle,
-    LogOut, CheckSquare, X, ArrowRightLeft, MessageSquare,
+    LogOut, CheckSquare, X, ArrowRightLeft, MessageCircle,
     Pencil, Trash2, UserPlus
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -835,7 +835,7 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                             className="w-12 h-12 p-0 border-2 rounded-xl border-slate-200 hover:border-emerald-500 hover:text-emerald-600 shrink-0"
                             title="Notificar por WhatsApp"
                         >
-                            <MessageSquare className="w-5 h-5" />
+                            <MessageCircle className="w-5 h-5" />
                         </Button>
                         <Button
                             onClick={handleConfirmar}

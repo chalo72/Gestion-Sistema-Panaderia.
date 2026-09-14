@@ -5,7 +5,7 @@ import {
     X,
     DollarSign,
     Loader2,
-    MessageSquare,
+    MessageCircle,
     Store,
     ChevronDown
 } from 'lucide-react';
@@ -183,7 +183,7 @@ export function CajaMovimientosModal({
                     <div className="space-y-1.5">
                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Descripción / Motivo</Label>
                         <div className="relative">
-                            <MessageSquare className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                            <MessageCircle className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
                             <textarea
                                 value={motivo}
                                 onChange={e => setMotivo(e.target.value)}

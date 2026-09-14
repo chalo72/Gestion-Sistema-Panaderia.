@@ -146,7 +146,7 @@ export function Sidebar({
       emoji: '🏛️', // Icono de oficina central/gobierno
       items: [
         { id: 'dashboard',       label: 'Centro de Mando',         icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
-        { id: 'whatsapp-hub',    label: 'Comandos WhatsApp & IA',  icon: MessageSquare,   permission: 'VER_DASHBOARD' },
+        { id: 'whatsapp-hub',    label: 'Comandos WhatsApp & IA',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones',  label: 'Equipo & Checklist',      icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia',      label: 'Mando Superior (IA)',     icon: Shield,          permission: 'VER_DASHBOARD' },
         { id: 'videovigilancia', label: 'Videovigilancia',         icon: Video,           permission: 'VER_DASHBOARD' },
@@ -428,7 +428,7 @@ export function Sidebar({
       items: [
         { id: 'dashboard' as ViewType,       label: 'Centro de Mando',        icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia' as ViewType,      label: 'Mando Superior (IA)',    icon: Shield,          permission: 'VER_DASHBOARD' },
-        { id: 'whatsapp-hub' as ViewType,    label: 'WhatsApp & IA',          icon: MessageSquare,   permission: 'VER_DASHBOARD' },
+        { id: 'whatsapp-hub' as ViewType,    label: 'WhatsApp & IA',          icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones' as ViewType,  label: 'Equipo & Checklist',     icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'videovigilancia' as ViewType, label: 'Videovigilancia',        icon: Video,           permission: 'VER_DASHBOARD' },
         { id: 'cctv' as ViewType,            label: 'Auditoría Digital',      icon: Shield,          permission: 'VER_DASHBOARD' },

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   BrainCircuit, Mic, Zap, Shield, Eye, Cpu,
   Loader2, CheckCircle2, AlertTriangle, Activity,
-  TrendingUp, Package, DollarSign, X, GitMerge, Trash2, Target, Utensils, ShoppingCart, MessageSquare, Truck, Users, Building, ClipboardList, Server
+  TrendingUp, Package, DollarSign, X, GitMerge, Trash2, Target, Utensils, ShoppingCart, MessageCircle, Truck, Users, Building, ClipboardList, Server
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -67,7 +67,7 @@ const ACCIONES_RAPIDAS = [
   { label: 'Stock Crítico', icon: Package, color: 'text-orange-400 border-orange-500/30 hover:bg-orange-500/10', prompt: 'Delega SOLO al agente inventario. Usa stock + memoria de faltantes previos. Lista críticos, pedido corto y 3 acciones. Números en nombres (40*30) son texto.' },
   { label: 'Horno / Producción', icon: Utensils, color: 'text-amber-200 border-amber-500/30 hover:bg-amber-500/10', prompt: 'Delega SOLO al agente produccion (Jefe de Horno). Con órdenes abiertas, formulaciones e insumos críticos: prioridad de horneado, riesgos y 3 acciones concretas.' },
   { label: 'Ventas del Día', icon: ShoppingCart, color: 'text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/10', prompt: 'Delega SOLO al agente ventas. Con tickets de hoy, ticket promedio, métodos de pago y top productos: ESTADO, TOP, PAGO y 3 ACCIONES para vender más en mostrador. No inventes cifras.' },
-  { label: 'Hermes / Comanda', icon: MessageSquare, color: 'text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10', prompt: 'Delega SOLO al agente hermes. Usa el top de productos del día como referencia y explícame cómo armar una comanda rápida por voz (ejemplo: dos pan de bono y una gaseosa). Formato ÍTEMS / NOTA / SIGUIENTE.' },
+  { label: 'Hermes / Comanda', icon: MessageCircle, color: 'text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10', prompt: 'Delega SOLO al agente hermes. Usa el top de productos del día como referencia y explícame cómo armar una comanda rápida por voz (ejemplo: dos pan de bono y una gaseosa). Formato ÍTEMS / NOTA / SIGUIENTE.' },
   { label: 'Compras / OC', icon: Truck, color: 'text-violet-400 border-violet-500/30 hover:bg-violet-500/10', prompt: 'Delega SOLO al agente logistica. Con proveedores, órdenes de compra abiertas, recepciones y faltantes: ESTADO, PRIORIDAD, PROVEEDOR sugerido y 3 ACCIONES (abrir Pre-Pedidos / crear OC / recibir). Pedidos grandes ≥$500.000 requieren mi confirmación.' },
   { label: 'Cartera Clientes', icon: Users, color: 'text-pink-400 border-pink-500/30 hover:bg-pink-500/10', prompt: 'Delega SOLO al agente clientes. Con el maestro de clientes: ESTADO, DESTACADOS y 3 ACCIONES de fidelización. Si hay fiados, remite a créditos sin inventar saldos.' },
   { label: 'Fiados / Deudas', icon: Building, color: 'text-blue-400 border-blue-500/30 hover:bg-blue-500/10', prompt: 'Delega SOLO al agente creditos. Con fiados activos: saldo pendiente, top deudores, vencidos y 3 ACCIONES de cobro. No inventes deudas. Borrar/anular requiere mi confirmación.' },

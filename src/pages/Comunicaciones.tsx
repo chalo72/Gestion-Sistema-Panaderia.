@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  MessageSquare, CheckSquare, Clock, Send, Plus, Trash2,
+  MessageCircle, CheckSquare, Clock, Send, Plus, Trash2,
   Coffee, Brush, ShoppingBag, DollarSign, Users, ChevronDown,
   ChevronUp, AlertCircle, CheckCircle2, LogIn, LogOut, Calendar,
   Megaphone, Star, Flame, X, User
@@ -308,7 +308,7 @@ export default function Comunicaciones() {
       {/* Header */}
       <header className="bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-4 py-4 flex items-center gap-3 shrink-0">
         <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-          <MessageSquare className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          <MessageCircle className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
         </div>
         <div>
           <h1 className="text-lg font-black text-slate-900 dark:text-white">Equipo Dulce Placer</h1>

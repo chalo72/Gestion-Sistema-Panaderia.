@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  MessageSquare, 
+  MessageCircle, 
   CreditCard, 
   Cake, 
   Sparkles, 
@@ -348,7 +348,7 @@ export default function WhatsAppHub({ trabajadores = [] }: WhatsAppHubProps) {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 border border-emerald-500/20">
-              <MessageSquare className="w-6 h-6" />
+              <MessageCircle className="w-6 h-6" />
             </div>
             Comandos WhatsApp & Agentes IA
           </h1>
@@ -906,7 +906,7 @@ export default function WhatsAppHub({ trabajadores = [] }: WhatsAppHubProps) {
                     <div className="space-y-1.5 bg-white dark:bg-slate-950 p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px] font-black uppercase text-emerald-600 flex items-center gap-1.5">
-                          <MessageSquare className="w-3.5 h-3.5" /> Texto para Estados de WhatsApp
+                          <MessageCircle className="w-3.5 h-3.5" /> Texto para Estados de WhatsApp
                         </Label>
                         <Button
                           size="sm"

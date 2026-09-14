@@ -3,7 +3,7 @@ import {
   Pin, Send, Users, ShieldCheck, Activity, Terminal, Shield, Rocket,
   Loader2, X,
   TrendingUp, Wallet, Utensils, Package, Megaphone,
-  Truck, CheckCircle, Wrench, MessageSquare,
+  Truck, CheckCircle, Wrench, MessageCircle,
   Leaf, Scale, FileText, Target, Instagram,
   Lightbulb, Clipboard, Brain, Building, ShieldAlert, Eye,
   BarChart3, Zap, TrendingDown, AlertTriangle, CreditCard,
@@ -57,7 +57,7 @@ const DIV_SEGURIDAD: AgenteId[]   = ['pico-claw', 'open-claw', 'auto-claw'];
 const ICON_MAP: Record<string, any> = {
   gerente: Brain, inversion: TrendingUp, contable: Wallet, creditos: Building, subvenciones: Clipboard,
   produccion: Utensils, inventario: Package, logistica: Truck, calidad: CheckCircle, mantenimiento: Wrench, sostenibilidad: Leaf,
-  marketing: Megaphone, influencer: Instagram, ventas: Target, clientes: MessageSquare, pitch: Lightbulb,
+  marketing: Megaphone, influencer: Instagram, ventas: Target, clientes: MessageCircle, pitch: Lightbulb,
   abogado: Scale, tax: FileText, nomina: Users, expansion: Rocket,
   'pico-claw': ShieldAlert, 'open-claw': Eye, 'auto-claw': Activity
 };
@@ -634,7 +634,7 @@ EQUIPO: ${usuarios.filter(u => u.activo !== false).length} personas activas`;
                   disabled={!promptAgente.trim() || estaCargandoAgente}
                   className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest py-4 rounded-2xl transition-all"
                 >
-                  {estaCargandoAgente ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</> : <><MessageSquare className="w-4 h-4" /> Enviar Consulta</>}
+                  {estaCargandoAgente ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</> : <><MessageCircle className="w-4 h-4" /> Enviar Consulta</>}
                 </button>
               </div>
             </div>

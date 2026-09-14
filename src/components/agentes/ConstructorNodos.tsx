@@ -18,7 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { 
   BrainCircuit, AlertTriangle, Zap, Package, X, Settings, 
-  Database, Webhook, Globe, Bot, Mail, MessageSquare, Code, Save, Trash2, Link, Info, Lightbulb,
+  Database, Webhook, Globe, Bot, Mail, MessageCircle, Code, Save, Trash2, Link, Info, Lightbulb,
   HardDrive, ShieldAlert, Play, Share2, Send, Minimize2, Maximize2
 } from 'lucide-react';
 import { useWorkflowEngine } from '@/hooks/useWorkflowEngine';
@@ -40,7 +40,7 @@ const iconMap: Record<string, React.ReactNode> = {
   Globe: <Globe className="w-5 h-5" />,
   Bot: <Bot className="w-5 h-5" />,
   Mail: <Mail className="w-5 h-5" />,
-  MessageSquare: <MessageSquare className="w-5 h-5" />,
+  MessageCircle: <MessageCircle className="w-5 h-5" />,
   Code: <Code className="w-5 h-5" />,
   Zap: <Zap className="w-5 h-5" />,
   AlertTriangle: <AlertTriangle className="w-5 h-5" />,

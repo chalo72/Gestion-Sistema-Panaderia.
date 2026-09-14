@@ -38,7 +38,7 @@ export const workflowTemplates = [
           title: 'Notificar al Gerente',
           category: 'Acción',
           colorTheme: 'emerald',
-          iconName: 'MessageSquare',
+          iconName: 'MessageCircle',
           description: 'Envía un mensaje de alerta por WhatsApp.',
           code: 'if(input && input.mensaje) {\n  console.log("[Éxito]: Mensaje enviado: " + input.mensaje);\n  return { success: true };\n}\nreturn { success: false };'
         }
@@ -139,7 +139,7 @@ export const workflowTemplates = [
           title: 'Enviar a Gerencia',
           category: 'Acción',
           colorTheme: 'emerald',
-          iconName: 'MessageSquare',
+          iconName: 'MessageCircle',
           description: 'Manda el resumen al dueño por WhatsApp.',
           code: 'console.log(`[Éxito]: WhatsApp enviado: 💰 Cierre ${input.dia}: Ventas $${input.ventasTotales}, Gastos $${input.gastos}. Neto: $${input.neto}`);\nreturn true;'
         }
@@ -226,7 +226,7 @@ export const workflowTemplates = [
           title: 'Enviar Catálogo PDF',
           category: 'Acción',
           colorTheme: 'emerald',
-          iconName: 'MessageSquare',
+          iconName: 'MessageCircle',
           description: 'Envía mensaje automático de bienvenida.',
           code: 'console.log(`[Éxito]: Mensaje enviado a ${input.telefono}: ¡Bienvenido ${input.nombre}! Aquí tienes nuestra Lista de Precios Oficial.`);\nreturn true;'
         }
@@ -312,7 +312,7 @@ export const workflowTemplates = [
           title: 'Enviar Promo 15%',
           category: 'Acción',
           colorTheme: 'emerald',
-          iconName: 'MessageSquare',
+          iconName: 'MessageCircle',
           description: 'Envía cupón de descuento por WhatsApp.',
           code: 'if(input.clientes_inactivos) {\n  console.log(`[Éxito]: Promo enviada a ${input.clientes_inactivos[0].nombre}: ¡Te extrañamos! Tienes 15% de descuento hoy.`);\n  return true;\n}\nreturn false;'
         }
@@ -400,7 +400,7 @@ export const workflowTemplates = [
           title: 'Mensaje Recibido (Webhook)',
           category: 'Trigger',
           colorTheme: 'cyan',
-          iconName: 'MessageSquare',
+          iconName: 'MessageCircle',
           description: 'Detecta cuando un cliente escribe al WhatsApp del negocio.',
           code: 'console.log("[Info]: 📩 Nuevo mensaje de WhatsApp entrante.");\nreturn { cliente: "Roberto", mensaje_cliente: "¿Hasta qué hora abren hoy?" };'
         }
