@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import {
   Pin, Send, Users, ShieldCheck, Activity, Terminal, Shield, Rocket,
-  Loader2, X, MessageSquare as MsgIcon,
+  Loader2, X,
   TrendingUp, Wallet, Utensils, Package, Megaphone,
   Truck, CheckCircle, Wrench, MessageSquare,
   Leaf, Scale, FileText, Target, Instagram,
@@ -634,7 +634,7 @@ EQUIPO: ${usuarios.filter(u => u.activo !== false).length} personas activas`;
                   disabled={!promptAgente.trim() || estaCargandoAgente}
                   className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-black text-xs uppercase tracking-widest py-4 rounded-2xl transition-all"
                 >
-                  {estaCargandoAgente ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</> : <><MsgIcon className="w-4 h-4" /> Enviar Consulta</>}
+                  {estaCargandoAgente ? <><Loader2 className="w-4 h-4 animate-spin" /> Procesando...</> : <><MessageSquare className="w-4 h-4" /> Enviar Consulta</>}
                 </button>
               </div>
             </div>
