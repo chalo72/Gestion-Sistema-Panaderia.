@@ -576,98 +576,96 @@ export function Sidebar({
     );
   }
 
-  // ─── Render final: Sheet móvil SIEMPRE renderizado (CSS lo oculta en desktop)
-  //     + Sidebar escritorio oculto en móvil con md:block
-  return (
-    <>
-      {/* ── MENÚ MÓVIL (md:hidden via SheetContent wrapper) ── */}
-      <div className="md:hidden">
-        <Sheet open={isMobileMenuOpen} onOpenChange={onMobileMenuOpenChange}>
-          <SheetContent side="left" className="p-0 bg-slate-950 border-r border-slate-800/60 w-[300px] flex flex-col">
-            {/* Header */}
-            <div className="flex-none p-4 border-b border-white/10 bg-gradient-to-r from-slate-900 to-slate-950">
-              <div className="flex items-center gap-3">
-                <div className="relative w-10 h-10 flex-none">
-                  <div className="absolute inset-0 rounded-full border border-transparent animate-spin" style={{ animationDuration: '4s', borderTopColor: 'rgba(255,0,127,0.7)' }} />
-                  <div className="absolute inset-[3px] rounded-full border border-transparent animate-spin" style={{ animationDuration: '2.4s', animationDirection: 'reverse', borderTopColor: 'rgba(99,102,241,0.8)' }} />
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <img src="/logo.png" alt="Logo" className="w-[70%] h-[70%] object-contain drop-shadow-[0_0_8px_rgba(255,0,127,0.5)]" />
-                  </div>
-                </div>
-                <div>
-                  <h1 className="text-sm font-extrabold text-white leading-tight">Dulce Placer</h1>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">v{import.meta.env.VITE_APP_VERSION || '5.3.0'} • {role}</p>
+  if (isMobile) {
+    return (
+      <Sheet open={isMobileMenuOpen} onOpenChange={onMobileMenuOpenChange}>
+        <SheetContent side="left" className="p-0 bg-slate-950 border-r border-slate-800/60 w-[300px] flex flex-col">
+          {/* Header */}
+          <div className="flex-none p-4 border-b border-white/10 bg-gradient-to-r from-slate-900 to-slate-950">
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10 flex-none">
+                <div className="absolute inset-0 rounded-full border border-transparent animate-spin" style={{ animationDuration: '4s', borderTopColor: 'rgba(255,0,127,0.7)' }} />
+                <div className="absolute inset-[3px] rounded-full border border-transparent animate-spin" style={{ animationDuration: '2.4s', animationDirection: 'reverse', borderTopColor: 'rgba(99,102,241,0.8)' }} />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <img src="/logo.png" alt="Logo" className="w-[70%] h-[70%] object-contain drop-shadow-[0_0_8px_rgba(255,0,127,0.5)]" />
                 </div>
               </div>
+              <div>
+                <h1 className="text-sm font-extrabold text-white leading-tight">Dulce Placer</h1>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">v{import.meta.env.VITE_APP_VERSION || '5.3.0'} • {role}</p>
+              </div>
             </div>
+          </div>
 
-            {/* Menú por categorías */}
-            <div className="flex-1 overflow-y-auto py-3 px-3 space-y-5">
-              {filteredMobileCategories.map(cat => (
-                <div key={cat.section}>
-                  <div className="flex items-center gap-2 px-1 mb-2">
-                    <span className="text-base leading-none">{cat.emoji}</span>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{cat.section}</span>
-                    <div className="flex-1 h-px bg-white/10" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {cat.items.map(item => {
-                      const Icon = item.icon;
-                      const isActive = currentView === item.id;
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => handleViewChange(item.id)}
-                          className={cn(
-                            "relative flex flex-col items-center justify-center gap-1.5 rounded-2xl p-3 min-h-[72px] text-center transition-all active:scale-95 border",
-                            isActive
-                              ? cat.activeClass
-                              : `bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/10`
-                          )}
-                        >
-                          <div className={cn(
-                            "w-8 h-8 rounded-xl flex items-center justify-center",
-                            isActive ? "bg-white/20" : "bg-white/[0.06]"
-                          )}>
-                            <Icon className="w-[17px] h-[17px]" />
-                          </div>
-                          <span className="text-[11px] font-bold leading-tight">{item.label}</span>
-                          {item.id === 'alertas' && alertasNoLeidas > 0 && (
-                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
-                              {alertasNoLeidas}
-                            </span>
-                          )}
-                          {item.id === 'comunicaciones' && anunciosNoLeidos > 0 && (
-                            <span className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
-                              {anunciosNoLeidos}
-                            </span>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+          {/* Menú por categorías */}
+          <div className="flex-1 overflow-y-auto py-3 px-3 space-y-5">
+            {filteredMobileCategories.map(cat => (
+              <div key={cat.section}>
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <span className="text-base leading-none">{cat.emoji}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{cat.section}</span>
+                  <div className="flex-1 h-px bg-white/10" />
                 </div>
-              ))}
-              <div className="h-6" />
-            </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {cat.items.map(item => {
+                    const Icon = item.icon;
+                    const isActive = currentView === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleViewChange(item.id)}
+                        className={cn(
+                          "relative flex flex-col items-center justify-center gap-1.5 rounded-2xl p-3 min-h-[72px] text-center transition-all active:scale-95 border",
+                          isActive
+                            ? cat.activeClass
+                            : "bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/10"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-8 h-8 rounded-xl flex items-center justify-center",
+                          isActive ? "bg-white/20" : "bg-white/[0.06]"
+                        )}>
+                          <Icon className="w-[17px] h-[17px]" />
+                        </div>
+                        <span className="text-[11px] font-bold leading-tight">{item.label}</span>
+                        {item.id === 'alertas' && alertasNoLeidas > 0 && (
+                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                            {alertasNoLeidas}
+                          </span>
+                        )}
+                        {item.id === 'comunicaciones' && anunciosNoLeidos > 0 && (
+                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                            {anunciosNoLeidos}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="h-6" />
+          </div>
 
-            {/* Footer */}
-            <div className="flex-none p-3 border-t border-white/10">
-              <button onClick={recargar} className="w-full text-center text-[10px] text-slate-600 hover:text-slate-400 transition-colors py-1">
-                Toca para actualizar • v{import.meta.env.VITE_APP_VERSION || '5.3.0'}
-              </button>
-            </div>
-          </SheetContent>
-        </Sheet>
-      </div>
+          {/* Footer */}
+          <div className="flex-none p-3 border-t border-white/10">
+            <button onClick={recargar} className="w-full text-center text-[10px] text-slate-600 hover:text-slate-400 transition-colors py-1">
+              Toca para actualizar • v{import.meta.env.VITE_APP_VERSION || '5.3.0'}
+            </button>
+          </div>
+        </SheetContent>
+      </Sheet>
+    );
+  }
 
-      {/* ── SIDEBAR ESCRITORIO (solo visible en md+) ── */}
-      <aside className={cn(
-        "fixed left-0 top-0 h-full border-r border-white/10 bg-[#0f172a] z-50 hidden md:block transition-all duration-300",
-        isCollapsed ? "w-20" : "w-64"
-      )}>
-        {renderSidebarContent()}
-      </aside>
-    </>
+  // ── SIDEBAR ESCRITORIO ──
+  return (
+    <aside className={cn(
+      "fixed left-0 top-0 h-full border-r border-white/10 bg-[#0f172a] z-50 hidden md:block transition-all duration-300",
+      isCollapsed ? "w-20" : "w-64"
+    )}>
+      {renderSidebarContent()}
+    </aside>
   );
 }
+
