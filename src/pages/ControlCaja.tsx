@@ -1321,15 +1321,15 @@ export function ControlCaja({
                                     <Store className="w-3.5 h-3.5" /> {cajaActiva.cajaNombre || 'Caja Principal'}
                                 </p>
                                 <p className="text-[11px] text-blue-100 font-bold mb-4 opacity-80">
-                                    Apertura: {formatCurrency(cajaActiva.montoApertura)}
+                                    Apertura: {formatCurrency(cajaActiva.montoApertura || 0)}
                                 </p>
                                 <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">Balance en Sistema</p>
                                 <div className="text-4xl font-black tracking-tight mt-0.5 tabular-nums">
                                     {formatCurrency(
-                                        cajaActiva.montoApertura +
-                                        cajaActiva.totalVentas +
-                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0) -
-                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0)
+                                        (cajaActiva.montoApertura || 0) +
+                                        (cajaActiva.totalVentas || 0) +
+                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + (m.monto || 0), 0) -
+                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + (m.monto || 0), 0)
                                     )}
                                 </div>
                             </div>
@@ -1342,7 +1342,7 @@ export function ControlCaja({
                                     <TrendingUp className="w-3 h-3" /> Ventas
                                 </p>
                                 <p className="text-lg font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
-                                    {formatCurrency(cajaActiva.totalVentas)}
+                                    {formatCurrency(cajaActiva.totalVentas || 0)}
                                 </p>
                                 <p className="text-[9px] text-emerald-500/70 font-bold mt-0.5">Total del turno</p>
                             </div>
@@ -1351,7 +1351,7 @@ export function ControlCaja({
                                     <TrendingDown className="w-3 h-3" /> Salidas
                                 </p>
                                 <p className="text-lg font-black text-rose-700 dark:text-rose-400 tabular-nums">
-                                    -{formatCurrency((cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0))}
+                                    -{formatCurrency((cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + (m.monto || 0), 0))}
                                 </p>
                                 <p className="text-[9px] text-rose-500/70 font-bold mt-0.5">Egresos registrados</p>
                             </div>
