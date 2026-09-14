@@ -418,11 +418,164 @@ export function Sidebar({
     </div>
   );
 
+  // ─── MENÚ MÓVIL REDISEÑADO (PASO 5) ─────────────────────────────────────────
+  const mobileCategories = [
+    {
+      section: 'Ventas y Caja',
+      emoji: '💰',
+      color: 'from-emerald-600 to-teal-700',
+      borderColor: 'border-emerald-500/30',
+      items: [
+        { id: 'ventas' as ViewType,           label: 'Ventas / POS',        icon: ShoppingCart, permission: 'VER_VENTAS' },
+        { id: 'historial-ventas' as ViewType, label: 'Historial Ventas',    icon: History,      permission: 'VER_VENTAS' },
+        { id: 'caja' as ViewType,             label: 'Control Caja',        icon: Wallet,       permission: 'ABRIR_CERRAR_CAJA' },
+        { id: 'clientes' as ViewType,         label: 'Clientes',            icon: Users,        permission: 'VER_USUARIOS' },
+        { id: 'creditos' as ViewType,         label: 'Créditos',            icon: CreditCard,   permission: 'VER_FINANZAS' },
+        { id: 'mayoristas' as ViewType,       label: 'Ventas al Mayor',     icon: Store,        permission: 'VER_FINANZAS' },
+      ],
+    },
+    {
+      section: 'Producción',
+      emoji: '🍞',
+      color: 'from-amber-600 to-orange-700',
+      borderColor: 'border-amber-500/30',
+      items: [
+        { id: 'produccion' as ViewType, label: role === 'PANADERO' ? 'Libreta Horno' : 'Producción', icon: Utensils,  permission: 'VER_PRODUCCION' },
+        { id: 'recetas' as ViewType,    label: 'Recetas',            icon: ChefHat,   permission: 'VER_PRODUCCION' },
+        { id: 'inventario' as ViewType, label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
+        { id: 'productos' as ViewType,  label: 'Catálogo',           icon: Package,   permission: 'VER_PRODUCTOS' },
+      ],
+    },
+    {
+      section: 'Compras',
+      emoji: '🛒',
+      color: 'from-blue-600 to-indigo-700',
+      borderColor: 'border-blue-500/30',
+      items: [
+        { id: 'proveedores' as ViewType, label: 'Proveedores',      icon: Truck,          permission: 'VER_PROVEEDORES' },
+        { id: 'prepedidos' as ViewType,  label: 'Órdenes Compra',   icon: ShoppingCart,   permission: 'VER_PREPEDIDOS' },
+        { id: 'recepciones' as ViewType, label: 'Entrada Mercancía',icon: ClipboardCheck, permission: 'VER_RECEPCIONES' },
+      ],
+    },
+    {
+      section: 'Finanzas',
+      emoji: '📊',
+      color: 'from-violet-600 to-purple-700',
+      borderColor: 'border-violet-500/30',
+      items: [
+        { id: 'reportes' as ViewType,    label: 'Análisis',         icon: BarChart3,  permission: 'VER_REPORTES' },
+        { id: 'gastos' as ViewType,      label: 'Egresos',          icon: DollarSign, permission: 'VER_FINANZAS' },
+        { id: 'boveda' as ViewType,      label: 'Bóveda',           icon: Wallet,     permission: 'VER_FINANZAS' },
+        { id: 'ahorro' as ViewType,      label: 'Ahorros',          icon: PiggyBank,  permission: 'VER_FINANZAS' },
+        { id: 'inversiones' as ViewType, label: 'Inversión',        icon: TrendingUp, permission: 'VER_FINANZAS' },
+        { id: 'alertas' as ViewType,     label: 'Alertas Costos',   icon: Bell,       permission: 'VER_ALERTAS' },
+      ],
+    },
+    {
+      section: 'Admin',
+      emoji: '👥',
+      color: 'from-rose-600 to-pink-700',
+      borderColor: 'border-rose-500/30',
+      items: [
+        { id: 'trabajadores' as ViewType,   label: 'Trabajadores',    icon: UserCircle2,   permission: 'VER_USUARIOS' },
+        { id: 'asistencia' as ViewType,     label: 'Asistencia',      icon: CalendarCheck, permission: 'VER_USUARIOS' },
+        { id: 'nomina' as ViewType,         label: 'Nómina',          icon: Wallet,        permission: 'VER_FINANZAS' },
+        { id: 'seguridad' as ViewType,      label: 'Anti-Fraude',     icon: Shield,        permission: 'VER_FINANZAS' },
+        { id: 'configuracion' as ViewType,  label: 'Configuración',   icon: Settings,      permission: 'VER_CONFIGURACION' },
+        { id: 'usuarios' as ViewType,       label: 'Equipo',          icon: Users,         permission: 'VER_USUARIOS' },
+        { id: 'comunicaciones' as ViewType, label: 'Comunicaciones',  icon: MessageCircle, permission: 'VER_DASHBOARD' },
+        { id: 'dashboard' as ViewType,      label: 'Centro de Mando', icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
+      ],
+    },
+  ];
+
+  const filteredMobileCategories = mobileCategories
+    .map(cat => ({
+      ...cat,
+      items: cat.items.filter(i => {
+        if (role === 'PANADERO' && (i.id === 'agentes-ia' || i.id === 'videovigilancia' || i.id === 'cctv' || i.id === 'comunicaciones')) return false;
+        return check(i.permission as any) && puedeVer(role ?? '', i.id);
+      }),
+    }))
+    .filter(cat => cat.items.length > 0);
+
   if (isMobile) {
     return (
       <Sheet open={isMobileMenuOpen} onOpenChange={onMobileMenuOpenChange}>
-        <SheetContent side="left" className="p-0 bg-[#0f172a] border-r-0 w-[280px]">
-          {renderSidebarContent()}
+        <SheetContent side="left" className="p-0 bg-slate-950 border-r border-slate-800/60 w-[300px] flex flex-col">
+          {/* Header */}
+          <div className="flex-none p-4 border-b border-white/10 bg-gradient-to-r from-slate-900 to-slate-950">
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10 flex-none">
+                <div className="absolute inset-0 rounded-full border border-transparent animate-spin" style={{ animationDuration: '4s', borderTopColor: 'rgba(255,0,127,0.7)' }} />
+                <div className="absolute inset-[3px] rounded-full border border-transparent animate-spin" style={{ animationDuration: '2.4s', animationDirection: 'reverse', borderTopColor: 'rgba(99,102,241,0.8)' }} />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <img src="/logo.png" alt="Logo" className="w-[70%] h-[70%] object-contain drop-shadow-[0_0_8px_rgba(255,0,127,0.5)]" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-sm font-extrabold text-white leading-tight">Dulce Placer</h1>
+                <p className="text-[10px] text-slate-400 uppercase font-bold tracking-widest">v{import.meta.env.VITE_APP_VERSION || '5.3.0'} • {role}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Menú por categorías */}
+          <div className="flex-1 overflow-y-auto py-3 px-3 space-y-5">
+            {filteredMobileCategories.map(cat => (
+              <div key={cat.section}>
+                <div className="flex items-center gap-2 px-1 mb-2">
+                  <span className="text-base leading-none">{cat.emoji}</span>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{cat.section}</span>
+                  <div className="flex-1 h-px bg-white/10" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {cat.items.map(item => {
+                    const Icon = item.icon;
+                    const isActive = currentView === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => handleViewChange(item.id)}
+                        className={cn(
+                          "relative flex flex-col items-center justify-center gap-1.5 rounded-2xl p-3 min-h-[72px] text-center transition-all active:scale-95 border",
+                          isActive
+                            ? `bg-gradient-to-br ${cat.color} text-white border-transparent shadow-lg`
+                            : `bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/10`
+                        )}
+                      >
+                        <div className={cn(
+                          "w-8 h-8 rounded-xl flex items-center justify-center",
+                          isActive ? "bg-white/20" : "bg-white/[0.06]"
+                        )}>
+                          <Icon className="w-[17px] h-[17px]" />
+                        </div>
+                        <span className="text-[11px] font-bold leading-tight">{item.label}</span>
+                        {item.id === 'alertas' && alertasNoLeidas > 0 && (
+                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                            {alertasNoLeidas}
+                          </span>
+                        )}
+                        {item.id === 'comunicaciones' && anunciosNoLeidos > 0 && (
+                          <span className="absolute -top-1 -right-1 w-5 h-5 bg-indigo-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">
+                            {anunciosNoLeidos}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            <div className="h-6" />
+          </div>
+
+          {/* Footer */}
+          <div className="flex-none p-3 border-t border-white/10">
+            <button onClick={recargar} className="w-full text-center text-[10px] text-slate-600 hover:text-slate-400 transition-colors py-1">
+              Toca para actualizar • v{import.meta.env.VITE_APP_VERSION || '5.3.0'}
+            </button>
+          </div>
         </SheetContent>
       </Sheet>
     );
