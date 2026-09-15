@@ -681,8 +681,14 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async addSesionCaja(sesion: DBCajaSesion): Promise<void> {
-        const { error } = await supabase.from('caja').upsert(this.mapCajaToDB(sesion));
-        if (error) throw error;
+        try {
+            const { error } = await supabase.from('caja').upsert(this.mapCajaToDB(sesion));
+            if (error) {
+                console.warn('⚠️ [SupabaseDB] addSesionCaja no se pudo sincronizar en Supabase (no bloqueante):', error.message);
+            }
+        } catch (err) {
+            console.warn('⚠️ [SupabaseDB] addSesionCaja excepción capturada:', err);
+        }
     }
 
     async updateSesionCaja(sesion: DBCajaSesion): Promise<void> {
@@ -1262,14 +1268,14 @@ export class SupabaseDatabase implements IDatabase {
     private mapCajaToDB(c: DBCajaSesion): any {
         return {
             id: c.id,
-            usuario_id: c.usuarioId,
-            fecha_apertura: c.fechaApertura,
-            fecha_cierre: c.fechaCierre,
+            usuario_id: c.usuarioId || 'admin',
+            fecha_apertura: c.fechaApertura || new Date().toISOString(),
+            fecha_cierre: c.fechaCierre || null,
             monto_apertura: safeN(c.montoApertura),
             monto_cierre: safeN(c.montoCierre),
             total_ventas: safeN(c.totalVentas),
-            ventas_ids: c.ventasIds,
-            estado: c.estado
+            ventas_ids: Array.isArray(c.ventasIds) ? c.ventasIds : [],
+            estado: c.estado || 'abierta'
         };
     }
 

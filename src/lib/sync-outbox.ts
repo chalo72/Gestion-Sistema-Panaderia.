@@ -41,13 +41,18 @@ export const leerOutbox = (): OutboxItem[] => {
     if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
+    const valid = parsed.filter(
       (x): x is OutboxItem =>
         typeof x === 'object' &&
         x !== null &&
         typeof (x as OutboxItem).id === 'string' &&
-        typeof (x as OutboxItem).table === 'string'
+        typeof (x as OutboxItem).table === 'string' &&
+        ((x as OutboxItem).attempts ?? 0) < MAX_ATTEMPTS
     );
+    if (valid.length !== parsed.length) {
+      localStorage.setItem(OUTBOX_KEY, JSON.stringify(valid.slice(0, MAX_ITEMS)));
+    }
+    return valid;
   } catch {
     return [];
   }
@@ -135,16 +140,14 @@ export const flushOutbox = async (handlers: FlushHandlers): Promise<number> => {
       ok += 1;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      const attempts = item.attempts + 1;
+      const attempts = (item.attempts ?? 0) + 1;
       if (attempts < MAX_ATTEMPTS) {
         remaining.push({ ...item, attempts, lastError: msg.slice(0, 200) });
       } else {
-        emitStatus({
-          kind: 'error',
-          message: `No se pudo subir ${item.table} tras ${MAX_ATTEMPTS} intentos.`,
-          pendingCount: remaining.length + 1,
-        });
-        remaining.push({ ...item, attempts, lastError: msg.slice(0, 200) });
+        console.warn(
+          `⚠️ [Sync Outbox] Elemento ${item.table} (${item.id}) archivado tras ${MAX_ATTEMPTS} intentos:`,
+          msg
+        );
       }
     }
   }
