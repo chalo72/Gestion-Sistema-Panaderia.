@@ -1341,6 +1341,55 @@ export function ControlCaja({
                 </div>
             )}
 
+            {/* ══ MÓVIL: ACCESO RÁPIDO A TODAS LAS CAJAS ABIERTAS (Principal, Helados, Micheladas, etc.) ══
+                En escritorio esta lista ya existe en la pestaña "Cajas de la Jornada" (hidden md:flex más abajo).
+                En celular NO aparecía porque esa pestaña está oculta (hidden md:flex) y la tarjeta de abajo
+                solo muestra "cajaActiva" (un puntero local a ESTE dispositivo, no la lista real sincronizada).
+                Por eso las cajas ya abiertas en el PC "no aparecían" en el celular de la vendedora: existían
+                en cajasAbiertas (sí sincronizado), pero no había ninguna UI en celular que las listara. */}
+            {cajasAbiertas.length > 0 && (
+                <div className="md:hidden flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between px-1">
+                        <h3 className="text-[11px] font-black text-slate-500 dark:text-slate-400 uppercase tracking-widest">
+                            Cajas Abiertas ({cajasAbiertas.length})
+                        </h3>
+                        <span className="text-[10px] font-bold text-slate-400">Turno {turnoActual || '—'}</span>
+                    </div>
+                    {cajasAbiertas.map(caja => {
+                        const turnoEmoji = caja.turno === 'Mañana' ? '☀️' : caja.turno === 'Tarde' ? '🌆' : '🌙';
+                        const vendedora = getVendedora(caja);
+                        return (
+                            <div key={caja.id} className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm p-3.5 flex items-center gap-3">
+                                <div className="w-11 h-11 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center shrink-0">
+                                    <Store className="w-5 h-5 text-slate-500" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-black text-slate-900 dark:text-white uppercase truncate leading-none">{getNombreCaja(caja)}</p>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                        <span className="text-xs shrink-0">{turnoEmoji}</span>
+                                        <span className={cn(
+                                            "text-[10px] font-black uppercase truncate",
+                                            vendedora ? "text-slate-400" : "text-amber-500"
+                                        )}>
+                                            {vendedora || 'Sin vendedora asignada'}
+                                        </span>
+                                    </div>
+                                    <p className="text-[10px] font-bold text-emerald-600 mt-0.5">
+                                        Ventas: {formatCurrency(caja.totalVentas)}
+                                    </p>
+                                </div>
+                                <Button
+                                    onClick={() => { setCajaEntregando(caja); setShowEntregaModal(true); }}
+                                    className="shrink-0 h-11 px-3 bg-slate-900 hover:bg-black dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl font-black text-[10px] uppercase gap-1"
+                                >
+                                    <Handshake className="w-3.5 h-3.5" /> Cuadrar
+                                </Button>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
             {/* ══ MÓVIL: DASHBOARD DE CAJA (PASO 4) ══ */}
             <div className="md:hidden flex flex-col gap-4">
                 {hayJornada && cajaActiva ? (

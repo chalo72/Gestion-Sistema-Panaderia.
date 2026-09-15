@@ -470,6 +470,7 @@ const App = () => {
             onAjustarStock={onAjustarStock}
             cajaActionTrigger={cajaActionTrigger}
             onCajaActionConsumed={() => setCajaActionTrigger(null)}
+            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           />
         );
       case 'caja':

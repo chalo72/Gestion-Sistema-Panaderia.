@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Coffee, BellRing } from 'lucide-react';
+import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Coffee, BellRing, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 import { RadarNequi } from './RadarNequi';
@@ -27,12 +27,15 @@ interface POSHeaderProps {
     onSelectVendedora?: (v: VendedoraOption | null) => void;
     onShowChecklistVitrina?: () => void;
     onViewConsumo?: () => void;
+    /** Acceso directo (1 toque) a Búsqueda Rápida — abre el menú lateral donde vive el buscador */
+    onOpenMobileMenu?: () => void;
 }
 
 export function POSHeader({
     viewMode, setViewMode,
     tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida,
-    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowChecklistVitrina, onViewConsumo
+    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowChecklistVitrina, onViewConsumo,
+    onOpenMobileMenu
 }: POSHeaderProps) {
     const [panelOpen, setPanelOpen] = useState(false);
 
@@ -168,6 +171,16 @@ export function POSHeader({
                     >
                         <LayoutGrid className="w-5 h-5" />
                     </button>
+                    {/* Búsqueda rápida — acceso directo de 1 toque para vendedoras */}
+                    {onOpenMobileMenu && (
+                        <button
+                            onClick={onOpenMobileMenu}
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700 shadow-sm"
+                            title="Búsqueda rápida"
+                        >
+                            <Search className="w-5 h-5" />
+                        </button>
+                    )}
                     {/* Consumo */}
                     {onViewConsumo && (
                         <button

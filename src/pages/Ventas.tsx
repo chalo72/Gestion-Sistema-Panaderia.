@@ -98,6 +98,8 @@ interface VentasProps {
     clientes: Cliente[];
     cajaActionTrigger?: { tipo: 'entrada' | 'salida' | 'cierre'; ts: number } | null;
     onCajaActionConsumed?: () => void;
+    /** Abre el menú lateral (donde vive Búsqueda Rápida) — acceso directo desde el header del POS en móvil */
+    onOpenMobileMenu?: () => void;
 }
 
 // ID constante para la pestaña de Venta Rápida
@@ -129,6 +131,7 @@ export function Ventas(props: VentasProps) {
         clientes: masterClientes,
         cajaActionTrigger,
         onCajaActionConsumed,
+        onOpenMobileMenu,
     } = props;
 
     // ==========================================
@@ -1030,6 +1033,7 @@ export function Ventas(props: VentasProps) {
                     onSelectVendedora={setVendedoraActiva}
                     onShowChecklistVitrina={() => setShowChecklistVitrina(true)}
                     onViewConsumo={props.onViewConsumo}
+                    onOpenMobileMenu={onOpenMobileMenu}
                 />
                 {/* ── Selector Rápido de Vendedora — solo desktop ── */}
                 {vendedorasDisponibles.length >= 1 && (
