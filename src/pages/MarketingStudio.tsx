@@ -45,7 +45,7 @@ export default function MarketingStudio() {
     setIsGenerating(true);
     setGeneratedContent('');
     const estrategia = STRATEGIES.find(s => s.id === selectedStrategy);
-    const prompt = Actúa como un experto copywriter de marketing gastronómico. He subido una foto de mi panadería/repostería. Mi objetivo es aplicar la estrategia de "". \n\nGenera un plan de contenidos directo y persuasivo con esta estructura EXACTA:\n\n[INSTAGRAM]\n(Texto para Instagram y Facebook con emojis y hashtags)\n\n[WHATSAPP]\n(Texto corto y muy vendedor para subir a los Estados de WhatsApp o enviar a clientes)\n\n[TIKTOK]\n(Idea de guion de 15 segundos narrando lo que se ve en el video);
+    const prompt = `Actúa como un experto copywriter de marketing gastronómico. He subido una foto de mi panadería/repostería. Mi objetivo es aplicar la estrategia de "${estrategia?.label ?? ''}". \n\nGenera un plan de contenidos directo y persuasivo con esta estructura EXACTA:\n\n[INSTAGRAM]\n(Texto para Instagram y Facebook con emojis y hashtags)\n\n[WHATSAPP]\n(Texto corto y muy vendedor para subir a los Estados de WhatsApp o enviar a clientes)\n\n[TIKTOK]\n(Idea de guion de 15 segundos narrando lo que se ve en el video)`;
 
     try {
       let accumulatedText = '';
@@ -140,8 +140,8 @@ export default function MarketingStudio() {
             </CardHeader>
             <CardContent className="p-4 space-y-3">
               {STRATEGIES.map(strategy => (
-                <div key={strategy.id} onClick={() => setSelectedStrategy(strategy.id)} className={p-3 rounded-xl border-2 cursor-pointer transition-all }>
-                  <h3 className={	ext-sm font-bold }>{strategy.label}</h3>
+                <div key={strategy.id} onClick={() => setSelectedStrategy(strategy.id)} className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${selectedStrategy === strategy.id ? 'border-fuchsia-500 bg-fuchsia-50 dark:bg-fuchsia-900/20' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'}`}>
+                  <h3 className={`text-sm font-bold ${selectedStrategy === strategy.id ? 'text-fuchsia-600 dark:text-fuchsia-400' : 'text-slate-700 dark:text-white'}`}>{strategy.label}</h3>
                   <p className="text-xs text-slate-500 mt-1">{strategy.desc}</p>
                 </div>
               ))}

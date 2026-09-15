@@ -212,7 +212,7 @@ export default function FiadosEmpleados({ trabajadores = [] }: FiadosEmpleadosPr
                   </div>
                 ) : (
                   creditos.map(c => (
-                    <div key={c.id} className={\p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex flex-col sm:flex-row gap-4 \\}>
+                    <div key={c.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors flex flex-col sm:flex-row gap-4">
                       {c.fotoUrl && (
                         <div className="w-16 h-16 sm:w-20 sm:h-20 flex-shrink-0 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
                           <img src={c.fotoUrl} alt="Foto" className="w-full h-full object-cover" />
