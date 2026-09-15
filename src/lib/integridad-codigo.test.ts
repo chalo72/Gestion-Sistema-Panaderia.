@@ -42,8 +42,10 @@ describe('CAPA 3: Integridad del código — usePriceControl.ts', () => {
   });
 
   it('autoSeedData tiene guard de doble verificación del flag', () => {
-    // Guard runtime: si alguien llama autoSeedData fuera de contexto
-    expect(usePriceControlSrc).toContain('autoSeedData bloqueado');
+    // Guard runtime: el texto del comentario cambió, pero el guard triple
+    // (localStorage + IndexedDB + tombstones) sigue presente antes de seedear.
+    expect(usePriceControlSrc).toContain('Guard TRIPLE');
+    expect(usePriceControlSrc).toContain("yaSetupLS === 'true' || yaSetupIDB === true");
   });
 
   it('autoSeedData consulta tombstones de productos', () => {

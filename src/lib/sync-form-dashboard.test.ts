@@ -99,7 +99,9 @@ describe('CAPA 2: Proveedores.tsx handleSubmit — sincronización Form → DB',
   });
 
   it('handleSubmit envía cantidadEmbalaje al crear precio', () => {
-    expect(proveedoresPageSrc).toContain('cantidadEmbalaje: Number(item.cantidadEmbalaje)');
+    // Se agregó conversión a unidad base (kg/L) para soportar lb/gr/ml — sigue
+    // enviando cantidadEmbalaje, ahora ya normalizado.
+    expect(proveedoresPageSrc).toContain('cantidadEmbalaje: Math.round(cantidadBase * 1000) / 1000');
   });
 
   it('handleSubmit envía tipoEmbalaje al crear precio', () => {

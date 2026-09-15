@@ -369,9 +369,11 @@ describe('RED: Pruebas de Red y Estados Límite', () => {
 describe('INTEGRIDAD: Código de Sincronización en Producción', () => {
 
   it('DB-01: syncCloudToLocal usa MERGE (no hydrateFromCloud directo) para Supabase', () => {
-    // Verificar que el fix de MERGE está en el código
-    const tieneLogicaMerge = databaseSrc.includes('MERGE BIDIRECCIONAL') ||
-      databaseSrc.includes('Solo agregar lo que NO existe');
+    // Verificar que el fix de MERGE está en el código (el comentario bajó a
+    // minúsculas: "merge bidireccional"; la lógica de "solo insertar/actualizar
+    // lo que vino de la nube" sigue intacta).
+    const tieneLogicaMerge = databaseSrc.includes('merge bidireccional') ||
+      databaseSrc.includes('solo insertar/actualizar lo que vino de la nube');
     expect(tieneLogicaMerge).toBe(true);
   });
 

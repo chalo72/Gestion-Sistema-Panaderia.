@@ -25,6 +25,7 @@ const srcDir = resolve(__dirname, '..');
 const proveedoresPage = readFileSync(resolve(srcDir, 'pages/Proveedores.tsx'), 'utf-8');
 const proveedorForm = readFileSync(resolve(srcDir, 'components/proveedores/ProveedorForm.tsx'), 'utf-8');
 const usePriceControl = readFileSync(resolve(srcDir, 'hooks/usePriceControl.ts'), 'utf-8');
+const useCatalogo = readFileSync(resolve(srcDir, 'hooks/useCatalogo.ts'), 'utf-8');
 
 // ═══════════════════════════════════════════════════════════════
 // CAPA 1: FORTALEZA — Campos obligatorios de ProductoCatalogo
@@ -63,7 +64,8 @@ describe('CAPA 2 — CADENA: handleSubmit transmite todos los campos a DB', () =
   // Campos que handleSubmit DEBE enviar a onAddOrUpdatePrecio
   const camposPrecio = [
     'precioCosto: Math.round(Number(item.precioCosto) || 0)',
-    'cantidadEmbalaje: Number(item.cantidadEmbalaje)',
+    // Normalizado a unidad base (kg/L) para soportar lb/gr/ml — ver blindaje-form-dashboard "CAPA 5"
+    'cantidadEmbalaje: Math.round(cantidadBase * 1000) / 1000',
     'tipoEmbalaje: item.tipoEmbalaje',
     'destino: item.destino',
   ];
@@ -187,8 +189,10 @@ describe('CAPA 5 — CENTINELA: Fórmulas matemáticas blindadas', () => {
 
   // --- Fórmulas del Form ---
   it('Form: costUnit = precioCosto / cantidadEmbalaje', () => {
-    // useMemo en ProveedorForm calcula cost / packQty
-    expect(proveedorForm).toContain('cost / packQty');
+    // useMemo en ProveedorForm calcula cost / (packQty * factor).
+    // Se agregó "factor" para soportar unidades (kg/lb/gr/ml/L); con und/kg factor=1
+    // y la fórmula se reduce a la original cost / packQty.
+    expect(proveedorForm).toContain('cost / (packQty * factor)');
   });
 
   it('Form: sellPrice = costUnit * (1 + margen / 100)', () => {
@@ -216,7 +220,9 @@ describe('CAPA 5 — CENTINELA: Fórmulas matemáticas blindadas', () => {
   });
 
   it('Hook: precio de venta redondeado a centenas', () => {
-    expect(usePriceControl).toContain('/ 100) * 100');
+    // La recalculación de precioVenta se delegó de usePriceControl a useCatalogo
+    // (ver comentario del test anterior); el redondeo a centenas sigue vivo ahí.
+    expect(useCatalogo).toContain('/ 100) * 100');
   });
 
   // --- Fórmulas de cálculo puro ---

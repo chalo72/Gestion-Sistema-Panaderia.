@@ -255,15 +255,18 @@ describe('SINC-02 — Pull inteligente: descarga solo items más nuevos', () => 
 describe('CONS-01 — Integridad del código fuente', () => {
   it('CONS-01a: Ventas.tsx filtra insumos por categoría (no por tipo — W-010)', () => {
     // W-010: el filtro por p.tipo fue eliminado intencionalmente para incluir
-    // productos sin tipo importados. La protección ahora es por categoría isNotInsumo.
+    // productos sin tipo importados. La protección por categoría (antes inline
+    // "isNotInsumo" en Ventas.tsx) se extrajo a busqueda-productos.ts como
+    // esCategoriaInsumo(), usada por esProductoBusquedaVenta() en Ventas.tsx.
     const src = readSrc('pages/Ventas.tsx');
-    expect(src).toContain('isNotInsumo');
-    expect(src).toContain("startsWith('ins:')");
+    const lib = readSrc('lib/busqueda-productos.ts');
+    expect(src).toContain('esProductoBusquedaVenta');
+    expect(lib).toContain("startsWith('ins:')");
   });
 
   it('CONS-01b: Ventas.tsx filtra insumos con ins: prefix', () => {
-    const src = readSrc('pages/Ventas.tsx');
-    expect(src).toContain("categoriaLower.startsWith('ins:')");
+    const lib = readSrc('lib/busqueda-productos.ts');
+    expect(lib).toContain("c.startsWith('ins:')");
   });
 
   it('CONS-01c: Ventas.tsx comparación de categoría es lowercase', () => {

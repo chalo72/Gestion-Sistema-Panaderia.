@@ -316,22 +316,28 @@ describe('CAPA 2 — CADENA: Fórmulas se propagan correctamente', () => {
 // ══════════════════════════════════════════════════════════════
 describe('CAPA 3 — ESPEJO: Consistencia entre componentes', () => {
   
-  it('ProveedorForm y usePriceControl usan la misma fórmula de redondeo COP', () => {
+  it('ProveedorForm y useCatalogo usan la misma fórmula de redondeo COP', () => {
     const provForm = readSrc('components/proveedores/ProveedorForm.tsx');
-    const priceControl = readSrc('hooks/usePriceControl.ts');
-    
+    // El redondeo a centenas de precioVenta se delegó de usePriceControl a
+    // useCatalogo (ver blindaje-form-dashboard "CAPA 5").
+    const useCatalogo = readSrc('hooks/useCatalogo.ts');
+
     // Ambos deben usar / 100) * 100 para redondeo COP
     expect(provForm).toMatch(/\/\s*100\)\s*\*\s*100/);
-    expect(priceControl).toMatch(/\/\s*100\)\s*\*\s*100/);
+    expect(useCatalogo).toMatch(/\/\s*100\)\s*\*\s*100/);
   });
 
-  it('ModelosPanView y BusquedaRapida usan margen sobre COSTO', () => {
+  it('ModelosPanView usa Markup (margen sobre COSTO) y BusquedaRapida usa Gross Margin (sobre VENTA)', () => {
+    // Por convención del proyecto (ver CLAUDE.md "Cálculos de Precio"):
+    // - Markup, para fijar precio: margen = (venta - costo) / costo × 100
+    // - Gross Margin, para reportes de utilidad: margen = (venta - costo) / venta × 100
+    // ModelosPanView fija precio de venta → Markup (sobre costoUnitario).
+    // BusquedaRapida muestra un reporte rápido de "utilidad" → Gross Margin (sobre precioVenta).
     const modelos = readSrc('components/produccion/ModelosPanView.tsx');
     const busqueda = readSrc('components/layout/BusquedaRapida.tsx');
-    
-    // Ambos deben dividir por costo, no por precio de venta
+
     expect(modelos).toMatch(/\/\s*costoUnitario\)\s*\*\s*100/);
-    expect(busqueda).toMatch(/\/\s*costoUnitario\)\s*\*\s*100/);
+    expect(busqueda).toMatch(/\(\s*v\s*-\s*costoRef\s*\)\s*\/\s*v\s*\)\s*\*\s*100/);
   });
 
   it('useFinanzas protege ambas funciones de pago (clientes y trabajadores)', () => {

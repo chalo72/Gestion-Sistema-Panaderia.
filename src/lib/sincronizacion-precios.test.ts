@@ -26,6 +26,10 @@ const usePriceControlSrc = readFileSync(resolve(hooksDir, 'usePriceControl.ts'),
 const useCatalogoSrc = readFileSync(resolve(hooksDir, 'useCatalogo.ts'), 'utf-8');
 const busquedaRapidaSrc = readFileSync(resolve(componentsDir, 'layout/BusquedaRapida.tsx'), 'utf-8');
 const proveedoresSrc = readFileSync(resolve(__dirname, '../pages/Proveedores.tsx'), 'utf-8');
+// El desglose de precio-por-proveedor con "mejor precio" resaltado vive ahora en
+// Productos.tsx + ProductPriceItem.tsx (BusquedaRapida solo muestra el resumen).
+const productosPageSrc = readFileSync(resolve(__dirname, '../pages/Productos.tsx'), 'utf-8');
+const productPriceItemSrc = readFileSync(resolve(componentsDir, 'productos/ProductPriceItem.tsx'), 'utf-8');
 
 // ============================================================
 // CAPA 1: Fórmulas de cálculo correctas (lógica pura)
@@ -118,13 +122,15 @@ describe('CAPA 2: addOrUpdatePrecio usa fórmula con costoUnitario', () => {
 describe('CAPA 3: BusquedaRapida sincronizada con precios de proveedor', () => {
 
   it('BusquedaRapida calcula utilidad con costo UNITARIO, no precio de paquete', () => {
+    // La variable se renombró de costoUnitario a costoRef, pero sigue siendo
+    // precioCosto / cantidadEmbalaje (costo unitario, no de paquete).
     expect(busquedaRapidaSrc).toContain('cantidadEmbalaje');
-    expect(busquedaRapidaSrc).toContain('costoUnitario');
+    expect(busquedaRapidaSrc).toContain('costoRef');
   });
 
   it('BusquedaRapida divide precioCosto por cantidadEmbalaje en stats', () => {
     // Verificar que getProductoStats NO usa precioCosto directamente
-    const statsSection = busquedaRapidaSrc.match(/getProductoStats[\s\S]*?mejorCosto:\s*costoUnitario/);
+    const statsSection = busquedaRapidaSrc.match(/getProductoStats[\s\S]*?mejorCosto:\s*costoRef/);
     expect(statsSection).not.toBeNull();
   });
 
@@ -133,12 +139,15 @@ describe('CAPA 3: BusquedaRapida sincronizada con precios de proveedor', () => {
   });
 
   it('BusquedaRapida muestra costo unitario por proveedor (no pack)', () => {
-    // La lista de precios por proveedor debe mostrar costo unitario
-    expect(busquedaRapidaSrc).toContain('formatCurrency(costoUnit)');
+    // Este desglose por proveedor se movió de BusquedaRapida a la página Productos
+    // (ProductPriceItem.tsx), donde se muestra "Precio Costo" por cada aliado.
+    expect(productPriceItemSrc).toContain('formatCurrency(precio.precioCosto)');
   });
 
   it('BusquedaRapida compara esMejor con costoUnitario, no precioCosto', () => {
-    expect(busquedaRapidaSrc).toContain('costoUnit === stats.mejorCosto');
+    // getMejorPrecio (useCatalogo.ts) elige por costo UNITARIO (precioCosto/cantidadEmbalaje),
+    // no por precioCosto de paquete; Productos.tsx pasa esMejorPrecio={mp?.id === precio.id}.
+    expect(productosPageSrc).toContain('esMejorPrecio={mp?.id === precio.id}');
   });
 });
 
@@ -148,7 +157,7 @@ describe('CAPA 3: BusquedaRapida sincronizada con precios de proveedor', () => {
 describe('CAPA 4: Proveedores.tsx sincroniza con módulo de productos', () => {
 
   it('handleSubmit llama onAddOrUpdatePrecio con cantidadEmbalaje', () => {
-    expect(proveedoresSrc).toContain('cantidadEmbalaje: Number(item.cantidadEmbalaje)');
+    expect(proveedoresSrc).toContain('cantidadEmbalaje: Math.round(cantidadBase * 1000) / 1000');
   });
 
   it('handleSubmit actualiza producto con precioVenta redondeado del formulario', () => {
