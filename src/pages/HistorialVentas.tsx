@@ -31,7 +31,8 @@ import {
     Banknote,
     BarChart3,
     CheckSquare,
-    Square
+    Square,
+    X
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -136,7 +137,8 @@ export default function HistorialVentas({
                     v.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                     (v.cliente || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                     v.usuarioId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                    (v.vendedoraNombre || '').toLowerCase().includes(searchTerm.toLowerCase());
+                    (v.vendedoraNombre || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                    v.items.some(item => (getProductoById(item.productoId)?.nombre || '').toLowerCase().includes(searchTerm.toLowerCase()));
 
                 // Filtro por rango de fechas
                 let matchesDate = true;
@@ -213,10 +215,28 @@ export default function HistorialVentas({
         });
         const totalHoy = ventasHoy.reduce((sum, v) => sum + v.total, 0);
 
+        // Totales por método de pago en el filtro actual
+        let totalEfectivo = 0;
+        let totalDigital = 0; // nequi + transferencia + tarjeta
+        let totalCredito = 0;
+
+        filteredVentas.forEach(v => {
+            if (v.metodoPago === 'efectivo') {
+                totalEfectivo += v.total;
+            } else if (v.metodoPago === 'credito') {
+                totalCredito += v.total;
+            } else {
+                totalDigital += v.total;
+            }
+        });
+
         return {
             totalVentas,
             totalItems,
             promedioVenta,
+            totalEfectivo,
+            totalDigital,
+            totalCredito,
             metodoMasUsado: metodoMasUsado ? { metodo: metodoMasUsado[0], count: metodoMasUsado[1] } : null,
             cantidadVentas: filteredVentas.length,
             ventasHoy: ventasHoy.length,
@@ -471,7 +491,7 @@ export default function HistorialVentas({
     };
 
     // Atajos de rango de fechas rápidos
-    const setQuickDateFilter = (tipo: 'hoy' | 'ayer' | 'semana' | 'mes') => {
+    const setQuickDateFilter = (tipo: 'hoy' | 'ayer' | 'semana' | 'mes' | 'todo') => {
         const hoy = new Date();
         const fmt = (d: Date) => format(d, 'yyyy-MM-dd');
         switch (tipo) {
@@ -492,6 +512,10 @@ export default function HistorialVentas({
             case 'mes':
                 setFechaDesde(fmt(subDays(hoy, 29)));
                 setFechaHasta(fmt(hoy));
+                break;
+            case 'todo':
+                setFechaDesde('');
+                setFechaHasta('');
                 break;
         }
         setCurrentPage(1);
@@ -716,15 +740,15 @@ export default function HistorialVentas({
             </header>
 
             {/* KPIs Dashboard */}
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2">
                 <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 bg-emerald-500/10 rounded-lg flex items-center justify-center shrink-0">
                             <DollarSign className="w-4 h-4 text-emerald-600" />
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Ventas Hoy</p>
-                            <p className="text-sm font-black text-emerald-600 tabular-nums truncate">{formatCurrency(kpis.totalHoy)}</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest truncate">Total Filtrado</p>
+                            <p className="text-sm font-black text-emerald-600 tabular-nums truncate">{formatCurrency(kpis.totalVentas)}</p>
                         </div>
                     </div>
                 </div>
@@ -735,8 +759,44 @@ export default function HistorialVentas({
                             <ShoppingCart className="w-4 h-4 text-blue-600" />
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Trans. Hoy</p>
-                            <p className="text-sm font-black text-blue-600 tabular-nums">{kpis.ventasHoy}</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest truncate">Transacciones</p>
+                            <p className="text-sm font-black text-blue-600 tabular-nums">{kpis.cantidadVentas}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-teal-500/10 rounded-lg flex items-center justify-center shrink-0">
+                            <Banknote className="w-4 h-4 text-teal-600" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest truncate">Efectivo</p>
+                            <p className="text-sm font-black text-teal-600 tabular-nums truncate">{formatCurrency(kpis.totalEfectivo)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center shrink-0">
+                            <CreditCard className="w-4 h-4 text-purple-600" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest truncate">Nequi/Tarj.</p>
+                            <p className="text-sm font-black text-purple-600 tabular-nums truncate">{formatCurrency(kpis.totalDigital)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                    <div className="flex items-center gap-2">
+                        <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center shrink-0">
+                            <Clock className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest truncate">Crédito/Fiado</p>
+                            <p className="text-sm font-black text-amber-600 tabular-nums truncate">{formatCurrency(kpis.totalCredito)}</p>
                         </div>
                     </div>
                 </div>
@@ -747,44 +807,8 @@ export default function HistorialVentas({
                             <TrendingUp className="w-4 h-4 text-indigo-600" />
                         </div>
                         <div className="min-w-0">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Promedio</p>
+                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest truncate">Ticket Prom.</p>
                             <p className="text-sm font-black text-indigo-600 tabular-nums truncate">{formatCurrency(kpis.promedioVenta)}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-purple-500/10 rounded-lg flex items-center justify-center shrink-0">
-                            <Package className="w-4 h-4 text-purple-600" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Items</p>
-                            <p className="text-sm font-black text-purple-600 tabular-nums">{kpis.totalItems}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-amber-500/10 rounded-lg flex items-center justify-center shrink-0">
-                            <Banknote className="w-4 h-4 text-amber-600" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Método Top</p>
-                            <p className="text-sm font-black text-amber-600 uppercase truncate">{kpis.metodoMasUsado?.metodo || 'N/A'}</p>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 p-3 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-rose-500/10 rounded-lg flex items-center justify-center shrink-0">
-                            <BarChart3 className="w-4 h-4 text-rose-600" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Filtradas</p>
-                            <p className="text-sm font-black text-rose-600 tabular-nums">{kpis.cantidadVentas}</p>
                         </div>
                     </div>
                 </div>
@@ -920,8 +944,8 @@ export default function HistorialVentas({
                     <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 shrink-0" />
 
                     {/* Atajos de fecha rápidos */}
-                    {(['hoy', 'ayer', 'semana', 'mes'] as const).map(tipo => {
-                        const labels = { hoy: 'Hoy', ayer: 'Ayer', semana: '7 días', mes: '30 días' };
+                    {(['hoy', 'ayer', 'semana', 'mes', 'todo'] as const).map(tipo => {
+                        const labels = { hoy: 'Hoy', ayer: 'Ayer', semana: 'Esta Semana', mes: 'Este Mes', todo: 'Todo' };
                         const isActive = (() => {
                             const hoy = format(new Date(), 'yyyy-MM-dd');
                             const ayer = format(subDays(new Date(), 1), 'yyyy-MM-dd');
@@ -929,6 +953,7 @@ export default function HistorialVentas({
                             if (tipo === 'ayer') return fechaDesde === ayer && fechaHasta === ayer;
                             if (tipo === 'semana') return fechaDesde === format(subDays(new Date(), 6), 'yyyy-MM-dd') && fechaHasta === hoy;
                             if (tipo === 'mes') return fechaDesde === format(subDays(new Date(), 29), 'yyyy-MM-dd') && fechaHasta === hoy;
+                            if (tipo === 'todo') return !fechaDesde && !fechaHasta;
                             return false;
                         })();
                         return (
@@ -1149,11 +1174,21 @@ export default function HistorialVentas({
                 <div className="md:col-span-2 relative">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <Input
-                        placeholder="Buscar por ID, Cliente o Vendedor..."
+                        placeholder="Buscar por ID, Cliente, Vendedor o Producto..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="pl-11 h-12 bg-slate-50 dark:bg-slate-800 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
+                        className="pl-11 pr-10 h-12 bg-slate-50 dark:bg-slate-800 border-transparent rounded-2xl focus:ring-2 focus:ring-indigo-500 transition-all font-medium"
                     />
+                    {searchTerm && (
+                        <button
+                            type="button"
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
+                            title="Limpiar búsqueda"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    )}
                 </div>
 
                 <div className="relative">

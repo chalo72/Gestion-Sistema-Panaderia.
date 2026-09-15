@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1149",
-  "buildTime": "2026-09-14T22:08:00.000Z",
-  "description": "Historial de producción con buscador en tiempo real, filtro por fechas (Hoy, Ayer, Esta Semana, Todos) y tarjetas totalizadoras de arrobas y panes",
-  "timestamp": 1789423680000,
+  "version": "1.1.1150",
+  "buildTime": "2026-09-14T22:22:00.000Z",
+  "description": "Historial de Ventas optimizado: buscador por producto, filtros de fecha rapidos (Hoy, Ayer, Esta Semana, Este Mes, Todo) y KPIs con desglose por medio de pago",
+  "timestamp": 1789424520000,
   "buildDate": "2026-09-14"
 }
