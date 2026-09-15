@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1146",
-  "buildTime": "2026-09-14T13:42:00.000Z",
-  "description": "Permitir seleccion fluida de masa a mojar en Libreta del Horno con selector nativo movil y auto-seleccion",
-  "timestamp": 1789392120000,
+  "version": "1.1.1149",
+  "buildTime": "2026-09-14T22:08:00.000Z",
+  "description": "Historial de producción con buscador en tiempo real, filtro por fechas (Hoy, Ayer, Esta Semana, Todos) y tarjetas totalizadoras de arrobas y panes",
+  "timestamp": 1789423680000,
   "buildDate": "2026-09-14"
 }
