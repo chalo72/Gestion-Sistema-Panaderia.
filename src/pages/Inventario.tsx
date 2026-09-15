@@ -1158,6 +1158,58 @@ export function Inventario({
                                                         id={`input-ronda-${item.productoId}`}
                                                         className="h-12 text-center font-black text-xl rounded-xl border-2 border-indigo-200 dark:border-indigo-700 focus:border-indigo-500 w-full"
                                                     />
+                                                    {/* Botones táctiles rápidos para conteo ágil */}
+                                                    <div className="grid grid-cols-5 gap-1 py-1">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConteoValues(prev => ({ ...prev, [item.productoId]: '0' }))}
+                                                            className="h-7 text-[10px] font-black rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                                                            title="Poner en cero"
+                                                        >
+                                                            0
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConteoValues(prev => {
+                                                                const act = Math.max(0, (parseInt(prev[item.productoId] || '0') || 0) - 1);
+                                                                return { ...prev, [item.productoId]: String(act) };
+                                                            })}
+                                                            className="h-7 text-[10px] font-black rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                                                        >
+                                                            -1
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConteoValues(prev => {
+                                                                const act = (parseInt(prev[item.productoId] || '0') || 0) + 1;
+                                                                return { ...prev, [item.productoId]: String(act) };
+                                                            })}
+                                                            className="h-7 text-[10px] font-black rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                                                        >
+                                                            +1
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConteoValues(prev => {
+                                                                const act = (parseInt(prev[item.productoId] || '0') || 0) + 5;
+                                                                return { ...prev, [item.productoId]: String(act) };
+                                                            })}
+                                                            className="h-7 text-[10px] font-black rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                                                        >
+                                                            +5
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConteoValues(prev => {
+                                                                const act = (parseInt(prev[item.productoId] || '0') || 0) + 10;
+                                                                return { ...prev, [item.productoId]: String(act) };
+                                                            })}
+                                                            className="h-7 text-[10px] font-black rounded-lg bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300"
+                                                        >
+                                                            +10
+                                                        </button>
+                                                    </div>
+
                                                     {/* Botón confirmar rápido (igual al esperado) */}
                                                     {!contado && (
                                                         <button
@@ -1256,6 +1308,32 @@ export function Inventario({
             ════════════════════════════════════════════════════════ */}
             {tab === 'stock' && (
                 <div className="space-y-4 animate-ag-fade-in">
+                    {/* Tarjetas Totalizadoras de Stock */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Valor Invertido (Costo)</p>
+                            <p className="text-base sm:text-lg font-black text-emerald-600 tabular-nums mt-0.5 truncate">{formatCurrency(stats.valorTotal)}</p>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Valor Venta Estimado</p>
+                            <p className="text-base sm:text-lg font-black text-indigo-600 tabular-nums mt-0.5 truncate">
+                                {formatCurrency(inventarioConProducto.reduce((s, i) => s + (i.stockActual * (i.producto?.precioVenta || 0)), 0))}
+                            </p>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Críticos / Por Agotar</p>
+                            <p className="text-base sm:text-lg font-black text-amber-600 tabular-nums mt-0.5">
+                                {stats.bajo + stats.agotado} <span className="text-xs text-muted-foreground font-normal">({stats.agotado} agotados)</span>
+                            </p>
+                        </div>
+                        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest truncate">Salud de Bodega</p>
+                            <p className="text-base sm:text-lg font-black text-teal-600 tabular-nums mt-0.5">
+                                {stats.saludPct}% <span className="text-xs text-muted-foreground font-normal">({stats.ok}/{stats.total})</span>
+                            </p>
+                        </div>
+                    </div>
+
                     {/* Filtros */}
                     <div className="flex gap-3 flex-wrap">
                         <div className="relative flex-1 min-w-[200px]">
