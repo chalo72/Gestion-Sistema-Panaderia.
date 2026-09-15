@@ -35,10 +35,10 @@ export class ErrorBoundary extends Component<Props, State> {
       msg.includes('posible caché PWA');
 
     if (isChunkError) {
-      // Evita bucle infinito de recarga
+      // Evita bucle infinito de recarga, usando localStorage
       const key = 'dp_chunk_reload_once';
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, '1');
+      if (!localStorage.getItem(key)) {
+        localStorage.setItem(key, '1');
         window.location.reload();
       }
     }
@@ -79,7 +79,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <Button 
                 onClick={() => {
                   if (isChunkError) {
-                    sessionStorage.removeItem('dp_chunk_reload_once');
+                    localStorage.removeItem('dp_chunk_reload_once');
                     window.location.reload();
                   } else {
                     this.setState({ hasError: false, error: null });

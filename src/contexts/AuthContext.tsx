@@ -93,10 +93,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch { /* usar baseList como fallback */ }
 
-          // LOCAL SIEMPRE GANA: nube solo agrega usuarios que no existen localmente
+          // MERGE INTELIGENTE: Preservar contraseñas de la nube si el local no tiene, y usar updatedAt
           const mergedMap = new Map<string, Usuario>();
-          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // nube — prioridad baja
-          freshLocalList.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // local gana siempre
+          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // nube base
+
+          freshLocalList.forEach(localU => {
+            const key = localU.email.toLowerCase();
+            const cloudU = mergedMap.get(key);
+            if (!cloudU) {
+              mergedMap.set(key, localU);
+            } else {
+              // Combinar preservando la contraseña más reciente o existente
+              const cloudAt = new Date(cloudU.updatedAt || cloudU.createdAt || 0).getTime();
+              const localAt = new Date(localU.updatedAt || localU.createdAt || 0).getTime();
+              
+              // Si la nube es más reciente o el local perdió el password, gana la nube para esos campos
+              const preferCloud = cloudAt > localAt || (cloudU.password && !localU.password);
+              
+              const mergedU = preferCloud ? { ...localU, ...cloudU } : { ...cloudU, ...localU };
+              
+              // Asegurar que nunca perdamos el password si uno de los dos lo tiene
+              mergedU.password = mergedU.password || localU.password || cloudU.password;
+              
+              mergedMap.set(key, mergedU);
+            }
+          });
           let merged = normalizarUsuariosLogin(Array.from(mergedMap.values()));
 
           // Subir oficiales e inactivaciones a la nube (uno a uno)
@@ -301,13 +322,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = [...usuarios, nuevo];
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
-    if (firestore) {
-      try {
-        await setDoc(fbDoc(firestore, 'usuarios_sistema', nuevo.id), toFirestoreDoc(nuevo));
-      } catch (e) {
-        console.warn('⚠️ [Auth] No se pudo guardar en nube (guardado localmente):', e);
+      if (firestore) {
+        try {
+          setDoc(fbDoc(firestore, 'usuarios_sistema', nuevo.id), toFirestoreDoc(nuevo)).catch(e => {
+            console.warn('⚠️ [Auth] No se pudo guardar en nube (guardado localmente):', e);
+          });
+        } catch (e) {}
       }
-    }
     toast.success('Usuario guardado');
     return true;
   }, [usuarios]);
@@ -321,14 +342,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUsuario(updatedMe);
       localStorage.setItem('pricecontrol_local_user', JSON.stringify(updatedMe));
     }
-    if (firestore) {
-      try {
-        const updated = newList.find(u => u.id === id);
-        if (updated) await setDoc(fbDoc(firestore, 'usuarios_sistema', id), toFirestoreDoc(updated));
-      } catch (e) {
-        console.warn('⚠️ [Auth] No se pudo actualizar en nube:', e);
+      if (firestore) {
+        try {
+          const updated = newList.find(u => u.id === id);
+          if (updated) {
+             setDoc(fbDoc(firestore, 'usuarios_sistema', id), toFirestoreDoc(updated)).catch(e => console.warn(e));
+          }
+        } catch (e) {}
       }
-    }
     return true;
   }, [usuarios, usuario]);
 
@@ -340,13 +361,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const newList = usuarios.filter(u => u.id !== id);
     setUsuarios(newList);
     localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(newList));
-    if (firestore) {
-      try {
-        await deleteDoc(fbDoc(firestore, 'usuarios_sistema', id));
-      } catch (e) {
-        console.warn('⚠️ [Auth] No se pudo eliminar de nube:', e);
+      if (firestore) {
+        try {
+          deleteDoc(fbDoc(firestore, 'usuarios_sistema', id)).catch(e => console.warn(e));
+        } catch (e) {}
       }
-    }
     return true;
   }, [usuarios, usuario]);
 
@@ -371,6 +390,7 @@ export const useCan = () => {
   return {
     check: hasPermission, checkAny: hasAnyPermission, checkAll: hasAllPermissions,
     role, isAdmin: role === 'ADMIN', isGerente: role === 'GERENTE',
+    isControlFinanciero: role === 'CONTROL_FINANCIERO',
     isComprador: role === 'COMPRADOR', isVendedor: role === 'VENDEDOR', usuario
   };
 };

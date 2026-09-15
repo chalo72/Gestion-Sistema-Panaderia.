@@ -10,6 +10,7 @@ import {
   ArrowUpCircle,
   ArrowDownCircle,
   Bell,
+  Clock,
 } from 'lucide-react';
 
 import { usePriceControl } from '@/hooks/usePriceControl';
@@ -53,6 +54,11 @@ const Ahorros            = lazy(() => import('@/pages/Ahorros'));
 const PrePedidos         = lazy(() => import('@/pages/PrePedidos'));
 const Recepciones        = lazy(() => import('@/pages/Recepciones'));
 const PlanNegocio        = lazy(() => import('@/pages/PlanNegocio').then(m => ({ default: m.PlanNegocio })));
+const Expedientes        = lazy(() => import('@/pages/Expedientes'));
+const WhatsAppHub        = lazy(() => import('@/pages/WhatsAppHub'));
+const MarketingStudio    = lazy(() => import('@/pages/MarketingStudio'));
+const PedidosTortas      = lazy(() => import('@/pages/PedidosTortas'));
+const ControlMerma       = lazy(() => import('@/pages/ControlMerma'));
 
 // Carga Inmediata — Módulos principales del negocio (Navegación instantánea a costo de un inicio un poco más pesado)
 const Productos = lazy(() => import('@/pages/Productos'));
@@ -221,6 +227,9 @@ const App = () => {
     updateNomina,
   } = usePriceControl();
 
+  usePermisosRealtime();
+  useUsuariosRealtime();
+
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -256,11 +265,12 @@ const App = () => {
   // Vista de aterrizaje según el rol del usuario
   const getVistaInicial = (rol: string | null | undefined): ViewType => {
     switch (rol) {
-      case 'PANADERO':  return 'produccion';
-      case 'VENDEDOR':  return 'ventas';
-      case 'COMPRADOR': return 'recepciones';
-      case 'AUXILIAR':  return 'ventas';
-      default:          return 'dashboard';
+      case 'PANADERO':           return 'produccion';
+      case 'VENDEDOR':           return 'ventas';
+      case 'COMPRADOR':          return 'recepciones';
+      case 'CONTROL_FINANCIERO': return 'boveda';
+      case 'AUXILIAR':           return 'ventas';
+      default:                   return 'dashboard';
     }
   };
 
@@ -332,6 +342,8 @@ const App = () => {
             onViewInventario={() => setCurrentView('inventario')}
             onViewVentas={() => setCurrentView('ventas')}
             onViewAhorros={() => setCurrentView('ahorro')}
+            onViewCargaMasiva={() => setCurrentView('cargamasiva')}
+            onViewRecetas={() => setCurrentView('recetas')}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
@@ -841,6 +853,16 @@ const App = () => {
         />;
       case 'comunicaciones':
         return <Comunicaciones />;
+      case 'expedientes':
+        return <Expedientes />;
+      case 'whatsapp-hub':
+        return <WhatsAppHub trabajadores={trabajadores} onAddGasto={addGasto} />;
+      case 'marketing-studio':
+        return <MarketingStudio />;
+      case 'pedidos-tortas':
+        return <PedidosTortas />;
+      case 'control-merma':
+        return <ControlMerma />;
       case 'seguridad':
         return <Seguridad userRole={user?.rol} ventas={ventas} />;
       case 'login':
@@ -859,6 +881,13 @@ const App = () => {
             onViewInventario={() => setCurrentView('inventario')}
             onViewVentas={() => setCurrentView('ventas')}
             onViewAhorros={() => setCurrentView('ahorro')}
+            onViewCargaMasiva={() => setCurrentView('cargamasiva')}
+            onViewRecetas={() => setCurrentView('recetas')}
+            onViewCaja={() => setCurrentView('caja')}
+            onViewProduccion={() => setCurrentView('produccion')}
+            onViewGastos={() => setCurrentView('gastos')}
+            onViewHistorial={() => setCurrentView('historial-ventas')}
+            onViewReportes={() => setCurrentView('reportes')}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
@@ -907,16 +936,16 @@ const App = () => {
       )}
 
       <main className={cn(
-        "transition-all duration-300",
+        "transition-all duration-300 relative",
         // En móvil no hay padding left, el sidebar está oculto y hay un BottomNavBar
         user ? (isSidebarCollapsed ? "md:pl-20" : "md:pl-64") : "pl-0",
         // En ventas y móvil dejamos padding bottom para el BottomNavBar
         "pb-[72px] md:pb-0",
-        currentView === 'ventas' ? 'h-[calc(100vh-72px)] md:h-screen overflow-hidden' : ''
+        currentView === 'ventas' ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-[100dvh]'
       )}>
         {/* Header Superior (Solo si hay usuario) */}
         {user && (
-          <header className="sticky top-0 z-40 w-full h-16 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 pl-16 pr-4 md:px-8 flex items-center justify-between">
+          <header className="flex-none sticky top-0 z-40 w-full h-16 bg-white/70 dark:bg-slate-950/70 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 pl-16 pr-4 md:px-8 flex items-center justify-between">
             <div className="flex items-center gap-4">
                {/* Breadcrumbs dinámicos */}
                <div className="flex items-center gap-2">
@@ -928,7 +957,7 @@ const App = () => {
                </div>
             </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 overflow-x-auto min-w-0">
                {/* Botones de Caja — solo visibles en POS con caja abierta */}
                {currentView === 'ventas' && cajaActiva && (
                  <div className="flex items-center gap-1">
@@ -958,6 +987,22 @@ const App = () => {
                    </button>
                  </div>
                )}
+
+                {/* Acceso Rápido: Marcar Turno */}
+                <button
+                   onClick={() => setCurrentView('asistencia')}
+                   className={cn(
+                     "flex items-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-xl border font-bold text-xs transition-all select-none shadow-sm",
+                     currentView === 'asistencia'
+                       ? "bg-amber-500 text-white border-amber-500 shadow-amber-500/20"
+                       : "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/50"
+                   )}
+                   title="Marcar Asistencia / Turno"
+                >
+                   <Clock className="w-3.5 h-3.5" />
+                   <span className="text-[10px] font-black uppercase tracking-wider hidden xs:inline">Turno</span>
+                </button>
+
                {/* Alertas Inteligentes de Stock */}
                <div className="relative">
                  <button
@@ -1016,7 +1061,7 @@ const App = () => {
           </header>
         )}
 
-        <div className={currentView === 'ventas' ? 'h-[calc(100vh-4rem)] overflow-hidden' : 'p-4 md:p-8'}>
+        <div className={currentView === 'ventas' ? 'flex-1 overflow-hidden relative' : 'p-4 md:p-8'}>
           <ErrorBoundary moduleName={currentView}>
             <Suspense fallback={<PageLoader />}>
               <PageTransition viewKey={currentView} className={currentView === 'ventas' ? 'h-full min-h-0' : ''}>

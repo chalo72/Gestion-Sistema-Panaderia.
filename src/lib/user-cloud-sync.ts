@@ -89,12 +89,30 @@ export function mergeUsersToLocalStorage(remoteUsers: Record<string, unknown>[])
             localUsers.push(remote);
             changed++;
         } else {
-            // LOCAL GANA en todo, EXCEPTO cuando la nube dice activo=true y local dice
-            // activo=false: en ese caso el admin reactivó al usuario desde otro dispositivo
-            // y su perfil completo (incluida contraseña) debe restaurarse.
-            if (remote.activo === true && localUsers[idx].activo === false) {
-                localUsers[idx] = { ...localUsers[idx], ...remote, activo: true };
-                changed++;
+            const localU = localUsers[idx];
+            // Combinar usando updatedAt
+            const remoteAt = new Date((remote.updatedAt || remote.createdAt || 0) as string | number).getTime();
+            const localAt = new Date((localU.updatedAt || localU.createdAt || 0) as string | number).getTime();
+            
+            // La nube gana si es más reciente, o si el local perdió el password pero la nube lo tiene, 
+            // o en el caso especial de reactivación.
+            const preferRemote = remoteAt > localAt || (remote.password && !localU.password) || (remote.activo === true && localU.activo === false);
+
+            if (preferRemote) {
+                const merged = { ...localU, ...remote };
+                merged.password = merged.password || localU.password || remote.password;
+                
+                // Si son diferentes, actualizar
+                if (JSON.stringify(localU) !== JSON.stringify(merged)) {
+                    localUsers[idx] = merged;
+                    changed++;
+                }
+            } else {
+                // El local es más reciente, pero aseguramos no perder el password de la nube si el local no tiene
+                if (remote.password && !localU.password) {
+                    localUsers[idx] = { ...localU, password: remote.password };
+                    changed++;
+                }
             }
         }
     }
