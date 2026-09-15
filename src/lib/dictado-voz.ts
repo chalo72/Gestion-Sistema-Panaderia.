@@ -87,6 +87,30 @@ export function obtenerSpeechRecognition(): SpeechRecognitionCtor | null {
 }
 
 /**
+ * Al reiniciar SpeechRecognition (auto-restart tras pausa), el navegador
+ * puede reenviar como "final" un segmento que ya habíamos acumulado antes,
+ * con resultIndex en 0 otra vez. Esto evita que ese solape se duplique.
+ */
+function quitarSolapamiento(previo: string, nuevo: string): string {
+  if (!previo) return nuevo;
+  if (!nuevo) return '';
+
+  const prevPalabras = previo.trim().split(/\s+/);
+  const nuevoPalabras = nuevo.trim().split(/\s+/);
+  const maxSolape = Math.min(prevPalabras.length, nuevoPalabras.length);
+
+  for (let len = maxSolape; len > 0; len--) {
+    const finPrevio = prevPalabras.slice(prevPalabras.length - len).join(' ').toLowerCase();
+    const inicioNuevo = nuevoPalabras.slice(0, len).join(' ').toLowerCase();
+    if (finPrevio === inicioNuevo) {
+      return nuevoPalabras.slice(len).join(' ');
+    }
+  }
+
+  return nuevo;
+}
+
+/**
  * Acumula transcript correctamente desde resultIndex.
  * Los resultados finales no se pierden; el interim no pisa el inicio.
  */
@@ -112,7 +136,9 @@ export function extraerTranscriptDesdeEvento(
   }
 
   const final = segmentoFinalNuevo
-    ? `${acumuladoFinalPrevio} ${segmentoFinalNuevo}`.replace(/\s+/g, ' ').trim()
+    ? `${acumuladoFinalPrevio} ${quitarSolapamiento(acumuladoFinalPrevio, segmentoFinalNuevo)}`
+        .replace(/\s+/g, ' ')
+        .trim()
     : acumuladoFinalPrevio.trim();
 
   const completo = interim
@@ -127,7 +153,9 @@ export function normalizarTranscriptDictado(texto: string): string {
   let s = texto.replace(/(\d),(\d)/g, '$1$2').toLowerCase();
   s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-  const ordenado = Object.entries(MAP_NUMEROS).sort((a, b) => b[0].length - a[0].length);
+  const ordenado = Object.entries(MAP_NUMEROS)
+    .filter(([palabra]) => palabra !== 'mil')
+    .sort((a, b) => b[0].length - a[0].length);
   for (const [palabra, digito] of ordenado) {
     const norm = palabra.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     s = s.replace(new RegExp(`\\b${norm}\\b`, 'gi'), digito);
@@ -135,6 +163,8 @@ export function normalizarTranscriptDictado(texto: string): string {
 
   // "15 mil" / "50 mil" → montos colombianos frecuentes
   s = s.replace(/\b(\d{1,3})\s*mil\b/gi, (_, n: string) => String(parseInt(n, 10) * 1000));
+  // "mil" suelto (sin número delante, ej. "mil pesos") = 1000
+  s = s.replace(/\bmil\b/gi, '1000');
 
   return s.replace(/\s+/g, ' ').trim();
 }
@@ -166,7 +196,7 @@ export function separarItemsDictadoFactura(transcript: string): string[] {
 
   const partes = normalizado
     .split(
-      /(?:,\s*|\s+y\s+(?=\d)|\s+ademas\s+|\s+además\s+|\s+luego\s+|\s+despues\s+|\s+después\s+|\s+otro\s+|\s+siguiente\s+)/i
+      /(?:,\s*|(?<=\d)\s+y\s+|\s+y\s+(?=\d)|\s+ademas\s+|\s+además\s+|\s+luego\s+|\s+despues\s+|\s+después\s+|\s+otro\s+|\s+siguiente\s+)/i
     )
     .map((c) => c.trim())
     .filter((c) => c.length > 1);

@@ -788,7 +788,9 @@ export function ProveedorForm({
                 notas: p.notasExtra || `Factura (${resultado.tipoFactura}) · Confianza: ${p.confianza}%`,
                 costoUnitario: costoUnit,
                 precioVenta: precioVentaUnit,
-                precioVentaPack: Math.round(p.precioCosto * (1 + margenOCR / 100)),
+                // Derivado de precioVentaUnit × cantEmb (no de precioCosto directo) para que
+                // coincida exactamente con "precio unitario × cantidad" mostrado en el form.
+                precioVentaPack: Math.round(precioVentaUnit * cantEmb / 100) * 100,
                 stockRecibido: p.cantidadRecibida || 0,
               };
             });
