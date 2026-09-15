@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Coffee } from 'lucide-react';
+import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Coffee, BellRing } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 
@@ -106,6 +106,10 @@ export function POSHeader({
                                 <span className="text-[10px] font-black uppercase">Consumo</span>
                             </button>
                         )}
+                        <button onClick={() => alert('Radar de Transferencias en construcción (Conectará con Nequi/Wompi)')} className="h-8 px-3 rounded-lg border border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100 transition-all flex items-center gap-1.5 shrink-0" title="Radar de Pagos en Vivo">
+                            <BellRing className="w-4 h-4 animate-pulse" />
+                            <span className="text-[10px] font-black uppercase">Radar Nequi</span>
+                        </button>
                         {onShowChecklistVitrina && (
                             <button onClick={onShowChecklistVitrina} className="h-8 px-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 transition-all flex items-center gap-1.5 shrink-0" title="Checklist de Rotación de Vitrina">
                                 <span className="text-[12px]">📝</span>
@@ -176,6 +180,14 @@ export function POSHeader({
                             <Coffee className="w-5 h-5" />
                         </button>
                     )}
+                    {/* Radar Nequi */}
+                    <button
+                        onClick={() => alert('Radar de Transferencias en construcción (Conectará con Nequi/Wompi)')}
+                        className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-pink-200 bg-pink-50 text-pink-700 hover:bg-pink-100 shadow-sm"
+                        title="Radar de Pagos en Vivo"
+                    >
+                        <BellRing className="w-5 h-5 animate-pulse" />
+                    </button>
                     {/* Checklist */}
                     {onShowChecklistVitrina && (
                         <button
