@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1150",
-  "buildTime": "2026-09-14T22:22:00.000Z",
-  "description": "Historial de Ventas optimizado: buscador por producto, filtros de fecha rapidos (Hoy, Ayer, Esta Semana, Este Mes, Todo) y KPIs con desglose por medio de pago",
-  "timestamp": 1789424520000,
+  "version": "1.1.1151",
+  "buildTime": "2026-09-14T22:25:00.000Z",
+  "description": "Inventario optimizado: botones tactiles rapidos de conteo (0, -1, +1, +5, +10) y tarjetas totalizadoras de valor invertido, venta estimada y productos criticos",
+  "timestamp": 1789424700000,
   "buildDate": "2026-09-14"
 }
