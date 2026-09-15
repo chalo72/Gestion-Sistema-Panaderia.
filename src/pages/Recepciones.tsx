@@ -34,6 +34,16 @@ interface RecepcionesProps {
     onConfirmarRecepcion: (recepcion: Recepcion) => Promise<void>;
     onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<void>;
     onUpdateProducto: (id: string, updates: Partial<Producto>) => Promise<void>;
+    onAddOrUpdatePrecio?: (data: {
+        id?: string;
+        productoId: string;
+        proveedorId: string;
+        precioCosto: number;
+        notas?: string;
+        destino?: 'venta' | 'insumo';
+        tipoEmbalaje?: string;
+        cantidadEmbalaje?: number;
+    }) => Promise<void>;
     getProveedorById: (id: string) => Proveedor | undefined;
     getProductoById: (id: string) => Producto | undefined;
     formatCurrency: (value: number) => string;
@@ -42,7 +52,7 @@ interface RecepcionesProps {
 
 export default function Recepciones({
     recepciones, proveedores, productos, precios, prepedidos, categorias,
-    onAddRecepcion, onConfirmarRecepcion, onAddProducto, onUpdateProducto,
+    onAddRecepcion, onConfirmarRecepcion, onAddProducto, onUpdateProducto, onAddOrUpdatePrecio,
     getProveedorById, getProductoById, formatCurrency, onUpdatePrePedido
 }: RecepcionesProps) {
     const { check } = useCan();
@@ -381,6 +391,35 @@ export default function Recepciones({
             localStorage.setItem('rec_draft_v2', JSON.stringify({ form: newRecepcion, step }));
         } catch {}
     }, [newRecepcion, step, view]);
+
+    // Recuperar borrador si el celular se reinició o la app se cerró a medio pedido
+    useEffect(() => {
+        if (draftRestorado) return;
+        setDraftRestorado(true);
+        try {
+            const raw = localStorage.getItem('rec_draft_v2');
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            const items: RecepcionItem[] = parsed?.form?.items || [];
+            if (items.length === 0) return;
+            const proveedor = getProveedorById(parsed.form.proveedorId);
+            const totalDraft = items.reduce((s: number, i: RecepcionItem) => s + (i.cantidadRecibida * i.precioFacturado), 0);
+            const quiereRestaurar = confirm(
+                `Encontramos una recepción sin guardar de "${proveedor?.nombre || 'proveedor'}" con ${items.length} producto${items.length > 1 ? 's' : ''} (${formatCurrency(totalDraft)}).\n\n¿Quieres continuarla donde la dejaste?`
+            );
+            if (quiereRestaurar) {
+                setNewRecepcion(parsed.form);
+                setStep(parsed.step || 1);
+                setView('new');
+                toast.success('Recepción recuperada');
+            } else {
+                localStorage.removeItem('rec_draft_v2');
+            }
+        } catch {
+            localStorage.removeItem('rec_draft_v2');
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // === FUNCIÓN DE ESCANEO OCR REAL (Tesseract.js) ===
     const handleScanFactura = async () => {
@@ -776,13 +815,30 @@ export default function Recepciones({
                 await onUpdatePrePedido(newRecepcion.prePedidoId, { estado: 'recibido' });
             }
 
-            // Actualizar costos que cambiaron
+            // Actualizar costos que cambiaron: se guardan en el catálogo de precios del PROVEEDOR
+            // (no solo en el producto), para que la próxima recepción de este proveedor ya traiga el precio correcto.
             const preciosParaActualizar = preciosSet ?? preciosAActualizar;
             if (preciosParaActualizar.size > 0) {
                 await Promise.all(
                     newRecepcion.items
                         .filter(item => preciosParaActualizar.has(item.productoId))
-                        .map(item => onUpdateProducto(item.productoId, { costoBase: Math.round(item.precioFacturado * 100) / 100 }))
+                        .map(item => {
+                            const precioNuevo = Math.round(item.precioFacturado * 100) / 100;
+                            if (onAddOrUpdatePrecio) {
+                                const precioExistente = preciosDelProveedor.find(pp => pp.productoId === item.productoId);
+                                return onAddOrUpdatePrecio({
+                                    id: precioExistente?.id,
+                                    productoId: item.productoId,
+                                    proveedorId: newRecepcion.proveedorId,
+                                    precioCosto: precioNuevo,
+                                    tipoEmbalaje: precioExistente?.tipoEmbalaje,
+                                    cantidadEmbalaje: precioExistente?.cantidadEmbalaje,
+                                    destino: precioExistente?.destino,
+                                    notas: precioExistente?.notas,
+                                });
+                            }
+                            return onUpdateProducto(item.productoId, { costoBase: precioNuevo });
+                        })
                 );
             }
 
@@ -805,6 +861,7 @@ export default function Recepciones({
                 </div>,
                 { duration: 5000 }
             );
+            try { localStorage.removeItem('rec_draft_v2'); } catch {}
             setView('list');
             setStep(1);
             setPrePedidoSeleccionado('');

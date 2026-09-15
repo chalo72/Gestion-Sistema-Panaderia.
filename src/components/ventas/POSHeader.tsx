@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, LayoutGrid, X, Users, Plus, ChevronDown } from 'lucide-react';
+import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 
@@ -30,13 +30,16 @@ interface POSHeaderProps {
     onSelectVendedora?: (v: VendedoraOption | null) => void;
     onShowBalanceProduccion?: () => void;
     onShowChecklistVitrina?: () => void;
+    /** Acceso directo (1 toque) a Búsqueda Rápida — abre el menú lateral donde vive el buscador */
+    onOpenMobileMenu?: () => void;
 }
 
 export function POSHeader({
     viewMode, setViewMode,
     tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida,
     cajaActiva, onCerrarCaja, onMovimientoEntrada, onMovimientoSalida,
-    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowBalanceProduccion, onShowChecklistVitrina
+    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowBalanceProduccion, onShowChecklistVitrina,
+    onOpenMobileMenu
 }: POSHeaderProps) {
     const [panelOpen, setPanelOpen] = useState(false);
 
@@ -156,6 +159,17 @@ export function POSHeader({
                             </span>
                         )}
                     </button>
+
+                    {/* Búsqueda rápida — acceso directo de 1 toque para vendedoras */}
+                    {onOpenMobileMenu && (
+                        <button
+                            onClick={onOpenMobileMenu}
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
+                            title="Búsqueda rápida"
+                        >
+                            <Search className="w-5 h-5" />
+                        </button>
+                    )}
 
                     {/* Mesas */}
                     <button

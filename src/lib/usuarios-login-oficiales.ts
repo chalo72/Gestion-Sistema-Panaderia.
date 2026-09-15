@@ -133,11 +133,8 @@ const debeInactivar = (u: Usuario): boolean => {
 
 const mergeOficial = (existente: Usuario | undefined, oficial: Usuario): Usuario => {
   if (!existente) return { ...oficial, activo: true };
-  // Conservar password del admin si ya tenía una
-  const password =
-    oficial.rol === 'ADMIN' && existente.password
-      ? existente.password
-      : oficial.password ?? existente.password;
+  // Conservar password de cualquier usuario si ya tenía una configurada localmente o en la nube
+  const password = existente.password || oficial.password;
   return {
     ...existente,
     ...oficial,

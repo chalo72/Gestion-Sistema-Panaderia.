@@ -31,6 +31,7 @@ import {
   Edit3,
   Save,
   TrendingDown,
+  Printer,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -38,7 +39,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { cn, escapeHtml } from '@/lib/utils';
 import { PrePedidoHeader } from '@/components/prepedidos/PrePedidoHeader';
 import { PrePedidoModal } from '@/components/prepedidos/PrePedidoModal';
 import { PrePedidoAddItemModal } from '@/components/prepedidos/PrePedidoAddItemModal';
@@ -142,6 +143,7 @@ export default function PrePedidos({
   const [showSupplierGrid, setShowSupplierGrid] = useState(true); // ✅ INICIAR EN GRID SIEMPRE
   const [activeProveedorId, setActiveProveedorId] = useState<string | null>(null);
   const [showProveedorPanel, setShowProveedorPanel] = useState(false); // ✅ NUEVO: Panel de proveedor abierto
+  const [showMobileCart, setShowMobileCart] = useState(false); // Ticket como panel deslizable en celular (estilo Venta Rápida)
   const [searchProveedorText, setSearchProveedorText] = useState(''); // ✅ NUEVO: Buscador de proveedores
 
   // Estados para la vista de Cuenta
@@ -351,6 +353,73 @@ export default function PrePedidos({
     const phone = prov?.telefono ? prov.telefono.replace(/\D/g,'') : '';
     const url = phone ? `https://wa.me/${phone}?text=${encoded}` : `https://wa.me/?text=${encoded}`;
     window.open(url, '_blank');
+  };
+
+  const handlePrintPedido = (pedido: PrePedido) => {
+    const prov = getProveedorById(pedido.proveedorId);
+    const ticketContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Orden ${pedido.numeroOrden || pedido.id.substring(0, 8)}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Courier New', monospace; width: 80mm; padding: 10px; font-size: 12px; }
+        .header { text-align: center; margin-bottom: 15px; border-bottom: 2px dashed #000; padding-bottom: 10px; }
+        .header h1 { font-size: 18px; font-weight: bold; }
+        .header p { font-size: 10px; color: #666; }
+        .info { margin: 10px 0; font-size: 11px; }
+        .info-row { display: flex; justify-content: space-between; margin: 3px 0; }
+        .items { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 10px 0; margin: 10px 0; }
+        .item { display: flex; justify-content: space-between; margin: 5px 0; }
+        .item-name { flex: 1; }
+        .item-qty { width: 40px; text-align: center; }
+        .item-price { width: 70px; text-align: right; }
+        .total { font-size: 16px; font-weight: bold; text-align: right; margin-top: 10px; padding-top: 10px; border-top: 2px solid #000; }
+        .footer { text-align: center; margin-top: 20px; font-size: 10px; color: #666; }
+        @media print { body { width: 80mm; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>DULCE PLACER</h1>
+        <p>Orden de Compra</p>
+    </div>
+    <div class="info">
+        <div class="info-row"><span>Orden:</span><span>${escapeHtml(pedido.numeroOrden || pedido.id.substring(0, 8))}</span></div>
+        <div class="info-row"><span>Proveedor:</span><span>${escapeHtml(prov?.nombre || 'Sin proveedor')}</span></div>
+        <div class="info-row"><span>Fecha:</span><span>${new Date(pedido.fechaCreacion).toLocaleDateString('es-CO')}</span></div>
+        ${pedido.fechaEntregaEsperada ? `<div class="info-row"><span>Entrega esp.:</span><span>${safeDate(pedido.fechaEntregaEsperada)}</span></div>` : ''}
+    </div>
+    <div class="items">
+        ${pedido.items.map(item => {
+          const prod = getProductoById(item.productoId);
+          return `<div class="item">
+                <span class="item-name">${escapeHtml(prod?.nombre || 'Producto')}</span>
+                <span class="item-qty">x${item.cantidad}</span>
+                <span class="item-price">${formatCurrency(item.cantidad * item.precioUnitario)}</span>
+            </div>`;
+        }).join('')}
+    </div>
+    <div class="total">TOTAL: ${formatCurrency(pedido.total)}</div>
+    ${pedido.notas ? `<div class="footer"><p>Notas: ${escapeHtml(pedido.notas)}</p></div>` : ''}
+    <div class="footer">
+        <p>Generado desde Dulce Placer ERP</p>
+    </div>
+</body>
+</html>
+        `;
+
+    const printWindow = window.open('', '_blank', 'width=320,height=600');
+    if (printWindow) {
+      printWindow.document.write(ticketContent);
+      printWindow.document.close();
+      printWindow.focus();
+      setTimeout(() => printWindow.print(), 250);
+      toast.success('Orden lista para imprimir');
+    } else {
+      toast.error('No se pudo abrir la ventana de impresión');
+    }
   };
 
   const handleMarcarEnviado = (pedidoId: string) => {
@@ -716,6 +785,9 @@ export default function PrePedidos({
                          <Edit3 className="w-4 h-4" /> Editar
                       </Button>
                    )}
+                   <Button onClick={(e) => { e.stopPropagation(); handlePrintPedido(verDetallePedido); }} variant="outline" className="h-12 px-6 rounded-xl font-black uppercase tracking-widest border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex gap-2 items-center flex-1 sm:flex-none">
+                      <Printer className="w-4 h-4" /> Imprimir
+                   </Button>
                    <Button onClick={(e) => { e.stopPropagation(); sharePedidoWhatsApp(verDetallePedido); }} className="h-12 px-6 rounded-xl font-black uppercase tracking-widest bg-[#25D366] hover:bg-[#1DA851] text-white flex gap-2 items-center shadow-lg shadow-emerald-500/20 flex-1 sm:flex-none">
                       <Send className="w-4 h-4" /> WhatsApp
                    </Button>
@@ -920,9 +992,33 @@ export default function PrePedidos({
         )}
       </div>
 
-      {/* ═══ PANEL DERECHO (TICKET / CUENTA) ═══ */}
-      <div className="w-[320px] lg:w-[380px] xl:w-[420px] h-full flex flex-col bg-slate-50 dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shrink-0">
-          
+      {/* ═══ FONDO OSCURO AL DESLIZAR EL TICKET EN CELULAR ═══ */}
+      {showMobileCart && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40 animate-ag-fade-in"
+          onClick={() => setShowMobileCart(false)}
+        />
+      )}
+
+      {/* ═══ PANEL DERECHO (TICKET / CUENTA) — sidebar fijo en desktop, panel deslizable en celular ═══ */}
+      <div
+        className={cn(
+          'fixed inset-x-0 bottom-0 z-50 h-[85vh] rounded-t-3xl border-t shadow-2xl transition-transform duration-300 ease-out flex flex-col bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800',
+          showMobileCart ? 'translate-y-0' : 'translate-y-full',
+          'lg:static lg:inset-auto lg:z-auto lg:translate-y-0 lg:h-full lg:w-[380px] xl:w-[420px] lg:rounded-none lg:border-t-0 lg:border-l lg:shadow-none lg:shrink-0'
+        )}
+        style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}
+      >
+
+          {/* Agarradera visual del panel deslizable — solo celular */}
+          <button
+            onClick={() => setShowMobileCart(false)}
+            className="lg:hidden w-full flex flex-col items-center gap-1 pt-2 pb-1 shrink-0 bg-[#1a1c2e]"
+            aria-label="Cerrar pedido"
+          >
+            <span className="w-10 h-1.5 rounded-full bg-white/25" />
+          </button>
+
           {/* TABS DEL PANEL DERECHO */}
           <div className="flex bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
             <button
@@ -1307,6 +1403,56 @@ export default function PrePedidos({
             </div>
           )}
       </div>
+
+      {/* ═══ NAVEGACIÓN MÓVIL: pastilla flotante estilo Venta Rápida (un solo dedo) ═══ */}
+      {!verDetallePedido && (
+        <div
+          className="lg:hidden fixed bottom-4 left-4 right-4 rounded-3xl overflow-hidden flex border-2 border-indigo-500 shadow-[0_8px_30px_rgba(0,0,0,0.3)] bg-white dark:bg-slate-900 z-[45]"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0px)' }}
+        >
+          <button
+            onClick={() => setShowMobileCart(false)}
+            className={cn(
+              'flex-1 flex flex-col items-center justify-center gap-1 py-4 text-[10px] font-black uppercase tracking-widest transition-colors',
+              !showMobileCart
+                ? 'text-indigo-500 bg-indigo-50 dark:bg-indigo-900/10'
+                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300'
+            )}
+          >
+            <Store className="w-6 h-6" />
+            Catálogo
+          </button>
+
+          <div className="w-px bg-slate-200 dark:bg-slate-700 self-stretch" />
+
+          <button
+            onClick={() => setShowMobileCart(true)}
+            className={cn(
+              'flex-[2] flex items-center justify-center gap-2 py-4 transition-all',
+              showMobileCart || (activeDraft && activeDraft.items.length > 0)
+                ? 'bg-indigo-600 text-white'
+                : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-500'
+            )}
+          >
+            {activeDraft && activeDraft.items.length > 0 ? (
+              <>
+                <span className="w-6 h-6 rounded-full bg-white/25 text-white text-[11px] font-black flex items-center justify-center shrink-0">
+                  {activeDraft.items.reduce((s, i) => s + i.cantidad, 0)}
+                </span>
+                <div className="flex flex-col items-start leading-none">
+                  <span className="text-[11px] font-black">{formatCurrency(activeDraft.total)}</span>
+                  <span className="text-[9px] opacity-70 font-bold uppercase">Ver pedido</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <ShoppingCart className="w-5 h-5 opacity-50" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Ver Pedido</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Modal Historial de Pedidos (ELIMINADO - Ahora es vista central) */}
 

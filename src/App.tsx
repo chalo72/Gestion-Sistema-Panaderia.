@@ -468,6 +468,7 @@ const App = () => {
             onAjustarStock={onAjustarStock}
             cajaActionTrigger={cajaActionTrigger}
             onCajaActionConsumed={() => setCajaActionTrigger(null)}
+            onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
           />
         );
       case 'caja':
@@ -812,6 +813,7 @@ const App = () => {
             }}
             onAddProducto={addProducto}
             onUpdateProducto={updateProducto}
+            onAddOrUpdatePrecio={addOrUpdatePrecio}
             getProductoById={getProductoById}
             getProveedorById={getProveedorById}
             formatCurrency={formatCurrency}

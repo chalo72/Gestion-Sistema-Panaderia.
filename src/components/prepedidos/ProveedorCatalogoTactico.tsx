@@ -232,29 +232,29 @@ export function ProveedorCatalogoTactico({
           </div>
 
           <div className="mt-auto space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-            {/* Selector de cantidad */}
+            {/* Selector de cantidad — objetivos grandes para tocar con el pulgar */}
             <div className="flex items-center justify-between bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-lg border border-slate-100 dark:border-slate-700">
-              <div className="flex gap-0.5">
+              <div className="flex gap-1">
                 {Number(prod.cantidadEmbalaje || 1) > 1 && (
                   <Button onClick={() => updateQuantity(prod.id, -Number(prod.cantidadEmbalaje || 1), prod.necesidadTotal)} size="icon" variant="ghost"
-                    className="w-6 h-6 rounded bg-white dark:bg-slate-800 text-rose-500 hover:bg-rose-50 p-0 text-[8px] font-black shadow-sm">
+                    className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 text-rose-500 hover:bg-rose-50 p-0 text-[9px] font-black shadow-sm active:scale-90">
                     -{prod.cantidadEmbalaje}
                   </Button>
                 )}
                 <Button onClick={() => updateQuantity(prod.id, -1, prod.necesidadTotal)} size="icon" variant="ghost"
-                  className="w-6 h-6 rounded bg-white dark:bg-slate-800 text-slate-400 hover:text-rose-500 p-0 shadow-sm">
-                  <Minus className="w-3 h-3" />
+                  className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 text-slate-400 hover:text-rose-500 p-0 shadow-sm active:scale-90">
+                  <Minus className="w-4 h-4" />
                 </Button>
               </div>
-              <span className="text-xs font-black tabular-nums text-slate-900 dark:text-white px-1 min-w-[20px] text-center">{qty}</span>
-              <div className="flex gap-0.5">
+              <span className="text-sm font-black tabular-nums text-slate-900 dark:text-white px-1 min-w-[24px] text-center">{qty}</span>
+              <div className="flex gap-1">
                 <Button onClick={() => updateQuantity(prod.id, 1, prod.necesidadTotal)} size="icon" variant="ghost"
-                  className="w-6 h-6 rounded bg-white dark:bg-slate-800 text-slate-400 hover:text-emerald-500 p-0 shadow-sm">
-                  <Plus className="w-3 h-3" />
+                  className="w-9 h-9 rounded-lg bg-white dark:bg-slate-800 text-slate-400 hover:text-emerald-500 p-0 shadow-sm active:scale-90">
+                  <Plus className="w-4 h-4" />
                 </Button>
                 {Number(prod.cantidadEmbalaje || 1) > 1 && (
                   <Button onClick={() => updateQuantity(prod.id, Number(prod.cantidadEmbalaje || 1), prod.necesidadTotal)} size="icon" variant="ghost"
-                    className="w-6 h-6 rounded bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 hover:bg-emerald-100 p-0 text-[8px] font-black shadow-sm">
+                    className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 hover:bg-emerald-100 p-0 text-[9px] font-black shadow-sm active:scale-90">
                     +{prod.cantidadEmbalaje}
                   </Button>
                 )}
@@ -265,9 +265,9 @@ export function ProveedorCatalogoTactico({
               size="sm"
               onClick={() => handleAddWithFeedback(prod.id!, activeProveedor.id, qty, prod.precioCosto || 0)}
               disabled={isAdding}
-              className={cn('w-full h-8 rounded-xl font-black uppercase text-[10px] tracking-widest gap-1.5 transition-all shadow-sm active:scale-95 text-white', accent.btn)}
+              className={cn('w-full h-11 rounded-xl font-black uppercase text-[11px] tracking-widest gap-1.5 transition-all shadow-sm active:scale-95 text-white', accent.btn)}
             >
-              {isAdding ? <Check className="w-3.5 h-3.5" /> : <ShoppingCart className="w-3 h-3" />}
+              {isAdding ? <Check className="w-4 h-4" /> : <ShoppingCart className="w-3.5 h-3.5" />}
               {isAdding ? 'LISTO ✓' : 'AGREGAR'}
             </Button>
           </div>
@@ -310,7 +310,7 @@ export function ProveedorCatalogoTactico({
           </p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
           {items.map(prod => <ProductoCard key={prod.id} prod={prod} isInsumo={isInsumo} />)}
         </div>
       )}
