@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1148",
-  "buildTime": "2026-09-14T22:01:00.000Z",
-  "description": "Buscador de panes en tiempo real, botones tactiles rapidos de latas (-1, +1, +2, +5) y pesaje automatico de insumos para la mesa",
-  "timestamp": 1789423260000,
+  "version": "1.1.1149",
+  "buildTime": "2026-09-14T22:08:00.000Z",
+  "description": "Historial de producción con buscador en tiempo real, filtro por fechas (Hoy, Ayer, Esta Semana, Todos) y tarjetas totalizadoras de arrobas y panes",
+  "timestamp": 1789423680000,
   "buildDate": "2026-09-14"
 }
