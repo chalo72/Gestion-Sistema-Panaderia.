@@ -184,10 +184,42 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
                             {/* Botón auto-rellenar */}
                             <button
                                 onClick={() => setMonto(String(esperado))}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl transition-all"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-blue-500 hover:text-blue-700 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl transition-all"
                             >
                                 Usar sistema
                             </button>
+                        </div>
+
+                        {/* Botones táctiles rápidos para sumar denominaciones comunes */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 self-center mr-1">Rápido:</span>
+                            {[
+                                { label: '+$10k', val: 10000 },
+                                { label: '+$20k', val: 20000 },
+                                { label: '+$50k', val: 50000 },
+                                { label: '+$100k', val: 100000 },
+                            ].map(btn => (
+                                <button
+                                    key={btn.label}
+                                    type="button"
+                                    onClick={() => {
+                                        const actual = parseFloat(monto) || 0;
+                                        setMonto(String(actual + btn.val));
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-black text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                    {btn.label}
+                                </button>
+                            ))}
+                            {monto && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMonto('')}
+                                    className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100 text-[10px] font-black text-rose-600 dark:text-rose-400 ml-auto transition-colors"
+                                >
+                                    Borrar
+                                </button>
+                            )}
                         </div>
                     </div>
 
