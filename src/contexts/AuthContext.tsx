@@ -252,7 +252,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [rolePermissions, setRolePermissions] = useState<Record<UserRole, Permission[]>>(() => {
     const saved = localStorage.getItem('pricecontrol_permissions');
-    return saved ? JSON.parse(saved) : ROLE_PERMISSIONS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // MERGE with defaults to prevent crashes if a new role was added to the app but is missing in localStorage
+        return { ...ROLE_PERMISSIONS, ...parsed };
+      } catch {
+        return ROLE_PERMISSIONS;
+      }
+    }
+    return ROLE_PERMISSIONS;
   });
 
   useEffect(() => {

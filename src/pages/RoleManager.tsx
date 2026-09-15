@@ -75,16 +75,16 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
         setPasswords(masked);
     }, []);
 
-    // ── Permisos granulares ──────────────────────────────────────────────────
+    // ── Permisos granulares ──────────────────────────────────────────────────    // 🛡️ Permisos granulares 🛡️
     const handleTogglePermission = (role: UserRole, permission: Permission) => {
-        const current = rolePermissions[role];
+        const current = rolePermissions[role] || [];
         const next = current.includes(permission)
             ? current.filter(p => p !== permission)
             : [...current, permission];
         updateRolePermissions(role, next);
         toast.success(current.includes(permission)
-            ? `Privilegio revocado — ${ROLE_DESCRIPTIONS[role].nombre}`
-            : `Privilegio concedido — ${ROLE_DESCRIPTIONS[role].nombre}`);
+            ? `Privilegio revocado - ${ROLE_DESCRIPTIONS[role].nombre}`
+            : `Privilegio concedido - ${ROLE_DESCRIPTIONS[role].nombre}`);
     };
 
     const handleReset = () => {
@@ -265,7 +265,7 @@ export default function RoleManager({ publicAppUrl }: RoleManagerProps) {
                                                         </div>
                                                     </td>
                                                     {ROLES_GRANULARES.map((role) => {
-                                                        const isChecked  = rolePermissions[role].includes(permission);
+                                                        const isChecked  = rolePermissions[role]?.includes(permission) ?? false;
                                                         const isDisabled = role === 'ADMIN';
                                                         return (
                                                             <td key={`${role}-${permission}`} className="px-8 py-4 text-center">
