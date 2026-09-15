@@ -32,7 +32,8 @@ import {
   Briefcase,
   FileCheck,
   Cake,
-  AlertOctagon
+  AlertOctagon,
+  Coffee
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -149,7 +150,7 @@ export function Sidebar({
       items: [
         { id: 'dashboard',       label: 'Centro de Mando',         icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
         { id: 'marketing-studio',label: 'Marketing Studio IA',     icon: Megaphone,       permission: 'VER_DASHBOARD' },
-        { id: 'whatsapp-hub',    label: 'Comandos WhatsApp & IA',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
+        { id: 'fiados-empleados',label: 'Consumo Empleados',       icon: Coffee,          permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones',  label: 'Equipo & Checklist',      icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'pedidos-tortas',  label: 'Pedidos de Tortas',       icon: Cake,            permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia',      label: 'Mando Superior (IA)',     icon: Shield,          permission: 'VER_DASHBOARD' },
@@ -434,7 +435,7 @@ export function Sidebar({
         { id: 'dashboard' as ViewType,       label: 'Centro de Mando',        icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
         { id: 'marketing-studio' as ViewType,label: 'Marketing Studio IA',    icon: Megaphone,       permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia' as ViewType,      label: 'Mando Superior (IA)',    icon: Shield,          permission: 'VER_DASHBOARD' },
-        { id: 'whatsapp-hub' as ViewType,    label: 'WhatsApp & IA',          icon: MessageCircle,   permission: 'VER_DASHBOARD' },
+        { id: 'fiados-empleados' as ViewType,    label: 'Consumo Empleados',      icon: Coffee,          permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones' as ViewType,  label: 'Equipo & Checklist',     icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'pedidos-tortas' as ViewType,  label: 'Pedidos de Tortas',      icon: Cake,            permission: 'VER_DASHBOARD' },
         { id: 'videovigilancia' as ViewType, label: 'Videovigilancia',        icon: Video,           permission: 'VER_DASHBOARD' },

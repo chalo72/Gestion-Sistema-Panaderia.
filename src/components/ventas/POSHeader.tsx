@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, LayoutGrid, X, Users, Plus, ChevronDown } from 'lucide-react';
+import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Coffee } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 
@@ -25,12 +25,13 @@ interface POSHeaderProps {
     vendedoraActivaId?: string | null;
     onSelectVendedora?: (v: VendedoraOption | null) => void;
     onShowChecklistVitrina?: () => void;
+    onViewConsumo?: () => void;
 }
 
 export function POSHeader({
     viewMode, setViewMode,
     tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida,
-    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowChecklistVitrina
+    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowChecklistVitrina, onViewConsumo
 }: POSHeaderProps) {
     const [panelOpen, setPanelOpen] = useState(false);
 
@@ -99,6 +100,12 @@ export function POSHeader({
                             <Plus className="w-4 h-4" />
                         </button>
                         <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 ml-1 mr-1" />
+                        {onViewConsumo && (
+                            <button onClick={onViewConsumo} className="h-8 px-3 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-all flex items-center gap-1.5 shrink-0" title="Consumo Empleados">
+                                <Coffee className="w-4 h-4" />
+                                <span className="text-[10px] font-black uppercase">Consumo</span>
+                            </button>
+                        )}
                         {onShowChecklistVitrina && (
                             <button onClick={onShowChecklistVitrina} className="h-8 px-3 rounded-lg border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-300 transition-all flex items-center gap-1.5 shrink-0" title="Checklist de Rotación de Vitrina">
                                 <span className="text-[12px]">📝</span>
@@ -159,6 +166,16 @@ export function POSHeader({
                     >
                         <LayoutGrid className="w-5 h-5" />
                     </button>
+                    {/* Consumo */}
+                    {onViewConsumo && (
+                        <button
+                            onClick={onViewConsumo}
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-sm"
+                            title="Consumo Empleados"
+                        >
+                            <Coffee className="w-5 h-5" />
+                        </button>
+                    )}
                     {/* Checklist */}
                     {onShowChecklistVitrina && (
                         <button

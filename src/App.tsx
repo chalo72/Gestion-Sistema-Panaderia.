@@ -55,7 +55,7 @@ const PrePedidos         = lazy(() => import('@/pages/PrePedidos'));
 const Recepciones        = lazy(() => import('@/pages/Recepciones'));
 const PlanNegocio        = lazy(() => import('@/pages/PlanNegocio').then(m => ({ default: m.PlanNegocio })));
 const Expedientes        = lazy(() => import('@/pages/Expedientes'));
-const WhatsAppHub        = lazy(() => import('@/pages/WhatsAppHub'));
+const FiadosEmpleados    = lazy(() => import('@/pages/FiadosEmpleados'));
 const MarketingStudio    = lazy(() => import('@/pages/MarketingStudio'));
 const PedidosTortas      = lazy(() => import('@/pages/PedidosTortas'));
 const ControlMerma       = lazy(() => import('@/pages/ControlMerma'));
@@ -450,6 +450,7 @@ const App = () => {
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
             onFinalizarTurno={cerrarCaja}
             onRegistrarVenta={registrarVenta}
+            onViewConsumo={() => setCurrentView('fiados-empleados')}
             onAddCreditoCliente={addCreditoCliente}
             creditosClientes={creditosClientes}
             formatCurrency={formatCurrency}
@@ -852,8 +853,8 @@ const App = () => {
         return <Comunicaciones />;
       case 'expedientes':
         return <Expedientes />;
-      case 'whatsapp-hub':
-        return <WhatsAppHub trabajadores={trabajadores} onAddGasto={addGasto} />;
+      case 'fiados-empleados':
+        return <FiadosEmpleados trabajadores={trabajadores} onAddGasto={addGasto} />;
       case 'marketing-studio':
         return <MarketingStudio />;
       case 'pedidos-tortas':

@@ -91,6 +91,7 @@ interface VentasProps {
     onUpdateProducto?: (id: string, updates: Partial<Producto>) => Promise<void>;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
     onAddMesa?: (mesa: Mesa) => Promise<void>;
+    onViewConsumo?: () => void;
     onDeleteMesa?: (id: string) => Promise<void>;
     onAddCreditoCliente?: (credito: any) => Promise<any>;
     creditosClientes?: any[];
@@ -1028,6 +1029,7 @@ export function Ventas(props: VentasProps) {
                     vendedoraActivaId={vendedoraActiva?.id ?? null}
                     onSelectVendedora={setVendedoraActiva}
                     onShowChecklistVitrina={() => setShowChecklistVitrina(true)}
+                    onViewConsumo={props.onViewConsumo}
                 />
                 {/* ── Selector Rápido de Vendedora — solo desktop ── */}
                 {vendedorasDisponibles.length >= 1 && (
