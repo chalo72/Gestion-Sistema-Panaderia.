@@ -223,9 +223,6 @@ const App = () => {
     updateNomina,
   } = usePriceControl();
 
-  usePermisosRealtime();
-  useUsuariosRealtime();
-
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
