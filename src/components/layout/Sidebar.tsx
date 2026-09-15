@@ -30,7 +30,8 @@ import {
   TrendingUp,
   Video,
   Briefcase,
-  FileCheck
+  FileCheck,
+  Cake
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -149,6 +150,7 @@ export function Sidebar({
         { id: 'marketing-studio',label: 'Marketing Studio IA',     icon: Megaphone,       permission: 'VER_DASHBOARD' },
         { id: 'whatsapp-hub',    label: 'Comandos WhatsApp & IA',  icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones',  label: 'Equipo & Checklist',      icon: MessageCircle,   permission: 'VER_DASHBOARD' },
+        { id: 'pedidos-tortas',  label: 'Pedidos de Tortas',       icon: Cake,            permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia',      label: 'Mando Superior (IA)',     icon: Shield,          permission: 'VER_DASHBOARD' },
         { id: 'videovigilancia', label: 'Videovigilancia',         icon: Video,           permission: 'VER_DASHBOARD' },
         { id: 'cctv',            label: 'Auditoría Digital',       icon: Shield,          permission: 'VER_DASHBOARD' },
@@ -432,6 +434,7 @@ export function Sidebar({
         { id: 'agentes-ia' as ViewType,      label: 'Mando Superior (IA)',    icon: Shield,          permission: 'VER_DASHBOARD' },
         { id: 'whatsapp-hub' as ViewType,    label: 'WhatsApp & IA',          icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones' as ViewType,  label: 'Equipo & Checklist',     icon: MessageCircle,   permission: 'VER_DASHBOARD' },
+        { id: 'pedidos-tortas' as ViewType,  label: 'Pedidos de Tortas',      icon: Cake,            permission: 'VER_DASHBOARD' },
         { id: 'videovigilancia' as ViewType, label: 'Videovigilancia',        icon: Video,           permission: 'VER_DASHBOARD' },
         { id: 'cctv' as ViewType,            label: 'Auditoría Digital',      icon: Shield,          permission: 'VER_DASHBOARD' },
       ],

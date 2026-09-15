@@ -595,7 +595,7 @@ export interface DistribucionArrobasDia {
   arrobas: number;
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina' | 'boveda' | 'inversiones' | 'plan-negocio' | 'expedientes' | 'whatsapp-hub' | 'marketing-studio';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina' | 'boveda' | 'inversiones' | 'plan-negocio' | 'expedientes' | 'whatsapp-hub' | 'marketing-studio' | 'pedidos-tortas';
 
 export interface RegistroAsistencia {
   id: string;
