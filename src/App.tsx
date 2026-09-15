@@ -54,11 +54,7 @@ const Ahorros            = lazy(() => import('@/pages/Ahorros'));
 const PrePedidos         = lazy(() => import('@/pages/PrePedidos'));
 const Recepciones        = lazy(() => import('@/pages/Recepciones'));
 const PlanNegocio        = lazy(() => import('@/pages/PlanNegocio').then(m => ({ default: m.PlanNegocio })));
-const Expedientes        = lazy(() => import('@/pages/Expedientes'));
-const WhatsAppHub        = lazy(() => import('@/pages/WhatsAppHub'));
 const MarketingStudio    = lazy(() => import('@/pages/MarketingStudio'));
-const PedidosTortas      = lazy(() => import('@/pages/PedidosTortas'));
-const ControlMerma       = lazy(() => import('@/pages/ControlMerma'));
 
 // Carga Inmediata — Módulos principales del negocio (Navegación instantánea a costo de un inicio un poco más pesado)
 const Productos = lazy(() => import('@/pages/Productos'));
@@ -853,16 +849,8 @@ const App = () => {
         />;
       case 'comunicaciones':
         return <Comunicaciones />;
-      case 'expedientes':
-        return <Expedientes />;
-      case 'whatsapp-hub':
-        return <WhatsAppHub trabajadores={trabajadores} onAddGasto={addGasto} />;
       case 'marketing-studio':
         return <MarketingStudio />;
-      case 'pedidos-tortas':
-        return <PedidosTortas />;
-      case 'control-merma':
-        return <ControlMerma />;
       case 'seguridad':
         return <Seguridad userRole={user?.rol} ventas={ventas} />;
       case 'login':
