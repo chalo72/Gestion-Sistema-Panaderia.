@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Calculator, PieChart, ArrowRight, Wand2, PlusCircle, CheckCircle2, AlertTriangle, Layers3, Flame, Trash2, Plus, ClipboardCheck, ChevronDown } from 'lucide-react';
+import { Calculator, PieChart, ArrowRight, Wand2, PlusCircle, CheckCircle2, AlertTriangle, Layers3, Flame, Trash2, Plus, ClipboardCheck, ChevronDown, Search, ChevronUp, Wheat } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { FormulacionBase, ModeloPan, Venta, Producto } from '@/types';
 import { ARROBA_KG } from '@/types';
@@ -31,6 +31,8 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
   const [formId, setFormId] = useState<string>('');
   const [arrobas, setArrobas] = useState<number>(1);
   const [cortes, setCortes] = useState<Record<string, number>>({});
+  const [breadSearch, setBreadSearch] = useState<string>('');
+  const [showInsumosPesaje, setShowInsumosPesaje] = useState<boolean>(false);
 
   // Masa disponible en la base
   const formulacion = formulaciones.find(f => f.id === formId);
@@ -311,7 +313,7 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                       {(pesoUtilizadoGr / 1000).toFixed(2)} <span className="text-sm">kg</span>
                     </span>
                   </div>
-                  <div>
+                    <div>
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Sobrante</h4>
                     <span className={cn("text-2xl font-black", pesoRestanteGr < 0 ? "text-rose-500" : "text-amber-500")}>
                       {(pesoRestanteGr / 1000).toFixed(2)} <span className="text-sm">kg</span>
@@ -319,6 +321,51 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                   </div>
                 </div>
               </div>
+
+              {/* Botón y Sección de Pesaje de Insumos para la mesa */}
+              {formulacion?.ingredientes && formulacion.ingredientes.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setShowInsumosPesaje(!showInsumosPesaje)}
+                      className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 flex items-center gap-1.5 transition-colors"
+                    >
+                      <Wheat className="w-3.5 h-3.5 text-amber-500" />
+                      {showInsumosPesaje ? 'Ocultar pesaje de insumos' : `Ver pesaje para la mesa (${arrobas} arrobas)`}
+                      <ChevronDown className={cn("w-3.5 h-3.5 transition-transform", showInsumosPesaje && "rotate-180")} />
+                    </button>
+                    <span className="text-[10px] text-slate-400 font-bold">
+                      {formulacion.ingredientes.length} ingredientes calculados
+                    </span>
+                  </div>
+
+                  {showInsumosPesaje && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-1.5 mt-2.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                      {formulacion.ingredientes.map((ing, iIdx) => {
+                        const prod = productos?.find(p => p.id === ing.productoId);
+                        const nombreInsumo = prod?.nombre || ing.productoId;
+                        const cantBase = Number(ing.cantidadPorArroba ?? (ing as any).cantidadKg ?? 0);
+                        const cantTotal = (cantBase * arrobas);
+                        const unidad = ing.unidad || (ing as any).unidadMedida || 'kg';
+                        return (
+                          <div
+                            key={iIdx}
+                            className="flex items-center justify-between px-2.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 text-xs"
+                          >
+                            <span className="truncate text-slate-700 dark:text-slate-300 font-semibold text-[11px]">
+                              {nombreInsumo}
+                            </span>
+                            <span className="shrink-0 ml-1.5 font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-lg text-[11px]">
+                              {Number.isInteger(cantTotal) ? cantTotal : cantTotal.toFixed(1)} {unidad}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
 
@@ -344,7 +391,7 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                   )}
 
                   {/* Menú desplegable deslizable (subir y bajar) con buscador/scroll suave */}
-                  <DropdownMenu>
+                  <DropdownMenu onOpenChange={(open) => { if (!open) setBreadSearch(''); }}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-9 rounded-xl border-dashed border-indigo-300 text-indigo-600 bg-white hover:bg-indigo-50 font-bold shadow-sm">
                         <Plus className="w-3.5 h-3.5 mr-2" /> Agregar Pan a Fabricar
@@ -352,28 +399,54 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                     </DropdownMenuTrigger>
                     <DropdownMenuContent
                       align="end"
-                      className="w-72 max-h-72 overflow-y-auto overscroll-contain rounded-2xl p-1.5 shadow-2xl z-[9999] border-slate-200 dark:border-slate-800"
+                      className="w-72 max-h-80 overflow-hidden flex flex-col rounded-2xl p-1.5 shadow-2xl z-[9999] border-slate-200 dark:border-slate-800"
                     >
-                      <div className="px-2.5 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 mb-1">
-                        Panes disponibles ({modelosHijos.filter(m => cortes[m.id] === undefined).length})
-                      </div>
-                      {modelosHijos.filter(m => cortes[m.id] === undefined).map(m => (
-                        <DropdownMenuItem
-                          key={m.id}
-                          onClick={() => addModeloToList(m.id)}
-                          className="flex items-center justify-between p-2 rounded-xl font-bold cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
-                        >
-                          <span className="truncate text-slate-800 dark:text-slate-100 text-xs">{m.nombre}</span>
-                          <span className="shrink-0 ml-2 text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full">
-                            {m.pesoUnitarioGr}g
-                          </span>
-                        </DropdownMenuItem>
-                      ))}
-                      {modelosHijos.filter(m => cortes[m.id] === undefined).length === 0 && (
-                        <div className="px-3 py-5 text-xs text-center text-slate-500 font-medium">
-                          Todos los panes de esta masa ya están agregados
+                      {/* Buscador en tiempo real de panes */}
+                      <div className="p-1 border-b border-slate-100 dark:border-slate-800 mb-1">
+                        <div className="relative flex items-center">
+                          <Search className="w-3.5 h-3.5 absolute left-2.5 text-slate-400 pointer-events-none" />
+                          <Input
+                            type="text"
+                            placeholder="Buscar pan..."
+                            value={breadSearch}
+                            onChange={(e) => setBreadSearch(e.target.value)}
+                            className="h-8 pl-8 pr-2 text-xs rounded-xl border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 font-medium focus-visible:ring-indigo-500/20"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          />
                         </div>
-                      )}
+                      </div>
+
+                      <div className="overflow-y-auto overscroll-contain flex-1 max-h-60 custom-scrollbar pr-0.5">
+                        <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex justify-between items-center">
+                          <span>Panes disponibles</span>
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-black">
+                            {modelosHijos.filter(m => cortes[m.id] === undefined && (breadSearch.trim() === '' || m.nombre.toLowerCase().includes(breadSearch.toLowerCase()))).length}
+                          </Badge>
+                        </div>
+                        {modelosHijos
+                          .filter(m => cortes[m.id] === undefined && (breadSearch.trim() === '' || m.nombre.toLowerCase().includes(breadSearch.toLowerCase())))
+                          .map(m => (
+                            <DropdownMenuItem
+                              key={m.id}
+                              onClick={() => {
+                                addModeloToList(m.id);
+                                setBreadSearch('');
+                              }}
+                              className="flex items-center justify-between p-2 rounded-xl font-bold cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                            >
+                              <span className="truncate text-slate-800 dark:text-slate-100 text-xs">{m.nombre}</span>
+                              <span className="shrink-0 ml-2 text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full">
+                                {m.pesoUnitarioGr}g
+                              </span>
+                            </DropdownMenuItem>
+                          ))}
+                        {modelosHijos.filter(m => cortes[m.id] === undefined && (breadSearch.trim() === '' || m.nombre.toLowerCase().includes(breadSearch.toLowerCase()))).length === 0 && (
+                          <div className="px-3 py-6 text-xs text-center text-slate-500 font-medium">
+                            {breadSearch.trim() !== '' ? 'No se encontraron panes con ese nombre' : 'Todos los panes de esta masa ya están agregados'}
+                          </div>
+                        )}
+                      </div>
                     </DropdownMenuContent>
                   </DropdownMenu>
 
@@ -391,6 +464,7 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                   const cant = cortes[m.id] || 0;
                   const pesoTotal = (cant * m.pesoUnitarioGr) / 1000; // en kg
                   const numLatas = m.piezasPorLata ? Math.ceil(cant / m.piezasPorLata) : 0;
+                  const piezasPorLataEfectiva = m.piezasPorLata || 30;
                   
                   return (
                     <div key={m.id} className={cn(
@@ -407,7 +481,9 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                       <div className="flex justify-between items-start mb-3">
                         <div className="flex-1 pr-2">
                           <h5 className="font-black text-sm text-slate-900 dark:text-white leading-tight">{m.nombre}</h5>
-                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{m.pesoUnitarioGr}g c/u</p>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">
+                            {m.pesoUnitarioGr}g c/u · {piezasPorLataEfectiva} u/lata
+                          </p>
                         </div>
                         {m.ingredientesAdicionales && m.ingredientesAdicionales.length > 0 && (
                           <Badge className="bg-amber-100 text-amber-700 shrink-0 text-[9px] px-1.5">+Relleno</Badge>
@@ -420,13 +496,16 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                             <span className="text-[8px] font-black uppercase text-slate-400 mb-1">Bandejas</span>
                             <Input 
                               type="number" min={0} placeholder="0"
+                              value={cant > 0 ? (cant / piezasPorLataEfectiva).toFixed(1).replace(/\.0$/, '') : ''}
                               className="h-8 rounded-lg text-center text-xs font-bold border-slate-200"
                               onChange={(e) => {
                                 const v = e.target.value;
-                                if(v === '') return;
+                                if (v === '') {
+                                  setCorte(m.id, 0);
+                                  return;
+                                }
                                 const bandejas = Number(v) || 0;
-                                const pxb = m.piezasPorLata || 30; // 30 por defecto
-                                setCorte(m.id, bandejas * pxb);
+                                setCorte(m.id, Math.round(bandejas * piezasPorLataEfectiva));
                               }}
                             />
                           </div>
@@ -434,11 +513,12 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                           <div className="flex flex-col items-center w-1/3">
                             <span className="text-[8px] font-black uppercase text-slate-400 mb-1">x Bandeja</span>
                             <Input 
-                              type="number" min={0} defaultValue={m.piezasPorLata || 30}
+                              type="number" min={1} defaultValue={piezasPorLataEfectiva}
                               className="h-8 rounded-lg text-center text-xs font-bold border-slate-200 text-slate-500"
                               onChange={(e) => {
-                                // Aquí podríamos guardar el pxb en el estado si quisieran cambiarlo dinámicamente y recalcular
-                                // pero para mantenerlo simple, si editan el Total manual, está bien.
+                                const nuevoPorLata = Number(e.target.value) || piezasPorLataEfectiva;
+                                m.piezasPorLata = nuevoPorLata;
+                                setCorte(m.id, cant);
                               }}
                             />
                           </div>
@@ -455,7 +535,52 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                           </div>
                         </div>
                         
-                        <div className="flex gap-2">
+                        {/* Botones táctiles rápidos para panadería (sin teclear en móvil) */}
+                        <div className="grid grid-cols-4 gap-1">
+                          <button
+                            type="button"
+                            className="h-7 text-[10px] font-black rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 active:scale-95 transition-all flex items-center justify-center"
+                            onClick={() => {
+                              const nuevo = Math.max(0, cant - piezasPorLataEfectiva);
+                              setCorte(m.id, nuevo);
+                            }}
+                            title="Restar 1 lata"
+                          >
+                            -1 Lata
+                          </button>
+                          <button
+                            type="button"
+                            className="h-7 text-[10px] font-black rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 active:scale-95 transition-all flex items-center justify-center"
+                            onClick={() => {
+                              setCorte(m.id, cant + piezasPorLataEfectiva);
+                            }}
+                            title="Sumar 1 lata"
+                          >
+                            +1 Lata
+                          </button>
+                          <button
+                            type="button"
+                            className="h-7 text-[10px] font-black rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 active:scale-95 transition-all flex items-center justify-center"
+                            onClick={() => {
+                              setCorte(m.id, cant + (piezasPorLataEfectiva * 2));
+                            }}
+                            title="Sumar 2 latas"
+                          >
+                            +2 Latas
+                          </button>
+                          <button
+                            type="button"
+                            className="h-7 text-[10px] font-black rounded-lg border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 active:scale-95 transition-all flex items-center justify-center"
+                            onClick={() => {
+                              setCorte(m.id, cant + (piezasPorLataEfectiva * 5));
+                            }}
+                            title="Sumar 5 latas"
+                          >
+                            +5 Latas
+                          </button>
+                        </div>
+
+                        <div className="flex gap-2 mt-0.5">
                           <Button 
                             variant="outline" 
                             size="sm" 
@@ -465,18 +590,16 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                                if (availablePanes > 0) setCorte(m.id, cant + availablePanes);
                             }}
                           >
-                            Llenar Máx
+                            Llenar Masa Restante
                           </Button>
-                          {m.piezasPorLata && (
+                          {cant > 0 && (
                             <Button 
-                              variant="outline" 
+                              variant="ghost" 
                               size="sm" 
-                              className="h-7 text-[10px] font-bold flex-1 bg-white hover:bg-slate-100 text-slate-600 border-slate-200 rounded-lg"
-                              onClick={() => {
-                                 setCorte(m.id, cant + m.piezasPorLata!);
-                              }}
+                              className="h-7 text-[10px] font-bold px-2 text-slate-400 hover:text-rose-500 rounded-lg"
+                              onClick={() => setCorte(m.id, 0)}
                             >
-                              +1 Lata
+                              Poner 0
                             </Button>
                           )}
                         </div>

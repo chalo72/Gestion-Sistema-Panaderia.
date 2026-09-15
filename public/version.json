@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1147",
-  "buildTime": "2026-09-14T14:02:00.000Z",
-  "description": "Organizacion limpia de tarjetas de formulas, sincronizacion de recetas tecnicas vinculadas y scroll fluido para subir y bajar panes en la libreta",
-  "timestamp": 1789393320000,
+  "version": "1.1.1148",
+  "buildTime": "2026-09-14T22:01:00.000Z",
+  "description": "Buscador de panes en tiempo real, botones tactiles rapidos de latas (-1, +1, +2, +5) y pesaje automatico de insumos para la mesa",
+  "timestamp": 1789423260000,
   "buildDate": "2026-09-14"
 }
