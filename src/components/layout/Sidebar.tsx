@@ -31,7 +31,8 @@ import {
   Video,
   Briefcase,
   FileCheck,
-  Cake
+  Cake,
+  AlertOctagon
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';
@@ -174,6 +175,7 @@ export function Sidebar({
         { id: 'produccion', label: role === 'PANADERO' ? 'Libreta del Horno' : 'Producción / Libreta',  icon: Utensils,  permission: 'VER_PRODUCCION' },
         { id: 'recetas',    label: 'Recetas Técnicas',   icon: ChefHat,   permission: 'VER_PRODUCCION' },
         { id: 'inventario', label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
+        { id: 'control-merma', label: 'Control de Mermas', icon: AlertOctagon, permission: 'VER_PRODUCCION' },
       ],
     },
     {
@@ -460,6 +462,7 @@ export function Sidebar({
         { id: 'produccion' as ViewType, label: role === 'PANADERO' ? 'Libreta Horno' : 'Producción', icon: Utensils,  permission: 'VER_PRODUCCION' },
         { id: 'recetas' as ViewType,    label: 'Recetas',            icon: ChefHat,   permission: 'VER_PRODUCCION' },
         { id: 'inventario' as ViewType, label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
+        { id: 'control-merma' as ViewType, label: 'Mermas',          icon: AlertOctagon, permission: 'VER_PRODUCCION' },
         { id: 'productos' as ViewType,  label: 'Catálogo',           icon: Package,   permission: 'VER_PRODUCTOS' },
       ],
     },
