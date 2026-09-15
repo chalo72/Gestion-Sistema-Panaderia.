@@ -44,6 +44,7 @@ const WRITES: WriteSpec[] = [
   { method: 'addVenta', table: 'ventas', fn: (d) => supabaseDB.addVenta(d as never) },
   { method: 'addSesionCaja', table: 'sesiones_caja', fn: (d) => supabaseDB.addSesionCaja(d as never) },
   { method: 'updateSesionCaja', table: 'sesiones_caja', fn: (d) => supabaseDB.updateSesionCaja(d as never) },
+  { method: 'addVentaDiaria', table: 'ventas_diarias', fn: (d) => supabaseDB.addVentaDiaria(d as never) },
   { method: 'addGasto', table: 'gastos', fn: (d) => supabaseDB.addGasto(d as never) },
   { method: 'updateGasto', table: 'gastos', fn: (d) => supabaseDB.updateGasto(d as never) },
   { method: 'addRecepcion', table: 'recepciones', fn: (d) => supabaseDB.addRecepcion(d as never) },
@@ -86,6 +87,7 @@ const DELETES: DeleteSpec[] = [
   { method: 'deleteMesa', table: 'mesas', localTable: 'mesas', fn: (id) => supabaseDB.deleteMesa(id) },
   { method: 'deletePedidoActivo', table: 'pedidos_activos', localTable: 'pedidos_activos', fn: (id) => supabaseDB.deletePedidoActivo(id) },
   { method: 'deleteCliente', table: 'clientes', localTable: 'clientes', fn: (id) => supabaseDB.deleteCliente(id) },
+  { method: 'deleteVentaDiaria', table: 'ventas_diarias', localTable: 'ventas_diarias', fn: (id) => supabaseDB.deleteVentaDiaria(id) },
 ];
 
 const UPSERT_BY_TABLE: Record<string, (d: unknown) => Promise<void>> = {
@@ -108,6 +110,7 @@ const UPSERT_BY_TABLE: Record<string, (d: unknown) => Promise<void>> = {
   clientes: (d) => supabaseDB.addCliente(d as never),
   configuracion: (d) => supabaseDB.saveConfiguracion(d as never),
   nominas: (d) => supabaseDB.addNomina(d as never),
+  ventas_diarias: (d) => supabaseDB.addVentaDiaria(d as never),
 };
 
 const DELETE_BY_TABLE: Record<string, (id: string) => Promise<void>> = {
@@ -124,6 +127,7 @@ const DELETE_BY_TABLE: Record<string, (id: string) => Promise<void>> = {
   mesas: (id) => supabaseDB.deleteMesa(id),
   pedidos_activos: (id) => supabaseDB.deletePedidoActivo(id),
   clientes: (id) => supabaseDB.deleteCliente(id),
+  ventas_diarias: (id) => supabaseDB.deleteVentaDiaria(id),
 };
 
 /** Reintenta cola de pendientes (llamar al volver online / syncNow). */

@@ -695,6 +695,27 @@ export class SupabaseDatabase implements IDatabase {
         await this.addSesionCaja(sesion);
     }
 
+    // --- Ventas Diarias (registro manual mientras el POS no arranca) ---
+    async getAllVentasDiarias(): Promise<any[]> {
+        const { data, error } = await supabase.from('ventas_diarias').select('*');
+        if (error) { console.warn('⚠️ [SupabaseDB] getAllVentasDiarias falló:', error.message); return []; }
+        return data.map(this.mapVentaDiariaFromDB);
+    }
+
+    async addVentaDiaria(v: any): Promise<void> {
+        try {
+            const { error } = await supabase.from('ventas_diarias').upsert(this.mapVentaDiariaToDB(v));
+            if (error) console.warn('⚠️ [SupabaseDB] addVentaDiaria no se pudo sincronizar (no bloqueante):', error.message);
+        } catch (err) {
+            console.warn('⚠️ [SupabaseDB] addVentaDiaria excepción capturada:', err);
+        }
+    }
+
+    async deleteVentaDiaria(id: string): Promise<void> {
+        const { error } = await supabase.from('ventas_diarias').delete().eq('id', id);
+        if (error) console.warn('⚠️ [SupabaseDB] deleteVentaDiaria falló:', error.message);
+    }
+
     // --- Ahorros ---
     async getAllAhorros(): Promise<any[]> {
         const { data, error } = await supabase.from('ahorros').select('*');
@@ -1276,6 +1297,38 @@ export class SupabaseDatabase implements IDatabase {
             total_ventas: safeN(c.totalVentas),
             ventas_ids: Array.isArray(c.ventasIds) ? c.ventasIds : [],
             estado: c.estado || 'abierta'
+        };
+    }
+
+    private mapVentaDiariaFromDB(v: any): any {
+        return {
+            id: v.id,
+            fecha: v.fecha,
+            turno: v.turno,
+            evento: v.evento || undefined,
+            totalEfectivo: v.total_efectivo,
+            totalNequi: v.total_nequi,
+            totalTransferencia: v.total_transferencia,
+            totalCredito: v.total_credito,
+            total: v.total,
+            notas: v.notas || undefined,
+            cajas: v.cajas || undefined,
+        };
+    }
+
+    private mapVentaDiariaToDB(v: any): any {
+        return {
+            id: v.id,
+            fecha: v.fecha,
+            turno: v.turno || null,
+            evento: v.evento || null,
+            total_efectivo: safeN(v.totalEfectivo),
+            total_nequi: safeN(v.totalNequi),
+            total_transferencia: safeN(v.totalTransferencia),
+            total_credito: safeN(v.totalCredito),
+            total: safeN(v.total),
+            notas: v.notas || null,
+            cajas: v.cajas || {},
         };
     }
 

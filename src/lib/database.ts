@@ -52,7 +52,11 @@ export interface IDatabase {
   getSesionCajaActiva(): Promise<any | null>;
   addSesionCaja(s: any): Promise<void>;
   updateSesionCaja(s: any): Promise<void>;
-  
+
+  getAllVentasDiarias(): Promise<any[]>;
+  addVentaDiaria(v: any): Promise<void>;
+  deleteVentaDiaria(id: string): Promise<void>;
+
   getAllRecetas(): Promise<any[]>;
   addReceta(r: any): Promise<void>;
   updateReceta(r: any): Promise<void>;
@@ -496,6 +500,10 @@ class NexusDatabase implements IDatabase {
   }
   async addSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
   async updateSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
+
+  async getAllVentasDiarias() { return this.adapter.getCollection('ventas_diarias'); }
+  async addVentaDiaria(v: any) { return this.adapter.setDocument('ventas_diarias', v.id, v); }
+  async deleteVentaDiaria(id: string) { return this._delete('ventas_diarias', id); }
   async getBackup(key: string) { 
     const doc = await this.adapter.getDocument<any>('backups', key);
     if (doc && doc.data && Array.isArray(doc.data)) return doc.data;
@@ -763,6 +771,7 @@ class NexusDatabase implements IDatabase {
             { col: 'creditos_trabajadores', fn: () => supaDB.getAllCreditosTrabajadores() },
             { col: 'produccion', fn: () => supaDB.getAllOrdenesProduccion() },
             { col: 'nominas', fn: () => supaDB.getAllNominas() },
+            { col: 'ventas_diarias', fn: () => supaDB.getAllVentasDiarias() },
           ];
           for (const task of extraTasks) {
             try {
