@@ -788,17 +788,57 @@ export default function CreditosClientes({
                     </div>
 
                     {/* Filtros */}
-                    <div className="flex gap-3 flex-wrap">
+                    <div className="flex gap-2 flex-wrap items-center">
                         <div className="relative flex-1 min-w-[200px]">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                             <Input
                                 placeholder="Buscar cliente, descripción o carpeta..."
                                 value={searchCliente}
                                 onChange={e => setSearchCliente(e.target.value)}
-                                className="pl-9 rounded-xl"
+                                className="pl-9 pr-8 rounded-xl"
                             />
+                            {searchCliente && (
+                                <button
+                                    type="button"
+                                    onClick={() => setSearchCliente('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-slate-400 hover:text-slate-600 rounded-full"
+                                    title="Limpiar búsqueda"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
                         </div>
-                        <Button variant="outline" onClick={() => setShowCarpetasModal(true)} className="rounded-xl border-slate-200 dark:border-slate-800 flex items-center gap-2">
+
+                        {/* Botones de filtro rápido táctiles */}
+                        <div className="flex gap-1 bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                            {[
+                                { id: 'todos', label: 'Todos' },
+                                { id: 'activo', label: 'Con Deuda' },
+                                { id: 'vencido', label: 'Vencidos' },
+                                { id: 'pagado', label: 'Al Día' },
+                            ].map(btn => (
+                                <button
+                                    key={btn.id}
+                                    type="button"
+                                    onClick={() => setFiltroEstadoCliente(btn.id)}
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                                        filtroEstadoCliente === btn.id
+                                            ? btn.id === 'vencido'
+                                                ? 'bg-red-600 text-white'
+                                                : btn.id === 'activo'
+                                                ? 'bg-amber-600 text-white'
+                                                : btn.id === 'pagado'
+                                                ? 'bg-emerald-600 text-white'
+                                                : 'bg-slate-800 text-white dark:bg-white dark:text-slate-900'
+                                            : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                                    }`}
+                                >
+                                    {btn.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        <Button variant="outline" onClick={() => setShowCarpetasModal(true)} className="rounded-xl border-slate-200 dark:border-slate-800 flex items-center gap-2 h-9 px-3">
                             <FolderOpen className="w-4 h-4 text-blue-500" />
                             <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">Carpetas</span>
                         </Button>
@@ -806,21 +846,12 @@ export default function CreditosClientes({
                             variant="outline"
                             onClick={runDeepScan} 
                             disabled={isScanning}
-                            className={`rounded-xl border-orange-200 dark:border-orange-900 flex items-center gap-2 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`rounded-xl border-orange-200 dark:border-orange-900 flex items-center gap-2 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30 h-9 px-3 ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title="Recuperar datos perdidos de la memoria local"
                         >
                             <Search className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
                             <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">{isScanning ? 'Buscando...' : 'Rescate'}</span>
                         </Button>
-                        <Select value={filtroEstadoCliente} onValueChange={setFiltroEstadoCliente}>
-                            <SelectTrigger className="w-36 rounded-xl"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="todos">Todos</SelectItem>
-                                <SelectItem value="activo">Activos</SelectItem>
-                                <SelectItem value="vencido">Vencidos</SelectItem>
-                                <SelectItem value="pagado">Pagados</SelectItem>
-                            </SelectContent>
-                        </Select>
                     </div>
 
                     {/* Lista créditos clientes */}
