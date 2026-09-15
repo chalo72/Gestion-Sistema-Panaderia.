@@ -93,31 +93,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           } catch { /* usar baseList como fallback */ }
 
-          // MERGE INTELIGENTE: Preservar contraseñas de la nube si el local no tiene, y usar updatedAt
+          // LOCAL SIEMPRE GANA: nube solo agrega usuarios que no existen localmente
           const mergedMap = new Map<string, Usuario>();
-          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // nube base
-
-          freshLocalList.forEach(localU => {
-            const key = localU.email.toLowerCase();
-            const cloudU = mergedMap.get(key);
-            if (!cloudU) {
-              mergedMap.set(key, localU);
-            } else {
-              // Combinar preservando la contraseña más reciente o existente
-              const cloudAt = new Date(cloudU.updatedAt || cloudU.createdAt || 0).getTime();
-              const localAt = new Date(localU.updatedAt || localU.createdAt || 0).getTime();
-              
-              // Si la nube es más reciente o el local perdió el password, gana la nube para esos campos
-              const preferCloud = cloudAt > localAt || (cloudU.password && !localU.password);
-              
-              const mergedU = preferCloud ? { ...localU, ...cloudU } : { ...cloudU, ...localU };
-              
-              // Asegurar que nunca perdamos el password si uno de los dos lo tiene
-              mergedU.password = mergedU.password || localU.password || cloudU.password;
-              
-              mergedMap.set(key, mergedU);
-            }
-          });
+          cloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // nube — prioridad baja
+          freshLocalList.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // local gana siempre
           let merged = normalizarUsuariosLogin(Array.from(mergedMap.values()));
 
           // Subir oficiales e inactivaciones a la nube (uno a uno)
@@ -273,7 +252,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [rolePermissions, setRolePermissions] = useState<Record<UserRole, Permission[]>>(() => {
     const saved = localStorage.getItem('pricecontrol_permissions');
-    return saved ? JSON.parse(saved) : ROLE_PERMISSIONS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // Combinar con defaults para evitar crash si se agregó un rol nuevo que aún no existe en localStorage
+        return { ...ROLE_PERMISSIONS, ...parsed };
+      } catch {
+        return ROLE_PERMISSIONS;
+      }
+    }
+    return ROLE_PERMISSIONS;
   });
 
   useEffect(() => {
