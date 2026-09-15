@@ -681,8 +681,14 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async addSesionCaja(sesion: DBCajaSesion): Promise<void> {
-        const { error } = await supabase.from('caja').upsert(this.mapCajaToDB(sesion));
-        if (error) throw error;
+        try {
+            const { error } = await supabase.from('caja').upsert(this.mapCajaToDB(sesion));
+            if (error) {
+                console.warn('⚠️ [SupabaseDB] addSesionCaja no se pudo sincronizar en Supabase (no bloqueante):', error.message);
+            }
+        } catch (err) {
+            console.warn('⚠️ [SupabaseDB] addSesionCaja excepción capturada:', err);
+        }
     }
 
     async updateSesionCaja(sesion: DBCajaSesion): Promise<void> {
@@ -937,19 +943,25 @@ export class SupabaseDatabase implements IDatabase {
 
     // --- Sentinel Backups ---
     async saveBackup(id: string, data: any): Promise<void> { 
-        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config') {
-            const payload = Array.isArray(data) ? data : [data];
+        if (id) {
+            const payload = Array.isArray(data) ? data : (typeof data === 'object' ? data : [data]);
             const { error } = await supabase.from('configuracion').upsert({
                 id: id,
                 categorias: payload
             });
-            if (error) throw error;
+            if (error) {
+                console.warn(`[SupabaseDatabase] Error guardando backup ${id}:`, error);
+                throw error;
+            }
         }
     }
     async getBackup(id: string): Promise<any> {
-        if (id === 'formulaciones_data' || id === 'modelosPan_data' || id === 'cajas_config') {
+        if (id) {
             const { data, error } = await supabase.from('configuracion').select('categorias').eq('id', id).maybeSingle();
-            if (error) throw error;
+            if (error) {
+                console.warn(`[SupabaseDatabase] Error obteniendo backup ${id}:`, error);
+                return null;
+            }
             return data ? data.categorias : null;
         }
         return null;
@@ -1256,14 +1268,14 @@ export class SupabaseDatabase implements IDatabase {
     private mapCajaToDB(c: DBCajaSesion): any {
         return {
             id: c.id,
-            usuario_id: c.usuarioId,
-            fecha_apertura: c.fechaApertura,
-            fecha_cierre: c.fechaCierre,
+            usuario_id: c.usuarioId || 'admin',
+            fecha_apertura: c.fechaApertura || new Date().toISOString(),
+            fecha_cierre: c.fechaCierre || null,
             monto_apertura: safeN(c.montoApertura),
             monto_cierre: safeN(c.montoCierre),
             total_ventas: safeN(c.totalVentas),
-            ventas_ids: c.ventasIds,
-            estado: c.estado
+            ventas_ids: Array.isArray(c.ventasIds) ? c.ventasIds : [],
+            estado: c.estado || 'abierta'
         };
     }
 

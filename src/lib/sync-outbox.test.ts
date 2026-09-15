@@ -50,4 +50,14 @@ describe('sync-outbox', () => {
     quitarOutbox(id);
     expect(contarPendientesOutbox()).toBe(0);
   });
+
+  it('si supera MAX_ATTEMPTS, se descarta para no causar bucle infinito ni avisos molestos', async () => {
+    encolarOutbox('sesiones_caja', 'upsert', { id: 'caja_1' });
+    const upsert = vi.fn().mockRejectedValue(new Error('table error'));
+    const del = vi.fn();
+    for (let i = 0; i < 8; i++) {
+      await flushOutbox({ upsert, delete: del });
+    }
+    expect(contarPendientesOutbox()).toBe(0);
+  });
 });

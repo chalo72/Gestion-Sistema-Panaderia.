@@ -160,7 +160,10 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const onSyncStatus = (e: Event) => {
       const detail = (e as CustomEvent<{ kind: string; message: string; pendingCount: number }>).detail;
       if (!detail?.message) return;
-      if (detail.kind === 'error') toast.error(detail.message);
+      if (detail.kind === 'error') {
+        // Silenciado en pantalla según directiva del usuario para evitar avisos rojos intrusivos
+        console.warn('⚠️ [Sync Outbox]', detail.message);
+      }
       else if (detail.kind === 'flushed' && detail.pendingCount === 0) toast.success(detail.message);
       else if (detail.kind === 'pending' && detail.pendingCount > 0) {
         if (detail.pendingCount === 1 || detail.pendingCount % 5 === 0) {
