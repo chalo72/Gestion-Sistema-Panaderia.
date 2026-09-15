@@ -18,8 +18,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { cn } from '@/lib/utils';
+import { cn, escapeHtml } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import type { Producto, PrecioProveedor, Cliente } from '@/types';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
@@ -43,6 +44,7 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 
 // ─── Componente principal ────────────────────────────────────────────────────
 export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
+    const { usuario } = useAuth();
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -76,7 +78,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             saldo: saldo,
                             descripcion: 'Venta Mayorista (Rescate Histórico)',
                             items: h.items,
-                            usuarioId: 'admin',
+                            usuarioId: usuario?.id || 'admin',
                             estado: saldo <= 0 ? 'pagado' : 'activo',
                             pagos: (h.abonos || []).map(a => ({
                                 id: a.id,
@@ -140,6 +142,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     const [busquedaPerfil, setBusquedaPerfil] = useState('');
     const [categoriaPerfil, setCategoriaPerfil] = useState('');
+    const [busquedaClientes, setBusquedaClientes] = useState('');
+    const [filtroTipoCliente, setFiltroTipoCliente] = useState<string>('todos');
     const [tombstoneIds, setTombstoneIds] = useState<Set<string>>(new Set());
     const [carritoPos, setCarritoPos] = useState<{ productoId: string; nombre: string; precio: number; cantidad: number }[]>([]);
 
@@ -352,7 +356,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         descripcion: 'Venta Mayorista',
                         fecha: new Date().toISOString(),
                         items: nuevo.items,
-                        usuarioId: 'admin',
+                        usuarioId: usuario?.id || 'admin',
                         estado: 'activo',
                         pagos: []
                     });
@@ -1203,7 +1207,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
             const saldo = h.total - abonado;
             const metodo = metodoBadgeLabel[h.metodoPago ?? 'efectivo'] ?? (h.metodoPago ?? '');
-            const items = h.items.map(i => `${i.cantidad}× ${i.nombre} &mdash; ${fmt(i.precio * i.cantidad)}`).join('<br>');
+            const items = h.items.map(i => `${i.cantidad}× ${escapeHtml(i.nombre)} &mdash; ${fmt(i.precio * i.cantidad)}`).join('<br>');
             const estadoCred = h.metodoPago === 'credito'
                 ? (saldo > 0
                     ? `<span style="color:#dc2626;font-weight:700">Debe: ${fmt(saldo)}</span>`
@@ -1221,7 +1225,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>Historial — ${nombreCliente}</title>
+<title>Historial — ${escapeHtml(nombreCliente)}</title>
 <style>
   *{box-sizing:border-box}
   body{font-family:system-ui,sans-serif;margin:24px;color:#0f172a;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -1245,7 +1249,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
   </div>
   <button onclick="window.print()" style="background:#4f46e5;color:white;border:none;border-radius:8px;padding:8px 18px;font-weight:700;font-size:12px;cursor:pointer">Imprimir / PDF</button>
 </div>
-<h2 style="font-size:16px;margin:14px 0 2px">${nombreCliente}</h2>
+<h2 style="font-size:16px;margin:14px 0 2px">${escapeHtml(nombreCliente)}</h2>
 <p class="sub">Generado el ${new Date().toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
 <div class="kpi-row">
   <div class="kpi"><div class="kpi-label">Total facturado</div><div class="kpi-value">${fmt(totalGeneral)}</div></div>
@@ -3589,13 +3593,22 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     {/* Filtros y cliente activo */}
                     <div className="flex flex-wrap items-center gap-3">
                         <div className="relative flex-1 min-w-[200px]">
-                            <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <Package className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                             <Input
                                 placeholder="Buscar producto..."
                                 value={busqueda}
                                 onChange={e => setBusqueda(e.target.value)}
-                                className="pl-9 h-10 rounded-xl border-slate-200 dark:border-slate-700 text-sm"
+                                className="pl-10 pr-10 h-10 rounded-xl border-slate-200 dark:border-slate-700 text-sm font-bold"
                             />
+                            {busqueda && (
+                                <button
+                                    type="button"
+                                    onClick={() => setBusqueda('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
                         <button
                             onClick={() => setSoloViables(v => !v)}
@@ -3828,25 +3841,89 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     TAB 2: CLIENTES MAYORISTAS
                 ══════════════════════════════════════════════════ */}
                 <TabsContent value="clientes" className="space-y-4 mt-0">
-                    {clientes.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
-                            <Users className="w-12 h-12 text-muted-foreground/30 mb-3" />
-                            <p className="text-sm font-bold text-muted-foreground">Sin clientes mayoristas</p>
-                            <p className="text-xs text-muted-foreground mt-1 mb-4">Agrega tiendas o vendedores independientes para gestionar sus precios</p>
-                            <Button onClick={abrirNuevoCliente} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black gap-2">
-                                <Plus className="w-3 h-3" /> Agregar primer cliente
-                            </Button>
+                    {/* Barra de búsqueda táctil y filtros rápidos de Clientes */}
+                    <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
+                        <div className="relative">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                                placeholder="Buscar cliente por nombre o teléfono..."
+                                value={busquedaClientes}
+                                onChange={e => setBusquedaClientes(e.target.value)}
+                                className="pl-10 pr-10 h-11 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold"
+                            />
+                            {busquedaClientes && (
+                                <button
+                                    type="button"
+                                    onClick={() => setBusquedaClientes('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
                         </div>
-                    ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {clientes.map(c => {
-                                const tConf = TIPO_CONFIG[c.tipo];
-                                return (
-                                    <Card key={c.id} className="rounded-2xl border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md transition-all overflow-hidden">
-                                        <div 
-                                            className="p-5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
-                                            onClick={() => setExpandedClienteId(expandedClienteId === c.id ? null : c.id)}
-                                        >
+
+                        {/* Chips de tipo de cliente */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 shrink-0 flex items-center gap-1">
+                                <Users className="w-3 h-3 text-indigo-500" /> Tipo:
+                            </span>
+                            {(
+                                [
+                                    { id: 'todos', label: 'Todos' },
+                                    { id: 'mayorista', label: 'Al por Mayor' },
+                                    { id: 'detal', label: 'Detal' },
+                                    { id: 'tienda', label: 'Tiendas' },
+                                    { id: 'distribuidor', label: 'Distribuidores' },
+                                ] as const
+                            ).map(tp => (
+                                <button
+                                    key={tp.id}
+                                    type="button"
+                                    onClick={() => setFiltroTipoCliente(tp.id)}
+                                    className={cn(
+                                        'h-8 px-3 rounded-xl font-black uppercase tracking-wider text-[10px] transition-all shrink-0 border',
+                                        filtroTipoCliente === tp.id
+                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                            : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                                    )}
+                                >
+                                    {tp.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {(() => {
+                        const clientesFiltrados = clientes.filter(c => {
+                            const b = busquedaClientes.toLowerCase().trim();
+                            const matchTexto = !b || c.nombre.toLowerCase().includes(b) || (c.telefono || '').includes(b);
+                            const matchTipo = filtroTipoCliente === 'todos' || c.tipo === filtroTipoCliente;
+                            return matchTexto && matchTipo;
+                        });
+
+                        if (clientesFiltrados.length === 0) {
+                            return (
+                                <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-slate-900 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                                    <Users className="w-12 h-12 text-muted-foreground/30 mb-3" />
+                                    <p className="text-sm font-bold text-muted-foreground">Sin clientes que coincidan</p>
+                                    <p className="text-xs text-muted-foreground mt-1 mb-4">Prueba limpiando la búsqueda o agregando un cliente nuevo</p>
+                                    <Button onClick={abrirNuevoCliente} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black gap-2">
+                                        <Plus className="w-3 h-3" /> Agregar nuevo cliente
+                                    </Button>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {clientesFiltrados.map(c => {
+                                    const tConf = TIPO_CONFIG[c.tipo] || TIPO_CONFIG.mayorista;
+                                    return (
+                                        <Card key={c.id} className="rounded-2xl border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md transition-all overflow-hidden">
+                                            <div 
+                                                className="p-5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                                                onClick={() => setExpandedClienteId(expandedClienteId === c.id ? null : c.id)}
+                                            >
                                             <div className="flex items-start justify-between mb-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', tConf.bg)}>
@@ -3922,7 +3999,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 );
                             })}
                         </div>
-                    )}
+                        );
+                    })()}
                 </TabsContent>
             </Tabs>
 

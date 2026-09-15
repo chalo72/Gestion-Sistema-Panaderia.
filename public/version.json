@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1152",
-  "buildTime": "2026-09-14T22:26:00.000Z",
-  "description": "Créditos de clientes optimizado con filtros táctiles (Todos, Con Deuda, Vencidos, Al Día) y buscador con limpieza rápida",
-  "timestamp": 1789424760000,
+  "version": "1.1.1153",
+  "buildTime": "2026-09-14T22:37:00.000Z",
+  "description": "Optimización integral mobile-first: Filtros táctiles de períodos y estados, buscador con borrado instantáneo y tarjetas resumen en tiempo real en Gastos, Recepciones, Control de Caja y Mayoristas",
+  "timestamp": 1789425420000,
   "buildDate": "2026-09-14"
 }

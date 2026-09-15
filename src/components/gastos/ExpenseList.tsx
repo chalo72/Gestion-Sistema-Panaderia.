@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
     Search, Tag, Trash2, Calendar, FileText, Clock, Folder,
     Briefcase, Users, Settings, Plus, Pencil, TrendingDown,
@@ -89,8 +89,58 @@ export function ExpenseList({
         });
     };
 
+    const [filtroFecha, setFiltroFecha] = useState<'todos' | 'hoy' | 'ayer' | 'semana' | 'mes'>('todos');
+
+    // Filtrado por fecha
+    const gastosFiltradosPorFecha = useMemo(() => {
+        if (filtroFecha === 'todos') return gastos;
+        const hoy = new Date();
+        const yyyy = hoy.getFullYear();
+        const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+        const dd = String(hoy.getDate()).padStart(2, '0');
+        const hoyStr = `${yyyy}-${mm}-${dd}`;
+
+        const ayer = new Date();
+        ayer.setDate(hoy.getDate() - 1);
+        const ayerStr = `${ayer.getFullYear()}-${String(ayer.getMonth() + 1).padStart(2, '0')}-${String(ayer.getDate()).padStart(2, '0')}`;
+
+        const semanaAtras = new Date();
+        semanaAtras.setDate(hoy.getDate() - 7);
+        const mesActualStr = `${yyyy}-${mm}`;
+
+        return gastos.filter(g => {
+            const fechaG = (g.fecha || '').slice(0, 10);
+            if (filtroFecha === 'hoy') return fechaG === hoyStr;
+            if (filtroFecha === 'ayer') return fechaG === ayerStr;
+            if (filtroFecha === 'semana') return fechaG >= semanaAtras.toISOString().slice(0, 10);
+            if (filtroFecha === 'mes') return (g.fecha || '').slice(0, 7) === mesActualStr;
+            return true;
+        });
+    }, [gastos, filtroFecha]);
+
+    // Métricas rápidas de los registros filtrados actuales
+    const metricasFiltradas = useMemo(() => {
+        let totalEgresos = 0;
+        let totalIngresos = 0;
+        let cantEgresos = 0;
+        let cantIngresos = 0;
+
+        gastosFiltradosPorFecha.forEach(g => {
+            if (g.esIngreso) {
+                totalIngresos += g.monto;
+                cantIngresos++;
+            } else {
+                totalEgresos += g.monto;
+                cantEgresos++;
+            }
+        });
+
+        const balance = totalIngresos - totalEgresos;
+        return { totalEgresos, totalIngresos, cantEgresos, cantIngresos, balance, totalRegistros: gastosFiltradosPorFecha.length };
+    }, [gastosFiltradosPorFecha]);
+
     const grupos = agruparGastosPorDiaYProveedor(
-        gastos,
+        gastosFiltradosPorFecha,
         (g) => (g.esIngreso ? 1 : -1)
     );
 
@@ -99,34 +149,72 @@ export function ExpenseList({
 
     return (
         <div className="space-y-5">
-            {/* ── Barra de búsqueda + filtros ── */}
-            <div className="space-y-3">
+            {/* ── Barra de búsqueda + filtros táctiles rápidos ── */}
+            <div className="space-y-3 bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
                 <div className="relative group">
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-rose-500 transition-colors" />
                     <Input
                         placeholder="Buscar por descripción, proveedor o ítem..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="pl-11 h-11 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold focus:ring-2 focus:ring-rose-500/20"
+                        className="pl-11 pr-10 h-11 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold focus:ring-2 focus:ring-rose-500/20"
                     />
                     {searchTerm && (
-                        <button onClick={() => setSearchTerm('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                        <button
+                            type="button"
+                            onClick={() => setSearchTerm('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg"
+                        >
                             <X className="w-4 h-4" />
                         </button>
                     )}
                 </div>
 
-                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
+                {/* Filtro Rápido por Período de Fecha */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide pt-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 shrink-0 flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-indigo-500" /> Período:
+                    </span>
+                    {(
+                        [
+                            { id: 'todos', label: 'Todo' },
+                            { id: 'hoy', label: 'Hoy' },
+                            { id: 'ayer', label: 'Ayer' },
+                            { id: 'semana', label: 'Esta Semana' },
+                            { id: 'mes', label: 'Este Mes' },
+                        ] as const
+                    ).map(p => (
+                        <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => setFiltroFecha(p.id)}
+                            className={cn(
+                                'h-8 px-3.5 rounded-xl font-black uppercase tracking-wider text-[10px] transition-all shrink-0 border',
+                                filtroFecha === p.id
+                                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                    : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                            )}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Filtro Rápido por Categoría */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide pt-0.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 shrink-0 flex items-center gap-1">
+                        <Tag className="w-3 h-3 text-rose-500" /> Categoría:
+                    </span>
                     <button
                         onClick={() => setSelectedCategory(null)}
                         className={cn(
-                            'shrink-0 h-8 px-4 rounded-xl font-black uppercase tracking-widest text-[9px] border transition-all',
+                            'shrink-0 h-8 px-3.5 rounded-xl font-black uppercase tracking-widest text-[9px] border transition-all',
                             selectedCategory === null
                                 ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                                : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:text-rose-600'
+                                : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:text-rose-600'
                         )}
                     >
-                        Todos
+                        Todas
                     </button>
                     {CATEGORIAS_GASTOS.map(cat => {
                         const Icon = cat.icon;
@@ -138,7 +226,7 @@ export function ExpenseList({
                                     'shrink-0 h-8 px-3 rounded-xl font-black uppercase tracking-widest text-[9px] border transition-all flex items-center gap-1.5',
                                     selectedCategory === cat.value
                                         ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                                        : 'bg-white dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:text-rose-600'
+                                        : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-rose-300 hover:text-rose-600'
                                 )}
                             >
                                 <Icon className="w-3 h-3" />
@@ -146,6 +234,47 @@ export function ExpenseList({
                             </button>
                         );
                     })}
+                </div>
+
+                {/* Mini Tarjetas de Resumen Dinámico en Tiempo Real */}
+                <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <div className="bg-rose-50/70 dark:bg-rose-950/20 p-2.5 rounded-xl border border-rose-100 dark:border-rose-900/30">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-black uppercase text-rose-600 dark:text-rose-400">Total Egresos</span>
+                            <span className="text-[9px] font-bold bg-rose-200/60 dark:bg-rose-900/60 text-rose-700 dark:text-rose-300 px-1.5 py-0.5 rounded-md">{metricasFiltradas.cantEgresos}</span>
+                        </div>
+                        <p className="text-sm font-black text-rose-700 dark:text-rose-300 tabular-nums mt-0.5 leading-tight">
+                            {formatCurrency(metricasFiltradas.totalEgresos)}
+                        </p>
+                    </div>
+
+                    <div className="bg-emerald-50/70 dark:bg-emerald-950/20 p-2.5 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-black uppercase text-emerald-600 dark:text-emerald-400">Total Ingresos</span>
+                            <span className="text-[9px] font-bold bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.5 rounded-md">{metricasFiltradas.cantIngresos}</span>
+                        </div>
+                        <p className="text-sm font-black text-emerald-700 dark:text-emerald-300 tabular-nums mt-0.5 leading-tight">
+                            {formatCurrency(metricasFiltradas.totalIngresos)}
+                        </p>
+                    </div>
+
+                    <div className={cn(
+                        "p-2.5 rounded-xl border",
+                        metricasFiltradas.balance >= 0 
+                            ? "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200"
+                            : "bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/30 text-amber-700 dark:text-amber-300"
+                    )}>
+                        <div className="flex items-center justify-between">
+                            <span className="text-[9px] font-black uppercase tracking-wider">Balance Período</span>
+                            <span className="text-[8px] font-bold uppercase">{filtroFecha}</span>
+                        </div>
+                        <p className={cn(
+                            "text-sm font-black tabular-nums mt-0.5 leading-tight",
+                            metricasFiltradas.balance >= 0 ? "text-slate-900 dark:text-white" : "text-amber-600 dark:text-amber-400"
+                        )}>
+                            {formatCurrency(metricasFiltradas.balance)}
+                        </p>
+                    </div>
                 </div>
             </div>
 

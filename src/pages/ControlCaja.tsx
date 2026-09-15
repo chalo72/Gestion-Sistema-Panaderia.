@@ -7,7 +7,7 @@ import {
     ShoppingCart, TrendingUp, TrendingDown, ArrowUpCircle,
     ArrowDownCircle, Timer, Banknote, Coins, RefreshCw,
     CalendarDays, Wallet, Store, Users, Handshake, AlertTriangle,
-    LogOut, CheckSquare, X, ArrowRightLeft, MessageSquare,
+    LogOut, CheckSquare, X, ArrowRightLeft, MessageCircle,
     Pencil, Trash2, UserPlus
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -86,6 +86,11 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
     const cajaEmoji  = CAJA_EMOJIS[caja.cajaNombre || ''] || '📦';
 
     const handleConfirmar = async () => {
+        if (hayAlerta && !window.confirm(
+            `Hay un FALTANTE de ${formatCurrency(Math.abs(diferencia))} respecto a lo que el sistema esperaba.\n\n¿Confirmas que quieres cerrar el turno de todas formas?`
+        )) {
+            return;
+        }
         setLoading(true);
         await onConfirmar(caja.id, entregado);
         setMonto('');
@@ -179,10 +184,42 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
                             {/* Botón auto-rellenar */}
                             <button
                                 onClick={() => setMonto(String(esperado))}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-blue-500 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl transition-all"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black uppercase text-blue-500 hover:text-blue-700 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 px-2.5 py-1.5 rounded-xl transition-all"
                             >
                                 Usar sistema
                             </button>
+                        </div>
+
+                        {/* Botones táctiles rápidos para sumar denominaciones comunes */}
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 self-center mr-1">Rápido:</span>
+                            {[
+                                { label: '+$10k', val: 10000 },
+                                { label: '+$20k', val: 20000 },
+                                { label: '+$50k', val: 50000 },
+                                { label: '+$100k', val: 100000 },
+                            ].map(btn => (
+                                <button
+                                    key={btn.label}
+                                    type="button"
+                                    onClick={() => {
+                                        const actual = parseFloat(monto) || 0;
+                                        setMonto(String(actual + btn.val));
+                                    }}
+                                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-[10px] font-black text-slate-700 dark:text-slate-300 transition-colors"
+                                >
+                                    {btn.label}
+                                </button>
+                            ))}
+                            {monto && (
+                                <button
+                                    type="button"
+                                    onClick={() => setMonto('')}
+                                    className="px-2 py-1 rounded-lg bg-rose-50 dark:bg-rose-900/30 hover:bg-rose-100 text-[10px] font-black text-rose-600 dark:text-rose-400 ml-auto transition-colors"
+                                >
+                                    Borrar
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -361,6 +398,11 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
     const retencionGlobal = Math.max(0, totalVentasJornada * 0.10);
 
     const handleConfirmar = async () => {
+        if (hayAlerta && !window.confirm(
+            `Hay un FALTANTE neto de ${formatCurrency(Math.abs(diferenciaNeta))} en el cierre de jornada.\n\n¿Confirmas que quieres cerrar de todas formas?`
+        )) {
+            return;
+        }
         setLoading(true);
         setProgreso(0);
         const cierres = cajas.map(c => ({
@@ -825,7 +867,7 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                             className="w-12 h-12 p-0 border-2 rounded-xl border-slate-200 hover:border-emerald-500 hover:text-emerald-600 shrink-0"
                             title="Notificar por WhatsApp"
                         >
-                            <MessageSquare className="w-5 h-5" />
+                            <MessageCircle className="w-5 h-5" />
                         </Button>
                         <Button
                             onClick={handleConfirmar}
@@ -1168,7 +1210,7 @@ export function ControlCaja({
 
     // ─────────────────────────────────────────────────────────────
     return (
-        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+        <div className="min-h-full flex flex-col gap-5 p-4 pb-32 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
 
             {/* ══ HEADER ══ */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -1299,8 +1341,96 @@ export function ControlCaja({
                 </div>
             )}
 
-            {/* ══ CONTENIDO PRINCIPAL CON TABS ══ */}
-            <Tabs defaultValue="cajas" className="flex-1">
+            {/* ══ MÓVIL: DASHBOARD DE CAJA (PASO 4) ══ */}
+            <div className="md:hidden flex flex-col gap-4">
+                {hayJornada && cajaActiva ? (
+                    <>
+                        {/* Hero Card: Balance */}
+                        <div className="bg-gradient-to-br from-indigo-600 to-blue-700 rounded-3xl p-5 shadow-xl shadow-blue-900/20 text-white relative overflow-hidden">
+                            <div className="absolute -right-10 -top-10 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                            <div className="relative z-10">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-200 mb-1 flex items-center gap-1.5">
+                                    <Store className="w-3.5 h-3.5" /> {cajaActiva.cajaNombre || 'Caja Principal'}
+                                </p>
+                                <p className="text-[11px] text-blue-100 font-bold mb-4 opacity-80">
+                                    Apertura: {formatCurrency(cajaActiva.montoApertura || 0)}
+                                </p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-200">Balance en Sistema</p>
+                                <div className="text-4xl font-black tracking-tight mt-0.5 tabular-nums">
+                                    {formatCurrency(
+                                        (cajaActiva.montoApertura || 0) +
+                                        (cajaActiva.totalVentas || 0) +
+                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + (m.monto || 0), 0) -
+                                        (cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + (m.monto || 0), 0)
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Entradas / Salidas */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-2xl p-4 border border-emerald-100 dark:border-emerald-800/30">
+                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1 mb-1">
+                                    <TrendingUp className="w-3 h-3" /> Ventas
+                                </p>
+                                <p className="text-lg font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
+                                    {formatCurrency(cajaActiva.totalVentas || 0)}
+                                </p>
+                                <p className="text-[9px] text-emerald-500/70 font-bold mt-0.5">Total del turno</p>
+                            </div>
+                            <div className="bg-rose-50 dark:bg-rose-900/10 rounded-2xl p-4 border border-rose-100 dark:border-rose-800/30">
+                                <p className="text-[10px] font-black text-rose-600 uppercase tracking-widest flex items-center gap-1 mb-1">
+                                    <TrendingDown className="w-3 h-3" /> Salidas
+                                </p>
+                                <p className="text-lg font-black text-rose-700 dark:text-rose-400 tabular-nums">
+                                    -{formatCurrency((cajaActiva.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + (m.monto || 0), 0))}
+                                </p>
+                                <p className="text-[9px] text-rose-500/70 font-bold mt-0.5">Egresos registrados</p>
+                            </div>
+                        </div>
+
+                        {/* Botones de Acción */}
+                        <div className="grid grid-cols-2 gap-3 mt-1">
+                            <Button onClick={() => setMovementModal({ isOpen: true, tipo: 'entrada' })}
+                                className="h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black uppercase shadow-lg shadow-emerald-500/20 active:scale-95 transition-all text-sm gap-2">
+                                <ArrowUpCircle className="w-5 h-5" /> Entrada
+                            </Button>
+                            <Button onClick={() => setMovementModal({ isOpen: true, tipo: 'salida' })}
+                                className="h-14 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white font-black uppercase shadow-lg shadow-rose-500/20 active:scale-95 transition-all text-sm gap-2">
+                                <ArrowDownCircle className="w-5 h-5" /> Salida
+                            </Button>
+                        </div>
+
+                        <Button
+                            onClick={() => { setCajaEntregando(cajaActiva); setShowEntregaModal(true); }}
+                            className="w-full h-14 rounded-2xl bg-slate-900 dark:bg-slate-800 text-white font-black uppercase shadow-lg active:scale-95 transition-all text-xs gap-2 mt-2"
+                        >
+                            <Handshake className="w-5 h-5" /> Arqueo Ágil / Cerrar Turno
+                        </Button>
+
+                        <Button
+                            onClick={() => setShowCierreJornada(true)}
+                            variant="outline"
+                            className="w-full h-14 rounded-2xl border-2 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 font-black uppercase active:scale-95 transition-all text-xs gap-2"
+                        >
+                            <LogOut className="w-5 h-5" /> Cerrar Jornada Global
+                        </Button>
+                    </>
+                ) : (
+                    <div className="py-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <Store className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                        <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Caja Cerrada</p>
+                        <Button onClick={() => setShowAperturaModal(true)}
+                            className="mt-6 h-12 px-8 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase gap-2 shadow-lg shadow-blue-200 active:scale-95">
+                            <PlusCircle className="w-4 h-4" /> Iniciar Jornada
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+
+            {/* ══ CONTENIDO PRINCIPAL CON TABS (DESKTOP) ══ */}
+            <Tabs defaultValue="cajas" className="hidden md:flex flex-1 flex-col">
                 <TabsList className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-1.5 h-auto gap-1 shadow-sm flex overflow-x-auto no-scrollbar justify-start">
                     <TabsTrigger value="cajas"
                         className="flex-1 rounded-xl text-xs font-black uppercase tracking-wide py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm relative">
@@ -2393,6 +2523,35 @@ export function ControlCaja({
                     </div>
                 </DialogContent>
             </Dialog>
+            {/* ══ BARRA FLOTANTE MÓVIL (Control de Caja) ══ */}
+            {hayJornada && cajaActiva && (
+                <div className="md:hidden fixed bottom-[72px] left-0 right-0 p-3 z-40 bg-gradient-to-t from-white via-white to-transparent dark:from-slate-950 dark:via-slate-950 pb-6 pointer-events-none">
+                    <div className="bg-slate-900 dark:bg-slate-800 rounded-[2rem] p-2.5 flex items-center gap-2 shadow-2xl border border-white/10 pointer-events-auto shadow-black/30">
+                        {/* Resumen Visual de Saldo */}
+                        <div className="flex-1 bg-black/30 rounded-2xl p-2.5 flex flex-col justify-center px-4 border border-white/5">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Saldo en Caja</span>
+                            <span className="text-lg font-black text-white tabular-nums tracking-tight leading-none mt-1">{formatCurrency(balanceEsperado)}</span>
+                        </div>
+                        
+                        {/* Botones Táctiles Grandes */}
+                        <Button 
+                            onClick={() => setMovementModal({ isOpen: true, tipo: 'entrada' })}
+                            className="h-[60px] w-16 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white shrink-0 shadow-inner flex flex-col items-center justify-center gap-1 p-0 transition-transform active:scale-95"
+                        >
+                            <ArrowUpCircle className="w-6 h-6" />
+                            <span className="text-[9px] font-black uppercase">Ingreso</span>
+                        </Button>
+
+                        <Button 
+                            onClick={() => setMovementModal({ isOpen: true, tipo: 'salida' })}
+                            className="h-[60px] w-16 rounded-2xl bg-rose-500 hover:bg-rose-600 text-white shrink-0 shadow-inner flex flex-col items-center justify-center gap-1 p-0 transition-transform active:scale-95"
+                        >
+                            <ArrowDownCircle className="w-6 h-6" />
+                            <span className="text-[9px] font-black uppercase">Salida</span>
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

@@ -51,6 +51,8 @@ export default function Recepciones({
     const [selectedRecepcion, setSelectedRecepcion] = useState<Recepcion | null>(null);
     const [busqueda, setBusqueda] = useState('');
     const [proveedorFiltro, setProveedorFiltro] = useState<string>('todos');
+    const [filtroFecha, setFiltroFecha] = useState<'todos' | 'hoy' | 'ayer' | 'semana' | 'mes'>('todos');
+    const [filtroEstado, setFiltroEstado] = useState<'todos' | 'ok' | 'incidencias'>('todos');
     const [prePedidoSeleccionado, setPrePedidoSeleccionado] = useState<string>('');
     
     // === ESTADO PRODUCT FORM MODAL ===
@@ -602,6 +604,21 @@ export default function Recepciones({
     const filteredRecepciones = useMemo(() => {
         try {
             if (!recepciones || !Array.isArray(recepciones)) return [];
+            
+            const hoy = new Date();
+            const yyyy = hoy.getFullYear();
+            const mm = String(hoy.getMonth() + 1).padStart(2, '0');
+            const dd = String(hoy.getDate()).padStart(2, '0');
+            const hoyStr = `${yyyy}-${mm}-${dd}`;
+
+            const ayer = new Date();
+            ayer.setDate(hoy.getDate() - 1);
+            const ayerStr = `${ayer.getFullYear()}-${String(ayer.getMonth() + 1).padStart(2, '0')}-${String(ayer.getDate()).padStart(2, '0')}`;
+
+            const semanaAtras = new Date();
+            semanaAtras.setDate(hoy.getDate() - 7);
+            const mesActualStr = `${yyyy}-${mm}`;
+
             return recepciones.filter(recepcion => {
                 if (!recepcion || deletedIds.has(recepcion.id)) return false;
                 const proveedor = getProveedorById(recepcion.proveedorId);
@@ -609,7 +626,22 @@ export default function Recepciones({
                     (recepcion.numeroFactura?.toLowerCase() || "").includes(busqueda.toLowerCase()) ||
                     (proveedor?.nombre?.toLowerCase() || "").includes(busqueda.toLowerCase());
                 const matchProveedor = proveedorFiltro === 'todos' || recepcion.proveedorId === proveedorFiltro;
-                return matchBusqueda && matchProveedor;
+
+                // Filtro fecha
+                const fRec = (recepcion.fechaRecepcion || recepcion.fechaFactura || '').slice(0, 10);
+                let matchFecha = true;
+                if (filtroFecha === 'hoy') matchFecha = fRec === hoyStr;
+                else if (filtroFecha === 'ayer') matchFecha = fRec === ayerStr;
+                else if (filtroFecha === 'semana') matchFecha = fRec >= semanaAtras.toISOString().slice(0, 10);
+                else if (filtroFecha === 'mes') matchFecha = fRec.slice(0, 7) === mesActualStr;
+
+                // Filtro estado incidencias
+                const hasIssues = recepcion.items.some(i => !i.productoOk || !i.embalajeOk || i.defectuosos > 0);
+                let matchEstado = true;
+                if (filtroEstado === 'ok') matchEstado = !hasIssues;
+                else if (filtroEstado === 'incidencias') matchEstado = hasIssues;
+
+                return matchBusqueda && matchProveedor && matchFecha && matchEstado;
             }).sort((a, b) => {
                 const dateA = a.fechaRecepcion ? new Date(a.fechaRecepcion).getTime() : 0;
                 const dateB = b.fechaRecepcion ? new Date(b.fechaRecepcion).getTime() : 0;
@@ -619,7 +651,7 @@ export default function Recepciones({
             console.error("Shield-Guardian: Error filtrando recepciones", error);
             return [];
         }
-    }, [recepciones, busqueda, proveedorFiltro, getProveedorById, deletedIds]);
+    }, [recepciones, busqueda, proveedorFiltro, filtroFecha, filtroEstado, getProveedorById, deletedIds]);
 
     // Eliminar recepción del historial
     const handleDeleteRecepcion = async (id: string) => {
@@ -1775,27 +1807,111 @@ export default function Recepciones({
                     </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input
-                            placeholder="Buscar por factura o proveedor..."
-                            value={busqueda}
-                            onChange={e => setBusqueda(e.target.value)}
-                            className="pl-10"
-                        />
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <Input
+                                placeholder="Buscar por factura o proveedor..."
+                                value={busqueda}
+                                onChange={e => setBusqueda(e.target.value)}
+                                className="pl-10 pr-10 h-11 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl text-sm font-bold"
+                            />
+                            {busqueda && (
+                                <button
+                                    type="button"
+                                    onClick={() => setBusqueda('')}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            )}
+                        </div>
+                        <div className="w-full sm:w-64">
+                            <select
+                                className="w-full px-3 h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 text-sm font-bold text-slate-700 dark:text-slate-300 outline-none"
+                                value={proveedorFiltro}
+                                onChange={e => setProveedorFiltro(e.target.value)}
+                            >
+                                <option value="todos">Todos los Proveedores</option>
+                                {proveedores.map(p => (
+                                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
-                    <div className="w-full sm:w-64">
-                        <select
-                            className="w-full p-2 h-10 rounded-md border bg-background text-sm"
-                            value={proveedorFiltro}
-                            onChange={e => setProveedorFiltro(e.target.value)}
-                        >
-                            <option value="todos">Todos los Proveedores</option>
-                            {proveedores.map(p => (
-                                <option key={p.id} value={p.id}>{p.nombre}</option>
+
+                    {/* Filtros táctiles rápidos: Período + Estado */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                        {/* Período */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 shrink-0 flex items-center gap-1">
+                                <Calendar className="w-3 h-3 text-indigo-500" /> Fecha:
+                            </span>
+                            {(
+                                [
+                                    { id: 'todos', label: 'Todo' },
+                                    { id: 'hoy', label: 'Hoy' },
+                                    { id: 'ayer', label: 'Ayer' },
+                                    { id: 'semana', label: 'Esta Semana' },
+                                    { id: 'mes', label: 'Este Mes' },
+                                ] as const
+                            ).map(p => (
+                                <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => setFiltroFecha(p.id)}
+                                    className={cn(
+                                        'h-8 px-3 rounded-xl font-black uppercase tracking-wider text-[10px] transition-all shrink-0 border',
+                                        filtroFecha === p.id
+                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                            : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                                    )}
+                                >
+                                    {p.label}
+                                </button>
                             ))}
-                        </select>
+                        </div>
+
+                        {/* Estado OK / Incidencia */}
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 mr-1 shrink-0 flex items-center gap-1">
+                                <ClipboardCheck className="w-3 h-3 text-emerald-500" /> Auditoría:
+                            </span>
+                            {(
+                                [
+                                    { id: 'todos', label: 'Todos' },
+                                    { id: 'ok', label: '✓ Sin Novedad' },
+                                    { id: 'incidencias', label: '⚠ Con Incidencia' },
+                                ] as const
+                            ).map(st => (
+                                <button
+                                    key={st.id}
+                                    type="button"
+                                    onClick={() => setFiltroEstado(st.id)}
+                                    className={cn(
+                                        'h-8 px-2.5 rounded-xl font-black uppercase tracking-wider text-[10px] transition-all shrink-0 border',
+                                        filtroEstado === st.id
+                                            ? (st.id === 'incidencias' 
+                                                ? 'bg-rose-600 text-white border-rose-600 shadow-sm' 
+                                                : st.id === 'ok' 
+                                                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm' 
+                                                    : 'bg-slate-900 text-white border-slate-900 shadow-sm')
+                                            : 'bg-slate-50 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                                    )}
+                                >
+                                    {st.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Resumen de resultados filtrados */}
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-500 pt-1">
+                        <span>{filteredRecepciones.length} facturas encontradas</span>
+                        <span className="text-indigo-600 dark:text-indigo-400 font-black">
+                            Total filtrado: {formatCurrency(filteredRecepciones.reduce((s, r) => s + r.totalFactura, 0))}
+                        </span>
                     </div>
                 </div>
 
