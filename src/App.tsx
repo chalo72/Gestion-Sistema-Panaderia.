@@ -794,9 +794,10 @@ const App = () => {
             getPreciosByProveedor={(id) => precios.filter(p => p.proveedorId === id)}
             formatCurrency={formatCurrency}
             onAjustarStock={onAjustarStock}
-            onGenerarSugerencias={() => Promise.resolve(0)}
+            onGenerarSugerencias={onGenerarSugerencias}
             onNavigateToRecepciones={() => setCurrentView('recepciones')}
             addOrUpdatePrecio={addOrUpdatePrecio}
+            removePrecioFromCatalogo={deletePrecio}
           />
         );
       case 'recepciones':

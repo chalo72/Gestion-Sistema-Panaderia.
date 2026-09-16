@@ -95,6 +95,7 @@ interface PrePedidosProps {
   onGenerarSugerencias: () => Promise<number>;
   onNavigateToRecepciones?: () => void;
   addOrUpdatePrecio?: (precio: Omit<PrecioProveedor, 'id'>) => void;
+  removePrecioFromCatalogo?: (precioId: string) => void;
 }
 
 export default function PrePedidos({
@@ -119,7 +120,8 @@ export default function PrePedidos({
   onAjustarStock,
   onGenerarSugerencias,
   onNavigateToRecepciones,
-  addOrUpdatePrecio
+  addOrUpdatePrecio,
+  removePrecioFromCatalogo
 }: PrePedidosProps) {
   const [activeTab, setActiveTab] = useState<'creacion' | 'gestion' | 'comparador'>('creacion');
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
@@ -949,6 +951,7 @@ export default function PrePedidos({
               onShowBoard={() => setShowProveedorPanel(false)}
               draftItems={activeDraft?.items?.map(i => ({ productoId: i.productoId, cantidad: i.cantidad })) ?? []}
               addOrUpdatePrecio={addOrUpdatePrecio}
+              removePrecioFromCatalogo={removePrecioFromCatalogo}
             />
           </div>
         ) : (

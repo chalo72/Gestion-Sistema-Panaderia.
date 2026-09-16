@@ -11,6 +11,7 @@ import {
   FlaskConical,
   ShoppingBag,
   Zap,
+  Trash2
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,7 @@ interface ProveedorCatalogoTacticoProps {
   onShowBoard?: () => void;
   draftItems?: { productoId: string; cantidad: number }[];
   addOrUpdatePrecio?: (precio: Omit<PrecioProveedor, 'id'>) => void;
+  removePrecioFromCatalogo?: (precioId: string) => void;
 }
 
 const esInsumo = (p: any): boolean => {
@@ -65,6 +67,7 @@ export function ProveedorCatalogoTactico({
   onShowBoard,
   draftItems = [],
   addOrUpdatePrecio,
+  removePrecioFromCatalogo,
 }: ProveedorCatalogoTacticoProps) {
   const [search, setSearch] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -110,6 +113,7 @@ export function ProveedorCatalogoTactico({
           ...prod,
           nombre: prod?.nombre || 'Producto',
           id: pr.productoId,
+          precioId: pr.id,
           precioCosto: pr.precioCosto,
           destino: pr.destino,
           tipoEmbalaje: pr.tipoEmbalaje || 'UNIDAD',
@@ -235,10 +239,27 @@ export function ProveedorCatalogoTactico({
           </div>
         )}
 
-        <CardContent className="pl-4 pr-3 py-3 flex flex-col flex-1 gap-2">
-          <h4 className={cn('font-black uppercase text-xs sm:text-[13px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[36px]', enCarrito && 'pr-10')}>
-            {prod.nombre}
-          </h4>
+        <CardContent className="pl-4 pr-3 py-3 flex flex-col flex-1 gap-2 relative group">
+          <div className="flex justify-between items-start gap-1">
+            <h4 className={cn('font-black uppercase text-xs sm:text-[13px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[36px]', enCarrito && 'pr-10')}>
+              {prod.nombre}
+            </h4>
+            {removePrecioFromCatalogo && (prod as any).precioId && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm(`¿Estás seguro que deseas desvincular ${prod.nombre} del catálogo de este proveedor? (No se eliminará el producto del sistema)`)) {
+                    removePrecioFromCatalogo((prod as any).precioId);
+                    toast.success('Producto desvinculado del proveedor');
+                  }
+                }}
+                title="Desvincular del proveedor"
+                className="w-6 h-6 flex items-center justify-center rounded-md text-slate-300 hover:text-rose-500 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all shrink-0 -mt-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
 
           <div className="flex flex-col gap-1">
             {isEditingPrecio ? (
