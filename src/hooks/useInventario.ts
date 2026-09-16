@@ -96,7 +96,7 @@ export function useInventario({ productos }: UseInventarioParams) {
 
     } catch (error) {
       console.error('Error al ajustar stock:', error);
-      toast.error('Error al actualizar inventario');
+      // toast.error('Error al actualizar inventario');
     }
   }, []);
 

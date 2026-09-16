@@ -3288,7 +3288,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                         {editProduccionId && (
                                             <Button variant="outline" onClick={() => {
                                                 if (setEditProduccionId) setEditProduccionId(null);
-                                                setFormProd({ fecha: fechaLocalHoy(), notas: '' });
+                                                setFormProd({ fecha: hoyStr || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0], notas: '' });
                                                 setMasasPreparadas([]);
                                                 setHornadas([{ tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
                                             }} className="w-full mt-2 rounded-xl border-dashed border-2 h-10 text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 dark:hover:bg-slate-800">

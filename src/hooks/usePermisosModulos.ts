@@ -59,7 +59,7 @@ export const ROLES_CONFIGURABLES = [
   { id: 'AUXILIAR',           label: 'Auxiliar',           color: 'bg-slate-500' },
 ];
 
-const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub'];
+const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub','inventario'];
 const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas','asistencia'];
 const VER_CONTROL_FINANCIERO = [
   'dashboard',
@@ -109,6 +109,8 @@ const PATCH_PANADERO_REPORTES = 'dp_patch_panadero_reportes_20260810';
 const PATCH_CONTROL_FINANCIERO = 'dp_patch_control_financiero_20260913';
 /** Parche: WhatsApp Hub y Asistencia rápida para todos los roles clave */
 const PATCH_WHATSAPP_HUB = 'dp_patch_whatsapp_hub_20260913_v2';
+/** Parche: Vendedor gana acceso a Inventario (para inventariar desde el celular) */
+const PATCH_VENDEDOR_INVENTARIO = 'dp_patch_vendedor_inventario_20260915';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -187,6 +189,18 @@ export function cargarPermisos(): PermisosModulos {
           },
         };
         localStorage.setItem(PATCH_WHATSAPP_HUB, '1');
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_VENDEDOR_INVENTARIO)) {
+        parsed = {
+          ...parsed,
+          VENDEDOR: {
+            ...(parsed.VENDEDOR || DEFAULT_PERMISOS.VENDEDOR),
+            'inventario': { ver: true, eliminar: false },
+          },
+        };
+        localStorage.setItem(PATCH_VENDEDOR_INVENTARIO, '1');
         changed = true;
       }
 

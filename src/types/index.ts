@@ -503,6 +503,10 @@ export interface AlertaPrecio {
   porcentajeCambio: number;
   fecha: string;
   leida: boolean;
+  /** Presente cuando la alerta es por un cambio de PRECIO DE VENTA hecho por un usuario
+   * (ej. vendedora corrigiendo el precio desde el buscador de Ventas), no un cambio de
+   * costo de proveedor. Si está presente, no hay proveedor real involucrado. */
+  usuarioNombre?: string;
 }
 
 // NUEVO: Sistema de Pre-Pedidos
@@ -851,6 +855,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     'VER_PRECIO_VENTA',
     'VER_DASHBOARD',
     'VER_VENTAS', 'GESTIONAR_VENTAS', 'ABRIR_CERRAR_CAJA',
+    'VER_INVENTARIO',
   ],
   PANADERO: [
     // Producción + auditoría de panes (Reportes) + inventario básico
@@ -1019,6 +1024,9 @@ export interface CajaSesion {
   turno?: 'Mañana' | 'Tarde-Noche';
   vendedoraNombre?: string;
   eventoEspecial?: string;
+  /** true cuando totalVentas fue escrito a mano en el cierre (no vino de ventas de POS) —
+   * ej. un día que esta caja no se usó por POS. Sirve para distinguir el origen del dato en reportes. */
+  ventasManualIngresadas?: boolean;
 }
 // ============================================
 // PRÉSTAMOS ENTRE CAJAS

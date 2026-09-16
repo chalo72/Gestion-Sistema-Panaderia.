@@ -91,7 +91,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
     useEffect(() => {
         if (!isOpen) return;
         db.getBackup('cajas_config').then(data => {
-            if (data && Array.isArray(data) && data.length > 0) {
+            if (data && Array.isArray(data)) {
                 setCajasLista(data);
                 setConfigs(prev => {
                     const next = { ...prev };

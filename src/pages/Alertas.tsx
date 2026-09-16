@@ -328,10 +328,11 @@ export function Alertas({
           const pConfig   = PRIORIDAD_CONFIG[alerta.prioridad];
           const PriorityIcon = pConfig.icon;
 
+          const esCambioVendedora = !!alerta.usuarioNombre;
           const precioVenta    = producto?.precioVenta || 0;
-          const margenAnterior = precioVenta > 0 && alerta.precioAnterior > 0
+          const margenAnterior = !esCambioVendedora && precioVenta > 0 && alerta.precioAnterior > 0
             ? ((precioVenta - alerta.precioAnterior) / precioVenta) * 100 : null;
-          const margenNuevo    = precioVenta > 0 && alerta.precioNuevo > 0
+          const margenNuevo    = !esCambioVendedora && precioVenta > 0 && alerta.precioNuevo > 0
             ? ((precioVenta - alerta.precioNuevo) / precioVenta) * 100 : null;
           const deltaMargen    = margenAnterior !== null && margenNuevo !== null
             ? margenNuevo - margenAnterior : null;
@@ -397,7 +398,9 @@ export function Alertas({
                     </p>
                     <p className="text-sm text-muted-foreground flex items-center gap-1.5 mt-0.5">
                       <Store className="w-3.5 h-3.5 shrink-0" />
-                      {proveedor?.nombre || 'Proveedor Desconocido'}
+                      {esCambioVendedora
+                        ? `Precio corregido por ${alerta.usuarioNombre}`
+                        : (proveedor?.nombre || 'Proveedor Desconocido')}
                     </p>
                     {producto?.categoria && (
                       <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full inline-block mt-1">
@@ -460,9 +463,11 @@ export function Alertas({
                     'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/50'
                   )}>
                     <p className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider mb-1 flex items-center gap-1">
-                      <Zap className="w-2.5 h-2.5" /> Impacto margen
+                      <Zap className="w-2.5 h-2.5" /> {esCambioVendedora ? 'Corregido por' : 'Impacto margen'}
                     </p>
-                    {deltaMargen !== null ? (
+                    {esCambioVendedora ? (
+                      <p className="font-bold text-sm text-foreground truncate">{alerta.usuarioNombre}</p>
+                    ) : deltaMargen !== null ? (
                       <p className={cn('font-bold text-sm',
                         deltaMargen < -3 ? 'text-rose-500' :
                         deltaMargen < 0  ? 'text-amber-500' : 'text-emerald-500'
@@ -479,7 +484,15 @@ export function Alertas({
                 </div>
 
                 {/* Sugerencia de acción */}
-                {!alerta.leida && alerta.prioridad === 'CRÍTICA' && isSubida && (
+                {!alerta.leida && esCambioVendedora && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-sky-50/60 dark:bg-sky-950/30 border border-sky-200/60">
+                    <ShieldAlert className="w-4 h-4 text-sky-500 shrink-0" />
+                    <p className="text-xs font-bold text-sky-700 dark:text-sky-400">
+                      Verifica que el nuevo precio de venta sea correcto antes de marcar como revisada
+                    </p>
+                  </div>
+                )}
+                {!alerta.leida && !esCambioVendedora && alerta.prioridad === 'CRÍTICA' && isSubida && (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-50/60 dark:bg-rose-950/30 border border-rose-200/60">
                     <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
                     <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
@@ -487,7 +500,7 @@ export function Alertas({
                     </p>
                   </div>
                 )}
-                {!alerta.leida && !isSubida && alerta.prioridad !== 'NORMAL' && (
+                {!alerta.leida && !esCambioVendedora && !isSubida && alerta.prioridad !== 'NORMAL' && (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/60">
                     <TrendingDown className="w-4 h-4 text-emerald-500 shrink-0" />
                     <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">

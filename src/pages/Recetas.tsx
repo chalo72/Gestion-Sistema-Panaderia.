@@ -6,7 +6,7 @@ import {
     UtensilsCrossed, Save, AlertCircle, Thermometer, Timer, Gauge, Clock,
     Scale, TrendingUp, Info, History as HistoryIcon, Camera, X, ArrowUp,
     ArrowDown, ListOrdered, Filter, Calculator, ChevronDown, ChevronUp,
-    Package, Wheat, Percent, Tag, PieChart, Layers3, Check, Wrench, RefreshCw, Download, Shield
+    Package, Wheat, Percent, Tag, PieChart, Layers3, Check, Wrench, RefreshCw, Download, Shield, Croissant
 } from 'lucide-react';
 import { HistorialAuditoriasModal } from '@/components/produccion/HistorialAuditoriasModal';
 import { DistribuidorArroba } from '@/components/produccion/DistribuidorArroba';

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ProductVariant, ProductWithVariants, VariantStock } from '@/types/product-variants';
 
 interface UseProductVariantsReturn {

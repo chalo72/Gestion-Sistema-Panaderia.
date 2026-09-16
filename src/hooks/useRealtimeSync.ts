@@ -22,6 +22,9 @@ type Handler = {
   writeToLocal:    (item: any) => Promise<void>;
   deleteFromLocal: (id: string) => Promise<void>;
   localTableName:  string;
+  // Opcional: mapea el registro que ya viene en el evento realtime, sin traer toda la
+  // tabla. Si no está definido, se usa el camino viejo (getFromSupabase + find).
+  mapFromRecord?:  (record: any) => any;
 };
 
 function orig(name: string, fallback: (...a: any[]) => Promise<any>) {
@@ -32,6 +35,10 @@ const HANDLERS: Record<string, Handler> = {
   productos: {
     localTableName:  'productos',
     getFromSupabase: () => _sdb.getAllProductos(),
+    // 🩹 FIX 2026-09-15: mapea el registro del propio evento (ya viene completo) en vez de
+    // traer TODA la tabla de productos por cada cambio remoto — es la tabla que más
+    // eventos genera, así que es la que más cuota gastaba con el camino viejo.
+    mapFromRecord:   (r) => _sdb.mapProductoFromDB(r),
     writeToLocal:    (d) => orig('updateProducto', db.updateProducto.bind(db))(d),
     // Borra solo del IndexedDB local — NO propaga a Firebase.
     // Si propagáramos a Firebase, el siguiente sync Firebase->local no podría restaurarlo.
@@ -235,9 +242,13 @@ export function useRealtimeSync() {
         const tombstones = await db.getTombstones(handler.localTableName).catch(() => [] as string[]);
         if (tombstones.includes(recordId)) return;
 
-        // Obtener el registro completo y mapeado desde Supabase
-        const allItems = await handler.getFromSupabase();
-        const item = allItems.find((i: any) => i.id === recordId);
+        // Obtener el registro completo y mapeado.
+        // 🩹 FIX 2026-09-15: si el handler puede mapear el registro que YA viene en el
+        // evento (mapFromRecord), usar eso — evita descargar toda la tabla por cada
+        // cambio remoto individual. Si no, camino viejo: traer toda la tabla y buscar el id.
+        const item = handler.mapFromRecord
+          ? handler.mapFromRecord(record)
+          : (await handler.getFromSupabase()).find((i: any) => i.id === recordId);
         if (item) {
           const local = await localAdapter
             .getDocument<{ id: string }>(handler.localTableName, recordId)

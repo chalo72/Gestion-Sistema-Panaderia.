@@ -89,7 +89,10 @@ interface VentasProps {
     onUpdatePedidoActivo: (pedido: PedidoActivo) => Promise<void>;
     onDeletePedidoActivo: (id: string) => Promise<void>;
     onUpdateProducto?: (id: string, updates: Partial<Producto>) => Promise<void>;
+    onAddProducto?: (producto: Omit<Producto, 'id'>) => Promise<void>;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
+    /** Registra en Alertas un cambio manual de precio de venta hecho desde el buscador del POS, para auditoría del admin */
+    onRegistrarCambioPrecioVenta?: (productoId: string, precioAnterior: number, precioNuevo: number, usuarioNombre: string) => void;
     onAddMesa?: (mesa: Mesa) => Promise<void>;
     onViewConsumo?: () => void;
     onDeleteMesa?: (id: string) => Promise<void>;
@@ -125,6 +128,8 @@ export function Ventas(props: VentasProps) {
         onUpdatePedidoActivo,
         onDeletePedidoActivo,
         onUpdateProducto,
+        onAddProducto,
+        onRegistrarCambioPrecioVenta,
         onAjustarStock,
         onAddMesa,
         onDeleteMesa,
@@ -1121,6 +1126,7 @@ export function Ventas(props: VentasProps) {
                                         setSelectedCategory={setSelectedCategory}
                                         categorias={categorias}
                                         onEditProduct={onUpdateProducto}
+                                        onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
                                         onAjustarStock={onAjustarStock}
                                         onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
                                         cart={cart}
@@ -1151,7 +1157,7 @@ export function Ventas(props: VentasProps) {
                 </div>
 
                 {/* Panel derecho: Carrito — Desktop */}
-                <div className="hidden lg:flex w-[440px] xl:w-[480px] shrink-0 flex-col min-h-0 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-black/50 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden transition-all duration-300" style={{ minHeight: '0' }}>
+                <div className="hidden lg:flex w-[460px] xl:w-[520px] shrink-0 flex-col min-h-0 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-black/50 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden transition-all duration-300" style={{ minHeight: '0' }}>
                     {renderCartPanel()}
                 </div>
 
@@ -1485,7 +1491,7 @@ export function Ventas(props: VentasProps) {
                                 className="w-full h-11 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                         </div>
-                        {onUpdateProducto && (
+                        {onAddProducto && (
                             <label className="flex items-center gap-3 cursor-pointer select-none">
                                 <div
                                     onClick={() => setAdHocGuardar(v => !v)}
@@ -1520,9 +1526,15 @@ export function Ventas(props: VentasProps) {
                                         activo: true,
                                     } as Producto;
                                     addToCart(productoTemp);
-                                    if (adHocGuardar && onUpdateProducto) {
+                                    if (adHocGuardar && onAddProducto) {
                                         toast.promise(
-                                            onUpdateProducto(productoTemp.id, { nombre: productoTemp.nombre, precioVenta: precio, categoria: 'Otros' }),
+                                            onAddProducto({
+                                                nombre: productoTemp.nombre,
+                                                precioVenta: precio,
+                                                categoria: 'Otros',
+                                                tipo: 'elaborado',
+                                                activo: true,
+                                            } as Omit<Producto, 'id'>),
                                             { loading: 'Guardando...', success: 'Guardado en catálogo', error: 'No se pudo guardar' }
                                         );
                                     }

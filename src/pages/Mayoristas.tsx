@@ -2193,7 +2193,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                         ) : (
                                             /* ── Ficha: Pagados ── */
                                             <>
-                                                {pagadosFiltrados.length === 0 ? (
+                                                {ticketsPagados.length === 0 ? (
                                                     <div className="py-8 flex flex-col items-center gap-2 opacity-50">
                                                         {busquedaTicket ? (
                                                             <>
@@ -2209,7 +2209,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     </div>
                                                 ) : (
                                                     <div className="space-y-2">
-                                                        {pagadosFiltrados.map(h => {
+                                                        {ticketsPagados.map(h => {
                                                             const abonado = (h.abonos ?? []).reduce((s, a) => s + a.monto, 0);
                                                             const metodoLabel: Record<string,string> = { efectivo:'Efectivo', nequi:'Nequi', transferencia:'Cuenta', credito:'Crédito' };
                                                             const metodoCls: Record<string,string> = { efectivo:'bg-emerald-100 text-emerald-700', nequi:'bg-violet-100 text-violet-700', transferencia:'bg-blue-100 text-blue-700', credito:'bg-indigo-100 text-indigo-700' };
@@ -3715,7 +3715,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 value={tempPrecio}
                                                                 onChange={e => setTempPrecio(e.target.value)}
                                                                 onKeyDown={e => {
-                                                                    if (e.key === 'Enter') { procesarInputPrecio(tempPrecio, d.pvp, d.producto.id); }
+                                                                    if (e.key === 'Enter') {
+                                                                        const v = parseFloat(tempPrecio);
+                                                                        if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v);
+                                                                        setEditandoPrecioId(null);
+                                                                    }
                                                                     if (e.key === 'Escape') setEditandoPrecioId(null);
                                                                 }}
                                                                 autoFocus

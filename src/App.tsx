@@ -1,5 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { startAuditoriaSession } from '@/lib/auditoria-rrweb';
+import { usePermisosRealtime } from '@/hooks/usePermisosRealtime';
+import { useUsuariosRealtime } from '@/hooks/useUsuariosRealtime';
 import {
   LogOut,
   Sun,
@@ -144,6 +146,7 @@ const App = () => {
     updateCategoria,
     addOrUpdatePrecio,
     deletePrecio,
+    registrarCambioPrecioVenta,
     updateConfiguracion,
     // De useInventario
     recetas,
@@ -226,6 +229,9 @@ const App = () => {
     addNomina,
     updateNomina,
   } = usePriceControl();
+
+  usePermisosRealtime();
+  useUsuariosRealtime();
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -341,11 +347,18 @@ const App = () => {
             onViewAhorros={() => setCurrentView('ahorro')}
             onViewCargaMasiva={() => setCurrentView('cargamasiva')}
             onViewRecetas={() => setCurrentView('recetas')}
+            onViewConsumo={() => setCurrentView('fiados-empleados')}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
             nombre={user?.nombre}
             ventas={ventas}
+            productos={productos}
+            proveedores={proveedores}
+            precios={precios}
+            inventario={inventario}
+            getMejorPrecio={getMejorPrecio}
+            getPreciosByProducto={getPreciosByProducto}
           />
         );
       case 'proveedores':
@@ -467,6 +480,8 @@ const App = () => {
             onUpdatePedidoActivo={onUpdatePedidoActivo}
             onDeletePedidoActivo={onDeletePedidoActivo}
             onUpdateProducto={updateProducto}
+            onAddProducto={addProducto}
+            onRegistrarCambioPrecioVenta={registrarCambioPrecioVenta}
             onAjustarStock={onAjustarStock}
             cajaActionTrigger={cajaActionTrigger}
             onCajaActionConsumed={() => setCajaActionTrigger(null)}
@@ -480,7 +495,8 @@ const App = () => {
             cajaActiva={cajaActiva}
             ventas={ventas}
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
-            onCerrarCaja={cerrarCaja}
+            onCerrarCaja={(monto, ventasManual) => cerrarCaja(monto, user?.nombre, ventasManual)}
+            onViewHistorial={() => setCurrentView('historial-ventas')}
             onRegistrarMovimiento={registrarMovimientoCaja}
             formatCurrency={formatCurrency}
           />
@@ -815,6 +831,7 @@ const App = () => {
             }}
             onAddProducto={addProducto}
             onUpdateProducto={updateProducto}
+            onAddOrUpdatePrecio={addOrUpdatePrecio}
             getProductoById={getProductoById}
             getProveedorById={getProveedorById}
             formatCurrency={formatCurrency}
@@ -892,6 +909,12 @@ const App = () => {
             formatCurrency={formatCurrency}
             nombre={user?.nombre}
             ventas={ventas}
+            productos={productos}
+            proveedores={proveedores}
+            precios={precios}
+            inventario={inventario}
+            getMejorPrecio={getMejorPrecio}
+            getPreciosByProducto={getPreciosByProducto}
           />
         );
     }
@@ -956,7 +979,7 @@ const App = () => {
                </div>
             </div>
 
-            <div className="flex items-center gap-6 overflow-x-auto min-w-0">
+            <div className="flex items-center gap-2 sm:gap-4 md:gap-6 min-w-0">
                {/* Botones de Caja — solo visibles en POS con caja abierta */}
                {currentView === 'ventas' && cajaActiva && (
                  <div className="flex items-center gap-1">
@@ -999,7 +1022,7 @@ const App = () => {
                    title="Marcar Asistencia / Turno"
                 >
                    <Clock className="w-3.5 h-3.5" />
-                   <span className="text-[10px] font-black uppercase tracking-wider hidden xs:inline">Turno</span>
+                   <span className="text-[10px] font-black uppercase tracking-wider hidden sm:inline">Turno</span>
                 </button>
 
                {/* Alertas Inteligentes de Stock */}
@@ -1040,16 +1063,18 @@ const App = () => {
                   {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                </button>
 
-               {/* info Usuario */}
-               <div className="flex items-center gap-3 pl-6 border-l border-slate-200 dark:border-slate-800">
-                  <div className="text-right flex flex-col justify-center">
+               {/* info Usuario — nombre/avatar decorativos se ocultan en celular para que
+                   Turno/Alertas/Tema quepan sin scroll horizontal; el logout siempre queda visible
+                   porque es el único botón de cerrar sesión en toda la app. */}
+               <div className="flex items-center gap-1 sm:gap-3 sm:pl-6 sm:border-l border-slate-200 dark:border-slate-800 shrink-0">
+                  <div className="hidden sm:flex text-right flex-col justify-center">
                     <p className="text-[10px] font-black text-slate-900 dark:text-white uppercase leading-none mb-1">{user.nombre}</p>
                     <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-tighter leading-none">{user.rol}</p>
                   </div>
-                  <div className="w-9 h-9 rounded-xl bg-indigo-500 flex items-center justify-center text-white font-black text-xs shadow-lg shadow-indigo-500/20">
+                  <div className="hidden sm:flex w-9 h-9 rounded-xl bg-indigo-500 items-center justify-center text-white font-black text-xs shadow-lg shadow-indigo-500/20">
                     {user.nombre.charAt(0)}
                   </div>
-                  <button 
+                  <button
                     onClick={logout}
                     className="p-2 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-500 transition-colors"
                   >
@@ -1101,7 +1126,7 @@ const App = () => {
         )}
       </main>
 
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster position="top-right" richColors closeButton visibleToasts={1} duration={3000} />
     </div>
   );
 };

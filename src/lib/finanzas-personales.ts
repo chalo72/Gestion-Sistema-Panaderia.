@@ -95,6 +95,32 @@ export function deleteVentaDiaria(id: string): void {
   saveVentasDiarias(getVentasDiarias().filter(v => v.id !== id));
 }
 
+/**
+ * Escribe/actualiza el monto de UNA caja dentro del registro de "Ventas del Día" (fecha dada),
+ * creando el registro del día si aún no existe. Usado para sincronizar el cierre manual de una
+ * caja (arqueo sin ventas de POS ese día) con el formulario de Ventas del Día en Reportes,
+ * evitando anotar el mismo dato dos veces en pantallas distintas.
+ */
+export function upsertCajaEnVentaDiaria(fecha: string, cajaNombre: string, monto: number): VentaDiaria {
+  const existentes = getVentasDiarias();
+  const existente = existentes.find(v => v.fecha === fecha);
+  if (existente) {
+    const { total: _total, ...resto } = existente;
+    return addVentaDiaria({
+      ...resto,
+      cajas: { ...(existente.cajas || {}), [cajaNombre]: monto },
+    });
+  }
+  return addVentaDiaria({
+    fecha,
+    totalEfectivo: 0,
+    totalNequi: 0,
+    totalTransferencia: 0,
+    totalCredito: 0,
+    cajas: { [cajaNombre]: monto },
+  });
+}
+
 // ── Proyección de Quincena ────────────────────────────────────
 
 /** Fecha local YYYY-MM-DD (evita el desfase UTC de toISOString en Colombia). */

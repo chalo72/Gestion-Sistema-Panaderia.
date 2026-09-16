@@ -171,7 +171,7 @@ export function CartDetail({
                                 </div>
 
                                 <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-black text-slate-800 dark:text-slate-100 truncate leading-tight uppercase tracking-tight">
+                                    <p className="text-sm font-black text-slate-800 dark:text-slate-100 line-clamp-2 leading-snug uppercase tracking-tight">
                                         {item.producto.nombre}
                                     </p>
                                     <div className="flex items-center gap-2 mt-1.5">

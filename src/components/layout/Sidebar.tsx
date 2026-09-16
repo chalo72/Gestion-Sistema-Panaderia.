@@ -33,7 +33,8 @@ import {
   FileCheck,
   Cake,
   AlertOctagon,
-  Coffee
+  Coffee,
+  Megaphone
 } from 'lucide-react';
 import { BusquedaRapida } from './BusquedaRapida';
 import { useCan } from '@/contexts/AuthContext';

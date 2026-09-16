@@ -16,6 +16,7 @@ import type {
   Recepcion,
   Cliente,
   RegistroAsistencia,
+  CreditoCliente,
 } from '@/types';
 import { ARROBA_KG } from '@/types';
 import { toast } from 'sonner';
@@ -259,12 +260,13 @@ export function usePriceControl() {
 
       // 3. Gestión de Sincronización Remota
       if (isOnline) {
-        const performSync = async () => {
+        // Devuelve true si logró traer y aplicar datos de la nube.
+        const performSync = async (): Promise<boolean> => {
           if (!hasLocalData) toast.info('Sincronizando con Dulce Placer...');
-          
+
           try {
             await db.syncCloudToLocal?.();
-            
+
             // Recargar datos tras sync (solo si es necesario actualizar la UI)
             const [c, p, pr, prc] = await Promise.all([
               db.getConfiguracion(),
@@ -272,26 +274,46 @@ export function usePriceControl() {
               db.getAllProveedores(),
               db.getAllPrecios(),
             ]);
-            
+
             await applyData(c, p, pr, prc);
             await loadSecondaryDataInBackground();
-            
+
             if (!hasLocalData) {
               setLoaded(true);
               toast.success('¡Catálogo recuperado!');
             }
+            return true;
           } catch (e) {
             console.warn('⚠️ Error en sync inicial:', e);
-            if (!hasLocalData) setLoaded(true);
+            return false;
           }
         };
 
         if (hasLocalData) {
           performSync(); // background
         } else {
-          await performSync(); // foreground (bloquea solo si está vacío)
+          // Dispositivo vacío: si el primer intento falla (red inestable al abrir,
+          // Supabase lento, etc.), reintentar antes de rendirse — de lo contrario
+          // la app queda "cargada" pero completamente vacía, sin aviso ni forma
+          // de recuperarse sola (causa real de "la vendedora ve todo vacío").
+          let exito = false;
+          for (let intento = 1; intento <= 3 && !exito; intento++) {
+            exito = await performSync();
+            if (!exito && intento < 3) {
+              await new Promise(resolve => setTimeout(resolve, 1500 * intento));
+            }
+          }
+          if (!exito) {
+            toast.error('No se pudo cargar el catálogo. Revisa tu conexión e intenta de nuevo.', {
+              duration: 8000,
+            });
+          }
+          setLoaded(true);
         }
       } else if (!hasLocalData) {
+        toast.error('Sin conexión y sin datos guardados en este dispositivo. Conéctate a internet e intenta de nuevo.', {
+          duration: 8000,
+        });
         setLoaded(true); // Offline y vacío
       }
 
@@ -840,6 +862,35 @@ export function usePriceControl() {
       await db.addTombstone('precios', id).catch(() => {});
     }
     setPrecios(prev => prev.filter(p => p.id !== id));
+  }, []);
+
+  // Registra en Alertas un cambio de PRECIO DE VENTA hecho manualmente por un usuario
+  // (ej. vendedora corrigiendo el precio desde la búsqueda rápida de Ventas), para que
+  // el admin pueda auditar quién cambió qué y verificar si tuvo razón.
+  const registrarCambioPrecioVenta = useCallback(async (
+    productoId: string,
+    precioAnterior: number,
+    precioNuevo: number,
+    usuarioNombre: string
+  ) => {
+    if (!Number.isFinite(precioAnterior) || !Number.isFinite(precioNuevo) || precioAnterior === precioNuevo) return;
+    const diferencia = precioNuevo - precioAnterior;
+    const porcentajeCambio = precioAnterior > 0 ? (diferencia / precioAnterior) * 100 : 0;
+    const alerta: AlertaPrecio = {
+      id: generateUUID(),
+      productoId,
+      proveedorId: '',
+      tipo: diferencia > 0 ? 'subida' : 'bajada',
+      precioAnterior,
+      precioNuevo,
+      diferencia,
+      porcentajeCambio: Math.abs(porcentajeCambio),
+      fecha: new Date().toISOString(),
+      leida: false,
+      usuarioNombre,
+    };
+    await db.addAlerta(alerta);
+    setAlertas(prev => [alerta, ...prev]);
   }, []);
 
   // Funciones de Pre-Pedidos
@@ -1433,7 +1484,7 @@ export function usePriceControl() {
 
     addProducto, updateProducto, deleteProducto,
     addProveedor, updateProveedor, deleteProveedor,
-    addOrUpdatePrecio, deletePrecio,
+    addOrUpdatePrecio, deletePrecio, registrarCambioPrecioVenta,
     addPrePedido, updatePrePedido, deletePrePedido, addItemToPrePedido, removeItemFromPrePedido, updateItemCantidad,
     marcarAlertaLeida, marcarTodasAlertasLeidas, deleteAlerta, clearAllAlertas,
     updateConfiguracion,

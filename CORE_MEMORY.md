@@ -1,102 +1,61 @@
-# 🧠 CORE MEMORY — Gestión de Precios y Proveedores (Kimi Agent)
-> Última actualización: 2026-02-23 (Sesión Yimi-Antigravity Fusion)
+# 🧠 CORE MEMORY — Gestión de Precios y Proveedores (Dulce Placer)
+> Última actualización: 2026-09-15
+
+## 🚨 CUÁL COPIA ES LA BUENA — LÉELO ANTES DE DESPLEGAR O EDITAR (actualizado 2026-09-15, tarde)
+Hay **dos copias del código fuente** en este repo: `src/` (raíz) y `app/src/`. Ambas carpetas están vinculadas al **mismo proyecto de Vercel** (`projectId: prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`, nombre de proyecto "app", sirviendo `app-eight-sigma-13.vercel.app`) — quien sea que corra `vercel --prod` desde una u otra carpeta es lo que queda publicado. **Ninguna de las dos es "la buena" de forma permanente** — han evolucionado en paralelo con trabajo real e independiente en cada una, y se pisan entre sí cada vez que se despliega la que no toca. Antes de decir "esta es la buena", compara — no asumas.
+
+**Estado a las 22:00 del 2026-09-15**: la copia de la **raíz** (`src/`) es la más completa — tiene los módulos de la semana (Radar Nequi, Consumo Interno/Fiados, Control de Merma, Pedidos Tortas, Marketing Studio) **y** se le portaron a mano las mejoras recientes de `app/` (recuperación de borrador en Recepciones, precio→catálogo de proveedor, imprimir en Pedidos, tarjetas táctiles más grandes) **y** los 7 bugs de "variable no definida" que causaban crashes en producción ya están arreglados ahí. `app/` sigue teniendo su propio trabajo en curso (menú móvil táctil en Ventas/Caja, fixes de sincronización/login) que la raíz no tiene — si alguien sigue trabajando ahí, hay que volver a portar esos cambios a la raíz antes de desplegar, no asumir que ya están.
+
+**Por qué esto importa**: el 2026-09-15 se desplegó por error desde `app/` (encima de un despliegue correcto desde la raíz) porque había DOS archivos `PUBLICAR_A_PRODUCCION.bat` con el mismo nombre, uno en cada carpeta — esto borró de producción los módulos de la semana sin que nadie lo notara hasta que el usuario se dio cuenta. **Se eliminó el `.bat` duplicado de `app/`; ahora solo existe uno, en la raíz.** Si se crea una copia en `app/` de nuevo, bórrala o dale un nombre claramente distinto.
+
+**Regla para cualquier agente**: antes de desplegar, verifica con `git log --oneline -5` en AMBAS carpetas qué tiene cada una, decide cuál es realmente la más completa en ese momento (probablemente la raíz, pero confírmalo), y despliega solo desde ahí con `PUBLICAR_A_PRODUCCION.bat` (raíz). No despliegues repetidamente en poco tiempo — Vercel tiene protección automática anti-abuso (no configurable en el plan actual) que bloquea el dominio con un "Forbidden" genérico si detecta demasiados despliegues seguidos; si pasa, hay que esperar a que se enfríe (sin más deploys) en vez de seguir intentando.
+
+## 🤝 Protocolo de Coordinación Multi-Agente (LEE ESTO PRIMERO)
+Este proyecto se trabaja con **varios agentes de IA** (Antigravity, Cursor, Claude Code) en sesiones distintas, no simultáneas — cuando a uno se le acaban los créditos/tokens, el usuario continúa con otro. Este archivo es el **relevo entre agentes**: el punto único de verdad que cualquiera de las tres herramientas debe leer al empezar y actualizar al terminar.
+
+**Reglas:**
+1. **Al iniciar sesión**: lee este archivo completo antes de tocar código. No asumas que sabes el estado del proyecto por la conversación — puede haber cambiado con otro agente.
+2. **Al terminar una tarea significativa**: agrega una entrada en "🔑 Decisiones Clave" o "🚀 Estado Actual y Pendientes" con fecha, qué se hizo y por qué. No lo dejes solo en el chat — si no está escrito aquí, el siguiente agente no lo sabe.
+3. **No confíes en memoria propia de cada herramienta** (memoria automática de Claude Code, contexto de Cursor, etc.) para coordinación entre agentes — esas son privadas de cada herramienta. Solo lo que está en archivos del repo es visible para todos.
+4. **Antes de una tarea grande**, revisa si otro agente la dejó a medias en "⚠️ Problemas Por Resolver" o "📋 Próximas Acciones".
+5. Si usas Cursor: hay una regla en `.cursor/rules/core-memory.mdc` que le indica leer este archivo. Si usas Antigravity: pégale al inicio de la sesión "Lee y mantén actualizado CORE_MEMORY.md en la raíz del proyecto" hasta que confirmes si tiene un mecanismo de reglas persistentes propio.
+
+## 🔥 Incidente real — por qué el protocolo de coordinación importa
+El 2026-09-15, tras publicar `app/` a producción (arreglando el bug de `Megaphone`), la app volvió a caerse con `ReferenceError: usePermisosRealtime is not defined`. Causa: `App.tsx` tenía dos llamadas (`usePermisosRealtime()`, `useUsuariosRealtime()`) a hooks que **nunca se implementaron** — ni el archivo del hook ni el import existían. `tsc` en `app/` estaba limpio en una revisión anterior de la misma sesión, así que esas líneas se agregaron a `App.tsx` **entre esa revisión y el deploy** — casi seguro por otro agente (Antigravity/Cursor) trabajando en paralelo en una función de "permisos en tiempo real" a medio construir. Se quitaron las dos líneas (no tenían implementación real, así que no se perdió funcionalidad) y se debe re-publicar.
+**Lección**: correr `tsc --noEmit` una vez no garantiza nada si otro agente sigue editando el mismo archivo después — antes de cada deploy, correr `tsc --noEmit` de nuevo justo antes de publicar, no confiar en una revisión de minutos/horas atrás.
+
+## ⚠️ Advertencia de estructura del repo
+`app/` es un repositorio git anidado (tiene su propio `.git`, sin `.gitmodules`) que apunta al mismo remoto que la raíz pero con historial que puede divergir. Antes de asumir que un cambio se sincronizó, verifica en qué repo (raíz o `app/`) y en qué rama estás parado — actualmente `app/` suele trabajarse en ramas de feature (ej. `fix/dictado-voz-y-tests-guardian`), no siempre en `main`.
 
 ## 🎯 Ancla del Proyecto
-- **Proyecto**: Sistema de Gestión de Precios, Proveedores e Inventario + Yimi POS Features.
-- **Descripción**: Aplicación web para controlar compras, comparar precios, gestionar stock y procesar ventas con soporte E-Wallet y variantes.
+- **Proyecto**: Sistema de Gestión de Precios, Proveedores e Inventario para panadería/heladería Dulce Placer, evolucionando hacia funciones estilo Yimi POS.
+- **Descripción**: Aplicación web para controlar compras, comparar precios de proveedores, gestionar stock y procesar ventas, incorporando E-Wallet, multifotos y variantes de producto sobre la base actual.
 - **Público**: Administradores, Vendedores y Clientes del negocio.
-- **Visión**: Dashboard futuristico tipo Yimi pero manteniendo tu base actual. Glassmorphism premium, E-Wallet, Multifotos, Variantes.
-
-## 📐 Arquitectura
-- **Stack**: React 19 + Vite + TypeScript + Shadcn/ui (Radix UI).
-- **Styling**: Tailwind CSS + Glassmorphism + Dark mode.
-- **DB & Auth**: Supabase (PostgreSQL).
-- **Estructura**: Componentes en `src/sections`, lógica en `src/contexts` y `src/hooks`.
-
-## 🆕 Módulos Antigravity-Yimi (2026-02-23) - ✅ COMPLETADOS
-
-### TIER 1: Núcleo (COMPLETADO)
-1. ✅ **Sistema de Variantes de Producto**
-   - Tipo: Talla, Color, Personalizado, Bundle
-   - SKU único por variante
-   - Multifotos por variante
-   - Control stock independiente
-   - Hook: `useProductVariants` (120 líneas)
-   - Componente: `ProductVariantEditor`
-
-2. ✅ **Sistema de Pagos Avanzado**
-   - Métodos: Cash, Card, Transfer, E-Wallet, Crédito
-   - E-Wallet con balance control
-   - Ventas a Crédito con seguimiento
-   - Histórico de pagos
-   - Hook: `usePaymentSystem` (150 líneas)
-   - Componente: `PaymentProcessor`
-
-3. ✅ **Dashboard Financiero Premium**
-   - 6 Métricas KPI en tiempo real
-   - Selector temporal (día/semana/mes/año)
-   - Gráfico de tendencias animado
-   - Órdenes recientes con estado
-   - Productos TOP con analytics
-   - Componente: `FinancialDashboard` (250 líneas)
-
-### TIER 2: Organización (COMPLETADO)
-4. ✅ **Sistema de Categorías Jerárquicas**
-   - Categories → Subcategories (2 niveles)
-   - Reordenamiento dinámico DnD
-   - Activación/desactivación por estado
-   - Búsqueda por slug
-   - Hook: `useCategories` (180 líneas)
-   - Stats automáticas
-
-5. ✅ **Category Browser Yumi-Style**
-   - Sidebar navegable interactivo
-   - Grid de subcategorías con preview
-   - CRUD integrado (opcional)
-   - Glassmorphism +dark mode
-   - Componente: `CategoryBrowser` (320 líneas)
-
-### BONUS: Documentación y Ejemplos (COMPLETADO)
-- ✅ Guía: `INTEGRACION_YIMI.md` (200 líneas)
-- ✅ Ejemplos: `EJEMPLOS_CODIGO.tsx` (350 líneas)
-- ✅ Showcase: `SalesShowcase.tsx` (250 líneas)
-
-## 👤 Preferencias del Usuario
-- **Idioma**: Español estricto.
-- **Estética**: Glassmorphism, animaciones, efectos premium.
-- **Target**: Yimi-like pero con tu codebase actual.
-
-## 📜 Decisiones Arquitectónicas
-- **Variantes**: Type-safe con Enum (size, color, custom, bundle)
-- **Pagos**: Agnóstico a proveedor (Stripe, MercadoPago, PayPal listo)
-- **E-Wallet**: Map<customerId, EWallet> para búsqueda O(1)
-- **UI**: Backdrop-blur glassmorphism con hover effects premium
-
-
-## 🎯 Ancla del Proyecto
-- **Proyecto**: Sistema de Gestión de Precios, Proveedores e Inventario.
-- **Descripción**: Aplicación web para controlar compras, comparar precios de proveedores y gestionar el stock de una panadería/negocio.
-- **Público**: Administradores y Vendedores del negocio.
-- **Problema**: Desincronización de datos entre local y nube, y fallos en el acceso de usuarios.
-- **Visión**: Un dashboard fluido, con acceso basado en roles y sincronización resiliente con Supabase.
+- **Problema de fondo**: Desincronización de datos entre local y nube, y fallos históricos en el acceso de usuarios.
+- **Visión**: Dashboard fluido tipo Yimi (glassmorphism premium, E-Wallet, multifotos, variantes) manteniendo la base actual, con acceso basado en roles y sincronización resiliente con Supabase.
 - **No es**: Una tienda online pública (e-commerce).
 
 ## 📐 Arquitectura
-- **Stack**: React + Vite + TypeScript.
-- **Styling**: Tailwind CSS + shadcn/ui.
-- **DB & Auth**: Supabase (PostgreSQL).
-- **Estructura**: Componentes en `src/sections`, lógica en `src/contexts` y `src/hooks`.
+- **Stack**: React 19 + Vite + TypeScript + shadcn/ui (Radix UI) + Tailwind CSS (Glassmorphism + Dark mode).
+- **DB & Auth**: Supabase (PostgreSQL) con fallback local IndexedDB (`PriceControlDB`, ver `app/src/lib/database.ts`) — **LOCAL SIEMPRE GANA** en sync.
+- **Estructura real**: páginas en `app/src/pages`, lógica en `app/src/hooks` y `app/src/contexts`, componentes en `app/src/components`. (Nota: versiones antiguas de este documento mencionaban `src/sections`, que no existe en este repo — no usar esa referencia.)
+- **Detalle completo de comandos/convenciones**: ver `CLAUDE.md` en la raíz y en `app/CLAUDE.md`.
 
 ## 👤 Preferencias del Usuario
-- **Idioma**: Español estricto en toda la interfaz y comentarios.
-- **Estética**: Diseño premium, moderno (Glassmorphism), con feedback visual inmediato.
-- **Persistencia**: Manejo de sesiones persistentes para evitar logouts accidentales.
+- **Idioma**: Español estricto en toda la interfaz, comentarios y comunicación.
+- **Estética**: Premium, moderna (Glassmorphism), con feedback visual inmediato y animaciones. Este sistema de diseño está nombrado literalmente en `src/index.css` como **"High-Vibe"** (dos bloques: "High-Vibe — Electric Tropical Palette" ~línea 466, paleta de colores `--electric-cyan/--deep-violet/--hot-pink/--neon-green` sobre fondos oscuros; y "High-Vibe — Glassmorphism 3 Capas" ~línea 493, clases `.glass-layer-1/2/3` de vidrio esmerilado apilable). Es intencional — no es un experimento a medio hacer ni algo para "revertir a lo simple" si un agente lo encuentra raro.
+- **Persistencia**: Sesiones persistentes para evitar logouts accidentales.
+- **Mobile-first**: cualquier pantalla con catálogo + carrito/ticket debe seguir el patrón de `Ventas.tsx` (drawer deslizable + pastilla flotante para un solo dedo) — no layouts fijos de escritorio que se aplastan en celular.
 
 ## 📜 Reglas Inquebrantables
 - **Seguridad**: RLS (Row Level Security) activo en Supabase.
-- **Sincronización**: Siempre intentar descargar datos de la nube tras un login exitoso.
+- **Sincronización**: Siempre intentar descargar datos de la nube tras un login exitoso; local siempre gana sobre nube en conflicto.
 - **Integridad**: No usar contenido truncado (`[truncated]`) para reescribir archivos.
-- **Flujo Vercel-First**: Todas las actualizaciones y cambios de funciones, código y UI deben desplegarse y verificarse primero en Vercel (`https://app-eight-sigma-13.vercel.app/`) y después consolidarse en el entorno local.
+- **Archivos protegidos**: requieren "AUTORIZO" explícito del usuario antes de editar — ver lista en `CLAUDE.md` (`App.tsx`, `AuthContext.tsx`, `usePriceControl.ts`, `database.ts`, `supabase-db.ts`, configs de build).
+- **Flujo Vercel-First** (histórico): cambios de funciones/UI se desplegaban y verificaban primero en Vercel (`https://app-eight-sigma-13.vercel.app/`) y luego se consolidaban local — confirmar si sigue vigente antes de asumirlo.
+
+## 🛡️ PROTECCIÓN ACTIVA: `app/` ya NO puede desplegar a producción (desde 2026-09-16)
+La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevos de la raíz, ver incidentes abajo) volvió a pasar una TERCERA vez el mismo día — un commit en `app/` se desplegó a producción 45 segundos después de hacerse, sin coordinación. Como el problema de documentación ("leer CORE_MEMORY.md antes de desplegar") no estaba funcionando, se aplicó una protección técnica real: **se renombró `app/.vercel/` a `app/.vercel.DESCONECTADO_ver_CORE_MEMORY/`**, así que `vercel --prod` corrido desde `app/` ya NO tiene con qué proyecto vincularse y fallará (o pedirá re-vincular). Hay un aviso en `app/NO_DESPLEGAR_DESDE_AQUI.txt` explicando por qué. **Si algún agente necesita restaurar el enlace para desplegar desde `app/` a propósito, debe avisar al usuario explícitamente primero** — no es un accidente de configuración, es intencional. Desplegar sigue haciéndose SOLO desde la raíz con `PUBLICAR_A_PRODUCCION.bat`.
 
 ## 🔑 Decisiones Clave (Historial)
 | Fecha | Decisión | Razón |
@@ -104,55 +63,58 @@
 | 2026-02-21 | Configuración de Supabase | Se activó `persistSession: true` y `autoRefreshToken: true` para corregir redirecciones al login. |
 | 2026-02-21 | Refactor de AuthContext | Se separó `fetchProfile` para asegurar que el rol del usuario esté disponible antes de cargar la app. |
 | 2026-02-21 | Manejo de Error de Esquema | Se implementó captura específica para "Database error querying schema" para alertar sobre proyectos pausados. |
+| 2026-03-18 | Restauración de PrePedidos a layout 3 columnas | El workflow con modal dialogs era complejo; se volvió a un layout simple (proveedores / catálogo / ticket). |
+| 2026-09-15 | Corrección de precio en Recepciones ahora escribe al catálogo del proveedor (`addOrUpdatePrecio`), no solo a `costoBase` | Un precio incorrecto de Coca-Cola detectado al recibir debía quedar corregido en el catálogo de ese proveedor para la próxima recepción. |
+| 2026-09-15 | Borrador de Recepciones ahora se restaura al reabrir | Ya se autoguardaba en `localStorage` pero nunca se leía de vuelta — un pedido se perdió al reiniciarse el celular a medio capturar. |
+| 2026-09-15 | Pedidos (`PrePedidos.tsx`) rediseñado a drawer móvil + pastilla flotante, igual que `Ventas.tsx` | El panel de ticket fijo (`w-[320px]`) aplastaba el catálogo en celular; causa real de "selección tediosa" reportada por el usuario. |
+| 2026-09-15 | Se eliminó `spec-kit-antigravity/` (repo git anidado sin integrar) | Nunca se completó su instalación (requería copiar `.agent`/`memory`/`templates` a la raíz); quedó como ruido sin uso. |
+| 2026-09-15 noche | Vercel bloqueó el dominio con "Forbidden" genérico tras ~decenas de despliegues seguidos en pocas horas | Protección automática anti-abuso (no configurable en el plan actual). Se resolvió solo tras dejar de desplegar un rato — no fue un bug de código ni de configuración. |
+| 2026-09-15 noche | Se restauraron `usePermisosRealtime` y `useUsuariosRealtime` con implementación real (no se dejaron eliminados) | Investigado a fondo: las tablas Supabase `usuarios_sistema` y `permisos_sistema` SÍ existen y tienen datos reales — no eran hooks fantasma, sino una integración a medias (otro agente agregó las llamadas en `App.tsx` sin copiar los archivos de `_respaldo_diseno_original/app_src/hooks/`). Se copiaron los hooks, se agregó `src/lib/permisos-cloud-sync.ts` (nuevo) y se sumaron 3 funciones a `src/lib/user-cloud-sync.ts` (`applyRemoteUserRecord`, `notifyUsuariosSync`, `USUARIOS_SYNC_EVENT`) SIN tocar la lógica de merge existente (que ya tiene el fix "LOCAL SIEMPRE GANA" simplificado — la versión del respaldo era más vieja y no se debía copiar encima). |
+| 2026-09-15 noche | `useSyncOffline.ts` confirmado como código muerto (0 referencias en el repo) | Un agente iba a "arreglar" este archivo pensando que causaba el torrente de toasts rojos; en realidad ese bug ya se había resuelto antes en `sync-outbox.ts` y `CentinelaProvider.tsx` (toast.error → toast.message/console.warn). No tocar `useSyncOffline.ts`, no está en uso. |
+| 2026-09-15 noche | `usePriceControl.ts`: dispositivo nuevo/vacío ahora reintenta 3 veces la sincronización inicial y avisa con toast si falla, en vez de quedar "cargado" con todo vacío en silencio | Causa raíz real de "la vendedora ve todo vacío" — si el primer intento de sync fallaba (red inestable al abrir, Supabase lento), la app se rendía sin reintentar y sin avisar. Cambio acotado solo a la rama `!hasLocalData`; no se tocó la sincronización en segundo plano de dispositivos con datos. |
+| 2026-09-15 noche | Ventas (POS): "Guardar en catálogo" del producto ad-hoc ahora usa `onAddProducto` en vez de `onUpdateProducto` | Bug real: intentaba "actualizar" un producto con un ID recién inventado (`adhoc-${Date.now()}`) que nunca existió en la base — nunca pudo funcionar. Se agregó `onAddProducto` como prop nueva de `Ventas.tsx`, hilada desde `App.tsx`. |
+| 2026-09-15 noche | `ProductCatalog.tsx` (búsqueda del POS): botón "Agregar al catálogo" cuando no encuentra el producto buscado, y lápiz de "Corregir precio" en cada resultado (`FastSearchCard`, antes solo lo tenía `ProductCard`) | Pedido explícito: si la vendedora busca un producto en Ventas y no existe, o el precio está mal, debe poder agregarlo/corregirlo ahí mismo sin salir de la venta. |
+| 2026-09-15 noche | VENDEDOR gana acceso a Inventario (`VER_INVENTARIO` en `types/index.ts` + `'inventario'` en `VER_VENDEDOR` de `usePermisosModulos.ts`, con parche `PATCH_VENDEDOR_INVENTARIO` para usuarios con permisos ya guardados) + botón "Consumo/Fiados" agregado a Acciones Principales de `MobileDashboardView.tsx` | Pedido explícito del usuario: vendedoras deben poder inventariar desde el celular, y tener acceso directo a Consumo Interno/Fiados (antes solo en el menú, no en accesos rápidos). `fiados-empleados` no necesitó cambio de permisos — no está en `VISTA_PERMISO` (view-guards.ts), así que ya era accesible a todos los roles; solo faltaba el botón. |
+| 2026-09-15 noche | Nuevo registro/auditoría en Alertas cuando una vendedora corrige el precio de venta desde el buscador del POS | Pedido explícito: el admin quiere ver quién cambió qué precio y verificar si tuvo razón. Se agregó `usuarioNombre?: string` a `AlertaPrecio` (`types/index.ts`), nueva función `registrarCambioPrecioVenta(productoId, precioAnterior, precioNuevo, usuarioNombre)` en `usePriceControl.ts` (crea la alerta con `proveedorId: ''`, sin importar el umbral de alerta configurado — toda corrección manual queda registrada), hilada `App.tsx` → `Ventas.tsx` (prop `onRegistrarCambioPrecioVenta`, resuelve el nombre con `vendedoraActiva?.nombre \|\| usuario?.nombre`) → `ProductCatalog.tsx` (prop `onPrecioVentaCorregido`, se dispara en `handleSaveEdit` solo si el precio realmente cambió). `Alertas.tsx` se adaptó para mostrar "Precio corregido por {nombre}" en vez de proveedor, y ocultar el cálculo de "Impacto margen" (no aplica — ese cálculo asume que precioAnterior/Nuevo son COSTOS de proveedor, no el precio de venta) cuando `alerta.usuarioNombre` está presente. `tsc --noEmit` y `vite build` verificados limpios; persisten ~25 tests fallando en 11 archivos que ya fallaban antes de este cambio (dictado-voz, proteccion-tipos/Supabase config, CONS-01a/b de filtro de insumos en Ventas.tsx, etc. — no relacionados, no se tocaron esos archivos). Pendiente de Fase 9: item 2 (monto manual por caja en arqueo, sincronizado con "Ventas del Día" manual), item 3 (Nequi como una caja más) e item 4 (vendedora ve historial de ventas desde Caja) — no iniciados aún. |
+| 2026-09-16 madrugada | Ventas (POS): nombres de producto más legibles y catálogo/ticket con más espacio, SIN cambiar el estilo High-Vibe ni la estructura de la pantalla | Pedido explícito del usuario, con la instrucción expresa de "sin perder el contexto de la UI" (no rediseñar). Cambios puntuales: `ProductCatalog.tsx` → `ProductCard` (tarjeta chica del catálogo por categoría): imagen `h-20`→`h-24`, nombre `text-[10px] line-clamp-1`→`text-xs line-clamp-2` (ya no corta nombres largos), más padding interno. `CartDetail.tsx`: nombre del producto en el ticket `truncate` (1 línea)→`line-clamp-2` (2 líneas, ya no se corta). `Ventas.tsx`: panel de ticket en escritorio `w-[440px] xl:w-[480px]`→`w-[460px] xl:w-[520px]` (más ancho). No se tocó `FastSearchCard` (búsqueda, ya tenía nombre grande) ni `CategoriaAvatar` (nombres de categoría, ya tenía `line-clamp-2`). Verificado con `tsc --noEmit` limpio; falta verificación visual en navegador (no disponible desde esta sesión). |
+| 2026-09-16 mañana | 🚨 INCIDENTE #2 (mismo día): `app/` desplegó a producción de nuevo, 45 seg después de un commit ahí — se desconectó `app/` de Vercel como protección técnica | El usuario reportó "el estilo High-Vibe se reversó otra vez" horas después del incidente anterior. `vercel inspect` del deploy de producción más reciente (12 min de antigüedad en ese momento) seguía sin `api/nequi-radar` → venía de `app/`. `git log` en `app/` mostró el commit `cd4b202` a las 08:33:55, y el deploy fue creado a las 08:34:40 — 45 segundos después, sin coordinación. Documentar ya no bastaba, así que se aplicó una protección técnica real (ver banner "🛡️ PROTECCIÓN ACTIVA" arriba de esta tabla): se renombró `app/.vercel/` para que `vercel --prod` desde `app/` ya no pueda desplegar. |
+| 2026-09-16 madrugada | 🚨 INCIDENTE #1: `app/` volvió a sobrescribir producción con un diseño/funcionalidad más viejo, pisando el trabajo de la raíz | El usuario reportó "se me cambió el diseño" viendo la app en Vercel (no en local). `vercel ls` mostró **más de 15 despliegues a producción en pocas horas**, varios con 4-8 min de diferencia — otro agente (Antigravity/Cursor) desplegando repetidamente desde `app/`. Confirmado con `vercel inspect` del último deploy: le faltaba la función `api/nequi-radar` (que sí existe en la raíz), o sea que el deploy activo venía de `app/`, no de la raíz. El último commit de `app/` literalmente se llama "fix: Revert UI compacta de POS y restaurar diseño original" — ahí está el cambio de diseño que notó el usuario. Los tokens de CSS (`index.css`, ver "High-Vibe" arriba) SÍ son idénticos entre ambas copias — el cambio percibido es a nivel de componentes (POS/Ventas), no de paleta/tema. **Se le indicó al usuario ejecutar `PUBLICAR_A_PRODUCCION.bat` de la raíz para restaurar** (con la advertencia de pausar cualquier otro agente trabajando en `app/` antes, o el problema se repite en minutos). **Lección para el siguiente agente**: si el usuario reporta "cambió el diseño" o "desapareció una función" y tú no tocaste nada, revisa `vercel ls` / `vercel inspect` antes de asumir que es tu culpa — puede ser una carrera de despliegues entre `app/` y raíz sucediendo en paralelo, sin relación con tu sesión. |
+| 2026-09-15 noche | Cierre de caja (`CierreCajaModal.tsx`) ahora acepta un total de ventas ESCRITO A MANO para días que esa caja no se usó por POS, y ese monto se sincroniza solo con "Ventas del Día" (Reportes → Análisis Financiero) | Completa Fase 9 items 2-4. Diseño confirmado con el usuario: el monto manual reemplaza `totalVentas`/`totalVentasEfectivo` de la `CajaSesion` (nuevo flag `ventasManualIngresadas` en `types/index.ts`) para que el arqueo cuadre, Y llama a la nueva función `upsertCajaEnVentaDiaria(fecha, cajaNombre, monto)` (`src/lib/finanzas-personales.ts`) que crea/actualiza el registro de `VentaDiaria` de HOY escribiendo en su mapa `cajas[cajaNombre]` (ese campo ya existía sin usarse) — así ya no se anota el mismo dato dos veces en pantallas distintas. `useVentas.ts`: `cerrarCaja(montoCierre, nombreUsuario?, ventasManual?)` ganó el 3er parámetro (orden importa: en `App.tsx` el wrapper para `ControlCaja` es `(monto, ventasManual) => cerrarCaja(monto, user?.nombre, ventasManual)` — ojo si se agregan más call-sites, los parámetros NO son intercambiables por posición). Nequi (item 3) no necesitó código nuevo: las "cajas" nunca fueron un catálogo fijo (son nombres libres en `dp_cajas_config`), así que "Nequi" ya se comporta como cualquier otra caja en este flujo — lo que falta a futuro (no incluido aquí) es que Radar Nequi (SSE webhook) cree automáticamente una `Venta`/ajuste con `cajaId` de la caja Nequi; hoy sigue siendo solo un panel de notificación. Item 4: se agregó botón "Ver Historial de Ventas" en la vista MÓVIL de `ControlCaja.tsx` (antes esa pestaña de historial solo existía en escritorio) vía nueva prop opcional `onViewHistorial` hilada desde `App.tsx` a `setCurrentView('historial-ventas')` — sin cambios de permisos porque VENDEDOR ya tenía `VER_VENTAS` y el módulo `historial-ventas` ya estaba en su lista de vistas visibles. Verificado con `tsc --noEmit`, `vite build` y `vitest run` (mismas 25 fallas preexistentes de antes, ninguna nueva). |
+| 2026-09-15 noche | `MobileDashboardView.tsx` ahora incluye `BusquedaRapida` (antes solo vivía dentro del `Sidebar`, alcanzable únicamente abriendo el menú lateral desde `BottomNavBar`) | La vendedora reportó "no aparece la búsqueda rápida en Inicio" — cierto: en celular, Inicio usa `MobileDashboardView` (no la vista de escritorio), que nunca tuvo buscador. Se hilaron 6 props nuevas (`productos`, `proveedores`, `precios`, `inventario`, `getMejorPrecio`, `getPreciosByProducto`) desde `App.tsx` → `Dashboard.tsx` → `MobileDashboardView.tsx`; también se amplió el tipo de `getProveedorById` en `Dashboard.tsx` (antes `{ nombre: string }`, ahora `Proveedor` completo) para que calzara con `BusquedaRapida`. Confirmado: "Vender"/"Caja" (acceso rápido de venta del día / cuadre de caja) YA existían en `MobileDashboardView` — ese reclamo era percepción, no bug real. |
+| 2026-09-15 noche | `App.tsx`: barra superior (header) ya no usa `overflow-x-auto` — se redujeron gaps y se ocultó el nombre/avatar decorativo en celular (dejando el botón de cerrar sesión siempre visible, es el único en toda la app) | Confirmado con captura real: en celular esa barra se cortaba y requería deslizar hacia los lados (barra naranja de scroll) para ver el botón de "Turno", alertas y tema — por eso "no aparecían". De paso se encontró que el texto "Turno" usaba `xs:inline`, un breakpoint que no existe en `tailwind.config.js` — nunca se mostraba en ningún tamaño de pantalla; corregido a `sm:inline`. |
 
 ## ⚠️ Errores Conocidos / Lecciones
 - **Supabase Pausado**: El error `Database error querying schema` indica que el proyecto en la nube está inactivo o tiene llaves incorrectas.
-- **Llaves de Stripe**: Se detectó que el `VITE_SUPABASE_ANON_KEY` actual parece ser de Stripe (`sb_publishable_...`) y no de Supabase. **Debe ser reemplazada.**
+- **Llaves de Stripe**: Se detectó que el `VITE_SUPABASE_ANON_KEY` podía estar mezclada con una llave de Stripe (`sb_publishable_...`) — verificar que sea la de Supabase.
 - **Loop de Perfil**: Evitar loops infinitos en `onAuthStateChange` verificando si el usuario ya está cargado.
+- **`app/` como repo anidado divergido**: ver advertencia de estructura arriba — puede causar que cambios "no aparezcan" si se mira el repo equivocado.
 
 ## 🚀 Estado Actual y Pendientes
 
-### ✅ Completado (Sesión 2026-02-23 al 2026-02-26)
-1. ✅ **Producción Artesanal**: Implementada planificación de lotes con verificación de insumos.
-2. ✅ **Ejecución de Lotes**: Sincronización atómica entre producción terminada e inventario (recetas).
-3. ✅ **Seguridad Nexus**: Upgraded `Usuarios.tsx` y `RoleManager.tsx` a estética Premium Antigravity.
-4. ✅ **Heladería Dulce Placer**: Categorías `INS:` e insumos de heladería integrados y sincronizados.
-5. ✅ **Filtros de Privacidad**: POS blindado contra categorías de uso interno.
-6. ✅ **Equipo de Trabajo**: Usuarios y Roles actualizados para mayor automatización.
-5. ✅ App carga en RED LOCAL: `http://192.168.1.5:5173/` 
-6. ✅ Vite PWA configurado (Service Workers + Offline cache)
+### ✅ Completado recientemente
+- Producción Artesanal: planificación de lotes con verificación de insumos.
+- Ejecución de Lotes: sincronización atómica entre producción terminada e inventario.
+- Seguridad Nexus: `Usuarios.tsx` y `RoleManager.tsx` con permisos revisados.
+- Heladería Dulce Placer: categorías `INS:` e insumos integrados.
+- Filtros de Privacidad: POS blindado contra categorías de uso interno.
+- Restauración de PrePedidos a layout 3 columnas.
+- (2026-09-15) Radar de pagos Nequi en tiempo real vía SSE/webhook.
+- (2026-09-15) Fix de avisos rojos de sincronización y reintentos infinitos de `sesiones_caja`.
+- (2026-09-15) Bug de visibilidad de datos móviles: causa real era `ControlCaja` ocultando la lista de cajas en celular — arreglado, **pusheado en `fix/dictado-voz-y-tests-guardian`, falta mergear a `main`**.
+- (2026-09-15) Recepciones: recuperación de borrador perdido + corrección de precio directo al catálogo del proveedor + módulo de impresión en Pedidos + rediseño móvil de Pedidos (ver Decisiones Clave arriba).
 
 ### ⚠️ Problemas Por Resolver
-1. ⚠️ **Demora en carga al entrar nuevamente** - Bundle grande o Supabase inactivo
-2. ⚠️ **Supabase inactivo/pausado** - `Database error querying schema`
-3. ⚠️ **Optimización de Activos**: Las imágenes de productos requieren Lazy Loading avanzado.
-
-## 🔄 ACTUALIZACIONES RECIENTES (2026-03-18)
-
-### ✅ Restauración de PrePedidos - Layout 3 Columnas
-**Problema**: PrePedidos tenía workflow complejo con modal dialogs
-**Solución**: Restaurado a layout simple 3-columnas:
-- **Izquierda**: Grilla de proveedores (siempre visible)
-- **Centro**: Catálogo del proveedor seleccionado (búsqueda, categorías, stock)
-- **Derecha**: Ticket/Carrito actualizado en tiempo real
-
-**Archivos Modificados**:
-- `app/src/pages/PrePedidos.tsx` - Nuevo layout, estado `showProveedorPanel`
-- Build: ✅ EXITOSO (0 errores, 20.29s)
-
-**Features**:
-- ✅ Glassmorphism en cards de proveedores
-- ✅ Alertas de stock bajo con badges animados
-- ✅ Dark mode totalmente funcional
-- ✅ Botones: Confirmar pedido + Compartir WhatsApp
+- Merge pendiente de `fix/dictado-voz-y-tests-guardian` (`app/`) a `main` — `app/` sigue teniendo trabajo (menú móvil táctil, fixes de sync/login) que la raíz no tiene; portarlo a la raíz antes de asumir que ya está.
+- **Radar Nequi (`api/nequi-radar.ts`) usa un `Set` en memoria para las conexiones SSE** — riesgo real: en funciones serverless de Vercel, el GET (frontend) y el POST (MacroDroid) pueden caer en instancias distintas sin memoria compartida, y el aviso "no suena" de forma intermitente aunque el webhook sí reciba el pago. Si empieza a fallar así, la solución es un pub/sub persistente (ej. Supabase Realtime) en vez del `Set` en memoria.
+- Integración Wompi/Bancolombia: solo planeada en conversación, sin código — depende de que el usuario consiga las llaves de API de Wompi.
+- Verificar que `permisos_sistema` (tabla vacía en Supabase) se empiece a poblar correctamente ahora que `usePermisosRealtime` está integrado — probar cambiando un permiso desde un dispositivo y confirmar que llega a otro.
+- Demora en carga al entrar nuevamente (bundle grande o Supabase inactivo) — sin diagnosticar a fondo.
+- Optimización de imágenes de productos (Lazy Loading avanzado).
 
 ### 📋 Próximas Acciones
-- [ ] Revisar NetworkTab en DevTools para identificar qué demora la carga
-- [x] Finalizar Módulo Producción (Planificación y Ejecución)
-- [x] Desarrollar Sub-pantallas: Usuarios y Roles
-- [x] ✅ Restaurar PrePedidos a workflow simple
-- [ ] Optimizar bundle size (Vite analyze)
-- [ ] Revisar/actualizar credenciales de Supabase
-- [ ] Agregar tests unitarios y E2E
-- [ ] Implementar exportación PDF de reportes de producción
-
+- [ ] Aplicar el patrón de UX móvil (drawer + pastilla flotante, o el de pestañas catálogo/ticket que ya usa la raíz) a otras pantallas con catálogo+carrito, si las hay más allá de Ventas/Pedidos.
+- [ ] Mergear `fix/dictado-voz-y-tests-guardian` a `main` cuando esté validado, portando antes lo que la raíz no tenga.
+- [ ] Probar de punta a punta `usePermisosRealtime`/`useUsuariosRealtime` recién integrados (cambiar permiso/usuario en un dispositivo, confirmar que sincroniza a otro).
+- [ ] Revisar la arquitectura del Radar Nequi (SSE en memoria) antes de depender de él en producción real.
+- [ ] Optimizar bundle size (Vite analyze).
+- [ ] Agregar tests unitarios y E2E para los módulos nuevos.

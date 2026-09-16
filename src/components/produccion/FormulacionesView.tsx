@@ -444,7 +444,7 @@ export function FormulacionesView({
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold">Categoría</label>
-                  <Select value={categoria} onValueChange={(v) => setCategoria(v as CategoriaFormulacion)}>
+                  <Select value={categoria} onValueChange={(v) => setCategoria(v as FormulacionBase['categoria'])}>
                     <SelectTrigger className="rounded-xl">
                       <SelectValue />
                     </SelectTrigger>

@@ -27,7 +27,7 @@ const MONEDAS_CIERRE = [
 interface CierreCajaModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onCerrar: (monto: number) => Promise<any>;
+    onCerrar: (monto: number, ventasManual?: number) => Promise<any>;
     cajaActiva: CajaSesion | undefined;
     formatCurrency: (value: number) => string;
     usuario?: any;
@@ -37,6 +37,7 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
     const [desglose, setDesglose] = useState<Record<string, string>>({});
     const [observaciones, setObservaciones] = useState('');
     const [confirmando, setConfirmando] = useState(false);
+    const [ventasManualStr, setVentasManualStr] = useState('');
 
     // Calcular duración del turno
     const duracionTurno = useMemo(() => {
@@ -54,7 +55,9 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
         }, 0);
     }, [desglose]);
 
-    const totalVentas  = cajaActiva?.totalVentas  || 0;
+    const ventasManualNum = parseFloat(ventasManualStr) || 0;
+    const sinVentasPos  = (cajaActiva?.totalVentas || 0) === 0;
+    const totalVentas  = ventasManualNum > 0 ? ventasManualNum : (cajaActiva?.totalVentas || 0);
     const montoApertura = cajaActiva?.montoApertura || 0;
     const esperado      = totalVentas + montoApertura;
     const diferencia    = totalDesglose - esperado;
@@ -70,7 +73,7 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
     const handleConfirm = async () => {
         setConfirmando(true);
         try {
-            await onCerrar(totalDesglose);
+            await onCerrar(totalDesglose, ventasManualNum > 0 ? ventasManualNum : undefined);
             onClose();
         } finally {
             setConfirmando(false);
@@ -124,6 +127,29 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
 
                 {/* ── CUERPO ── */}
                 <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
+
+                    {/* Ventas manuales — para días que esta caja no se usó por POS */}
+                    <div className={cn(
+                        'p-4 rounded-2xl border-2',
+                        sinVentasPos ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800' : 'bg-slate-50 dark:bg-slate-900/30 border-slate-100 dark:border-slate-800'
+                    )}>
+                        <label className="flex items-center gap-2 text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2">
+                            <DollarSign className="w-3.5 h-3.5" />
+                            {sinVentasPos ? 'No hubo ventas por POS hoy — escribe el total vendido' : 'Ventas de hoy (si no se usó POS)'}
+                        </label>
+                        <input
+                            type="number" min="0"
+                            className="w-full h-11 px-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-black text-base focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400/20 transition-all"
+                            placeholder={cajaActiva?.totalVentas ? formatCurrency(cajaActiva.totalVentas) : '0'}
+                            value={ventasManualStr}
+                            onChange={e => setVentasManualStr(e.target.value)}
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1.5">
+                            {ventasManualNum > 0
+                                ? 'Este total reemplaza el de POS para cuadrar el cierre y también quedará en "Ventas del Día" (Reportes).'
+                                : 'Déjalo vacío si las ventas de hoy ya se registraron por POS.'}
+                        </p>
+                    </div>
 
                     {/* Tabla de denominaciones */}
                     <div>

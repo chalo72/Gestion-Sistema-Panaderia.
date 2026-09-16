@@ -37,6 +37,14 @@ function fromRow(row: UserRow): Record<string, unknown> {
     };
 }
 
+export const USUARIOS_SYNC_EVENT = 'dp-usuarios-sync';
+
+export function notifyUsuariosSync(reason: string, userId?: string): void {
+    window.dispatchEvent(new CustomEvent(USUARIOS_SYNC_EVENT, {
+        detail: { reason, userId },
+    }));
+}
+
 export async function pushUserToCloud(user: Record<string, unknown>): Promise<boolean> {
     try {
         const { error } = await supabase.from(TABLE).upsert(toRow(user), { onConflict: 'id' });
@@ -103,6 +111,32 @@ export function mergeUsersToLocalStorage(remoteUsers: Record<string, unknown>[])
         localStorage.setItem(LOCAL_KEY, JSON.stringify(localUsers));
     }
     return changed;
+}
+
+export function applyRemoteUserRecord(record: Record<string, unknown>, eventType: string): number {
+    if (eventType === 'DELETE') {
+        const id = record.id as string;
+        if (!id) return 0;
+        const localRaw = localStorage.getItem(LOCAL_KEY);
+        let localUsers: Record<string, unknown>[] = [];
+        if (localRaw) {
+            try {
+                const parsed: unknown = JSON.parse(localRaw);
+                localUsers = Array.isArray(parsed) ? (parsed as Record<string, unknown>[]) : [];
+            } catch {
+                localUsers = [];
+            }
+        }
+        const antes = localUsers.length;
+        localUsers = localUsers.filter((u) => u.id !== id);
+        if (localUsers.length !== antes) {
+            localStorage.setItem(LOCAL_KEY, JSON.stringify(localUsers));
+            return 1;
+        }
+        return 0;
+    }
+
+    return mergeUsersToLocalStorage([fromRow(record as unknown as UserRow)]);
 }
 
 // ── Códigos de acceso offline ──────────────────────────────────────────────────

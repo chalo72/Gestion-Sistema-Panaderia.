@@ -904,13 +904,14 @@ interface ControlCajaProps {
     categorias: Categoria[];
     productos: Producto[];
     onAbrirCaja: (monto: number) => Promise<any>;
-    onCerrarCaja: (monto: number) => Promise<any>;
+    onCerrarCaja: (monto: number, ventasManual?: number) => Promise<any>;
+    onViewHistorial?: () => void;
 }
 
 export function ControlCaja({
     sesiones, ventas, cajaActiva, formatCurrency,
     getProductoById, registrarMovimientoCaja, usuario,
-    onAbrirCaja, onCerrarCaja
+    onAbrirCaja, onCerrarCaja, onViewHistorial
 }: ControlCajaProps) {
     const [searchTerm,        setSearchTerm]        = useState('');
     const [arqueo,            setArqueo]            = useState<Record<string, string>>({});
@@ -1464,6 +1465,16 @@ export function ControlCaja({
                         >
                             <LogOut className="w-5 h-5" /> Cerrar Jornada Global
                         </Button>
+
+                        {onViewHistorial && (
+                            <Button
+                                onClick={onViewHistorial}
+                                variant="ghost"
+                                className="w-full h-12 rounded-2xl text-slate-500 dark:text-slate-400 font-black uppercase active:scale-95 transition-all text-xs gap-2"
+                            >
+                                <History className="w-4 h-4" /> Ver Historial de Ventas
+                            </Button>
+                        )}
                     </>
                 ) : (
                     <div className="py-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -1473,9 +1484,98 @@ export function ControlCaja({
                             className="mt-6 h-12 px-8 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase gap-2 shadow-lg shadow-blue-200 active:scale-95">
                             <PlusCircle className="w-4 h-4" /> Iniciar Jornada
                         </Button>
+                        {onViewHistorial && (
+                            <Button onClick={onViewHistorial}
+                                variant="ghost"
+                                className="mt-2 h-11 px-6 text-slate-400 rounded-2xl font-black text-xs uppercase gap-2">
+                                <History className="w-4 h-4" /> Ver Historial de Ventas
+                            </Button>
+                        )}
                     </div>
                 )}
             </div>
+
+            {/* ══ RESUMEN FINANCIERO GENERAL (A PETICIÓN DEL USUARIO) ══ */}
+            {hayJornada && (
+                <div className="bg-slate-900 rounded-3xl p-5 shadow-xl border border-slate-800 text-white mt-4 mb-2">
+                    <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-400 mb-3 flex items-center gap-2">
+                        <BarChart3 className="w-4 h-4" />
+                        Resumen Consolidado del Día
+                    </h3>
+                    {(() => {
+                        let princEfectivo = 0;
+                        let princNequi = 0;
+                        let gastosSalidas = 0;
+                        let totalOtras = 0;
+
+                        cajasAbiertas.forEach(caja => {
+                            const isPrincipal = (caja.cajaNombre?.toLowerCase() === 'caja principal' || caja.cajaNombre?.toLowerCase() === 'principal');
+                            
+                            const ventasCaja = ventas?.filter(v => v.cajaId === caja.id) || [];
+                            
+                            let efec = 0;
+                            let neq = 0;
+                            
+                            if (caja.ventasManualIngresadas && caja.totalVentas > 0) {
+                                efec = caja.totalVentasEfectivo || caja.totalVentas;
+                            } else {
+                                efec = ventasCaja.filter(v => v.metodoPago === 'efectivo').reduce((a, v) => a + v.total, 0) || (caja.totalVentasEfectivo || 0);
+                                neq = ventasCaja.filter(v => v.metodoPago === 'nequi' || v.metodoPago === 'transferencia').reduce((a, v) => a + v.total, 0) || ((caja as any).totalVentasNequi || 0);
+                            }
+
+                            const brutoCaja = efec + neq;
+                            const salidas = (caja.movimientos || []).filter(m => m.tipo === 'salida').reduce((x, m) => x + m.monto, 0);
+
+                            if (isPrincipal) {
+                                princEfectivo += efec;
+                                princNequi += neq;
+                                gastosSalidas += salidas;
+                            } else {
+                                totalOtras += brutoCaja;
+                            }
+                        });
+
+                        const princBruto = princEfectivo + princNequi;
+                        const princNeto = princBruto - gastosSalidas;
+                        const totalGeneral = princNeto + totalOtras;
+
+                        return (
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center text-xs">
+                                    <span className="text-slate-400 font-semibold">Total Principal + Nequi (Bruto):</span>
+                                    <span className="font-bold text-slate-300">
+                                        {formatCurrency(princBruto)}
+                                    </span>
+                                </div>
+                                {gastosSalidas > 0 && (
+                                    <div className="flex justify-between items-center text-xs text-rose-400">
+                                        <span className="font-semibold">Menos Gastos / Salidas:</span>
+                                        <span className="font-bold">- {formatCurrency(gastosSalidas)}</span>
+                                    </div>
+                                )}
+                                <div className="flex justify-between items-center text-xs border-b border-slate-700 pb-2">
+                                    <span className="text-slate-400 font-semibold">Subtotal Princ + Nequi (Neto):</span>
+                                    <span className="font-black text-indigo-400">
+                                        {formatCurrency(princNeto)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-xs pb-1 mt-2">
+                                    <span className="text-slate-400 font-semibold">Total Otras Cajas:</span>
+                                    <span className="font-black text-emerald-400">
+                                        {formatCurrency(totalOtras)}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between items-center text-sm pt-1">
+                                    <span className="font-black uppercase tracking-wider text-slate-300">TOTAL GENERAL:</span>
+                                    <span className="font-black text-amber-400">
+                                        {formatCurrency(totalGeneral)}
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                </div>
+            )}
 
 
             {/* ══ CONTENIDO PRINCIPAL CON TABS (DESKTOP) ══ */}

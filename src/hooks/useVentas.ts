@@ -15,6 +15,7 @@ import type {
 } from '@/types';
 import { toast } from 'sonner';
 import { procesarCuadreTurno } from '@/lib/security-agent';
+import { upsertCajaEnVentaDiaria } from '@/lib/finanzas-personales';
 
 const _supaDB = new SupabaseDatabase();
 
@@ -73,13 +74,19 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     return sesion;
   }, []);
 
-  const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string) => {
+  const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string, ventasManual?: number) => {
     if (!cajaActiva) return undefined;
+    const hayVentaManual = Number.isFinite(ventasManual) && (ventasManual as number) > 0;
     const sesion: CajaSesion = {
       ...cajaActiva,
       fechaCierre: new Date().toISOString(),
       montoCierre,
-      estado: 'cerrada'
+      estado: 'cerrada',
+      ...(hayVentaManual ? {
+        totalVentas: ventasManual as number,
+        totalVentasEfectivo: ventasManual as number,
+        ventasManualIngresadas: true,
+      } : {}),
     };
     await db.updateSesionCaja(sesion as any);
     _supaDB.updateSesionCaja(sesion as any).catch(() => {});
@@ -101,6 +108,16 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       localStorage.removeItem('dp_caja_apertura_ts');
     } catch (e) {
       console.warn('[Security] Error al generar cuadre:', e);
+    }
+    // Sincroniza el total manual con "Ventas del Día" (Reportes → Análisis Financiero)
+    // para no tener que anotarlo dos veces en pantallas distintas.
+    if (hayVentaManual) {
+      try {
+        const fechaHoy = new Date().toISOString().split('T')[0];
+        upsertCajaEnVentaDiaria(fechaHoy, sesion.cajaNombre || 'Caja', ventasManual as number);
+      } catch (e) {
+        console.warn('[Caja] No se pudo sincronizar con Ventas del Día:', e);
+      }
     }
     toast.success('Caja cerrada correctamente');
     return sesion;

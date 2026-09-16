@@ -22,6 +22,7 @@ interface ProductCatalogProps {
     onAddToCart: (producto: Producto) => void;
     formatCurrency: (value: number) => string;
     onEditProduct?: (id: string, updates: Partial<Producto>) => Promise<void>;
+    onPrecioVentaCorregido?: (productoId: string, precioAnterior: number, precioNuevo: number) => void;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
     onOpenAdHoc?: () => void;
     cart?: { producto: { id: string }; cantidad: number }[];
@@ -29,7 +30,7 @@ interface ProductCatalogProps {
 
 export function ProductCatalog({
     productos, inventario, categorias, searchTerm, setSearchTerm,
-    selectedCategory, setSelectedCategory, onAddToCart, formatCurrency, onEditProduct, onAjustarStock, onOpenAdHoc, cart
+    selectedCategory, setSelectedCategory, onAddToCart, formatCurrency, onEditProduct, onPrecioVentaCorregido, onAjustarStock, onOpenAdHoc, cart
 }: ProductCatalogProps) {
 
     const [editingProduct, setEditingProduct] = useState<Producto | null>(null);
@@ -95,11 +96,15 @@ export function ProductCatalog({
     const handleSaveEdit = async () => {
         if (!editingProduct || !onEditProduct) return;
         try {
+            const precioAnterior = safeNumber(editingProduct.precioVenta);
             await onEditProduct(editingProduct.id, {
                 nombre: editForm.nombre,
                 precioVenta: editForm.precioVenta,
                 descripcion: editForm.descripcion,
             });
+            if (onPrecioVentaCorregido && editForm.precioVenta !== precioAnterior) {
+                onPrecioVentaCorregido(editingProduct.id, precioAnterior, editForm.precioVenta);
+            }
             // Ajustar stock si cambió
             if (onAjustarStock) {
                 const itemInv = inventario.find(i => i.productoId === editingProduct.id);
@@ -267,15 +272,24 @@ export function ProductCatalog({
 
                 {isSearching ? (
                     productos.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center h-48 text-center">
+                        <div className="flex flex-col items-center justify-center h-48 text-center gap-3">
                             <span className="text-4xl mb-2">🔍</span>
                             <p className="text-sm font-bold text-slate-400">No se encontró "{searchTerm}"</p>
+                            {onOpenAdHoc && (
+                                <button
+                                    onClick={onOpenAdHoc}
+                                    className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-black shadow-sm active:scale-95 transition-all"
+                                >
+                                    <Plus className="w-4 h-4" /> Agregar "{searchTerm}" al catálogo
+                                </button>
+                            )}
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             {productos.map(producto => (
                                 <FastSearchCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
+                                    onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
                                     cantidadEnCarrito={cart?.find(i => i.producto.id === producto.id)?.cantidad ?? 0} />
                             ))}
                         </div>
@@ -403,7 +417,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
         )}
             onClick={() => onAddToCart(producto)}>
             {/* Imagen compacta */}
-            <div className="h-20 overflow-hidden relative shrink-0">
+            <div className="h-24 overflow-hidden relative shrink-0">
                 <ProductAvatar
                     imagen={producto.imagen}
                     nombre={producto.nombre}
@@ -441,8 +455,8 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
             </div>
 
             {/* Info compacta */}
-            <div className="px-2 py-1.5 flex flex-col bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800">
-                <h4 className="text-[10px] font-black leading-tight text-slate-800 dark:text-slate-100 uppercase tracking-tighter line-clamp-1">
+            <div className="px-2.5 py-2 flex flex-col bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800">
+                <h4 className="text-xs font-black leading-snug text-slate-800 dark:text-slate-100 uppercase tracking-tight line-clamp-2 min-h-[2.2em]">
                     {producto.nombre}
                 </h4>
                 {producto.descripcion && (
@@ -450,7 +464,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                         {producto.descripcion}
                     </p>
                 )}
-                <div className="mt-1 flex items-center justify-between border-t border-slate-50 dark:border-white/5 pt-1">
+                <div className="mt-1.5 flex items-center justify-between border-t border-slate-50 dark:border-white/5 pt-1.5">
                     <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {formatCurrency(safeNumber(producto.precioVenta))}
                     </span>
@@ -471,9 +485,10 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
 }
 
 /* Tarjeta de Búsqueda Rápida Gigante para Resultados Profesionales */
-function FastSearchCard({ producto, inventario, categorias, onAddToCart, formatCurrency, cantidadEnCarrito }: {
+function FastSearchCard({ producto, inventario, categorias, onAddToCart, formatCurrency, onEdit, cantidadEnCarrito }: {
     producto: Producto; inventario: InventarioItem[]; categorias: Categoria[];
     onAddToCart: (p: Producto) => void; formatCurrency: (v: number) => string;
+    onEdit?: (e: React.MouseEvent) => void;
     cantidadEnCarrito?: number;
 }) {
     const itemInv = inventario.find(i => i.productoId === producto.id);
@@ -537,11 +552,22 @@ function FastSearchCard({ producto, inventario, categorias, onAddToCart, formatC
             </div>
 
             {/* PRECIO GIGANTE */}
-            <div className="shrink-0 text-right pl-2 border-l border-slate-100 dark:border-slate-800">
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-0.5">PVP</p>
-                <p className="text-2xl md:text-3xl font-black tabular-nums text-emerald-600 dark:text-emerald-400 tracking-tighter">
-                    {formatCurrency(producto.precioVenta)}
-                </p>
+            <div className="shrink-0 text-right pl-2 border-l border-slate-100 dark:border-slate-800 flex items-start gap-2">
+                <div>
+                    <p className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-400 mb-0.5">PVP</p>
+                    <p className="text-2xl md:text-3xl font-black tabular-nums text-emerald-600 dark:text-emerald-400 tracking-tighter">
+                        {formatCurrency(producto.precioVenta)}
+                    </p>
+                </div>
+                {onEdit && (
+                    <button
+                        onClick={onEdit}
+                        title="Corregir precio"
+                        className="w-8 h-8 rounded-xl bg-slate-50 dark:bg-slate-800 shadow-sm flex items-center justify-center shrink-0 hover:bg-emerald-500 hover:text-white active:scale-90 transition-all"
+                    >
+                        <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                )}
             </div>
 
             {/* Overlay Plus */}

@@ -697,7 +697,7 @@ function extraerProductosForense(texto: string, tipo: TipoFactura): ProductoFore
         nombre: nombreFinal,
         gramaje: dim.gramaje,
         cantidadEmbalaje: dim.cantidadEmbalaje,  // B = unidades por pack
-        cantidadRecibida,                         // columna CANTIDAD = cajas compradas
+        cantidadRecibida: cantRecibida,          // columna CANTIDAD = cajas compradas
         precioCosto: precio,
         // A (dim.cantidadBulto) = unidades por bulto, va solo a notas como referencia
         notasExtra: dim.cantidadBulto > 1
@@ -758,7 +758,7 @@ function extraerProductosForense(texto: string, tipo: TipoFactura): ProductoFore
         nombre: dim.gramaje ? `${dim.nombre} ${dim.gramaje}` : dim.nombre,
         gramaje: dim.gramaje,
         cantidadEmbalaje: dim.cantidadEmbalaje,
-        cantidadRecibida,
+        cantidadRecibida: cantRecibida,
         precioCosto: Math.round(precioReal),
         precioConIva: precios[1] || 0,
         descuentoPct: descPct,
