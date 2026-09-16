@@ -20,15 +20,49 @@ const CAJAS_DEFAULT = [
 ];
 
 const LS_KEY = 'dp_cajas_config';
+const LS_DELETED_KEY = 'dp_cajas_eliminadas';
 
 interface CajaDefinicion { nombre: string; emoji: string; descripcion: string; }
 
+// Normaliza un nombre de caja para comparar (evita duplicados por mayusculas/espacios)
+function normalizarNombreCaja(nombre: string): string {
+    return nombre.trim().toLowerCase();
+}
+
+// Quita duplicados por nombre (conserva la primera aparicion) y filtra nombres eliminados
+function limpiarListaCajas(lista: CajaDefinicion[], eliminados: Set<string>): CajaDefinicion[] {
+    const vistos = new Set<string>();
+    const resultado: CajaDefinicion[] = [];
+    for (const c of lista) {
+        const key = normalizarNombreCaja(c.nombre);
+        if (eliminados.has(key) || vistos.has(key)) continue;
+        vistos.add(key);
+        resultado.push(c);
+    }
+    return resultado;
+}
+
+function cargarNombresEliminados(): string[] {
+    try {
+        const raw = localStorage.getItem(LS_DELETED_KEY);
+        if (raw) return JSON.parse(raw) as string[];
+    } catch { /* ignorar */ }
+    return [];
+}
+
+function guardarNombresEliminados(nombres: string[]) {
+    const unicos = Array.from(new Set(nombres));
+    try { localStorage.setItem(LS_DELETED_KEY, JSON.stringify(unicos)); } catch { /* ignorar */ }
+    db.saveBackup('cajas_eliminadas', unicos).catch(() => {});
+}
+
 function cargarCajasGuardadas(): CajaDefinicion[] {
+    const eliminados = new Set(cargarNombresEliminados().map(normalizarNombreCaja));
     try {
         const raw = localStorage.getItem(LS_KEY);
-        if (raw) return JSON.parse(raw) as CajaDefinicion[];
+        if (raw) return limpiarListaCajas(JSON.parse(raw) as CajaDefinicion[], eliminados);
     } catch { /* ignorar */ }
-    return CAJAS_DEFAULT;
+    return limpiarListaCajas(CAJAS_DEFAULT, eliminados);
 }
 
 function guardarCajas(cajas: CajaDefinicion[]) {
@@ -90,20 +124,48 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
 
     useEffect(() => {
         if (!isOpen) return;
-        db.getBackup('cajas_config').then(data => {
-            if (data && Array.isArray(data)) {
-                setCajasLista(data);
-                setConfigs(prev => {
-                    const next = { ...prev };
-                    data.forEach(c => {
-                        if (!next[c.nombre]) {
-                            next[c.nombre] = configDefault();
-                        }
-                    });
-                    return next;
-                });
+        (async () => {
+            // Traer del respaldo en la nube los nombres que se eliminaron desde otro
+            // dispositivo, y fusionarlos con los eliminados localmente -- un borrado
+            // hecho en cualquier celular no se debe perder ni reaparecer en los demas.
+            let eliminadosNube: string[] = [];
+            try {
+                const backup = await db.getBackup('cajas_eliminadas');
+                if (Array.isArray(backup)) eliminadosNube = backup as string[];
+            } catch { /* ignorar */ }
+            const eliminadosLocal = cargarNombresEliminados();
+            const eliminadosUnion = Array.from(new Set([...eliminadosLocal, ...eliminadosNube]));
+            if (eliminadosUnion.length !== eliminadosLocal.length) {
+                guardarNombresEliminados(eliminadosUnion);
             }
-        }).catch(() => {});
+            const eliminadosSet = new Set(eliminadosUnion.map(normalizarNombreCaja));
+
+            // LOCAL SIEMPRE GANA para el contenido de la lista: si ya hay una lista guardada
+            // en este dispositivo no la reemplazamos con el respaldo de la nube -- solo la
+            // limpiamos (sin duplicados, sin cajas eliminadas desde cualquier dispositivo).
+            // El respaldo de la nube solo aporta datos cuando este dispositivo nunca guardo
+            // nada localmente (arranque de un celular nuevo).
+            const local = localStorage.getItem(LS_KEY);
+            let base: CajaDefinicion[];
+            if (local) {
+                try { base = JSON.parse(local) as CajaDefinicion[]; } catch { base = CAJAS_DEFAULT; }
+            } else {
+                try {
+                    const cloud = await db.getBackup('cajas_config');
+                    base = Array.isArray(cloud) && cloud.length > 0 ? cloud : CAJAS_DEFAULT;
+                } catch { base = CAJAS_DEFAULT; }
+            }
+            const limpia = limpiarListaCajas(base, eliminadosSet);
+            setCajasLista(limpia);
+            guardarCajas(limpia);
+            setConfigs(prev => {
+                const next = { ...prev };
+                limpia.forEach(c => {
+                    if (!next[c.nombre]) next[c.nombre] = configDefault();
+                });
+                return next;
+            });
+        })();
     }, [isOpen]);
 
     // Lista de cajas (editable y persistida)
@@ -164,6 +226,15 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
     const guardarEdicion = () => {
         if (!editNombre.trim()) return;
         const nueva: CajaDefinicion = { nombre: editNombre.trim(), emoji: editEmoji, descripcion: editDesc.trim() };
+        const nombreNuevoKey = normalizarNombreCaja(nueva.nombre);
+        // Evitar crear/renombrar a un nombre que ya existe en otra fila (causa duplicados).
+        const chocaConOtra = cajasLista.some((c, i) =>
+            i !== editandoIdx && normalizarNombreCaja(c.nombre) === nombreNuevoKey
+        );
+        if (chocaConOtra) {
+            alert(`Ya existe una caja llamada "${nueva.nombre}". Elegi otro nombre o edita la que ya existe.`);
+            return;
+        }
         let nuevaLista: CajaDefinicion[];
         if (editandoIdx === -1) {
             nuevaLista = [...cajasLista, nueva];
@@ -181,6 +252,12 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         }
         setCajasLista(nuevaLista);
         guardarCajas(nuevaLista);
+        // Si el usuario recrea a proposito una caja que antes se habia eliminado, sacarla
+        // de la lista de eliminadas para que no vuelva a filtrarse sola.
+        const eliminadosActuales = cargarNombresEliminados();
+        if (eliminadosActuales.some(n => normalizarNombreCaja(n) === nombreNuevoKey)) {
+            guardarNombresEliminados(eliminadosActuales.filter(n => normalizarNombreCaja(n) !== nombreNuevoKey));
+        }
         setEditandoIdx(null);
     };
 
@@ -190,10 +267,14 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         setCajasLista(nuevaLista);
         guardarCajas(nuevaLista);
         setConfigs(prev => { const n = { ...prev }; delete n[nombre]; return n; });
+        // Recordar el borrado para que no "reaparezca" traido por el respaldo de la nube
+        // ni por otro dispositivo que todavia tenga esta caja en su lista local.
+        guardarNombresEliminados([...cargarNombresEliminados(), normalizarNombreCaja(nombre)]);
     };
 
     const resetearPorDefecto = () => {
         if (!confirm('¿Restaurar la lista de cajas por defecto? Se perderán tus cambios.')) return;
+        guardarNombresEliminados([]);
         guardarCajas(CAJAS_DEFAULT);
         setCajasLista(CAJAS_DEFAULT);
         setConfigs(Object.fromEntries(CAJAS_DEFAULT.map(c => [c.nombre, configDefault()])));
