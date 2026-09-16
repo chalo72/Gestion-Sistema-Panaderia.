@@ -796,6 +796,7 @@ const App = () => {
             onAjustarStock={onAjustarStock}
             onGenerarSugerencias={() => Promise.resolve(0)}
             onNavigateToRecepciones={() => setCurrentView('recepciones')}
+            addOrUpdatePrecio={addOrUpdatePrecio}
           />
         );
       case 'recepciones':

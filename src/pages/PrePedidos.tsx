@@ -94,6 +94,7 @@ interface PrePedidosProps {
   ) => void;
   onGenerarSugerencias: () => Promise<number>;
   onNavigateToRecepciones?: () => void;
+  addOrUpdatePrecio?: (precio: Omit<PrecioProveedor, 'id'>) => void;
 }
 
 export default function PrePedidos({
@@ -117,7 +118,8 @@ export default function PrePedidos({
   formatCurrency,
   onAjustarStock,
   onGenerarSugerencias,
-  onNavigateToRecepciones
+  onNavigateToRecepciones,
+  addOrUpdatePrecio
 }: PrePedidosProps) {
   const [activeTab, setActiveTab] = useState<'creacion' | 'gestion' | 'comparador'>('creacion');
   const [confirmarLimpiar, setConfirmarLimpiar] = useState(false);
@@ -946,6 +948,7 @@ export default function PrePedidos({
               activeProveedorId={activeProveedorId}
               onShowBoard={() => setShowProveedorPanel(false)}
               draftItems={activeDraft?.items?.map(i => ({ productoId: i.productoId, cantidad: i.cantidad })) ?? []}
+              addOrUpdatePrecio={addOrUpdatePrecio}
             />
           </div>
         ) : (
@@ -1038,7 +1041,14 @@ export default function PrePedidos({
       )}>
           
           {/* TABS DEL PANEL DERECHO */}
-          <div className="flex bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
+          <div className="flex items-center bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
+            <button
+              onClick={() => setMobileView('catalogo')}
+              className="lg:hidden w-11 h-11 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 active:scale-95 transition-all shrink-0"
+              title="Volver al catálogo"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
             <button
               onClick={() => setPanelView('ticket')}
               className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all

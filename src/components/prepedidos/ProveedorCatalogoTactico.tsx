@@ -16,6 +16,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import type {
   Producto,
   Proveedor,
@@ -41,6 +42,7 @@ interface ProveedorCatalogoTacticoProps {
   activeProveedorId: string | null;
   onShowBoard?: () => void;
   draftItems?: { productoId: string; cantidad: number }[];
+  addOrUpdatePrecio?: (precio: Omit<PrecioProveedor, 'id'>) => void;
 }
 
 const esInsumo = (p: any): boolean => {
@@ -62,6 +64,7 @@ export function ProveedorCatalogoTactico({
   activeProveedorId,
   onShowBoard,
   draftItems = [],
+  addOrUpdatePrecio,
 }: ProveedorCatalogoTacticoProps) {
   const [search, setSearch] = useState('');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -78,7 +81,16 @@ export function ProveedorCatalogoTactico({
 
   const stats = useMemo(() => {
     return proveedores.map(prov => {
-      const preciosProv = precios.filter(pr => pr.proveedorId === prov.id);
+      const preciosProvBrutos = precios.filter(pr => pr.proveedorId === prov.id);
+      
+      // Eliminar duplicados (un mismo producto puede tener múltiples registros de precio histórico)
+      const uniquePreciosMap = new Map();
+      preciosProvBrutos.forEach(pr => {
+          // Si queremos mantener el más reciente podríamos comparar fechas, por ahora nos quedamos con el último mapeado
+          uniquePreciosMap.set(pr.productoId, pr);
+      });
+      const preciosProv = Array.from(uniquePreciosMap.values());
+
       const productosProv = preciosProv.map(pr => {
         const prod = productos.find(p => p.id === pr.productoId);
         const inv  = inventario.find(i => i.productoId === pr.productoId);
@@ -171,6 +183,30 @@ export function ProveedorCatalogoTactico({
   // ─── Tarjeta de producto ────────────────────────────────────────────────
   const ProductoCard = ({ prod, isInsumo }: { prod: typeof catalogoInsumos[0]; isInsumo: boolean }) => {
     const qty      = quantities[prod.id] !== undefined ? quantities[prod.id] : (prod.necesidadTotal || 1);
+    const [editPrecio, setEditPrecio] = useState(prod.precioCosto || 0);
+    const [isEditingPrecio, setIsEditingPrecio] = useState(false);
+    
+    // Sync price if it changes externally
+    useEffect(() => {
+        if (!isEditingPrecio) setEditPrecio(prod.precioCosto || 0);
+    }, [prod.precioCosto, isEditingPrecio]);
+
+    const handleSavePrecio = () => {
+        setIsEditingPrecio(false);
+        if (editPrecio !== prod.precioCosto && addOrUpdatePrecio) {
+            addOrUpdatePrecio({
+                productoId: prod.id,
+                proveedorId: activeProveedor.id,
+                precioCosto: editPrecio,
+                tipoEmbalaje: prod.tipoEmbalaje,
+                cantidadEmbalaje: prod.cantidadEmbalaje,
+                destino: prod.destino,
+                is_primary: true
+            });
+            toast.success(`Precio de ${prod.nombre} actualizado en el catálogo`);
+        }
+    };
+
     const isAdding = addingIds.has(prod.id);
     const draftQty = draftItems.find(i => i.productoId === prod.id)?.cantidad ?? 0;
     const enCarrito= draftQty > 0;
@@ -205,10 +241,34 @@ export function ProveedorCatalogoTactico({
           </h4>
 
           <div className="flex flex-col gap-1">
-            <span className={cn('text-sm font-black tabular-nums leading-none', accent.text)}>
-              {formatCurrency(prod.precioCosto || 0)}
-            </span>
-            <div className="flex flex-wrap gap-1 items-center">
+            {isEditingPrecio ? (
+              <div className="flex items-center gap-1">
+                <span className="text-sm font-black text-slate-400">$</span>
+                <Input
+                  type="number"
+                  value={editPrecio || ''}
+                  onChange={e => setEditPrecio(Number(e.target.value))}
+                  onBlur={handleSavePrecio}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSavePrecio();
+                    }
+                  }}
+                  autoFocus
+                  className={cn("h-7 w-24 text-sm font-black px-1.5 py-0 border-indigo-300 ring-indigo-200", accent.text)}
+                />
+              </div>
+            ) : (
+              <span 
+                className={cn('text-sm font-black tabular-nums leading-none cursor-text hover:opacity-80 transition-opacity border-b border-transparent hover:border-slate-300 w-fit', accent.text)}
+                onClick={() => setIsEditingPrecio(true)}
+                title="Toca para editar precio de paca"
+              >
+                {formatCurrency(prod.precioCosto || 0)}
+              </span>
+            )}
+            <div className="flex flex-wrap gap-1 items-center mt-1">
               <span className={cn('text-[9px] font-black uppercase px-1.5 py-0.5 rounded border',
                 prod.esCritico
                   ? 'bg-rose-50 border-rose-200 text-rose-600'
