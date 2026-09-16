@@ -441,6 +441,7 @@ const App = () => {
             productos={productos}
             proveedores={proveedores}
             precios={precios}
+            trabajadores={trabajadores}
             getMejorPrecio={getMejorPrecio}
             getPreciosByProducto={getPreciosByProducto}
             getProveedorById={getProveedorById}
@@ -479,6 +480,7 @@ const App = () => {
           <ControlCaja 
             sesiones={sesionesCaja}
             cajaActiva={cajaActiva}
+            trabajadores={trabajadores}
             ventas={ventas}
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
             onCerrarCaja={cerrarCaja}

@@ -62,7 +62,8 @@ import type {
     PedidoActivo,
     VentaItem,
     Cliente,
-    OrdenProduccion
+    OrdenProduccion,
+    Trabajador
 } from '@/types';
 
 // Estado del carrito por pestaña
@@ -75,6 +76,7 @@ interface TabCartState {
 
 interface VentasProps {
     productos: Producto[];
+    trabajadores?: Trabajador[];
     proveedores?: any[];
     precios?: any[];
     getMejorPrecio?: (productoId: string) => any;
@@ -147,11 +149,18 @@ export function Ventas(props: VentasProps) {
     // ==========================================
     const { usuarios } = useAuth();
     const vendedorasDisponibles = useMemo<VendedoraOption[]>(() => {
+        if (props.trabajadores && props.trabajadores.length > 0) {
+            const trVendedoras = props.trabajadores
+                .filter(t => t.estado !== 'inactivo' && (t.rol === 'vendedor' || t.rol === 'cajero'))
+                .map(t => ({ id: t.id, nombre: t.nombre, rol: t.rol }));
+            if (trVendedoras.length > 0) return trVendedoras;
+        }
+
         if (!usuarios || usuarios.length === 0) return [];
         return usuarios
             .filter(u => u.activo !== false && u.rol === 'VENDEDOR')
             .map(u => ({ id: u.id, nombre: u.nombre, rol: u.rol }));
-    }, [usuarios]);
+    }, [usuarios, props.trabajadores]);
 
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
     const [showMobileCart, setShowMobileCart] = useState(false);

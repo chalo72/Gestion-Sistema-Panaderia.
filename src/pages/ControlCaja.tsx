@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import {
     Dialog, DialogContent, DialogHeader,
@@ -28,7 +29,7 @@ import { VigilianciaIA } from '@/components/vigilancia/VigilianciaIA';
 import { PrestamosCajaModal } from '@/components/ventas/PrestamosCajaModal';
 import { ReporteZ } from '@/components/ventas/ReporteZ';
 import { enviarReporteZWhatsApp } from '@/lib/whatsapp-reporting';
-import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas } from '@/types';
+import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas, Trabajador } from '@/types';
 
 const BILLETES = [
     { valor: 100000, label: '$100.000', color: 'bg-purple-100 border-purple-200 text-purple-700' },
@@ -897,6 +898,7 @@ interface ControlCajaProps {
     sesiones: CajaSesion[];
     ventas: Venta[];
     cajaActiva?: CajaSesion;
+    trabajadores?: Trabajador[];
     formatCurrency: (value: number) => string;
     getProductoById: (id: string) => any;
     registrarMovimientoCaja: (monto: number, tipo: 'entrada' | 'salida', motivo: string, usuarioId: string, cajaId?: string) => Promise<any>;
@@ -2549,13 +2551,21 @@ export function ControlCaja({
                         </div>
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vendedora que atiende esta caja</label>
-                            <p className="text-[9px] text-slate-400">Escribe el nombre de la persona que está trabajando en esta caja durante este turno.</p>
-                            <input
-                                value={editVendedoraCaja}
-                                onChange={e => setEditVendedoraCaja(e.target.value)}
-                                className="w-full h-10 px-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none focus:border-indigo-400"
-                                placeholder="Ej: María García"
-                            />
+                            <p className="text-[9px] text-slate-400">Selecciona la persona que está trabajando en esta caja durante este turno.</p>
+                            <Select
+                                value={editVendedoraCaja || 'none'}
+                                onValueChange={(val) => setEditVendedoraCaja(val === 'none' ? '' : val)}
+                            >
+                                <SelectTrigger className="w-full h-10 px-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800">
+                                    <SelectValue placeholder="Selecciona una vendedora" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">-- Sin asignar --</SelectItem>
+                                    {props.trabajadores?.filter(t => t.estado !== 'inactivo' && (t.rol === 'vendedor' || t.rol === 'cajero')).map(t => (
+                                        <SelectItem key={t.id} value={t.nombre}>{t.nombre}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                         </div>
                         <div className="flex gap-3 pt-2">
                             <Button variant="outline" className="flex-1 h-10 rounded-xl font-black text-xs uppercase" onClick={() => setEditandoCaja(null)}>
