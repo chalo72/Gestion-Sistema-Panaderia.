@@ -439,9 +439,15 @@ const App = () => {
         return (
           <Ventas 
             productos={productos}
+            proveedores={proveedores}
+            precios={precios}
+            getMejorPrecio={getMejorPrecio}
+            getPreciosByProducto={getPreciosByProducto}
+            getProveedorById={getProveedorById}
             inventario={inventario}
             ventas={ventas}
             cajaActiva={cajaActiva}
+            onDownloadFromCloud={downloadFromCloud}
             onCerrarCaja={cerrarCaja}
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
             onFinalizarTurno={cerrarCaja}

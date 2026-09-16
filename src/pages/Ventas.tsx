@@ -25,6 +25,7 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { BusquedaRapida } from '@/components/layout/BusquedaRapida';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { registrarLogActividad, getDeudores, marcarDeudorRecuperado, registrarIncidente } from '@/lib/security-agent';
@@ -74,9 +75,15 @@ interface TabCartState {
 
 interface VentasProps {
     productos: Producto[];
+    proveedores?: any[];
+    precios?: any[];
+    getMejorPrecio?: (productoId: string) => any;
+    getPreciosByProducto?: (productoId: string) => any[];
+    getProveedorById?: (id: string) => any;
     inventario: InventarioItem[];
     ventas: Venta[];
     cajaActiva: CajaSesion | undefined;
+    onDownloadFromCloud?: () => Promise<void>;
     onRegistrarVenta: (data: any) => Promise<Venta>;
     onAbrirCaja: (montoApertura: number) => Promise<CajaSesion>;
     onCerrarCaja: (montoCierre: number) => Promise<CajaSesion | undefined>;
@@ -1012,7 +1019,22 @@ export function Ventas(props: VentasProps) {
                     onShowChecklistVitrina={() => setShowChecklistVitrina(true)}
                     onOpenMobileMenu={onOpenMobileMenu}
                 />
-                {/* ── Selector Rápido de Vendedora — solo desktop (en móvil está en el panel) ── */}
+                
+                {/* Búsqueda rápida en móvil */}
+                <div className="lg:hidden p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex justify-center">
+                    <BusquedaRapida 
+                        productos={props.productos}
+                        proveedores={props.proveedores || []}
+                        precios={props.precios || []}
+                        inventario={props.inventario}
+                        getMejorPrecio={props.getMejorPrecio || (() => null)}
+                        getPreciosByProducto={props.getPreciosByProducto || (() => [])}
+                        getProveedorById={props.getProveedorById || (() => undefined)}
+                        formatCurrency={props.formatCurrency}
+                    />
+                </div>
+
+                {/* ⚡ Selector Rápido de Vendedora - solo desktop (en móvil está en el panel) ⚡ */}
                 {vendedorasDisponibles.length >= 1 && (
                     <div className="hidden lg:flex items-center gap-3 px-4 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800">
                         <VendedoraQuickPicker
@@ -1029,25 +1051,47 @@ export function Ventas(props: VentasProps) {
             <div className="flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-3 pb-[140px] lg:pb-3">
                 {/* Panel izquierdo: Catálogo o Mesas — pantalla completa en móvil */}
                 <div className={cn(
-                    "flex-1 flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden",
+                    "flex-1 flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden relative",
                     "flex"
                 )} style={{ minHeight: '0' }}>
                     {viewMode === 'pos' ? (
-                        <ProductCatalog
-                            productos={productosVenta}
-                            inventario={inventario}
-                            onAddToCart={addToCart}
-                            formatCurrency={formatCurrency}
-                            searchTerm={searchTerm}
-                            setSearchTerm={setSearchTerm}
-                            selectedCategory={selectedCategory}
-                            setSelectedCategory={setSelectedCategory}
-                            categorias={categorias}
-                            onEditProduct={onUpdateProducto}
-                            onAjustarStock={onAjustarStock}
-                            onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
-                            cart={cart}
-                        />
+                        <>
+                            {props.productos.length === 0 && (
+                                <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-slate-50/80 dark:bg-slate-950/80 backdrop-blur-sm p-4">
+                                    <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-xl text-center max-w-md w-full border border-slate-200 dark:border-slate-800">
+                                        <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                                            <AlertCircle className="w-8 h-8" />
+                                        </div>
+                                        <h3 className="text-xl font-black mb-2">No hay productos locales</h3>
+                                        <p className="text-slate-500 dark:text-slate-400 text-sm mb-6">
+                                            Si has borrado la caché del celular o es la primera vez que entras, necesitas descargar los datos de la nube.
+                                        </p>
+                                        <Button 
+                                            onClick={props.onDownloadFromCloud}
+                                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-12 rounded-xl font-black uppercase tracking-widest text-sm"
+                                        >
+                                            <RefreshCw className="w-4 h-4 mr-2" />
+                                            Sincronizar ahora
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                            <ProductCatalog
+                                productos={productosVenta}
+                                inventario={inventario}
+                                onAddToCart={addToCart}
+                                formatCurrency={formatCurrency}
+                                searchTerm={searchTerm}
+                                setSearchTerm={setSearchTerm}
+                                selectedCategory={selectedCategory}
+                                setSelectedCategory={setSelectedCategory}
+                                categorias={categorias}
+                                onEditProduct={onUpdateProducto}
+                                onAjustarStock={onAjustarStock}
+                                onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
+                                cart={cart}
+                            />
+                        </>
                     ) : (
                         <MuroPedidos
                             mesas={mesas}

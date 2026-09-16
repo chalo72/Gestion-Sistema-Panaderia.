@@ -82,6 +82,9 @@ const FORM_VACIO: Omit<Trabajador, 'id' | 'createdAt'> = {
     cedula: '',
     telefono: '',
     email: '',
+    genero: 'M',
+    edad: 0,
+    turno: 'mañana',
     rol: 'panadero',
     salarioBase: 0,
     fechaIngreso: new Date().toISOString().split('T')[0],
@@ -251,6 +254,9 @@ export default function Trabajadores({
             cedula: t.cedula || '',
             telefono: t.telefono || '',
             email: t.email || '',
+            genero: t.genero || 'M',
+            edad: t.edad || 0,
+            turno: t.turno || 'mañana',
             rol: t.rol,
             salarioBase: t.salarioBase,
             fechaIngreso: t.fechaIngreso,
@@ -1043,6 +1049,47 @@ export default function Trabajadores({
                                     onChange={e => setFormData(p => ({ ...p, telefono: e.target.value }))}
                                     className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
                                 />
+                            </div>
+                        </div>
+
+                        {/* Género, Edad, Turno */}
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Género</Label>
+                                <Select value={formData.genero || 'M'} onValueChange={v => setFormData(p => ({ ...p, genero: v as any }))}>
+                                    <SelectTrigger className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="M">Masculino</SelectItem>
+                                        <SelectItem value="F">Femenino</SelectItem>
+                                        <SelectItem value="Otro">Otro</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Edad</Label>
+                                <Input
+                                    type="number"
+                                    placeholder="ej: 30"
+                                    value={formData.edad || ''}
+                                    onChange={e => setFormData(p => ({ ...p, edad: parseInt(e.target.value) || 0 }))}
+                                    className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
+                                />
+                            </div>
+                            <div>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Turno</Label>
+                                <Select value={formData.turno || 'mañana'} onValueChange={v => setFormData(p => ({ ...p, turno: v as any }))}>
+                                    <SelectTrigger className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="mañana">Mañana</SelectItem>
+                                        <SelectItem value="tarde">Tarde</SelectItem>
+                                        <SelectItem value="ambos">Ambos</SelectItem>
+                                        <SelectItem value="doblo">Doblo Turno</SelectItem>
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
 

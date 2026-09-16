@@ -1226,6 +1226,9 @@ export interface Trabajador {
   cedula?: string;
   telefono?: string;
   email?: string;
+  genero?: 'M' | 'F' | 'Otro';
+  edad?: number;
+  turno?: 'mañana' | 'tarde' | 'ambos' | 'doblo';
   rol: TrabajadorRol;
   salarioBase: number;
   fechaIngreso: string;

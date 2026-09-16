@@ -1,0 +1,12 @@
+---
+description: Coordinación multi-agente — leer y mantener CORE_MEMORY.md
+globs:
+alwaysApply: true
+---
+
+Este proyecto se trabaja alternando entre varios agentes de IA (Antigravity, Cursor, Claude Code) en sesiones distintas — cuando a uno se le acaban los créditos, el usuario continúa con otro.
+
+- **Antes de empezar cualquier tarea no trivial**, lee `CORE_MEMORY.md` un nivel arriba de esta carpeta (raíz del repo). Contiene el estado real del proyecto, decisiones recientes y pendientes que puede haber dejado otro agente. No asumas que el estado del proyecto es el que recuerdas de tu propio contexto.
+- **Después de completar algo significativo**, agrega una entrada en ese `CORE_MEMORY.md` (sección "Decisiones Clave" o "Estado Actual y Pendientes") con fecha, qué se hizo y por qué — para que el siguiente agente pueda continuar sin repreguntar.
+- Este proyecto tiene `CLAUDE.md` (raíz y aquí en `app/`) con instrucciones equivalentes — trátalos como guía válida también para ti, no solo para Claude Code.
+- Esta carpeta (`app/`) es su propio repo git anidado (sin `.gitmodules`), separado del repo raíz — verifica en qué repo/rama estás antes de asumir que un cambio se sincronizó.

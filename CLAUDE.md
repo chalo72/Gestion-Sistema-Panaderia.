@@ -4,6 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## 🤝 Coordinación multi-agente — OBLIGATORIO
+
+Este proyecto se trabaja alternando entre varios agentes de IA (Antigravity, Cursor, Claude Code) en sesiones distintas. **Antes de empezar cualquier tarea no trivial, lee `CORE_MEMORY.md` en la raíz del repo** (un nivel arriba de `app/`) — ahí está el estado real del proyecto, decisiones recientes y pendientes que puede haber dejado otro agente. **Después de completar algo significativo, agrega una entrada ahí** (fecha, qué se hizo, por qué) para que el siguiente agente pueda continuar sin repreguntar. No asumas que el estado del proyecto es el que recuerdas de esta conversación — puede haber cambiado con otra herramienta.
+
+Nota: `app/` es su propio repo git anidado (sin `.gitmodules`), separado del repo raíz — ver advertencia de estructura en `CORE_MEMORY.md` antes de asumir en qué rama/repo estás parado.
+
+---
+
 ## Comandos Esenciales
 
 Todos los comandos se ejecutan desde el directorio `app/`.
