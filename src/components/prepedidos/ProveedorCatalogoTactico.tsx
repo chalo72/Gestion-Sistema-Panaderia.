@@ -236,7 +236,7 @@ export function ProveedorCatalogoTactico({
         )}
 
         <CardContent className="pl-4 pr-3 py-3 flex flex-col flex-1 gap-2">
-          <h4 className={cn('font-black uppercase text-[11px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[34px]', enCarrito && 'pr-10')}>
+          <h4 className={cn('font-black uppercase text-xs sm:text-[13px] tracking-tight text-slate-900 dark:text-slate-100 leading-snug line-clamp-2 min-h-[36px]', enCarrito && 'pr-10')}>
             {prod.nombre}
           </h4>
 

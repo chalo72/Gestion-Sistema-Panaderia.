@@ -1102,14 +1102,14 @@ export default function PrePedidos({
                     return (
                       <div key={item.id} className="border-b border-slate-100 dark:border-slate-800 pb-4 last:border-none group">
                         <div className="flex items-start justify-between mb-2">
-                          <h5 className="font-black text-xs uppercase tracking-tight text-slate-900 dark:text-slate-100 leading-snug pr-2">
+                          <h5 className="font-black text-sm uppercase tracking-tight text-slate-900 dark:text-slate-100 leading-snug pr-2">
                             {prod?.nombre}
                           </h5>
                           <Button 
                             variant="ghost" 
                             size="icon" 
                             onClick={() => activeDraft && onRemoveItem(activeDraft.id, item.id)} 
-                            className="h-7 w-7 text-rose-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="h-8 w-8 text-rose-400 hover:text-rose-600 hover:bg-rose-50 shrink-0 rounded-lg lg:opacity-0 lg:group-hover:opacity-100 transition-opacity bg-rose-50/50 lg:bg-transparent"
                           >
                             <X className="w-4 h-4" />
                           </Button>
