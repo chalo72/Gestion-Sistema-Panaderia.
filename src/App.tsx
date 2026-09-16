@@ -620,6 +620,7 @@ const App = () => {
             onAddCreditoTrabajador={addCreditoTrabajador as any}
             onUpdateCreditoTrabajador={updateCreditoTrabajador as any}
             onDeleteCreditoTrabajador={deleteCreditoTrabajador}
+            onRegistrarMovimientoCaja={registrarMovimientoCaja}
             formatCurrency={formatCurrency}
             onBack={() => setCurrentView('trabajadores')}
           />

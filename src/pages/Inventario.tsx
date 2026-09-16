@@ -664,10 +664,21 @@ export function Inventario({
                         <Package className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-black text-slate-900 dark:text-white">Inventario</h1>
+                        <h1 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-3">
+                            Inventario
+                            <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => window.dispatchEvent(new CustomEvent('navigateView', { detail: 'ventas' }))}
+                                className="h-7 text-[11px] font-bold uppercase tracking-wider text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 hover:text-emerald-700"
+                            >
+                                <ShoppingBag className="w-3.5 h-3.5 mr-1" />
+                                Volver a Ventas
+                            </Button>
+                        </h1>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">
                             Salud: <span className={stats.saludPct >= 80 ? 'text-emerald-500' : stats.saludPct >= 50 ? 'text-amber-500' : 'text-red-500'}>{stats.saludPct}%</span>
-                            {' · '}{stats.total} productos
+                            {' • '}{stats.total} productos
                         </p>
                     </div>
                 </div>

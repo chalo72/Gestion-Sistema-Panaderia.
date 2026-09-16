@@ -25,6 +25,7 @@ interface NominaProps {
   onAddCreditoTrabajador: (c: Omit<CreditoTrabajador, 'id' | 'createdAt'>) => Promise<CreditoTrabajador>;
   onUpdateCreditoTrabajador: (c: CreditoTrabajador) => Promise<void>;
   onDeleteCreditoTrabajador: (id: string) => Promise<void>;
+  onRegistrarMovimientoCaja?: (monto: number, tipo: 'entrada' | 'salida', motivo: string, usuarioId: string, cajaId?: string) => Promise<any>;
   formatCurrency: (n: number) => string;
   onBack: () => void;
 }
@@ -183,7 +184,9 @@ const ESTADO_CREDITO_VACIO = {
   estado: 'activo' as const,
   esConsumo: false,
   productoSeleccionadoId: '',
-  cantidad: 1 
+  cantidad: 1,
+  abonoEfectivo: 0,
+  ingresarACaja: true
 };
 
 interface LoanModal { trabajadorId: string; trabajadorNombre: string; credito?: CreditoTrabajador; }
@@ -197,7 +200,7 @@ export default function Nomina({
   trabajadores, asistencia, creditosTrabajadores, nominas,
   onAddNomina, onUpdateNomina, onAddGasto,
   onAddCreditoTrabajador, onUpdateCreditoTrabajador, onDeleteCreditoTrabajador,
-  formatCurrency, onBack,
+  onRegistrarMovimientoCaja, formatCurrency, onBack,
 }: NominaProps) {
 
   const [tab, setTab] = useState<Tab>('liquidar');
@@ -364,7 +367,14 @@ export default function Nomina({
   function abrirNuevoPrestamo(t: Trabajador) { setLoanModal({ trabajadorId: t.id, trabajadorNombre: t.nombre }); setLoanForm({ ...ESTADO_CREDITO_VACIO }); }
   function abrirEditarPrestamo(t: Trabajador, c: CreditoTrabajador) {
     setLoanModal({ trabajadorId: t.id, trabajadorNombre: t.nombre, credito: c });
-    setLoanForm({ descripcion: c.descripcion || '', monto: c.monto, saldo: c.saldo, descontarDeSalario: c.descontarDeSalario, estado: c.estado });
+    setLoanForm({ 
+      ...ESTADO_CREDITO_VACIO,
+      descripcion: c.descripcion || '', 
+      monto: c.monto, 
+      saldo: c.saldo, 
+      descontarDeSalario: c.descontarDeSalario, 
+      estado: c.estado 
+    });
   }
 
   const guardarPrestamo = useCallback(async () => {
@@ -375,9 +385,28 @@ export default function Nomina({
     setLoanSaving(true);
     try {
       if (loanModal.credito) {
-        await onUpdateCreditoTrabajador({ ...loanModal.credito, descripcion: loanForm.descripcion.trim(),
-          monto: loanForm.monto, saldo: loanForm.saldo, descontarDeSalario: loanForm.descontarDeSalario, estado: loanForm.estado });
-        toast.success('Préstamo actualizado');
+        const nuevoSaldo = Math.max(0, loanForm.saldo - loanForm.abonoEfectivo);
+        await onUpdateCreditoTrabajador({ 
+          ...loanModal.credito, 
+          descripcion: loanForm.descripcion.trim(),
+          monto: loanForm.monto, 
+          saldo: nuevoSaldo, 
+          descontarDeSalario: loanForm.descontarDeSalario, 
+          estado: nuevoSaldo <= 0 ? 'descontado' : loanForm.estado 
+        });
+
+        // Si hay un abono en efectivo y se solicitó ingresar a caja
+        if (loanForm.abonoEfectivo > 0 && loanForm.ingresarACaja && onRegistrarMovimientoCaja) {
+          await onRegistrarMovimientoCaja(
+            loanForm.abonoEfectivo, 
+            'entrada', 
+            `Abono de ${loanModal.trabajadorNombre} a ${loanModal.credito.descripcion || 'Préstamo'}`, 
+            'nomina'
+          );
+          toast.success(`Abono registrado e ingresado a caja`);
+        } else {
+          toast.success('Préstamo actualizado');
+        }
       } else {
         const items = [];
         let descripcion = loanForm.descripcion.trim();
@@ -409,7 +438,7 @@ export default function Nomina({
       setLoanModal(null);
     } catch { toast.error('Error al guardar'); }
     finally { setLoanSaving(false); }
-  }, [loanModal, loanForm, onAddCreditoTrabajador, onUpdateCreditoTrabajador, productos, onAjustarStock]);
+  }, [loanModal, loanForm, onAddCreditoTrabajador, onUpdateCreditoTrabajador, productos, onAjustarStock, onRegistrarMovimientoCaja]);
 
   const eliminarPrestamo = useCallback(async (c: CreditoTrabajador) => {
     try { await onDeleteCreditoTrabajador(c.id); toast.success('Préstamo eliminado'); }
@@ -1429,12 +1458,29 @@ export default function Nomina({
                   className="mt-1 w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-400" />
               </div>
               {loanModal.credito && (
-                <div>
-                  <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Saldo pendiente</label>
-                  <input type="number" min={0} max={loanForm.monto} value={loanForm.saldo || ''}
-                    onChange={e => setLoanForm(f => ({ ...f, saldo: Math.min(Number(e.target.value) || 0, f.monto) }))}
-                    className="mt-1 w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-400" />
-                </div>
+                <>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Saldo pendiente actual</label>
+                    <input type="number" min={0} max={loanForm.monto} value={loanForm.saldo || ''}
+                      onChange={e => setLoanForm(f => ({ ...f, saldo: Math.min(Number(e.target.value) || 0, f.monto) }))}
+                      className="mt-1 w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  </div>
+                  <div className="pt-3 border-t border-gray-100 dark:border-gray-800">
+                    <label className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide">Registrar Abono en Efectivo</label>
+                    <input type="number" min={0} max={loanForm.saldo} value={loanForm.abonoEfectivo || ''}
+                      onChange={e => setLoanForm(f => ({ ...f, abonoEfectivo: Math.min(Number(e.target.value) || 0, f.saldo) }))}
+                      placeholder="Monto a abonar hoy..."
+                      className="mt-1 w-full border border-emerald-200 dark:border-emerald-900 rounded-xl px-3 py-2.5 text-sm bg-emerald-50/50 dark:bg-emerald-900/10 text-emerald-900 dark:text-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                  </div>
+                  {loanForm.abonoEfectivo > 0 && (
+                    <label className="flex items-center gap-2 cursor-pointer bg-emerald-50 dark:bg-emerald-900/20 p-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800">
+                      <input type="checkbox" checked={loanForm.ingresarACaja}
+                        onChange={e => setLoanForm(f => ({ ...f, ingresarACaja: e.target.checked }))}
+                        className="accent-emerald-600 w-4 h-4" />
+                      <span className="text-sm text-emerald-700 dark:text-emerald-400 font-bold">Ingresar {formatCurrency(loanForm.abonoEfectivo)} a Caja de Turno actual</span>
+                    </label>
+                  )}
+                </>
               )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={loanForm.descontarDeSalario}
