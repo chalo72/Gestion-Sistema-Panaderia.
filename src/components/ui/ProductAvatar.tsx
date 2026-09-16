@@ -362,7 +362,7 @@ export function CategoriaAvatar({ nombre, emoji, color, count, className = '', s
 
       {/* Nombre */}
       <p
-        className="relative z-10 text-xs font-black uppercase tracking-tight text-center leading-tight line-clamp-2 px-1 drop-shadow-[0_1px_1px_rgba(255,255,255,0.8)] dark:drop-shadow-[0_1px_1px_rgba(0,0,0,0.8)]"
+        className="relative z-10 text-[11px] sm:text-xs font-black uppercase tracking-tight text-center leading-tight line-clamp-2 px-2 py-0.5 rounded-full bg-white/60 dark:bg-black/40 backdrop-blur-md shadow-sm"
         style={{ color: cfg.text }}
       >
         {nombre}

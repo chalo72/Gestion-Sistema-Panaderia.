@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Search, Plus, Package, ArrowLeft, Edit2, X, Save, Zap } from 'lucide-react';
+import { Search, Plus, Package, ArrowLeft, Edit2, X, Save, Zap, Mic } from 'lucide-react';
 import { CalculadoraRapida } from './CalculadoraRapida';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -144,8 +144,14 @@ export function ProductCatalog({
                             placeholder="Buscar producto o código..."
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full h-9 sm:h-11 pl-9 pr-3 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-inner"
+                            className="w-full h-9 sm:h-11 pl-9 pr-9 sm:pr-10 bg-slate-50 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500/20 transition-all shadow-inner"
                         />
+                        <button 
+                            className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg text-slate-400 hover:text-emerald-500 hover:bg-emerald-50 flex items-center justify-center transition-colors"
+                            title="Dictar productos"
+                        >
+                            <Mic className="w-4 h-4" />
+                        </button>
                     </div>
                     {/* Multiplicador de cantidad */}
                     <div title="Multiplicador: el próximo producto se agregará esta cantidad de veces"
@@ -298,7 +304,7 @@ export function ProductCatalog({
                 ) : !selectedCategory ? (
                     /* ═══ NIVEL 1: Categorías Estilo Premium Stitch ═══ */
                     <>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 sm:gap-3">
                             {categoriasConProductos.map(cat => {
                                 const count = productosPorCategoria[cat.nombre.toLowerCase().trim()] || 0;
                                 return (
