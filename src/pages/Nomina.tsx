@@ -10,7 +10,11 @@ import type {
   NominaQuincenal, NominaItem, NominaEstado
 } from '@/types';
 
+import type { Producto } from '@/types';
+
 interface NominaProps {
+  productos?: Producto[];
+  onAjustarStock?: (id: string, variacion: number, motivo: string, usuario: string) => Promise<void>;
   trabajadores: Trabajador[];
   asistencia: RegistroAsistencia[];
   creditosTrabajadores: CreditoTrabajador[];
@@ -171,7 +175,16 @@ function CreditCard({ c, parciales, setParciales, estaPageada, descuentoGuardado
 
 // ── Modal de préstamo ──────────────────────────────────────────────────────
 
-const ESTADO_CREDITO_VACÍO = { descripcion: '', monto: 0, saldo: 0, descontarDeSalario: true, estado: 'activo' as const };
+const ESTADO_CREDITO_VACIO = { 
+  descripcion: '', 
+  monto: 0, 
+  saldo: 0, 
+  descontarDeSalario: true, 
+  estado: 'activo' as const,
+  esConsumo: false,
+  productoSeleccionadoId: '',
+  cantidad: 1 
+};
 
 interface LoanModal { trabajadorId: string; trabajadorNombre: string; credito?: CreditoTrabajador; }
 
@@ -180,6 +193,7 @@ interface LoanModal { trabajadorId: string; trabajadorNombre: string; credito?: 
 type Tab = 'liquidar' | 'historial' | 'liquidacion' | 'acuerdos';
 
 export default function Nomina({
+  productos = [], onAjustarStock,
   trabajadores, asistencia, creditosTrabajadores, nominas,
   onAddNomina, onUpdateNomina, onAddGasto,
   onAddCreditoTrabajador, onUpdateCreditoTrabajador, onDeleteCreditoTrabajador,
@@ -197,7 +211,7 @@ export default function Nomina({
   const [obsModal, setObsModal] = useState(false);
   const [obsText, setObsText]   = useState('');
   const [loanModal, setLoanModal] = useState<LoanModal | null>(null);
-  const [loanForm, setLoanForm]   = useState(ESTADO_CREDITO_VACÍO);
+  const [loanForm, setLoanForm]   = useState(ESTADO_CREDITO_VACIO);
   const [loanSaving, setLoanSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<CreditoTrabajador | null>(null);
   const [selectedNomina, setSelectedNomina] = useState<NominaQuincenal | null>(null);
@@ -347,7 +361,7 @@ export default function Nomina({
       onAddNomina, onUpdateNomina, onAddGasto, onUpdateCreditoTrabajador, formatCurrency]);
 
   // ── Gestión préstamos ──────────────────────────────────────────────────
-  function abrirNuevoPrestamo(t: Trabajador) { setLoanModal({ trabajadorId: t.id, trabajadorNombre: t.nombre }); setLoanForm({ ...ESTADO_CREDITO_VACÍO }); }
+  function abrirNuevoPrestamo(t: Trabajador) { setLoanModal({ trabajadorId: t.id, trabajadorNombre: t.nombre }); setLoanForm({ ...ESTADO_CREDITO_VACIO }); }
   function abrirEditarPrestamo(t: Trabajador, c: CreditoTrabajador) {
     setLoanModal({ trabajadorId: t.id, trabajadorNombre: t.nombre, credito: c });
     setLoanForm({ descripcion: c.descripcion || '', monto: c.monto, saldo: c.saldo, descontarDeSalario: c.descontarDeSalario, estado: c.estado });
@@ -355,7 +369,8 @@ export default function Nomina({
 
   const guardarPrestamo = useCallback(async () => {
     if (!loanModal) return;
-    if (!loanForm.descripcion.trim()) { toast.error('Escribe una descripción'); return; }
+    if (!loanForm.esConsumo && !loanForm.descripcion.trim()) { toast.error('Escribe una descripción'); return; }
+    if (loanForm.esConsumo && !loanForm.productoSeleccionadoId) { toast.error('Selecciona un producto'); return; }
     if (loanForm.monto <= 0) { toast.error('El monto debe ser mayor a 0'); return; }
     setLoanSaving(true);
     try {
@@ -364,18 +379,37 @@ export default function Nomina({
           monto: loanForm.monto, saldo: loanForm.saldo, descontarDeSalario: loanForm.descontarDeSalario, estado: loanForm.estado });
         toast.success('Préstamo actualizado');
       } else {
+        const items = [];
+        let descripcion = loanForm.descripcion.trim();
+        if (loanForm.esConsumo && loanForm.productoSeleccionadoId) {
+          const prod = productos.find(p => p.id === loanForm.productoSeleccionadoId);
+          if (prod) {
+            descripcion = prod.nombre;
+            items.push({
+              productoId: prod.id,
+              nombre: prod.nombre,
+              cantidad: loanForm.cantidad,
+              precioUnitario: loanForm.monto / loanForm.cantidad,
+              subtotal: loanForm.monto
+            });
+            if (onAjustarStock) {
+              await onAjustarStock(prod.id, -loanForm.cantidad, `Fiado/Consumo a ${loanModal.trabajadorNombre}`, 'Nomina');
+            }
+          }
+        }
+
         await onAddCreditoTrabajador({
           trabajadorId: loanModal.trabajadorId, trabajadorNombre: loanModal.trabajadorNombre,
-          descripcion: loanForm.descripcion.trim(), monto: loanForm.monto, saldo: loanForm.monto,
+          descripcion, monto: loanForm.monto, saldo: loanForm.monto,
           descontarDeSalario: loanForm.descontarDeSalario, estado: 'activo',
-          fecha: new Date().toISOString().split('T')[0], items: [], pagos: [], usuarioId: 'nomina',
+          fecha: new Date().toISOString().split('T')[0], items, pagos: [], usuarioId: 'nomina',
         });
-        toast.success('Préstamo registrado');
+        toast.success(loanForm.esConsumo ? 'Consumo registrado' : 'Préstamo registrado');
       }
       setLoanModal(null);
     } catch { toast.error('Error al guardar'); }
     finally { setLoanSaving(false); }
-  }, [loanModal, loanForm, onAddCreditoTrabajador, onUpdateCreditoTrabajador]);
+  }, [loanModal, loanForm, onAddCreditoTrabajador, onUpdateCreditoTrabajador, productos, onAjustarStock]);
 
   const eliminarPrestamo = useCallback(async (c: CreditoTrabajador) => {
     try { await onDeleteCreditoTrabajador(c.id); toast.success('Préstamo eliminado'); }
@@ -1337,13 +1371,56 @@ export default function Nomina({
               <button onClick={() => setLoanModal(null)} className="p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800"><X className="w-4 h-4 text-gray-500" /></button>
             </div>
             <div className="space-y-3">
-              <div>
-                <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descripción</label>
-                <input type="text" value={loanForm.descripcion}
-                  onChange={e => setLoanForm(f => ({ ...f, descripcion: e.target.value }))}
-                  placeholder="Ej: Préstamo uniforme, adelanto quincenal…"
-                  className="mt-1 w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-400" />
-              </div>
+              {!loanModal.credito && (
+                <label className="flex items-center gap-2 cursor-pointer bg-orange-50 dark:bg-orange-500/10 p-2.5 rounded-xl border border-orange-200 dark:border-orange-500/30">
+                  <input type="checkbox" checked={loanForm.esConsumo}
+                    onChange={e => setLoanForm(f => ({ ...f, esConsumo: e.target.checked, descripcion: '', productoSeleccionadoId: '', monto: 0 }))}
+                    className="accent-orange-500 w-4 h-4" />
+                  <ShoppingBag className="w-4 h-4 text-orange-500" />
+                  <span className="text-sm font-bold text-orange-700 dark:text-orange-400">Es consumo de productos</span>
+                </label>
+              )}
+
+              {loanForm.esConsumo ? (
+                <>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Producto</label>
+                    <select 
+                      value={loanForm.productoSeleccionadoId}
+                      onChange={e => {
+                        const id = e.target.value;
+                        const prod = productos.find(p => p.id === id);
+                        setLoanForm(f => ({ ...f, productoSeleccionadoId: id, monto: prod ? prod.precioVenta * f.cantidad : 0 }));
+                      }}
+                      className="mt-1 w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-400"
+                    >
+                      <option value="">Selecciona un producto...</option>
+                      {productos.filter(p => p.precioVenta > 0).map(p => (
+                        <option key={p.id} value={p.id}>{p.nombre} - {formatCurrency(p.precioVenta)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Cantidad</label>
+                    <input type="number" min={1} value={loanForm.cantidad}
+                      onChange={e => {
+                        const qty = Math.max(1, Number(e.target.value) || 1);
+                        const prod = productos.find(p => p.id === loanForm.productoSeleccionadoId);
+                        setLoanForm(f => ({ ...f, cantidad: qty, monto: prod ? prod.precioVenta * qty : 0 }));
+                      }}
+                      className="mt-1 w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                  </div>
+                </>
+              ) : (
+                <div>
+                  <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Descripción</label>
+                  <input type="text" value={loanForm.descripcion}
+                    onChange={e => setLoanForm(f => ({ ...f, descripcion: e.target.value }))}
+                    placeholder="Ej: Préstamo uniforme, adelanto quincenal…"
+                    className="mt-1 w-full border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5 text-sm bg-transparent text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-violet-400" />
+                </div>
+              )}
+
               <div>
                 <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Monto total</label>
                 <input type="number" min={0} value={loanForm.monto || ''}

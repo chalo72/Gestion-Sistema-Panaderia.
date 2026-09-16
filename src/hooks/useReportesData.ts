@@ -782,7 +782,7 @@ export function useReportesData(props: ReportesProps) {
         setCompromisos(getCompromisos());
     };
 
-    const handleAddVentaDiaria = () => {
+    const handleAddVentaDiaria = async () => {
         const ef = parseFloat(formVenta.totalEfectivo) || 0;
         const nq = parseFloat(formVenta.totalNequi) || 0;
         const tr = parseFloat(formVenta.totalTransferencia) || 0;
@@ -810,6 +810,45 @@ export function useReportesData(props: ReportesProps) {
             notas: formVenta.notas || undefined,
             cajas: cajas
         });
+
+        // 🔥 Novedad: Sincronizar Cierre Manual a Control de Caja (db local + Supabase)
+        try {
+            const { db } = await import('@/lib/database');
+            const { generateUUID } = await import('@/lib/safe-utils');
+            const idCaja = esEdicion ? formVenta.id : generateUUID();
+            
+            const sesionCajaCerrada: any = {
+                id: idCaja,
+                usuarioId: role || 'Admin',
+                fechaApertura: new Date(formVenta.fecha + 'T00:00:00').toISOString(),
+                fechaCierre: new Date(formVenta.fecha + 'T23:59:59').toISOString(),
+                montoApertura: 0,
+                montoCierre: ef, // Efectivo en caja
+                totalVentas: totalVal,
+                totalVentasEfectivo: ef,
+                totalCreditos: cr,
+                ventasIds: [],
+                movimientos: [],
+                estado: 'cerrada',
+                cajaNombre: 'Cierre Manual Unificado',
+                turno: formVenta.turno || 'Día Completo',
+                vendedoraNombre: 'Registro Manual',
+                totalesManuales: {
+                    efectivo: ef,
+                    nequi: nq,
+                    transferencia: tr,
+                    credito: cr,
+                    cajas: cajas
+                }
+            };
+            if (esEdicion) {
+                await db.updateSesionCaja(sesionCajaCerrada);
+            } else {
+                await db.addSesionCaja(sesionCajaCerrada);
+            }
+        } catch (err) {
+            console.error('[handleAddVentaDiaria] Error al sincronizar con Sesiones de Caja:', err);
+        }
 
         // Solo al registrar (no al editar): evita sumar dos veces el mismo arqueo en Bóveda
         if (!esEdicion) {

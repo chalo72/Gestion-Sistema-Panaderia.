@@ -29,7 +29,8 @@ import { VigilianciaIA } from '@/components/vigilancia/VigilianciaIA';
 import { PrestamosCajaModal } from '@/components/ventas/PrestamosCajaModal';
 import { ReporteZ } from '@/components/ventas/ReporteZ';
 import { enviarReporteZWhatsApp } from '@/lib/whatsapp-reporting';
-import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas, Trabajador } from '@/types';
+import { getVentasDiarias, addVentaDiaria, deleteVentaDiaria } from '@/lib/finanzas-personales';
+import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas, Trabajador, VentaDiaria } from '@/types';
 
 const BILLETES = [
     { valor: 100000, label: '$100.000', color: 'bg-purple-100 border-purple-200 text-purple-700' },
@@ -1483,6 +1484,10 @@ export function ControlCaja({
             {/* ══ CONTENIDO PRINCIPAL CON TABS (DESKTOP) ══ */}
             <Tabs defaultValue="cajas" className="hidden md:flex flex-1 flex-col">
                 <TabsList className="w-full bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl p-1.5 h-auto gap-1 shadow-sm flex overflow-x-auto no-scrollbar justify-start">
+                    <TabsTrigger value="manual"
+                        className="flex-1 rounded-xl text-xs font-black uppercase tracking-wide py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm relative">
+                        <Store className="w-3.5 h-3.5 mr-1.5" /> Registro Manual
+                    </TabsTrigger>
                     <TabsTrigger value="cajas"
                         className="flex-1 rounded-xl text-xs font-black uppercase tracking-wide py-2.5 data-[state=active]:bg-emerald-600 data-[state=active]:text-white data-[state=active]:shadow-sm relative">
                         <Store className="w-3.5 h-3.5 mr-1.5" /> Cajas de Turno
@@ -1525,6 +1530,21 @@ export function ControlCaja({
                     )}
                 </TabsList>
 
+                <TabsContent value="manual" className="mt-4">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden p-6 text-center">
+                        <Store className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
+                        <h3 className="text-lg font-black text-slate-800 dark:text-slate-100 mb-2">Registro Manual Unificado</h3>
+                        <p className="text-slate-500 dark:text-slate-400 text-sm max-w-md mx-auto mb-6">
+                            Para registrar ventas manuales (cuando no usas el POS automático) y asegurar que estén 100% sincronizadas en todos los historiales, dirígete al módulo de <strong>Reportes {'>'} Diagnóstico Financiero</strong> y usa el panel "Ventas del Día".
+                        </p>
+                        <Button 
+                            onClick={() => window.dispatchEvent(new CustomEvent('navigateView', { detail: 'reportes' }))}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold px-6"
+                        >
+                            Ir a Reportes / Ventas del Día
+                        </Button>
+                    </div>
+                </TabsContent>
                 {/* ── TAB: CAJAS DE TURNO ── */}
                 <TabsContent value="cajas" className="mt-4 space-y-4">
                     {/* Barra superior */}

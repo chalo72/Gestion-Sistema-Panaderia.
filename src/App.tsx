@@ -607,6 +607,8 @@ const App = () => {
       case 'nomina':
         return (
           <Nomina
+            productos={productos}
+            onAjustarStock={onAjustarStock}
             trabajadores={trabajadores}
             asistencia={asistencia}
             creditosTrabajadores={creditosTrabajadores as any}

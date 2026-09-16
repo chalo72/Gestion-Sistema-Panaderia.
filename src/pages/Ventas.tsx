@@ -1025,6 +1025,7 @@ export function Ventas(props: VentasProps) {
                     vendedoras={vendedorasDisponibles}
                     vendedoraActivaId={vendedoraActiva?.id ?? null}
                     onSelectVendedora={setVendedoraActiva}
+                    onGoToInventario={() => window.dispatchEvent(new CustomEvent('navigateView', { detail: 'inventario' }))}
                     onShowChecklistVitrina={() => setShowChecklistVitrina(true)}
                     onOpenMobileMenu={onOpenMobileMenu}
                 />

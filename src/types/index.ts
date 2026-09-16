@@ -1000,6 +1000,13 @@ export interface CajaSesion {
   turno?: 'Mañana' | 'Tarde-Noche';
   vendedoraNombre?: string;
   eventoEspecial?: string;
+  totalesManuales?: {
+    efectivo?: number;
+    nequi?: number;
+    transferencia?: number;
+    credito?: number;
+    cajas?: Record<string, number>;
+  };
 }
 // ============================================
 // PRÉSTAMOS ENTRE CAJAS
