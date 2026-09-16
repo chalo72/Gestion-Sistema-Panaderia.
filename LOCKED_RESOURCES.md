@@ -17,3 +17,4 @@ Archivos críticos de este proyecto (raíz y `app/`). Cualquier agente (Claude, 
 Fuente: lista original en `CLAUDE.md` (raíz y `app/`), sección "Archivos Protegidos". Este archivo existe para que el protocolo de inicio de sesión (leer `LOCKED_RESOURCES.md` antes de tocar código) tenga algo real que leer — antes no existía pese a estar referenciado.
 
 Ver también `CORE_MEMORY.md` para el estado actual del proyecto y el protocolo de coordinación entre agentes.
+src/components/prepedidos/ProveedorCatalogoTactico.tsx
