@@ -912,7 +912,7 @@ interface ControlCajaProps {
 export function ControlCaja({
     sesiones, ventas, cajaActiva, formatCurrency,
     getProductoById, registrarMovimientoCaja, usuario,
-    onAbrirCaja, onCerrarCaja
+    onAbrirCaja, onCerrarCaja, trabajadores = []
 }: ControlCajaProps) {
     const [searchTerm,        setSearchTerm]        = useState('');
     const [arqueo,            setArqueo]            = useState<Record<string, string>>({});
@@ -2580,7 +2580,7 @@ export function ControlCaja({
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">-- Sin asignar --</SelectItem>
-                                    {props.trabajadores?.filter(t => t.estado !== 'inactivo' && (t.rol === 'vendedor' || t.rol === 'cajero')).map(t => (
+                                    {trabajadores.filter(t => t.estado !== 'inactivo' && (t.rol === 'vendedor' || t.rol === 'cajero')).map(t => (
                                         <SelectItem key={t.id} value={t.nombre}>{t.nombre}</SelectItem>
                                     ))}
                                 </SelectContent>

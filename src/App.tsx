@@ -221,6 +221,7 @@ const App = () => {
     nominas,
     addNomina,
     updateNomina,
+    downloadFromCloud,
   } = usePriceControl();
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
