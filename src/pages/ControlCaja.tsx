@@ -29,7 +29,6 @@ import { VigilianciaIA } from '@/components/vigilancia/VigilianciaIA';
 import { PrestamosCajaModal } from '@/components/ventas/PrestamosCajaModal';
 import { ReporteZ } from '@/components/ventas/ReporteZ';
 import { enviarReporteZWhatsApp } from '@/lib/whatsapp-reporting';
-import { getVentasDiarias, addVentaDiaria, deleteVentaDiaria } from '@/lib/finanzas-personales';
 import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas, Trabajador, VentaDiaria } from '@/types';
 
 const BILLETES = [

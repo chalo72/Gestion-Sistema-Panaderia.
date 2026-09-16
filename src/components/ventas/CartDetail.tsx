@@ -51,7 +51,7 @@ export function CartDetail({
     const tabLabel = activeTabLabel || (cliente || 'Venta Rápida');
 
     return (
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden bg-white dark:bg-slate-900">
+        <div className="flex flex-col h-full min-h-0 overflow-hidden bg-white dark:bg-slate-900">
             {/* Header Fusionado - Estirado hacia arriba con Identificador */}
             <div className="shrink-0 h-10 px-3 bg-slate-900 border-b border-slate-800 flex items-center gap-3">
                 <div className="flex items-center gap-2 shrink-0">

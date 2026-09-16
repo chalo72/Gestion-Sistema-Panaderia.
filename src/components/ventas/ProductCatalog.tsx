@@ -361,7 +361,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
         )}
             onClick={() => onAddToCart(producto)}>
             {/* Imagen compacta */}
-            <div className="h-16 md:h-20 overflow-hidden relative shrink-0">
+            <div className="h-20 overflow-hidden relative shrink-0">
                 <ProductAvatar
                     imagen={producto.imagen}
                     nombre={producto.nombre}
@@ -375,7 +375,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                 {/* Badge de Stock — top-right */}
                 <div className="absolute top-1.5 right-1.5 z-10">
                     <div className={cn(
-                        "px-1.5 py-0.5 rounded-md text-[7px] md:text-[9px] font-black uppercase tracking-wide text-white shadow",
+                        "px-1.5 py-0.5 rounded-md text-[7px] font-black uppercase tracking-wide text-white shadow",
                         stock <= 0 ? "bg-rose-500" : stock < 5 ? "bg-amber-500" : "bg-emerald-500"
                     )}>
                         {stock <= 0 ? 'Agotado' : stock}
@@ -399,17 +399,17 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
             </div>
 
             {/* Info compacta */}
-            <div className="px-2 py-2 flex flex-col flex-1 bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800">
-                <h4 className="text-[11px] md:text-xs font-black leading-tight text-slate-800 dark:text-slate-100 uppercase tracking-tight line-clamp-2" title={producto.nombre}>
+            <div className="px-2 py-1.5 flex flex-col bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800">
+                <h4 className="text-[10px] font-black leading-tight text-slate-800 dark:text-slate-100 uppercase tracking-tighter line-clamp-1">
                     {producto.nombre}
                 </h4>
                 {producto.descripcion && (
-                    <p className="text-[9px] md:text-[10px] font-bold text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 line-clamp-1 mt-0.5 leading-tight transition-colors">
+                    <p className="text-[10px] font-bold text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-200 line-clamp-1 mt-0.5 leading-tight transition-colors">
                         {producto.descripcion}
                     </p>
                 )}
-                <div className="mt-auto pt-1 flex items-center justify-between border-t border-slate-50 dark:border-white/5">
-                    <span className="text-xs md:text-sm font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                <div className="mt-1 flex items-center justify-between border-t border-slate-50 dark:border-white/5 pt-1">
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {formatCurrency(safeNumber(producto.precioVenta))}
                     </span>
                     {/* Cantidad en ticket — visible en celular sin ir al carrito */}
@@ -419,7 +419,7 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
                         </span>
                     ) : (
                         <div className="w-5 h-5 rounded-md bg-slate-50 dark:bg-slate-800 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-colors">
-                            <Plus className="w-3 h-3 text-slate-400 group-hover:text-white" />
+                            <Plus className="w-2.5 h-2.5" />
                         </div>
                     )}
                 </div>

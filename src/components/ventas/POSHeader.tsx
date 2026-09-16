@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Search, Package } from 'lucide-react';
+import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 
@@ -39,7 +39,7 @@ export function POSHeader({
     viewMode, setViewMode,
     tabs, activeTabId, onSelectTab, onCloseTab, onAddVentaRapida,
     cajaActiva, onCerrarCaja, onMovimientoEntrada, onMovimientoSalida,
-    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowBalanceProduccion, onShowChecklistVitrina, onGoToInventario,
+    vendedoras = [], vendedoraActivaId = null, onSelectVendedora, onShowBalanceProduccion, onShowChecklistVitrina,
     onOpenMobileMenu
 }: POSHeaderProps) {
     const [panelOpen, setPanelOpen] = useState(false);
@@ -110,7 +110,11 @@ export function POSHeader({
                         </button>
                         <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 ml-1 mr-1" />
                         {onGoToInventario && (
-                            <button onClick={onGoToInventario} className="h-8 px-3 rounded-lg border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 hover:border-sky-300 transition-all flex items-center gap-1.5 shrink-0" title="Ver Inventario Físico">
+                            <button
+                                onClick={onGoToInventario}
+                                className="h-8 px-3 rounded-lg flex items-center border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100 transition-all shrink-0 gap-1.5"
+                                title="Inventario Físico"
+                            >
                                 <Package className="w-3.5 h-3.5" />
                                 <span className="text-[10px] font-black uppercase tracking-tight">Inventario</span>
                             </button>
@@ -131,72 +135,72 @@ export function POSHeader({
                 </div>
             </div>
 
-            {/* ══════════════════════════════════════════            {/* 👇
-                MÓVIL / TABLET - botón activo + panel
-            👇 */}
+            {/* ══════════════════════════════════════════
+                MÓVIL / TABLET — botón activo + panel
+            ══════════════════════════════════════════ */}
             <div className="flex lg:hidden flex-col border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
 
                 {/* Fila principal */}
-                <div className="flex items-center gap-1.5 px-2 py-1.5">
-                    {/* Botón activo - toca para abrir panel */}
+                <div className="flex items-center gap-2 px-3 py-2">
+                    {/* Botón activo — toca para abrir panel */}
                     <button
                         onClick={() => setPanelOpen(true)}
-                        className="flex-1 flex items-center gap-2 h-9 px-3 rounded-xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 active:scale-[0.98] transition-all"
+                        className="flex-1 flex items-center gap-2.5 h-11 px-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 active:scale-[0.98] transition-all"
                     >
                         <div className={cn(
-                            "w-6 h-6 rounded-lg flex items-center justify-center shrink-0 text-white",
+                            "w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-white",
                             activeTab?.tipo === 'venta-rapida' ? "bg-emerald-500" : "bg-blue-500"
                         )}>
-                            {activeTab?.tipo === 'venta-rapida' ? <Zap className="w-3.5 h-3.5" /> : <Users className="w-3.5 h-3.5" />}
+                            {activeTab?.tipo === 'venta-rapida' ? <Zap className="w-4 h-4" /> : <Users className="w-4 h-4" />}
                         </div>
-                        <div className="flex-1 text-left min-w-0 flex flex-col justify-center">
-                            <p className="text-[12px] font-black text-slate-800 dark:text-white truncate leading-none">
+                        <div className="flex-1 text-left min-w-0">
+                            <p className="text-sm font-black text-slate-800 dark:text-white truncate leading-tight">
                                 {activeTab?.label ?? 'Venta Rápida'}
                             </p>
                             {activeVendedora && (
-                                <p className="text-[9px] font-bold text-orange-500 truncate leading-none mt-0.5">
-                                    {activeVendedora.nombre.split(' ')[0]} - asignada
+                                <p className="text-[10px] font-bold text-orange-500 truncate leading-tight">
+                                    {activeVendedora.nombre.split(' ')[0]} — asignada
                                 </p>
                             )}
                         </div>
-                        <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
                         {tabs.length > 1 && (
-                            <span className="w-4 h-4 rounded-full bg-blue-500 text-white text-[8px] font-black flex items-center justify-center shrink-0">
+                            <span className="w-5 h-5 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center shrink-0">
                                 {tabs.length}
                             </span>
                         )}
                     </button>
 
-                    {/* Búsqueda rápida - acceso directo de 1 toque para vendedoras */}
+                    {/* Búsqueda rápida — acceso directo de 1 toque para vendedoras */}
                     {onOpenMobileMenu && (
                         <button
                             onClick={onOpenMobileMenu}
-                            className="w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
                             title="Búsqueda rápida"
                         >
-                            <Search className="w-4 h-4" />
+                            <Search className="w-5 h-5" />
                         </button>
                     )}
 
                     {/* Mesas */}
                     <button
                         onClick={() => setViewMode(viewMode === 'mesas' ? 'pos' : 'mesas')}
-                        className={cn("w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0",
+                        className={cn("w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0",
                             viewMode === 'mesas' ? "bg-indigo-600 text-white border-indigo-700" : "bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
                         )}
                         title="Mesas"
                     >
-                        <LayoutGrid className="w-4 h-4" />
+                        <LayoutGrid className="w-5 h-5" />
                     </button>
                     
                     {/* Inventario */}
                     {onGoToInventario && (
                         <button
                             onClick={onGoToInventario}
-                            className="w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
                             title="Inventario Físico"
                         >
-                            <Package className="w-4 h-4" />
+                            <Package className="w-5 h-5" />
                         </button>
                     )}
 
@@ -204,20 +208,20 @@ export function POSHeader({
                     {onShowBalanceProduccion && (
                         <button
                             onClick={onShowBalanceProduccion}
-                            className="w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
                             title="Balance Producción"
                         >
-                            <span className="text-[14px]">⚖️</span>
+                            <span className="text-[18px]">📈</span>
                         </button>
                     )}
                     {/* Checklist */}
                     {onShowChecklistVitrina && (
                         <button
                             onClick={onShowChecklistVitrina}
-                            className="w-9 h-9 rounded-xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                            title="Checklist Vitrina"
+                            className="w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            title="Checklist Rotación Vitrina"
                         >
-                            <span className="text-[14px]">🧽</span>
+                            <span className="text-[18px]">📝</span>
                         </button>
                     )}
                 </div>
