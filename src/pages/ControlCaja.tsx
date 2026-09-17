@@ -554,13 +554,13 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                                                 value={editNombre}
                                                 onChange={e => setEditNombre(e.target.value)}
                                                 placeholder="Nombre caja"
-                                                className="flex-1 h-8 px-2 text-xs font-black rounded-lg border border-indigo-400 bg-white dark:bg-slate-900 outline-none"
+                                                className="flex-1 h-8 px-2 text-xs font-black text-slate-900 dark:text-white rounded-lg border border-indigo-400 bg-white dark:bg-slate-900 outline-none"
                                             />
                                             <input
                                                 value={editVendedora}
                                                 onChange={e => setEditVendedora(e.target.value)}
                                                 placeholder="Vendedora"
-                                                className="flex-1 h-8 px-2 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none"
+                                                className="flex-1 h-8 px-2 text-xs font-bold text-slate-900 dark:text-white rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none"
                                             />
                                             <button
                                                 onClick={() => setEditingCajaId(null)}
@@ -759,13 +759,13 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                                                 value={caja.nombre}
                                                 onChange={e => setCajasExtra(prev => prev.map((c, i) => i === idx ? { ...c, nombre: e.target.value } : c))}
                                                 placeholder="Nombre caja"
-                                                className="flex-1 h-8 px-2 text-xs font-black rounded-lg border border-indigo-400 bg-white dark:bg-slate-900 outline-none"
+                                                className="flex-1 h-8 px-2 text-xs font-black text-slate-900 dark:text-white rounded-lg border border-indigo-400 bg-white dark:bg-slate-900 outline-none"
                                             />
                                             <input
                                                 value={caja.vendedora}
                                                 onChange={e => setCajasExtra(prev => prev.map((c, i) => i === idx ? { ...c, vendedora: e.target.value } : c))}
                                                 placeholder="Vendedora"
-                                                className="flex-1 h-8 px-2 text-xs font-bold rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none"
+                                                className="flex-1 h-8 px-2 text-xs font-bold text-slate-900 dark:text-white rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none"
                                             />
                                             <button onClick={() => setEditingIdx(null)} className="h-8 px-3 bg-indigo-600 text-white text-[10px] font-black rounded-lg">OK</button>
                                         </div>
@@ -2673,7 +2673,7 @@ export function ControlCaja({
                             <input
                                 value={editNombreCaja}
                                 onChange={e => setEditNombreCaja(e.target.value)}
-                                className="w-full h-10 px-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none focus:border-indigo-400"
+                                className="w-full h-10 px-3 text-sm font-bold text-slate-900 dark:text-white rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none focus:border-indigo-400"
                                 placeholder="Ej: Caja Principal"
                             />
                         </div>
@@ -2683,7 +2683,7 @@ export function ControlCaja({
                             <input
                                 value={editVendedoraCaja}
                                 onChange={e => setEditVendedoraCaja(e.target.value)}
-                                className="w-full h-10 px-3 text-sm font-bold rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none focus:border-indigo-400"
+                                className="w-full h-10 px-3 text-sm font-bold text-slate-900 dark:text-white rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none focus:border-indigo-400"
                                 placeholder="Ej: María García"
                             />
                         </div>

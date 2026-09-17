@@ -385,14 +385,14 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                                             value={editNombre}
                                                             onChange={e => setEditNombre(e.target.value)}
                                                             placeholder="Nombre de la caja"
-                                                            className="flex-1 h-10 px-3 text-sm font-black rounded-xl border-2 border-indigo-300 bg-white dark:bg-slate-800 outline-none"
+                                                            className="flex-1 h-10 px-3 text-sm font-black text-slate-900 dark:text-white rounded-xl border-2 border-indigo-300 bg-white dark:bg-slate-800 outline-none"
                                                         />
                                                     </div>
                                                     <input
                                                         value={editDesc}
                                                         onChange={e => setEditDesc(e.target.value)}
                                                         placeholder="Descripción (opcional)"
-                                                        className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none"
+                                                        className="w-full h-9 px-3 text-xs font-bold text-slate-900 dark:text-white rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none"
                                                     />
                                                     <div className="flex gap-2">
                                                         <button onClick={() => setEditandoIdx(null)} className="flex-1 h-9 rounded-xl border border-slate-200 text-xs font-black uppercase text-slate-500 hover:bg-slate-50 transition-all">
@@ -448,13 +448,13 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                         </div>
                                         <input autoFocus value={editNombre} onChange={e => setEditNombre(e.target.value)}
                                             placeholder="Nombre de la caja"
-                                            className="flex-1 h-10 px-3 text-sm font-black rounded-xl border-2 border-indigo-300 bg-white dark:bg-slate-800 outline-none" />
+                                            className="flex-1 h-10 px-3 text-sm font-black text-slate-900 dark:text-white rounded-xl border-2 border-indigo-300 bg-white dark:bg-slate-800 outline-none" />
                                     </div>
                                     <input value={editDesc} onChange={e => setEditDesc(e.target.value)}
                                         placeholder="Descripción (opcional)"
-                                        className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none" />
+                                        className="w-full h-9 px-3 text-xs font-bold text-slate-900 dark:text-white rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none" />
                                     <div className="flex gap-2">
-                                        <button onClick={() => setEditandoIdx(null)} className="flex-1 h-9 rounded-xl border border-slate-200 text-xs font-black uppercase text-slate-500 hover:bg-slate-50 transition-all">
+                                        <button onClick={() => setEditandoIdx(null)} className="flex-1 h-9 rounded-xl border border-slate-300 dark:border-slate-600 text-xs font-black uppercase text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all">
                                             Cancelar
                                         </button>
                                         <button onClick={guardarEdicion} disabled={!editNombre.trim()}
@@ -531,7 +531,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                         <DollarSign className="w-5 h-5" />
                                     </div>
                                     <input type="number" value={montoGlobal || ''} onChange={e => setMontoGlobal(parseFloat(e.target.value) || 0)}
-                                        className="w-full h-14 pl-16 pr-5 text-2xl font-black rounded-xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-blue-600/30 focus:bg-white dark:focus:bg-slate-800 transition-all outline-none tabular-nums"
+                                        className="w-full h-14 pl-16 pr-5 text-2xl font-black text-slate-900 dark:text-white rounded-xl bg-slate-50 dark:bg-slate-900 border-2 border-transparent focus:border-blue-600/30 focus:bg-white dark:focus:bg-slate-800 transition-all outline-none tabular-nums"
                                         placeholder="0" />
                                 </div>
                             )}
@@ -580,7 +580,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                                     <div className="flex items-center gap-1 shrink-0">
                                                         <span className="text-[10px] text-slate-400 font-bold">$</span>
                                                         <input type="number" value={cfg.montoApertura || ''} onChange={e => setMontoCaja(caja.nombre, parseFloat(e.target.value) || 0)}
-                                                            className="w-20 h-8 px-2 text-sm font-black text-right rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none focus:border-blue-300 tabular-nums"
+                                                            className="w-20 h-8 px-2 text-sm font-black text-slate-900 dark:text-white text-right rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 outline-none focus:border-blue-300 tabular-nums"
                                                             placeholder="0" />
                                                     </div>
                                                 )}
