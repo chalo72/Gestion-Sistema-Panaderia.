@@ -150,13 +150,14 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
                     if (Array.isArray(cloud)) cloudCajas = cloud;
                 } catch {}
 
-                let base = [...localCajas, ...cloudCajas];
+                // Si la nube tiene datos, la nube manda. Si no, usamos local.
+                let base = cloudCajas.length > 0 ? cloudCajas : localCajas;
                 if (base.length === 0) base = CAJAS_DEFAULT;
                 
                 // limpiarListaCajas deduplica (mantiene la primera aparición) y filtra las eliminadas
                 const limpia = limpiarListaCajas(base, eliminadosSet);
                 setCajasLista(limpia);
-                guardarCajas(limpia);
+                localStorage.setItem(LS_KEY, JSON.stringify(limpia));
                 setConfigs(prev => {
                     const next = { ...prev };
                     limpia.forEach(c => {
