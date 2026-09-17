@@ -367,17 +367,28 @@ export function useReportesData(props: ReportesProps) {
             return;
         }
 
-        if (editProduccionId) {
-            const existentes = getProducciones();
-            const actualizados = existentes.map(p => p.id === editProduccionId ? { ...p, ...data } : p);
-            saveProducciones(actualizados);
-            setProducciones(actualizados);
-            setEditProduccionId(null);
-            toast.success(`✅ Producción del ${data.fecha} actualizada`);
-        } else {
-            const nueva = addProduccion(data);
-            setProducciones(getProducciones());
-            toast.success(`✅ Producción del ${nueva.fecha} registrada`);
+        // 🩹 FIX 2026-09-16: saveProducciones/addProduccion escriben a localStorage sin
+        // try/catch — si localStorage falla en el celular (cuota llena, modo privado, etc.)
+        // la excepción quedaba silenciosa: no se guardaba nada y no aparecía ningún aviso.
+        // Ahora se atrapa el error real y se muestra con toast.error para poder diagnosticarlo.
+        try {
+            if (editProduccionId) {
+                const existentes = getProducciones();
+                const actualizados = existentes.map(p => p.id === editProduccionId ? { ...p, ...data } : p);
+                saveProducciones(actualizados);
+                setProducciones(actualizados);
+                setEditProduccionId(null);
+                toast.success(`✅ Producción del ${data.fecha} actualizada`);
+            } else {
+                const nueva = addProduccion(data);
+                setProducciones(getProducciones());
+                toast.success(`✅ Producción del ${nueva.fecha} registrada`);
+            }
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            toast.error(`❌ No se pudo guardar en la Libreta del Horno: ${msg}`);
+            console.error('[Libreta Horno] Falla al guardar producción:', err);
+            return;
         }
         
         setFormProd(p => ({ ...p, notas: '' }));

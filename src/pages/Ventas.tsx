@@ -1094,7 +1094,7 @@ export function Ventas(props: VentasProps) {
 
             <div className={cn(
                 "flex-1 flex flex-col lg:flex-row gap-3 overflow-hidden p-2 sm:p-3 lg:pb-3",
-                viewMode === 'pos' && mobileActiveView === 'catalogo' ? "pb-[140px]" : "pb-3"
+                viewMode === 'pos' && mobileActiveView === 'catalogo' ? "pb-2 sm:pb-3" : "pb-2 sm:pb-3"
             )}>
                 {/* Panel principal: Catálogo o Mesas o Ticket en móvil */}
                 <div className="flex-1 flex flex-col min-h-0 bg-card rounded-2xl border shadow-sm overflow-hidden" style={{ minHeight: '0' }}>
@@ -1110,28 +1110,24 @@ export function Ventas(props: VentasProps) {
                         />
                     ) : (
                         <>
-                            {/* Móvil: Mostrar ticket o catálogo según mobileActiveView */}
+                            {/* Móvil: En POS, SIEMPRE renderizamos el catálogo en el fondo. El ticket va en un modal. */}
                             <div className="lg:hidden flex-1 flex flex-col min-h-0 h-full">
-                                {mobileActiveView === 'ticket' ? (
-                                    renderCartPanel()
-                                ) : (
-                                    <ProductCatalog
-                                        productos={productosVenta}
-                                        inventario={inventario}
-                                        onAddToCart={addToCart}
-                                        formatCurrency={formatCurrency}
-                                        searchTerm={searchTerm}
-                                        setSearchTerm={setSearchTerm}
-                                        selectedCategory={selectedCategory}
-                                        setSelectedCategory={setSelectedCategory}
-                                        categorias={categorias}
-                                        onEditProduct={onUpdateProducto}
-                                        onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
-                                        onAjustarStock={onAjustarStock}
-                                        onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
-                                        cart={cart}
-                                    />
-                                )}
+                                <ProductCatalog
+                                    productos={productosVenta}
+                                    inventario={inventario}
+                                    onAddToCart={addToCart}
+                                    formatCurrency={formatCurrency}
+                                    searchTerm={searchTerm}
+                                    setSearchTerm={setSearchTerm}
+                                    selectedCategory={selectedCategory}
+                                    setSelectedCategory={setSelectedCategory}
+                                    categorias={categorias}
+                                    onEditProduct={onUpdateProducto}
+                                    onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
+                                    onAjustarStock={onAjustarStock}
+                                    onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
+                                    cart={cart}
+                                />
                             </div>
 
                             {/* Desktop (lg:flex): Siempre catálogo a la izquierda */}
@@ -1148,6 +1144,7 @@ export function Ventas(props: VentasProps) {
                                     categorias={categorias}
                                     onEditProduct={onUpdateProducto}
                                     onAjustarStock={onAjustarStock}
+                                    onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
                                     onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
                                     cart={cart}
                                 />
@@ -1161,10 +1158,16 @@ export function Ventas(props: VentasProps) {
                     {renderCartPanel()}
                 </div>
 
-                {/* Mobile Sheet Cart (respaldo) */}
-                <Sheet open={showMobileCart} onOpenChange={setShowMobileCart}>
-                    <SheetContent side="bottom" className="h-[85vh] p-0 pb-[80px] flex flex-col bg-slate-50 dark:bg-slate-950 border-t-0 rounded-t-3xl border-x-0 outline-none z-[60]">
-                        {renderCartPanel()}
+                {/* Modal / Sheet Cart (Móvil) - "encima suspendido" para POS y Mesas */}
+                <Sheet open={mobileActiveView === 'ticket'} onOpenChange={(o) => !o && setMobileActiveView('catalogo')}>
+                    <SheetContent side="bottom" className="h-[90vh] p-0 pb-6 flex flex-col bg-slate-50 dark:bg-slate-950 border-t-0 rounded-t-3xl border-x-0 outline-none z-[60]">
+                        {/* Indicador de arrastre */}
+                        <div className="w-full flex justify-center py-2 shrink-0 bg-white dark:bg-slate-900 rounded-t-3xl shadow-sm z-10">
+                            <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700" />
+                        </div>
+                        <div className="flex-1 flex flex-col min-h-0 relative">
+                            {renderCartPanel()}
+                        </div>
                     </SheetContent>
                 </Sheet>
             </div>

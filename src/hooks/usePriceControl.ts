@@ -1085,9 +1085,10 @@ export function usePriceControl() {
     try {
       if (value === null || value === undefined) return '$ 0';
       let numValue = typeof value === 'number' ? value : Number(value) || 0;
-      // Fallback robusto: si moneda no está configurada, usar COP por defecto
+      // Fallback robusto: si moneda no está configurada o no coincide con ningún código válido,
+      // usar COP por defecto — NUNCA MONEDAS[0] (que es Euro, no el mercado real de esta app).
       const monedaCode = configuracion.moneda || 'COP';
-      const monedaConfig = MONEDAS.find(m => m.code === monedaCode) || MONEDAS[0];
+      const monedaConfig = MONEDAS.find(m => m.code === monedaCode) || MONEDAS.find(m => m.code === 'COP')!;
       
       // Los precios de venta ya se redondean al guardar.
       // No redondear aquí para permitir ver costos exactos.
@@ -1104,7 +1105,7 @@ export function usePriceControl() {
   }, [configuracion.moneda]);
 
   const getMonedaActual = useCallback(() => {
-    return MONEDAS.find(m => m.code === configuracion.moneda) || MONEDAS[0];
+    return MONEDAS.find(m => m.code === configuracion.moneda) || MONEDAS.find(m => m.code === 'COP')!;
   }, [configuracion.moneda]);
 
   // Funciones de utilidad

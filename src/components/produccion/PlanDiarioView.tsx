@@ -1,5 +1,6 @@
 import { generateUUID } from '@/lib/safe-utils';
 import React, { useState, useMemo, useEffect } from 'react';
+import { toast } from 'sonner';
 import {
   CalendarDays,
   Plus,
@@ -28,6 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { DistribuidorArroba } from './DistribuidorArroba';
 import { IaAnalysisModal } from './IaAnalysisModal';
 import { HistorialLibretaHorno } from './historial-libreta-horno';
+import { getProducciones } from '@/lib/finanzas-personales';
 import {
   Select,
   SelectContent,
@@ -149,6 +151,46 @@ export function PlanDiarioView({
     localStorage.setItem('draft_sobrante_fisico', JSON.stringify(sobranteFisico));
   }, [sobranteFisico]);
   const ARROBA_KG = configuracion.pesoArrobaKg || ARROBA_KG_DEFAULT;
+
+  // 🩺 FIX 2026-09-16: Diagnóstico de sincronización — pensado para que Gonzalo lo lea
+  // directo en pantalla (celular y PC) sin abrir consola ni nada técnico. Solo lectura,
+  // no cambia ningún dato. Sirve para: (a) ver si "Masa Dulce" está duplicada con otro ID
+  // y por eso faltan panes, y (b) ver cuántos registros y qué rango de fechas tiene CADA
+  // aparato en la Libreta del Horno y en los Planes Guardados, antes de conectarlos a la nube.
+  const diagnosticoSync = useMemo(() => {
+    const nombreNorm = (s: string) => (s || '').toLowerCase().trim();
+    const formulacionesDulce = (formulaciones || [])
+      .filter((f) => nombreNorm(f.nombre).includes('dulce'))
+      .map((f) => ({
+        id: f.id,
+        nombre: f.nombre,
+        activo: f.activo,
+        panesVinculados: (modelos || []).filter((m) => m.formulacionId === f.id).length,
+        ingredientes: Array.isArray((f as any).ingredientes) ? (f as any).ingredientes.length : 0,
+      }));
+
+    const producciones = getProducciones();
+    const fechasProducciones = producciones.map((p) => p.fecha).filter(Boolean).sort();
+
+    const fechasPlanes = (planesDiarios || [])
+      .map((p: any) => p.fecha)
+      .filter(Boolean)
+      .sort();
+
+    return {
+      formulacionesDulce,
+      libreta: {
+        total: producciones.length,
+        desde: fechasProducciones[0] || '—',
+        hasta: fechasProducciones[fechasProducciones.length - 1] || '—',
+      },
+      planes: {
+        total: (planesDiarios || []).length,
+        desde: fechasPlanes[0] || '—',
+        hasta: fechasPlanes[fechasPlanes.length - 1] || '—',
+      },
+    };
+  }, [formulaciones, modelos, planesDiarios]);
 
   // Estado para el modal del Análisis IA
   const [analisisIaItem, setAnalisisIaItem] = useState<any>(null);
@@ -639,6 +681,13 @@ export function PlanDiarioView({
                       }).then(() => {
                         setItems([]);
                         setMasasObjetivo({});
+                      }).catch((err) => {
+                        // 🩹 FIX 2026-09-16: antes esta promesa no tenía .catch() — si
+                        // addPlanDiario fallaba (ej. error de IndexedDB en el celular),
+                        // no pasaba nada visible: ni error, ni se guardaba, ni se limpiaba.
+                        const msg = err instanceof Error ? err.message : String(err);
+                        toast.error(`❌ No se pudo guardar el Plan del día: ${msg}`);
+                        console.error('[Plan Diario] Falla al guardar plan:', err);
                       });
                     }
                   }}
@@ -1262,6 +1311,55 @@ export function PlanDiarioView({
       {/* A ancho completo: misma libreta que Reportes (más visible en celular) */}
       <div className="mt-8">
         <HistorialLibretaHorno limite={21} />
+      </div>
+
+      {/* 🩺 Diagnóstico de Sincronización — solo lectura, para revisar antes de tocar nada */}
+      <div className="mt-8">
+        <Card className="rounded-2xl shadow-sm border-2 border-dashed border-amber-300 dark:border-amber-700/50">
+          <CardHeader className="pb-3 border-b border-border/50">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              🩺 Diagnóstico de Sincronización (revisa esto en el celular y en la PC)
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Solo lectura — no cambia nada. Compara lo que ves aquí en cada aparato.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-4 space-y-4 text-xs">
+            <div>
+              <p className="font-bold mb-1">Formulaciones con "dulce" en el nombre:</p>
+              {diagnosticoSync.formulacionesDulce.length === 0 ? (
+                <p className="text-muted-foreground">No hay ninguna formulación con "dulce" en el nombre en este aparato.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {diagnosticoSync.formulacionesDulce.map((f) => (
+                    <li key={f.id} className="flex flex-wrap items-center gap-2 p-2 rounded-lg bg-slate-50 dark:bg-slate-900/40">
+                      <Badge variant="outline">{f.nombre}</Badge>
+                      <span className="text-muted-foreground">ID: {f.id.slice(0, 8)}…</span>
+                      <span className="font-bold text-indigo-600 dark:text-indigo-400">{f.panesVinculados} panes vinculados</span>
+                      <span className="text-muted-foreground">{f.ingredientes} ingredientes</span>
+                      {!f.activo && <Badge variant="destructive">Inactiva</Badge>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {diagnosticoSync.formulacionesDulce.length > 1 && (
+                <p className="mt-1 text-rose-600 dark:text-rose-400 font-bold">
+                  ⚠️ Hay más de una formulación con "dulce" — esto puede ser la causa de que falten panes en Masa Dulce.
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/40">
+                <p className="font-bold">Libreta del Horno (este aparato)</p>
+                <p>{diagnosticoSync.libreta.total} registros — desde {diagnosticoSync.libreta.desde} hasta {diagnosticoSync.libreta.hasta}</p>
+              </div>
+              <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900/40">
+                <p className="font-bold">Planes Guardados (este aparato)</p>
+                <p>{diagnosticoSync.planes.total} registros — desde {diagnosticoSync.planes.desde} hasta {diagnosticoSync.planes.hasta}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Historial de Planes Guardados */}

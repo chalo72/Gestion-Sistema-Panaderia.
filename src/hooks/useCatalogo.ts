@@ -318,7 +318,7 @@ export function useCatalogo(deps: {
     try {
       if (value === null || value === undefined) return '$0.00';
       let numValue = typeof value === 'number' ? value : Number(value) || 0;
-      const monedaConfig = MONEDAS.find(m => m.code === (configuracion.moneda || 'COP')) || MONEDAS[0];
+      const monedaConfig = MONEDAS.find(m => m.code === (configuracion.moneda || 'COP')) || MONEDAS.find(m => m.code === 'COP')!;
       
       // Ajuste para COP (Pesos Colombianos): Redondear al 50 más cercano
       if (monedaConfig.code === 'COP') {
