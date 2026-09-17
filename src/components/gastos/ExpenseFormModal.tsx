@@ -48,6 +48,7 @@ interface ExpenseFormModalProps {
     isEditMode?: boolean;
     proveedores?: Proveedor[];
     bovedas?: { id: string; nombre: string; saldo: number }[];
+    cajasAbiertas?: CajaSesion[];
 }
 
 export function ExpenseFormModal({
@@ -61,6 +62,7 @@ export function ExpenseFormModal({
     isEditMode = false,
     proveedores = [],
     bovedas = [],
+    cajasAbiertas = [],
 }: ExpenseFormModalProps) {
     const esIngreso = !!formData.esIngreso;
     const cats = esIngreso ? CATS_INGRESO : CATS_GASTO;
@@ -387,23 +389,46 @@ export function ExpenseFormModal({
                         </div>
                     )}
 
-                    {/* Bóveda de origen/destino */}
-                    {bovedas.length > 0 && (
+                    {/* Origen/Destino de fondos (Bóvedas o Cajas Activas) */}
+                    {(bovedas.length > 0 || cajasAbiertas.length > 0) && (
                         <div className="space-y-1.5">
                             <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">
-                                {esIngreso ? '¿A qué bóveda entra el dinero? (Opcional)' : '¿De qué bóveda sale el dinero? (Opcional)'}
+                                {esIngreso ? '¿A dónde entra el dinero? (Opcional)' : '¿De dónde sale el dinero? (Opcional)'}
                             </Label>
                             <Select
-                                value={formData.bovedaId ?? '__ninguno__'}
-                                onValueChange={val => setFormData({ ...formData, bovedaId: val === '__ninguno__' ? undefined : val })}
+                                value={
+                                    formData.cajaId ? `caja_${formData.cajaId}` :
+                                    formData.bovedaId ? `bov_${formData.bovedaId}` :
+                                    '__ninguno__'
+                                }
+                                onValueChange={val => {
+                                    if (val === '__ninguno__') {
+                                        setFormData({ ...formData, bovedaId: undefined, cajaId: undefined });
+                                    } else if (val.startsWith('bov_')) {
+                                        setFormData({ ...formData, bovedaId: val.replace('bov_', ''), cajaId: undefined });
+                                    } else if (val.startsWith('caja_')) {
+                                        setFormData({ ...formData, cajaId: val.replace('caja_', ''), bovedaId: undefined });
+                                    }
+                                }}
                             >
                                 <SelectTrigger className="h-11 rounded-xl border border-slate-200 dark:border-slate-700 font-bold">
-                                    <SelectValue placeholder="No vincular con bóveda" />
+                                    <SelectValue placeholder="No vincular" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="__ninguno__">No vincular con bóveda</SelectItem>
+                                    <SelectItem value="__ninguno__">No vincular (Fondo general)</SelectItem>
+                                    
+                                    {bovedas.length > 0 && <div className="px-2 py-1.5 text-[10px] font-black uppercase text-slate-400 bg-slate-50 dark:bg-slate-900">Bóvedas / Cajas Principales</div>}
                                     {bovedas.map(b => (
-                                        <SelectItem key={b.id} value={b.id}>{b.nombre} ({new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(b.saldo)})</SelectItem>
+                                        <SelectItem key={`bov_${b.id}`} value={`bov_${b.id}`}>
+                                            🏦 {b.nombre} ({new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(b.saldo)})
+                                        </SelectItem>
+                                    ))}
+
+                                    {cajasAbiertas.length > 0 && <div className="px-2 py-1.5 text-[10px] font-black uppercase text-slate-400 bg-slate-50 dark:bg-slate-900 mt-1">Cajas Activas (Vendedoras)</div>}
+                                    {cajasAbiertas.map(c => (
+                                        <SelectItem key={`caja_${c.id}`} value={`caja_${c.id}`}>
+                                            🏪 {c.cajaNombre} ({c.usuarioNombre})
+                                        </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>

@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/database';
-import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor, MetodoPago } from '@/types';
+import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor, MetodoPago, CajaSesion } from '@/types';
 import { procesarImagenFactura, matchProductoEnCatalogo, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import type { Categoria as CategoriaTipo } from '@/types';
@@ -30,6 +30,7 @@ interface RecepcionesProps {
     precios: PrecioProveedor[];
     prepedidos: PrePedido[];
     categorias: CategoriaTipo[];
+    cajasAbiertas?: CajaSesion[];
     onAddRecepcion: (data: Omit<Recepcion, 'id'>) => Promise<Recepcion>;
     onConfirmarRecepcion: (recepcion: Recepcion) => Promise<void>;
     onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<void>;
@@ -52,6 +53,7 @@ interface RecepcionesProps {
 
 export default function Recepciones({
     recepciones, proveedores, productos, precios, prepedidos, categorias,
+    cajasAbiertas = [],
     onAddRecepcion, onConfirmarRecepcion, onAddProducto, onUpdateProducto, onAddOrUpdatePrecio,
     getProveedorById, getProductoById, formatCurrency, onUpdatePrePedido
 }: RecepcionesProps) {
@@ -172,6 +174,7 @@ export default function Recepciones({
         items: RecepcionItem[];
         observaciones: string;
         metodoPago: MetodoPago;
+        cajaId?: string;
     }>({
         proveedorId: '',
         prePedidoId: undefined,
@@ -723,6 +726,7 @@ export default function Recepciones({
             items,
             observaciones: '',
             metodoPago: recepcion.metodoPago || 'efectivo',
+            cajaId: recepcion.cajaId,
         });
         setView('new');
         toast.success(`${items.length} productos cargados de la recepción anterior`);
@@ -805,6 +809,7 @@ export default function Recepciones({
                 imagenFactura: newRecepcion.imagenFactura || undefined,
                 observaciones: newRecepcion.observaciones,
                 metodoPago: newRecepcion.metodoPago,
+                cajaId: newRecepcion.cajaId,
             };
 
             await onAddRecepcion(recepcionCompleta as any);
@@ -874,6 +879,7 @@ export default function Recepciones({
                 items: [],
                 observaciones: '',
                 metodoPago: 'efectivo',
+                cajaId: undefined,
             });
         } catch (error) {
             console.error(error);
@@ -1503,6 +1509,25 @@ export default function Recepciones({
                                     <p className="text-[10px] text-amber-300/90 font-medium">
                                         El egreso quedará como pendiente (aún no pagado).
                                     </p>
+                                )}
+                                {newRecepcion.metodoPago === 'efectivo' && (
+                                    <div className="pt-1">
+                                        <label className="text-[9px] font-black uppercase tracking-widest text-indigo-300/80">
+                                            ¿De qué caja salió el dinero?
+                                        </label>
+                                        <select
+                                            value={newRecepcion.cajaId || ''}
+                                            onChange={e => setNewRecepcion(p => ({ ...p, cajaId: e.target.value || undefined }))}
+                                            className="w-full h-10 mt-1 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold px-3 outline-none"
+                                        >
+                                            <option value="" className="text-slate-900">Bóveda / Caja Fuerte Principal</option>
+                                            {cajasAbiertas.map(c => (
+                                                <option key={c.id} value={c.id} className="text-slate-900">
+                                                    Caja Activa: {c.cajaNombre} ({c.usuarioNombre})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
                                 )}
                             </div>
                             <button

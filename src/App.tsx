@@ -91,6 +91,7 @@ const Oficina = lazy(() => import('@/pages/Oficina'));
 const Gastos = lazy(() => import('@/pages/Gastos'));
 const Proveedores = lazy(() => import('@/pages/Proveedores'));
 const Reportes = lazy(() => import('@/pages/Reportes'));
+const ModoAyudante       = lazy(() => import('@/pages/ModoAyudante'));
 const Precios = lazy(() => import('@/pages/Precios'));
 const Clientes = lazy(() => import('@/pages/Clientes'));
 const BuscadorPrecios = lazy(() => import('@/pages/BuscadorPrecios'));
@@ -640,6 +641,7 @@ const App = () => {
             gastos={gastos}
             proveedores={proveedores}
             cajaActiva={cajaActiva}
+            cajasAbiertas={sesionesCaja.filter(c => c.estado === 'abierta')}
             onAddGasto={addGasto}
             onDeleteGasto={deleteGasto}
             onUpdateGasto={updateGasto}
@@ -706,6 +708,25 @@ const App = () => {
                  });
               }
             }}
+          />
+        );
+      case 'modo-ayudante':
+        return (
+          <ModoAyudante
+            ventas={ventas}
+            gastos={gastos}
+            productos={productos}
+            proveedores={proveedores}
+            precios={precios}
+            cajaActiva={cajaActiva}
+            sesionesCaja={sesionesCaja}
+            formulaciones={formulaciones}
+            modelosPan={modelosPan}
+            categorias={configuracion.categorias}
+            formatCurrency={formatCurrency}
+            generarReporte={generarReporte}
+            addGasto={addGasto}
+            updateGasto={updateGasto}
           />
         );
       case 'boveda':
@@ -809,6 +830,7 @@ const App = () => {
             productos={productos}
             precios={precios}
             categorias={configuracion.categorias}
+            cajasAbiertas={sesionesCaja.filter(c => c.estado === 'abierta')}
             onAddRecepcion={onAddRecepcion}
             onConfirmarRecepcion={async (recepcion) => {
               const pedidoVinculado = prepedidos.find(p => p.id === recepcion.prePedidoId);
@@ -826,6 +848,7 @@ const App = () => {
                      estado: estadoGasto,
                      proveedorId: recepcion.proveedorId,
                      metodoPago,
+                     cajaId: recepcion.cajaId,
                      usuarioId: user?.id || 'sistema',
                      comprobanteUrl: recepcion.imagenFactura,
                  });

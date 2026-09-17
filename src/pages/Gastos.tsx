@@ -58,6 +58,7 @@ interface GastosProps {
     gastos: Gasto[];
     proveedores: Proveedor[];
     cajaActiva: CajaSesion | undefined;
+    cajasAbiertas?: CajaSesion[];
     onAddGasto: (gasto: Omit<Gasto, 'id'>) => Promise<void>;
     onUpdateGasto: (id: string, updates: Partial<Gasto>) => Promise<void>;
     onDeleteGasto: (id: string) => Promise<void>;
@@ -82,6 +83,8 @@ const formVacio = (): FormGasto => ({
 export default function Gastos({
     gastos,
     proveedores,
+    cajaActiva,
+    cajasAbiertas = [],
     onAddGasto,
     onUpdateGasto,
     onDeleteGasto,
@@ -553,6 +556,7 @@ export default function Gastos({
                 isEditMode={!!editingId}
                 proveedores={proveedores}
                 bovedas={bovedas}
+                cajasAbiertas={cajasAbiertas}
             />
         </div>
     );

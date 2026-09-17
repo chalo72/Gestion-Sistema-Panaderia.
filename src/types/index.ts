@@ -599,7 +599,7 @@ export interface DistribucionArrobasDia {
   arrobas: number;
 }
 
-export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina' | 'boveda' | 'inversiones' | 'plan-negocio' | 'expedientes' | 'fiados-empleados' | 'marketing-studio' | 'pedidos-tortas' | 'control-merma';
+export type ViewType = 'dashboard' | 'productos' | 'proveedores' | 'precios' | 'alertas' | 'prepedidos' | 'configuracion' | 'login' | 'usuarios' | 'inventario' | 'recepciones' | 'roles' | 'recetas' | 'ventas' | 'caja' | 'ahorro' | 'gastos' | 'reportes' | 'produccion' | 'historial-ventas' | 'cargamasiva' | 'listapreciosproincial' | 'creditos' | 'trabajadores' | 'mayoristas' | 'oficina' | 'agentes-ia' | 'clientes' | 'seguridad' | 'comunicaciones' | 'asistencia' | 'nomina' | 'boveda' | 'inversiones' | 'plan-negocio' | 'expedientes' | 'fiados-empleados' | 'marketing-studio' | 'pedidos-tortas' | 'control-merma' | 'modo-ayudante';
 
 export interface RegistroAsistencia {
   id: string;
@@ -947,6 +947,7 @@ export interface Recepcion {
   imagenFactura?: string;
   /** Cómo se pagó / se pagará la factura (alimenta el gasto en egresos) */
   metodoPago?: MetodoPago;
+  cajaId?: string;
 }
 
 // ============================================
