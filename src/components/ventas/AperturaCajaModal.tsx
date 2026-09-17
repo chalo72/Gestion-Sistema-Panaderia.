@@ -93,13 +93,14 @@ interface AperturaCajaModalProps {
     isOpen: boolean;
     onClose: () => void;
     onAbrir: (monto: number) => Promise<any>;
+    cajasAbiertasNombres?: string[];
 }
 
 function configDefault(): CajaConfig {
     return { vendedoras: [], montoApertura: 0, incluida: true };
 }
 
-export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModalProps) {
+export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombres = [] }: AperturaCajaModalProps) {
     const [turno,           setTurno]           = useState<'Mañana' | 'Tarde' | 'Noche'>('Mañana');
     const [evento,          setEvento]          = useState<string>('Ninguno');
     const [montoGlobal,     setMontoGlobal]     = useState<number>(0);
@@ -184,7 +185,9 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
         Object.fromEntries(cajasLista.map(c => [c.nombre, configDefault()]))
     );
 
-    const cajasIncluidas = cajasLista.filter(c => configs[c.nombre]?.incluida);
+    const normalize = (n: string) => n.trim().toLowerCase();
+    const abiertasSet = new Set(cajasAbiertasNombres.map(normalize));
+    const cajasIncluidas = cajasLista.filter(c => configs[c.nombre]?.incluida && !abiertasSet.has(normalize(c.nombre)));
     const totalEfectivo  = usarMontoGlobal
         ? cajasIncluidas.length * montoGlobal
         : cajasIncluidas.reduce((sum, c) => sum + (configs[c.nombre]?.montoApertura || 0), 0);
@@ -553,12 +556,13 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                             <div className="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden divide-y divide-slate-50 dark:divide-slate-800">
                                 {cajasLista.map((caja) => {
                                     const cfg      = configs[caja.nombre] || configDefault();
-                                    const incluida = cfg.incluida;
+                                    const yaAbierta= abiertasSet.has(normalize(caja.nombre));
+                                    const incluida = cfg.incluida && !yaAbierta;
                                     const abierta  = expandida === caja.nombre;
                                     return (
-                                        <div key={caja.nombre} className={cn("transition-all", !incluida && "opacity-40")}>
+                                        <div key={caja.nombre} className={cn("transition-all", !incluida && "opacity-40", yaAbierta && "opacity-20 pointer-events-none")}>
                                             <div className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-900">
-                                                <button onClick={() => toggleCaja(caja.nombre)}
+                                                <button onClick={() => !yaAbierta && toggleCaja(caja.nombre)}
                                                     className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
                                                         incluida ? "border-emerald-500 bg-emerald-500" : "border-slate-200 dark:border-slate-700")}>
                                                     {incluida && <CheckCircle className="w-3.5 h-3.5 text-white" />}
@@ -566,7 +570,10 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir }: AperturaCajaModa
                                                 <div className="flex items-center gap-2 flex-1 min-w-0">
                                                     <span className="text-xl shrink-0">{caja.emoji}</span>
                                                     <div className="min-w-0">
-                                                        <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-none truncate">{caja.nombre}</p>
+                                                        <div className="flex items-center gap-2">
+                                                            <p className="text-sm font-black text-slate-800 dark:text-white uppercase leading-none truncate">{caja.nombre}</p>
+                                                            {yaAbierta && <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 font-bold uppercase tracking-widest">Ya abierta</span>}
+                                                        </div>
                                                         {cfg.vendedoras.length > 0 ? (
                                                             <p className="text-[10px] text-emerald-600 font-bold truncate">
                                                                 👤 {cfg.vendedoras.join(' · ')}

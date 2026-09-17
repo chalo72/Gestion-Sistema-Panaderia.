@@ -2583,7 +2583,12 @@ export function ControlCaja({
                     await registrarMovimientoCaja(monto, movementModal.tipo, motivo, usuario?.id || 'anon', cajaId);
                 }}
             />
-            <AperturaCajaModal isOpen={showAperturaModal} onClose={() => setShowAperturaModal(false)} onAbrir={onAbrirCaja} />
+            <AperturaCajaModal 
+                isOpen={showAperturaModal} 
+                onClose={() => setShowAperturaModal(false)} 
+                onAbrir={onAbrirCaja} 
+                cajasAbiertasNombres={cajasAbiertas.map(c => c.cajaNombre)} 
+            />
             {esAdmin && (
                 <PrestamosCajaModal
                     isOpen={showPrestamoModal}
