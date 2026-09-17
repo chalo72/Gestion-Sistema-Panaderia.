@@ -675,8 +675,7 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async getSesionCajaActiva(): Promise<DBCajaSesion | undefined> {
-        const { data, error } = await supabase.from('caja').select('*').eq('estado', 'abierta').maybeSingle();
-        if (error) throw error;
+        const { data, error } = await supabase.from('caja').select('*').eq('estado', 'abierta').order('fechaApertura', { ascending: false }).limit(1).maybeSingle();
         return data ? this.mapCajaFromDB(data) : undefined;
     }
 

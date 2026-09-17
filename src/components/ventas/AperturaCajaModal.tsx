@@ -128,44 +128,45 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
         (async () => {
             // Traer del respaldo en la nube los nombres que se eliminaron desde otro
             // dispositivo, y fusionarlos con los eliminados localmente -- un borrado
-            // hecho en cualquier celular no se debe perder ni reaparecer en los demas.
-            let eliminadosNube: string[] = [];
             try {
-                const backup = await db.getBackup('cajas_eliminadas');
-                if (Array.isArray(backup)) eliminadosNube = backup as string[];
-            } catch { /* ignorar */ }
-            const eliminadosLocal = cargarNombresEliminados();
-            const eliminadosUnion = Array.from(new Set([...eliminadosLocal, ...eliminadosNube]));
-            if (eliminadosUnion.length !== eliminadosLocal.length) {
-                guardarNombresEliminados(eliminadosUnion);
-            }
-            const eliminadosSet = new Set(eliminadosUnion.map(normalizarNombreCaja));
+                // Sincronizar eliminados primero
+                const eliminadosNube = await db.getBackup('cajas_eliminadas');
+                const eliminadosLocal = cargarNombresEliminados();
+                let eliminadosUnion = eliminadosLocal;
+                if (Array.isArray(eliminadosNube)) {
+                    eliminadosUnion = Array.from(new Set([...eliminadosLocal, ...eliminadosNube]));
+                    guardarNombresEliminados(eliminadosUnion);
+                }
+                const eliminadosSet = new Set(eliminadosUnion.map(normalizarNombreCaja));
 
-            // LOCAL SIEMPRE GANA para el contenido de la lista: si ya hay una lista guardada
-            // en este dispositivo no la reemplazamos con el respaldo de la nube -- solo la
-            // limpiamos (sin duplicados, sin cajas eliminadas desde cualquier dispositivo).
-            // El respaldo de la nube solo aporta datos cuando este dispositivo nunca guardo
-            // nada localmente (arranque de un celular nuevo).
-            const local = localStorage.getItem(LS_KEY);
-            let base: CajaDefinicion[];
-            if (local) {
-                try { base = JSON.parse(local) as CajaDefinicion[]; } catch { base = CAJAS_DEFAULT; }
-            } else {
+                // Fusionar cajas de la nube y locales
+                const localRaw = localStorage.getItem(LS_KEY);
+                let localCajas: CajaDefinicion[] = [];
+                if (localRaw) { try { localCajas = JSON.parse(localRaw) as CajaDefinicion[]; } catch {} }
+                
+                let cloudCajas: CajaDefinicion[] = [];
                 try {
                     const cloud = await db.getBackup('cajas_config');
-                    base = Array.isArray(cloud) && cloud.length > 0 ? cloud : CAJAS_DEFAULT;
-                } catch { base = CAJAS_DEFAULT; }
-            }
-            const limpia = limpiarListaCajas(base, eliminadosSet);
-            setCajasLista(limpia);
-            guardarCajas(limpia);
-            setConfigs(prev => {
-                const next = { ...prev };
-                limpia.forEach(c => {
-                    if (!next[c.nombre]) next[c.nombre] = configDefault();
+                    if (Array.isArray(cloud)) cloudCajas = cloud;
+                } catch {}
+
+                let base = [...localCajas, ...cloudCajas];
+                if (base.length === 0) base = CAJAS_DEFAULT;
+                
+                // limpiarListaCajas deduplica (mantiene la primera aparición) y filtra las eliminadas
+                const limpia = limpiarListaCajas(base, eliminadosSet);
+                setCajasLista(limpia);
+                guardarCajas(limpia);
+                setConfigs(prev => {
+                    const next = { ...prev };
+                    limpia.forEach(c => {
+                        if (!next[c.nombre]) next[c.nombre] = configDefault();
+                    });
+                    return next;
                 });
-                return next;
-            });
+            } catch (err) {
+                console.error("Error sincronizando cajas:", err);
+            }
         })();
     }, [isOpen]);
 
