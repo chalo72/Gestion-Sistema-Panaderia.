@@ -74,7 +74,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     return sesion;
   }, []);
 
-  const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string, ventasManual?: number) => {
+  const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string, ventasManual?: number, nota?: string) => {
     if (!cajaActiva) return undefined;
     const hayVentaManual = Number.isFinite(ventasManual) && (ventasManual as number) > 0;
     const sesion: CajaSesion = {
@@ -87,6 +87,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
         totalVentasEfectivo: ventasManual as number,
         ventasManualIngresadas: true,
       } : {}),
+      ...(nota ? { observaciones: nota } : {}),
     };
     await db.updateSesionCaja(sesion as any);
     _supaDB.updateSesionCaja(sesion as any).catch(() => {});

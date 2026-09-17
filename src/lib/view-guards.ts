@@ -38,6 +38,7 @@ export const VISTA_PERMISO: Partial<Record<ViewType, Permission>> = {
   asistencia: 'VER_DASHBOARD',
   'whatsapp-hub': 'VER_DASHBOARD',
   nomina: 'VER_FINANZAS',
+  'modo-ayudante': 'VER_DASHBOARD',
   usuarios: 'VER_USUARIOS',
   roles: 'VER_USUARIOS',
   seguridad: 'VER_FINANZAS',

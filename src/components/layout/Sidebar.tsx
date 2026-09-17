@@ -26,6 +26,7 @@ import {
   Building2,
   MessageCircle,
   CalendarCheck,
+  CalendarClock,
   RefreshCw,
   TrendingUp,
   Video,
@@ -178,6 +179,13 @@ export function Sidebar({
         { id: 'recetas',    label: 'Recetas Técnicas',   icon: ChefHat,   permission: 'VER_PRODUCCION' },
         { id: 'inventario', label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
         { id: 'control-merma', label: 'Control de Mermas', icon: AlertOctagon, permission: 'VER_PRODUCCION' },
+      ],
+    },
+    {
+      section: 'Ayudante',
+      emoji: '📝',
+      items: [
+        { id: 'modo-ayudante', label: 'Captura Rápida (Atrasados)', icon: CalendarClock, permission: 'VER_DASHBOARD' },
       ],
     },
     {
@@ -466,6 +474,14 @@ export function Sidebar({
         { id: 'inventario' as ViewType, label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
         { id: 'control-merma' as ViewType, label: 'Mermas',          icon: AlertOctagon, permission: 'VER_PRODUCCION' },
         { id: 'productos' as ViewType,  label: 'Catálogo',           icon: Package,   permission: 'VER_PRODUCTOS' },
+      ],
+    },
+    {
+      section: 'Ayudante',
+      emoji: '📝',
+      activeClass: 'bg-sky-600 text-white border-transparent shadow-lg',
+      items: [
+        { id: 'modo-ayudante' as ViewType, label: 'Captura Rápida', icon: CalendarClock, permission: 'VER_DASHBOARD' },
       ],
     },
     {

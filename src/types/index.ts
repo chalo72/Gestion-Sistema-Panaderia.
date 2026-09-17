@@ -142,6 +142,7 @@ export type CategoriaProduccion =
 export interface ModeloPan {
   id: string;
   nombre: string;              // Ej: "Pan Francés 80gr", "Mogolla 50gr"
+  productoId?: string;         // Referencia exacta al producto final en el inventario para evitar errores de enlace
   formulacionId: string;       // Qué formulación de masa usa
   pesoUnitarioGr: number;      // Peso de cada unidad en gramos
   panesPorArroba: number;      // Calculado: (ARROBA_KG * 1000) / pesoUnitarioGr
@@ -1028,6 +1029,8 @@ export interface CajaSesion {
   /** true cuando totalVentas fue escrito a mano en el cierre (no vino de ventas de POS) —
    * ej. un día que esta caja no se usó por POS. Sirve para distinguir el origen del dato en reportes. */
   ventasManualIngresadas?: boolean;
+  /** Notas del cierre (motivo de cierre con mesas abiertas, incidencias, etc.) */
+  observaciones?: string;
 }
 // ============================================
 // PRÉSTAMOS ENTRE CAJAS

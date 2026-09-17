@@ -48,6 +48,7 @@ export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
   { id: 'expedientes',      label: 'Expediente Empleadas',   seccion: 'Admin' },
   { id: 'asistencia',       label: 'Asistencia',             seccion: 'Admin' },
   { id: 'nomina',           label: 'Nómina',                 seccion: 'Admin' },
+  { id: 'modo-ayudante',    label: 'Captura Rápida (Atrasados)', seccion: 'Ayudante' },
 ];
 
 export const ROLES_CONFIGURABLES = [
@@ -111,6 +112,8 @@ const PATCH_CONTROL_FINANCIERO = 'dp_patch_control_financiero_20260913';
 const PATCH_WHATSAPP_HUB = 'dp_patch_whatsapp_hub_20260913_v2';
 /** Parche: Vendedor gana acceso a Inventario (para inventariar desde el celular) */
 const PATCH_VENDEDOR_INVENTARIO = 'dp_patch_vendedor_inventario_20260915';
+/** Parche: nuevo módulo 'modo-ayudante' debe nacer APAGADO para todos salvo Gerente (puedeVer cae en `?? true` si no está explícito) */
+const PATCH_MODO_AYUDANTE = 'dp_patch_modo_ayudante_20260917';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -201,6 +204,27 @@ export function cargarPermisos(): PermisosModulos {
           },
         };
         localStorage.setItem(PATCH_VENDEDOR_INVENTARIO, '1');
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_MODO_AYUDANTE)) {
+        const rolesSinModoAyudante: Array<keyof PermisosModulos> = ['CONTROL_FINANCIERO', 'COMPRADOR', 'VENDEDOR', 'PANADERO', 'AUXILIAR'];
+        const apagados: Partial<PermisosModulos> = {};
+        for (const rol of rolesSinModoAyudante) {
+          apagados[rol] = {
+            ...(parsed[rol] || DEFAULT_PERMISOS[rol]),
+            'modo-ayudante': { ver: false, eliminar: false },
+          };
+        }
+        parsed = {
+          ...parsed,
+          ...apagados,
+          GERENTE: {
+            ...(parsed.GERENTE || DEFAULT_PERMISOS.GERENTE),
+            'modo-ayudante': { ver: true, eliminar: true },
+          },
+        };
+        localStorage.setItem(PATCH_MODO_AYUDANTE, '1');
         changed = true;
       }
 

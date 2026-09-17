@@ -128,9 +128,14 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                         const isOcupada = mesa.estado !== 'disponible' && (pedido?.items?.length ?? 0) > 0;
 
                         let tiempoStr = '';
+                        let alertaTiempo: 'ambar' | 'rojo' | null = null;
                         if (pedido?.fechaInicio) {
                             const mins = Math.floor((Date.now() - new Date(pedido.fechaInicio).getTime()) / 60000);
                             tiempoStr = mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`;
+                            if (isOcupada) {
+                                // Mesa ocupada hace rato — 2h ambar, 4h rojo (ajustable segun el ritmo del local)
+                                alertaTiempo = mins >= 240 ? 'rojo' : mins >= 120 ? 'ambar' : null;
+                            }
                         }
 
                         return (
@@ -138,9 +143,13 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                                 onClick={() => onSelectMesa(mesa)}
                                 className={cn(
                                     "group rounded-xl border cursor-pointer transition-all hover:shadow-md active:scale-[0.97] relative flex flex-col gap-2 p-3",
-                                    isOcupada
-                                        ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 hover:border-blue-400"
-                                        : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-400"
+                                    alertaTiempo === 'rojo'
+                                        ? "bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 hover:border-red-400"
+                                        : alertaTiempo === 'ambar'
+                                            ? "bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 hover:border-amber-400"
+                                            : isOcupada
+                                                ? "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700 hover:border-blue-400"
+                                                : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-400"
                                 )}>
                                 {/* Botones editar/eliminar (hover) */}
                                 <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -177,9 +186,11 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
 
                                 {/* Badge de estado */}
                                 <span className={cn("self-start text-[10px] font-bold px-2 py-0.5 rounded-md",
-                                    isOcupada ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
+                                    alertaTiempo === 'rojo' ? "bg-red-100 text-red-700"
+                                        : alertaTiempo === 'ambar' ? "bg-amber-100 text-amber-700"
+                                            : isOcupada ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"
                                 )}>
-                                    {isOcupada ? 'Ocupada' : 'Libre'}
+                                    {alertaTiempo === 'rojo' ? '¡Revisar! Ocupada' : alertaTiempo === 'ambar' ? 'Ocupada hace rato' : isOcupada ? 'Ocupada' : 'Libre'}
                                 </span>
 
                                 {/* Info del pedido si está ocupada */}
@@ -194,7 +205,9 @@ export function MuroPedidos({ mesas, pedidosActivos, onSelectMesa, formatCurrenc
                                             <span className="text-[11px] font-semibold">{pedido.items.length}</span>
                                         </div>
                                         {tiempoStr && (
-                                            <div className="flex items-center gap-1 text-[10px] text-slate-400">
+                                            <div className={cn("flex items-center gap-1 text-[10px] font-bold",
+                                                alertaTiempo === 'rojo' ? "text-red-500" : alertaTiempo === 'ambar' ? "text-amber-600" : "text-slate-400"
+                                            )}>
                                                 <Clock className="w-3 h-3" /> {tiempoStr}
                                             </div>
                                         )}

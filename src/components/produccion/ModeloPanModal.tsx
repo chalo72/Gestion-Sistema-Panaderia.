@@ -28,6 +28,8 @@ interface ModeloPanModalProps {
 export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onSuccess }: ModeloPanModalProps) {
   const [nombre, setNombre] = useState('');
   const [formulacionId, setFormulacionId] = useState('');
+  const [productoId, setProductoId] = useState('');
+  const [productos, setProductos] = useState<any[]>([]);
   const [pesoUnitarioGr, setPesoUnitarioGr] = useState(80);
   const [precioVentaUnitario, setPrecioVentaUnitario] = useState(0);
   const [mermaEstimada, setMermaEstimada] = useState(5);
@@ -38,9 +40,14 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
   const [ingredientes, setIngredientes] = useState<any[]>([]);
 
   useEffect(() => {
+    db.getAllProductos().then(p => setProductos(p.filter((x: any) => x.tipo !== 'ingrediente'))).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (isOpen) {
       setNombre(modeloBase?.nombre || '');
       setFormulacionId(modeloBase?.formulacionId || '');
+      setProductoId(modeloBase?.productoId || '');
       setPesoUnitarioGr(modeloBase?.pesoUnitarioGr || 80);
       setPrecioVentaUnitario(modeloBase?.precioVentaUnitario || 0);
       setMermaEstimada(modeloBase?.mermaEstimada || 5);
@@ -84,6 +91,10 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
       toast.error('Selecciona una formulación');
       return;
     }
+    if (!productoId) {
+      toast.error('Selecciona el Producto Final (Inventario) al que se enlazará');
+      return;
+    }
     if (!pesoUnitarioGr || pesoUnitarioGr <= 0) {
       toast.error('El peso debe ser mayor a 0');
       return;
@@ -92,6 +103,7 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
     const modelo: ModeloPan = {
       id: modeloBase?.id || generateUUID(),
       nombre: nombre.trim(),
+      productoId,
       formulacionId,
       pesoUnitarioGr,
       panesPorArroba,
@@ -184,6 +196,22 @@ export function ModeloPanModal({ isOpen, onClose, formulaciones, modeloBase, onS
                 </Select>
               </div>
 
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-black tracking-widest text-slate-500 uppercase flex items-center gap-1">Producto en Inventario</label>
+                <Select value={productoId} onValueChange={setProductoId}>
+                  <SelectTrigger className="rounded-xl h-12 bg-slate-50/50 border-slate-200">
+                    <SelectValue placeholder="Enlazar con..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productos.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-[11px] font-black tracking-widest text-slate-500 uppercase flex items-center gap-1">Velocidad de Venta (Estrategia)</label>
                 <Select value={velocidadVenta} onValueChange={(v: any) => setVelocidadVenta(v)}>

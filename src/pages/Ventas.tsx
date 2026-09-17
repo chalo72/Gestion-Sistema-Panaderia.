@@ -77,7 +77,7 @@ interface VentasProps {
     cajaActiva: CajaSesion | undefined;
     onRegistrarVenta: (data: any) => Promise<Venta>;
     onAbrirCaja: (montoApertura: number) => Promise<CajaSesion>;
-    onCerrarCaja: (montoCierre: number) => Promise<CajaSesion | undefined>;
+    onCerrarCaja: (montoCierre: number, ventasManual?: number, nota?: string) => Promise<CajaSesion | undefined>;
     formatCurrency: (value: number) => string;
     usuario: any;
     categorias: Categoria[];
@@ -1491,12 +1491,14 @@ export function Ventas(props: VentasProps) {
             <CierreCajaModal
                 isOpen={showCierreModal}
                 onClose={() => setShowCierreModal(false)}
-                onCerrar={async (monto) => {
-                    await onCerrarCaja(monto);
+                onCerrar={async (monto, ventasManual, nota) => {
+                    await onCerrarCaja(monto, ventasManual, nota);
                     setShowCierreModal(false);
                 }}
                 cajaActiva={cajaActiva}
                 formatCurrency={formatCurrency}
+                mesas={mesas}
+                pedidosActivos={pedidosActivos}
             />
 
             {/* Modal de Movimientos de Caja (Entrada/Salida) */}

@@ -166,7 +166,7 @@ export function PlanProduccionModal({
                                 <ChefHat className="w-8 h-8 text-indigo-400" />
                             </div>
                             <div>
-                                <DialogTitle className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-white to-slate-400">
+                                <DialogTitle className="text-3xl font-black tracking-tight text-white drop-shadow-md">
                                     Lanzar Producción
                                 </DialogTitle>
                                 <DialogDescription className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">

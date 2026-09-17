@@ -400,20 +400,17 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 
                 if (!modelo || !formulacion) continue;
                 
-                // Asegurarse de que el productoId existe en las recetas si el backend de finalizarProduccion
-                // de app.tsx aún asume que hay una "receta" por producto (legado). 
-                // En Produccion, el producto a generar es usualmente referenciado, pero aquí usaremos el nombre del modelo
-                // Si la lógica antigua de finalizarProduccion necesita receta, creamos una orden "dummy" temporalmente o la enlazamos
-                // Para esto, buscaremos un producto que corresponda a este modelo, o simplemente registramos
-                
-                // Aquí deberíamos buscar el producto que corresponde a este modelo, o pedirlo.
-                // Como workaround temporal para que funcione el kanban:
-                // El modeloPan tiene un nombre pero no un productoId directamente en la interfaz. 
-                // Asumimos que se busca por nombre en los productos "elaborados".
-                const prodElaborado = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente') || productos.find(p => p.tipo !== 'ingrediente');
+                // Ahora ModeloPan tiene el productoId exacto para un enlace a prueba de fallos
+                let prodElaborado = null;
+                if (modelo.productoId) {
+                    prodElaborado = productos.find(p => p.id === modelo.productoId);
+                } else {
+                    // Fallback para modelos antiguos sin productoId
+                    prodElaborado = productos.find(p => p.nombre.toLowerCase().includes(modelo.nombre.toLowerCase()) && p.tipo !== 'ingrediente') || productos.find(p => p.tipo !== 'ingrediente');
+                }
                 
                 if (!prodElaborado) {
-                    toast.error(`No hay un producto "elaborado" que coincida con ${modelo.nombre}`);
+                    toast.error(`No se pudo enlazar ${modelo.nombre} con el inventario. Edita el Modelo de Pan y asígnale un Producto Final.`);
                     continue;
                 }
 

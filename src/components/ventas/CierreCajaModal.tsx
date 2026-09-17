@@ -6,7 +6,7 @@ import {
     Banknote, Coins, User, Clock, Lock, FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { CajaSesion } from '@/types';
+import type { CajaSesion, Mesa, PedidoActivo } from '@/types';
 
 const BILLETES_CIERRE = [
     { valor: 100000, label: '$100.000', color: 'bg-purple-100 border-purple-200 text-purple-700' },
@@ -27,17 +27,38 @@ const MONEDAS_CIERRE = [
 interface CierreCajaModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onCerrar: (monto: number, ventasManual?: number) => Promise<any>;
+    onCerrar: (monto: number, ventasManual?: number, nota?: string) => Promise<any>;
     cajaActiva: CajaSesion | undefined;
     formatCurrency: (value: number) => string;
     usuario?: any;
+    mesas?: Mesa[];
+    pedidosActivos?: PedidoActivo[];
 }
 
-export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatCurrency, usuario }: CierreCajaModalProps) {
+export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatCurrency, usuario, mesas, pedidosActivos }: CierreCajaModalProps) {
     const [desglose, setDesglose] = useState<Record<string, string>>({});
     const [observaciones, setObservaciones] = useState('');
     const [confirmando, setConfirmando] = useState(false);
     const [ventasManualStr, setVentasManualStr] = useState('');
+    const [motivoMesasAbiertas, setMotivoMesasAbiertas] = useState('');
+
+    // Mesas ocupadas (con pedido activo real) — mismo criterio que MuroPedidos
+    const mesasAbiertas = useMemo(() => {
+        return (mesas || [])
+            .map(mesa => {
+                const pedido = (pedidosActivos || []).find(p => p.id === mesa.pedidoActivoId);
+                const tieneItems = (pedido?.items?.length ?? 0) > 0;
+                if (mesa.estado === 'disponible' || !tieneItems) return null;
+                const minutos = pedido?.fechaInicio
+                    ? Math.floor((Date.now() - new Date(pedido.fechaInicio).getTime()) / 60000)
+                    : 0;
+                return { mesa, minutos };
+            })
+            .filter((x): x is { mesa: Mesa; minutos: number } => x !== null);
+    }, [mesas, pedidosActivos]);
+
+    const hayMesasAbiertas = mesasAbiertas.length > 0;
+    const motivoValido = motivoMesasAbiertas.trim().length >= 5;
 
     // Calcular duración del turno
     const duracionTurno = useMemo(() => {
@@ -71,9 +92,19 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
             : 'amber';
 
     const handleConfirm = async () => {
+        if (hayMesasAbiertas && !motivoValido) return;
         setConfirmando(true);
         try {
-            await onCerrar(totalDesglose, ventasManualNum > 0 ? ventasManualNum : undefined);
+            const notaMesas = hayMesasAbiertas
+                ? `Cerrado con ${mesasAbiertas.length} mesa(s) abierta(s): ` +
+                  mesasAbiertas.map(({ mesa, minutos }) => {
+                      const tiempo = minutos >= 60 ? `${Math.floor(minutos / 60)}h ${minutos % 60}m` : `${minutos} min`;
+                      return `Mesa ${mesa.numero}${mesa.abiertaPor ? ` (${mesa.abiertaPor})` : ''} — ${tiempo}`;
+                  }).join('; ') +
+                  `. Motivo: ${motivoMesasAbiertas.trim()}`
+                : '';
+            const notaFinal = [notaMesas, observaciones.trim()].filter(Boolean).join(' | ');
+            await onCerrar(totalDesglose, ventasManualNum > 0 ? ventasManualNum : undefined, notaFinal || undefined);
             onClose();
         } finally {
             setConfirmando(false);
@@ -127,6 +158,35 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
 
                 {/* ── CUERPO ── */}
                 <div className="p-6 space-y-5 max-h-[65vh] overflow-y-auto">
+
+                    {/* Aviso de mesas abiertas — bloquea el cierre normal hasta resolver o justificar */}
+                    {hayMesasAbiertas && (
+                        <div className="p-4 rounded-2xl border-2 bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800">
+                            <div className="flex items-center gap-2 mb-2">
+                                <AlertTriangle className="w-4 h-4 text-red-600" />
+                                <p className="text-xs font-black text-red-700 dark:text-red-400 uppercase tracking-widest">
+                                    {mesasAbiertas.length} mesa{mesasAbiertas.length > 1 ? 's' : ''} sin cerrar
+                                </p>
+                            </div>
+                            <ul className="space-y-1 mb-3">
+                                {mesasAbiertas.map(({ mesa, minutos }) => (
+                                    <li key={mesa.id} className="text-xs text-red-700 dark:text-red-300 font-semibold">
+                                        Mesa {mesa.numero}{mesa.abiertaPor ? ` — ${mesa.abiertaPor}` : ''} · {minutos >= 60 ? `${Math.floor(minutos / 60)}h ${minutos % 60}m` : `${minutos} min`} abierta
+                                    </li>
+                                ))}
+                            </ul>
+                            <p className="text-[11px] text-red-600 dark:text-red-400 mb-2">
+                                Cobra o libera estas mesas antes de cerrar. Si necesitas cerrar de todas formas, escribe el motivo:
+                            </p>
+                            <textarea
+                                value={motivoMesasAbiertas}
+                                onChange={e => setMotivoMesasAbiertas(e.target.value)}
+                                placeholder="Ej: La mesa sigue con clientes, cerramos caja para el siguiente turno..."
+                                rows={2}
+                                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-red-200 dark:border-red-800 rounded-xl text-xs font-medium focus:border-red-400 focus:outline-none focus:ring-1 focus:ring-red-400/20 resize-none transition-all"
+                            />
+                        </div>
+                    )}
 
                     {/* Ventas manuales — para días que esta caja no se usó por POS */}
                     <div className={cn(
@@ -294,11 +354,14 @@ export function CierreCajaModal({ isOpen, onClose, onCerrar, cajaActiva, formatC
                 <div className="px-6 pb-6 pt-2 space-y-3">
                     <Button
                         onClick={handleConfirm}
-                        disabled={confirmando}
-                        className="w-full h-14 rounded-2xl bg-slate-900 hover:bg-black text-white font-black uppercase tracking-widest text-sm shadow-lg transition-all active:scale-[0.98] border-none gap-2.5 disabled:opacity-60"
+                        disabled={confirmando || (hayMesasAbiertas && !motivoValido)}
+                        className={cn(
+                            "w-full h-14 rounded-2xl text-white font-black uppercase tracking-widest text-sm shadow-lg transition-all active:scale-[0.98] border-none gap-2.5 disabled:opacity-60",
+                            hayMesasAbiertas ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-black"
+                        )}
                     >
                         <Lock className="w-4 h-4" />
-                        {confirmando ? 'Cerrando turno...' : 'Confirmar Cierre de Turno'}
+                        {confirmando ? 'Cerrando turno...' : hayMesasAbiertas ? 'Cerrar de todas formas' : 'Confirmar Cierre de Turno'}
                     </Button>
                     <button
                         onClick={onClose}
