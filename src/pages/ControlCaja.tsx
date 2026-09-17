@@ -288,7 +288,7 @@ interface CierreJornadaModalProps {
     cajas: CajaSesion[];
     isOpen: boolean;
     onClose: () => void;
-    onConfirmar: (cierres: { cajaId: string; montoCierre: number }[]) => Promise<void>;
+    onConfirmar: (cierres: { cajaId: string; montoCierre: number; extraInfo?: any }[]) => Promise<void>;
     formatCurrency: (v: number) => string;
     ventas?: Venta[];
 }
@@ -405,10 +405,17 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
         }
         setLoading(true);
         setProgreso(0);
-        const cierres = cajas.map(c => ({
-            cajaId: c.id,
-            montoCierre: parseFloat(montos[c.id] || '0'),
-        }));
+        const cierres = [
+            ...cajas.map(c => ({
+                cajaId: c.id,
+                montoCierre: parseFloat(montos[c.id] || '0'),
+            })),
+            ...cajasExtra.map(c => ({
+                cajaId: c.id,
+                montoCierre: parseFloat(montos[c.id] || '0'),
+                extraInfo: c
+            }))
+        ];
         await onConfirmar(cierres);
         setMontos({});
         setDenoms({});
@@ -1147,13 +1154,36 @@ export function ControlCaja({
     };
 
     // Cerrar TODAS las cajas de la jornada de una vez
-    const handleCierreJornada = async (cierres: { cajaId: string; montoCierre: number }[]) => {
+    const handleCierreJornada = async (cierres: { cajaId: string; montoCierre: number; extraInfo?: any }[]) => {
         const ahora = new Date().toISOString();
         let cerradas = 0;
         let alertas  = 0;
 
         for (const cierre of cierres) {
             const caja = sesiones.find(s => s.id === cierre.cajaId);
+            
+            // Si es una caja extra manual creada en el modal de cierre
+            if (!caja && cierre.extraInfo) {
+                const baseNueva: any = {
+                    cajaNombre: cierre.extraInfo.nombre || 'Caja Extra',
+                    vendedoraNombre: cierre.extraInfo.vendedora || 'No asignada',
+                    turno: cajasAbiertas[0]?.turno || 'Mañana',
+                    estado: 'cerrada',
+                    montoApertura: 0,
+                    fechaApertura: ahora,
+                    fechaCierre: ahora,
+                    montoCierre: cierre.montoCierre,
+                    totalVentas: 0
+                };
+                try {
+                    await db.insertSesionCaja(baseNueva);
+                    cerradas++;
+                } catch (err) {
+                    console.error('Error guardando caja extra', err);
+                }
+                continue;
+            }
+
             if (!caja) continue;
             const ent = (caja.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
             const sal = (caja.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
