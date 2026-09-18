@@ -24,6 +24,16 @@ Este proyecto se trabaja con **varios agentes de IA** (Antigravity, Cursor, Clau
 > *Hola colegas! Soy Antigravity. El usuario (Gonzalo) me ha pedido explícitamente que trabajemos como un equipo sincronizado. Si estás trabajando en la implementación del servidor MCP (especialmente la integración de Supabase que vi en los logs recientes), por favor documenta aquí los endpoints o configs que modifiques. Gonzalo quiere que evitemos pisarnos la manguera y que construyamos juntos. Dejaré notas claras de mis auditorías, te invito amablemente a hacer lo mismo. ¡Éxitos con el código hoy!*
 
 ## 🔥 Incidente real — por qué el protocolo de coordinación importa
+
+**[NUEVO INCIDENTE CRÍTICO: 2026-09-17 Noche] - LA GUERRA DE SOBREESCRITURAS**
+**Problema:** El usuario reportó "otra vez se quitó la UI, se perdió el botón de Consumo y la barra de búsqueda". 
+**Causa:** Un agente (Agent A) trabajó en `app/` creando el "Marketing Studio" y "Monetización IA" (entre 7 PM y 9 PM) y desplegó `app/` a Vercel. Luego otro agente (Agent B, Antigravity) trabajó en `src/` (raíz) haciendo mejoras de Gastos y Selector de Cajas. Al desplegar desde la raíz, se borraron de Vercel las funciones de Marketing.
+Para arreglarlo, Agent B extrajo los archivos nuevos de `app/` y los metió en la raíz, PERO al copiar `MobileDashboardView.tsx` sobreescribió la versión buena de la raíz (que tenía el botón de Consumo) con la versión vieja de `app/` (que solo tenía 4 botones). 
+**Solución:** Se tuvo que buscar en el historial de Git la versión correcta de `MobileDashboardView.tsx` y `Dashboard.tsx` de unas horas atrás y restaurarla, empaquetando por fin ambas realidades (Marketing Studio + Botón de Consumo + Gastos).
+**NUEVA REGLA DE GUARDIÁN:** 
+1. **NUNCA MÁS DESPLIEGUES DESDE `app/`**. La raíz (`src/`) es la ÚNICA fuente de la verdad para despliegues.
+2. Si un agente trabaja por error en `app/`, NO SOBREESCRIBAS ARCHIVOS DE LA RAÍZ CIEGAMENTE usando copias (ej. `Copy-Item`). Fusiona las líneas específicas que faltan o usa herramientas de comparación (Diffs), porque corres el riesgo de borrar funciones (como el botón de Consumo) que ya estaban en la raíz. Verificación extrema cruzada antes de hacer Git Push.
+
 El 2026-09-15, tras publicar `app/` a producción (arreglando el bug de `Megaphone`), la app volvió a caerse con `ReferenceError: usePermisosRealtime is not defined`. Causa: `App.tsx` tenía dos llamadas (`usePermisosRealtime()`, `useUsuariosRealtime()`) a hooks que **nunca se implementaron** — ni el archivo del hook ni el import existían. `tsc` en `app/` estaba limpio en una revisión anterior de la misma sesión, así que esas líneas se agregaron a `App.tsx` **entre esa revisión y el deploy** — casi seguro por otro agente (Antigravity/Cursor) trabajando en paralelo en una función de "permisos en tiempo real" a medio construir. Se quitaron las dos líneas (no tenían implementación real, así que no se perdió funcionalidad) y se debe re-publicar.
 **Lección**: correr `tsc --noEmit` una vez no garantiza nada si otro agente sigue editando el mismo archivo después — antes de cada deploy, correr `tsc --noEmit` de nuevo justo antes de publicar, no confiar en una revisión de minutos/horas atrás.
 
@@ -167,3 +177,22 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - [ ] Revisar la arquitectura del Radar Nequi (SSE en memoria) antes de depender de él en producción real.
 - [ ] Optimizar bundle size (Vite analyze).
 - [ ] Agregar tests unitarios y E2E para los módulos nuevos.
+
+
+### 🔧 2026-09-17 (noche) — Claude Sonnet 5 — Bug de fondo de "cajas fantasma" (arreglado, ver mesa de trabajo)
+
+**Qué encontré**: el bug ya diagnosticado antes en este mismo archivo (puntero único `cajaActiva` en `useVentas.ts` vs. apertura de varias cajas a la vez desde `AperturaCajaModal`) seguía sin arreglar en el código — confirmado leyendo `cerrarCaja` línea por línea antes de tocar nada. Antes de asumir que hacía falta limpiar cajas viejas en Supabase, verifiqué la tabla `caja`: las 280 filas ya estaban en `estado='cerrada'` (0 abiertas) — alguien ya las cerró en bloque hoy (dos cierres masivos, 02:39:53 y 04:58:41 UTC) antes de que yo revisara. No hice ninguna limpieza SQL porque no hacía falta — solo lo verifiqué, no lo asumí.
+
+**Por qué importaba**: aunque las 69 cajas viejas ya estaban cerradas, el bug de código seguía activo — cualquier apertura múltiple futura iba a volver a generar cajas fantasma, y `ControlCaja.tsx` cerraba siempre `cajaActiva` (la de ESTE dispositivo) aunque el usuario tuviera seleccionada otra caja en la lista (`cajaVista`).
+
+**Qué hice** (cambio mínimo, aditivo, AUTORIZO de Gonzalo recibido):
+- `src/hooks/useVentas.ts`: `cerrarCaja` ahora acepta un 5º parámetro opcional `cajaId`. Sin ese parámetro se comporta EXACTAMENTE igual que antes (cierra `cajaActiva`). Con `cajaId`, cierra esa sesión específica de `sesionesCaja` sin tocar `cajaActiva` si es otra caja.
+- `src/pages/ControlCaja.tsx`: el modal de cierre (`CierreCajaModal`) ahora recibe `cajaVista` (la caja realmente seleccionada en pantalla, variable que YA existía en el archivo) en vez de forzar siempre `cajaActiva`, y le pasa su `id` a `onCerrarCaja`.
+- `src/App.tsx` (protegido, AUTORIZO recibido): una sola línea — el `onCerrarCaja` de `ControlCaja` ahora reenvía el `cajaId` a `cerrarCaja(...)`. La línea de `Ventas.tsx` (que usa `nota` en vez de `cajaId`) no se tocó — no lo necesitaba.
+
+**Cómo lo verifiqué**: releí las 3 líneas/bloques exactos guardados en disco después de escribir (no solo confié en que el editor no dio error). Corrí `npx tsc --noEmit -p tsconfig.app.json` antes y después: el repo ya tenía ~1810 errores preexistentes de TypeScript (ver skill `dulce-placer-deuda-tecnica`, deuda técnica documentada, no relacionada). El primer intento sí introdujo 2 errores nuevos (usé el nombre `cajaSeleccionada` que no existe — el nombre real en el código es `cajaVista`); los corregí y la segunda corrida quedó con el mismo total de errores que antes de mi cambio (ni uno más, ni uno menos) — confirmado con `diff` línea por línea entre las dos corridas de `tsc`.
+
+**Qué queda pendiente / qué NO hice**:
+- No probado en dispositivo real todavía (abrir 2+ cajas, cerrar una específica desde la lista y confirmar que la otra sigue abierta) — falta build + `PUBLICAR_A_PRODUCCION.bat` y una prueba real de Gonzalo o de otro agente.
+- No toqué `Ventas.tsx` ni su wiring de `onCerrarCaja` (línea 463 de `App.tsx`) — esa pantalla no tiene selector de "cuál caja cerrar", así que no lo necesitaba; si en el futuro se le agrega ese selector, aplicar el mismo patrón (`cajaId` opcional ya existe en `cerrarCaja`).
+- El riesgo sistémico de "last-write-wins" en sesiones de caja (ya documentado arriba en este archivo) sigue sin resolver — este fix no lo toca.
