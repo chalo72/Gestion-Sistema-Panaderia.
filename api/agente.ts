@@ -327,6 +327,10 @@ export default async function handler(req: Request) {
   const OLLAMA_VISION = process.env.OLLAMA_MODEL_VISION || 'llama3.2-vision';
   const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY;
   const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  // NVIDIA Build (NIM, build.nvidia.com) — proveedor adicional, 100% opcional.
+  // No reemplaza a ninguno de los anteriores: si NVIDIA_API_KEY no está configurada,
+  // el comportamiento es idéntico al de antes de este cambio.
+  const NVIDIA_KEY = process.env.NVIDIA_API_KEY;
 
   const providers = [];
   if (aiMode === 'local') {
@@ -336,9 +340,11 @@ export default async function handler(req: Request) {
     if (PRIMARY_PROVIDER === 'ollama') {
       providers.push('ollama');
       if (OPENAI_KEY) providers.push('openai');
+      if (NVIDIA_KEY) providers.push('nvidia');
       if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
     } else {
       if (OPENAI_KEY) providers.push('openai');
+      if (NVIDIA_KEY) providers.push('nvidia');
       if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
       providers.push('ollama');
     }
@@ -350,6 +356,10 @@ export default async function handler(req: Request) {
       if (provider === 'openai' && OPENAI_KEY) {
         // Standard OpenAI-compatible API call (works for OpenAI, DeepSeek, Together, etc)
         return await handleOpenAI(OPENAI_KEY, tipo, mensaje, imagen, systemPrompt);
+      }
+      if (provider === 'nvidia' && NVIDIA_KEY) {
+        // NVIDIA Build (NIM) también es compatible con el formato OpenAI — reusa el mismo handler.
+        return await handleOpenAI(NVIDIA_KEY, tipo, mensaje, imagen, systemPrompt);
       }
       if (provider === 'anthropic' && ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") {
         return await handleAnthropic(ANTHROPIC_KEY, tipo, mensaje, imagen, systemPrompt);
@@ -455,22 +465,25 @@ async function handleOllama(model: string, mensaje: string, imagen: string | und
 
 async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
   const isGroq = apiKey.startsWith('gsk_');
-  const isDeepSeek = apiKey.length === 32 && !apiKey.startsWith('sk-proj-') && !isGroq;
+  const isNvidia = apiKey.startsWith('nvapi-');
+  const isDeepSeek = apiKey.length === 32 && !apiKey.startsWith('sk-proj-') && !isGroq && !isNvidia;
 
   let model = ['gerente', 'madre-suprema', 'guardian-supremo', 'arbi-supremo', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo)
-    ? (isGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o')
-    : (isGroq ? 'llama-3.1-8b-instant' : 'gpt-4o-mini');
+    ? (isNvidia ? 'meta/llama-3.1-405b-instruct' : isGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o')
+    : (isNvidia ? 'meta/llama-3.1-8b-instruct' : isGroq ? 'llama-3.1-8b-instant' : 'gpt-4o-mini');
 
   const actualModel = isDeepSeek ? 'deepseek-chat' : model;
-  
-  const baseUrl = isDeepSeek 
-    ? 'https://api.deepseek.com/chat/completions' 
-    : isGroq 
+
+  const baseUrl = isDeepSeek
+    ? 'https://api.deepseek.com/chat/completions'
+    : isGroq
       ? 'https://api.groq.com/openai/v1/chat/completions'
-      : 'https://api.openai.com/v1/chat/completions';
+      : isNvidia
+        ? 'https://integrate.api.nvidia.com/v1/chat/completions'
+        : 'https://api.openai.com/v1/chat/completions';
 
   const content: any[] = [{ type: 'text', text: mensaje }];
-  if (imagen && !isDeepSeek && !isGroq) { // DeepSeek/Groq text models might not support vision via this exact format
+  if (imagen && !isDeepSeek && !isGroq && !isNvidia) { // DeepSeek/Groq/NVIDIA (modelos de texto) no soportan visión por este formato exacto
     content.push({
       type: 'image_url',
       image_url: { url: imagen.includes(',') ? imagen : `data:image/jpeg;base64,${imagen}` }

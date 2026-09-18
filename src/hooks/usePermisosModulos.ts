@@ -85,7 +85,7 @@ const VER_CONTROL_FINANCIERO = [
   'asistencia',
   'whatsapp-hub',
 ];
-const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes','asistencia','whatsapp-hub'];
+const VER_PANADERO   = ['dashboard','produccion','recetas','inventario','reportes','asistencia','whatsapp-hub','modo-ayudante'];
 const VER_AUXILIAR   = ['dashboard','ventas','asistencia'];
 const TODOS          = MODULOS_CONFIGURABLES.map(m => m.id);
 
@@ -114,6 +114,8 @@ const PATCH_WHATSAPP_HUB = 'dp_patch_whatsapp_hub_20260913_v2';
 const PATCH_VENDEDOR_INVENTARIO = 'dp_patch_vendedor_inventario_20260915';
 /** Parche: nuevo módulo 'modo-ayudante' debe nacer APAGADO para todos salvo Gerente (puedeVer cae en `?? true` si no está explícito) */
 const PATCH_MODO_AYUDANTE = 'dp_patch_modo_ayudante_20260917';
+/** Parche: Panadero gana acceso a Captura Rápida (Atrasados) para registrar producciones atrasadas */
+const PATCH_PANADERO_MODO_AYUDANTE = 'dp_patch_panadero_modo_ayudante_20260918';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -225,6 +227,18 @@ export function cargarPermisos(): PermisosModulos {
           },
         };
         localStorage.setItem(PATCH_MODO_AYUDANTE, '1');
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_PANADERO_MODO_AYUDANTE)) {
+        parsed = {
+          ...parsed,
+          PANADERO: {
+            ...(parsed.PANADERO || DEFAULT_PERMISOS.PANADERO),
+            'modo-ayudante': { ver: true, eliminar: false },
+          },
+        };
+        localStorage.setItem(PATCH_PANADERO_MODO_AYUDANTE, '1');
         changed = true;
       }
 

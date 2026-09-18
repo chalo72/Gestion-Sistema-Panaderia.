@@ -1,0 +1,200 @@
+{
+  "name": "NIVEL DIOS - Agencia IA Autónoma",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agencia-ia-maestra",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "1. Recibir Orden del ERP",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [ 100, 300 ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Eres Andrea, la mente maestra de Marketing. Han solicitado una campaña para: {{$json.body.producto}}. 1. Busca las tendencias. 2. Redacta el guion. 3. Decide a qué red social enviarlo (Instagram, TikTok o ambas).",
+        "hasOutputParser": false
+      },
+      "id": "ai-agent",
+      "name": "2. Cerebro Autónomo (LangChain)",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.1,
+      "position": [ 400, 300 ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4"
+      },
+      "id": "llm-model",
+      "name": "Motor Lógico de IA",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [ 300, 550 ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "agencia-dulce-placer-global"
+      },
+      "id": "memory",
+      "name": "Memoria Histórica",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1,
+      "position": [ 450, 550 ]
+    },
+    {
+      "parameters": {
+        "name": "RadarTendencias",
+        "description": "Busca en la web cuáles son los hashtags virales."
+      },
+      "id": "tool-search",
+      "name": "Herramienta: Radar Web",
+      "type": "@n8n/n8n-nodes-langchain.toolSerpApi",
+      "typeVersion": 1,
+      "position": [ 600, 550 ]
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "path": "aprobar-campana"
+      },
+      "id": "wait-human",
+      "name": "3. Aprobación de Gonzalo",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [ 800, 300 ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.decision_red_social}}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "INSTAGRAM",
+              "output": 0
+            },
+            {
+              "value2": "TIKTOK",
+              "output": 1
+            }
+          ]
+        }
+      },
+      "id": "router",
+      "name": "4. Enrutador Estratégico",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [ 1100, 300 ]
+    },
+    {
+      "parameters": {},
+      "id": "instagram-publish",
+      "name": "Motor Instagram / Facebook",
+      "type": "n8n-nodes-base.facebookGraphApi",
+      "typeVersion": 1,
+      "position": [ 1400, 200 ]
+    },
+    {
+      "parameters": {},
+      "id": "tiktok-publish",
+      "name": "Motor TikTok / Douyin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [ 1400, 400 ]
+    }
+  ],
+  "connections": {
+    "1. Recibir Orden del ERP": {
+      "main": [
+        [
+          {
+            "node": "2. Cerebro Autónomo (LangChain)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Cerebro Autónomo (LangChain)": {
+      "main": [
+        [
+          {
+            "node": "3. Aprobación de Gonzalo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "3. Aprobación de Gonzalo": {
+      "main": [
+        [
+          {
+            "node": "4. Enrutador Estratégico",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4. Enrutador Estratégico": {
+      "main": [
+        [
+          {
+            "node": "Motor Instagram / Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Motor TikTok / Douyin",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Motor Lógico de IA": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "2. Cerebro Autónomo (LangChain)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memoria Histórica": {
+      "ai_memory": [
+        [
+          {
+            "node": "2. Cerebro Autónomo (LangChain)",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Herramienta: Radar Web": {
+      "ai_tool": [
+        [
+          {
+            "node": "2. Cerebro Autónomo (LangChain)",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {}
+}
