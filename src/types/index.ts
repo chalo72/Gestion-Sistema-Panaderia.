@@ -585,6 +585,7 @@ export interface Configuracion {
   tiposLata?: TipoLata[];       // Tipos de lata configurados por el admin
   tiposDia?: TipoDiaConfig[];   // Plantillas de día: Normal, Alto, Evento
   whatsappApiKey?: string;      // API key de CallMeBot para envío automático sin interacción
+  n8nWebhookUrl?: string;       // NUEVO: URL del webhook de N8N para automatización de marketing
 }
 
 // Plantilla de tipo de día de producción

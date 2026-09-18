@@ -123,6 +123,7 @@ function Configuracion(props: ConfiguracionProps) {
   const [telefonoNegocio, setTelefonoNegocio] = useState('');
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
   const [showWaKey, setShowWaKey] = useState(false);
+  const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
 
   useEffect(() => {
     if (configuracion) {
@@ -139,6 +140,7 @@ function Configuracion(props: ConfiguracionProps) {
       setWhatsappApiKey(configuracion.whatsappApiKey || '');
       setLatasPorHorno((configuracion.latasPorHorno || 4).toString());
       setPesoArrobaKg((configuracion.pesoArrobaKg || ARROBA_KG).toString());
+      setN8nWebhookUrl(configuracion.n8nWebhookUrl || localStorage.getItem('N8N_WEBHOOK_URL') || '');
     }
   }, [configuracion]);
 
@@ -155,6 +157,12 @@ function Configuracion(props: ConfiguracionProps) {
     }
 
     try {
+      if (n8nWebhookUrl) {
+        localStorage.setItem('N8N_WEBHOOK_URL', n8nWebhookUrl.trim());
+      } else {
+        localStorage.removeItem('N8N_WEBHOOK_URL');
+      }
+
       const nuevaConfig = {
         nombreNegocio,
         moneda: monedaSeleccionada,
@@ -169,6 +177,7 @@ function Configuracion(props: ConfiguracionProps) {
         pesoArrobaKg: parseFloat(pesoArrobaKg) || ARROBA_KG,
         telefonoNegocio: telefonoNegocio.trim(),
         whatsappApiKey: whatsappApiKey.trim(),
+        n8nWebhookUrl: n8nWebhookUrl.trim(),
       };
       await onUpdateConfiguracion(nuevaConfig);
 
@@ -651,6 +660,46 @@ function Configuracion(props: ConfiguracionProps) {
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   <p className="text-[11px] font-black text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">
                     WhatsApp automático activo
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Marketing y AutomatizaciÃ³n N8N */}
+          <Card className="border-none shadow-xl bg-gradient-to-br from-fuchsia-50/40 to-card dark:from-fuchsia-950/10 dark:to-card backdrop-blur-sm overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-fuchsia-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="w-5 h-5 text-fuchsia-500" />
+                AutomatizaciÃ³n de Marketing (N8N)
+              </CardTitle>
+              <CardDescription>
+                Conecta tu instancia open-source de n8n para auto-publicar guiones y escanear TikTok/YouTube en Marketing Studio.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label className="font-bold flex items-center gap-2 text-sm text-slate-800 dark:text-slate-200">
+                  <CloudUpload className="w-4 h-4 text-fuchsia-500" />
+                  Webhook URL (n8n)
+                </Label>
+                <Input
+                  value={n8nWebhookUrl}
+                  onChange={e => setN8nWebhookUrl(e.target.value)}
+                  placeholder="http://localhost:5678/webhook/..."
+                  className="h-11 rounded-xl font-mono border-fuchsia-200 focus:border-fuchsia-500 focus:ring-fuchsia-500/20 text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Este endpoint recibirÃ¡ las publicaciones automÃ¡ticas hacia Instagram, TikTok y Avatar.
+                </p>
+              </div>
+
+              {n8nWebhookUrl && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-fuchsia-500/10 border border-fuchsia-300 dark:border-fuchsia-700">
+                  <span className="w-2 h-2 rounded-full bg-fuchsia-500 animate-pulse shrink-0" />
+                  <p className="text-[11px] font-black text-fuchsia-700 dark:text-fuchsia-400 uppercase tracking-wide">
+                    Enlace de marketing preparado
                   </p>
                 </div>
               )}
