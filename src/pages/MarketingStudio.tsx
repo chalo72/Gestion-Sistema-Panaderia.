@@ -1,13 +1,14 @@
-import React, { useState, useRef } from 'react';
-import { Bot, Sparkles, Image as ImageIcon, Copy, CheckCircle2, Megaphone, Target, TrendingUp, UserCircle, MapPin, Send, Instagram, PlaySquare, FileText, ShoppingBag, Radar, Upload, RefreshCw, MessageCircle, Check, Share2, Facebook, Video, User } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Bot, Sparkles, Image as ImageIcon, Copy, CheckCircle2, Megaphone, Target, TrendingUp, UserCircle, MapPin, Send, Instagram, PlaySquare, FileText, ShoppingBag, Radar, Upload, RefreshCw, MessageCircle, Check, Share2, Facebook, Video, User, Settings2, Sliders, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { consultarAgente } from '@/constants/agentes';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCan } from '@/contexts/AuthContext';
-import { publicarEnRedSocial } from '@/lib/marketing-api';
+import { publicarEnRedSocial, getWebhookUrl, setWebhookUrl, testWebhookConnection, enviarVideoAN8N } from '@/lib/marketing-api';
 import { scrapeViralTrends, type TrendVideo } from '@/lib/viral-scraper';
 import type { Producto } from '@/types';
 
@@ -30,14 +31,50 @@ export default function MarketingStudio({ productos = [] }: Props) {
   const [viralTrends, setViralTrends] = useState<TrendVideo[]>([]);
   const [isPublishing, setIsPublishing] = useState<Record<string, boolean>>({});
 
+  // Configuración de Webhook N8N
+  const [showWebhookConfig, setShowWebhookConfig] = useState(false);
+  const [currentWebhookUrl, setCurrentWebhookUrl] = useState(getWebhookUrl());
+  const [isTestingWebhook, setIsTestingWebhook] = useState(false);
+  const [webhookStatusMsg, setWebhookStatusMsg] = useState<string | null>(null);
+
+  // Fábrica de Video
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [extraerSubtitulos, setExtraerSubtitulos] = useState(true);
+  const [generarThumbnail, setGenerarThumbnail] = useState(true);
+  const [incluirLogo, setIncluirLogo] = useState(true);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTestWebhook = async () => {
+    setIsTestingWebhook(true);
+    setWebhookStatusMsg(null);
+    try {
+      const res = await testWebhookConnection(currentWebhookUrl);
+      if (res.success) {
+        toast.success(res.message);
+        setWebhookStatusMsg(`✅ ${res.message}`);
+      } else {
+        toast.error(res.message);
+        setWebhookStatusMsg(`⚠️ ${res.message}`);
+      }
+    } finally {
+      setIsTestingWebhook(false);
+    }
+  };
+
+  const handleSaveWebhook = () => {
+    setWebhookUrl(currentWebhookUrl);
+    toast.success('URL del Webhook guardada exitosamente.');
+    setShowWebhookConfig(false);
+  };
+
   const handleScrapeTrends = async () => {
     setIsScraping(true);
     try {
       const trends = await scrapeViralTrends(['reposteria', 'panaderia', 'pasteleria']);
       setViralTrends(trends);
-      toast.success(`Se encontraron ${trends.length} videos virales.`);
+      toast.success(`Se encontraron ${trends.length} videos y ganchos virales.`);
     } catch (error) {
-      toast.error('Error al conectar con el servidor MCP de Puppeteer.');
+      toast.error('Error al consultar el radar viral.');
     } finally {
       setIsScraping(false);
     }
@@ -180,7 +217,68 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
             Motor de crecimiento local para Dulce Placer y construcción de marca personal para Andrea.
           </p>
         </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowWebhookConfig(!showWebhookConfig)}
+            className="text-xs font-semibold gap-2 border-slate-200 dark:border-slate-800 bg-white/50 dark:bg-slate-900/50 backdrop-blur"
+          >
+            <Settings2 className="w-4 h-4 text-fuchsia-500" />
+            Webhook N8N
+          </Button>
+        </div>
       </div>
+
+      {/* MODAL / PANEL DE CONFIGURACIÓN WEBHOOK */}
+      {showWebhookConfig && (
+        <Card className="border-fuchsia-200 dark:border-fuchsia-900/50 bg-fuchsia-50/50 dark:bg-fuchsia-950/20 shadow-xl animate-in slide-in-from-top-2">
+          <CardHeader className="py-3 px-4 sm:px-6 border-b border-fuchsia-100 dark:border-fuchsia-900/30">
+            <CardTitle className="text-sm font-bold flex items-center gap-2 text-fuchsia-950 dark:text-fuchsia-200">
+              <Sliders className="w-4 h-4 text-fuchsia-600 dark:text-fuchsia-400" /> Configuración de Enlace N8N / Webhooks
+            </CardTitle>
+            <CardDescription className="text-xs text-fuchsia-700 dark:text-fuchsia-300">
+              Configura la URL del Webhook receptor para auto-publicar en redes y procesar videos en segundo plano.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 sm:p-6 space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">URL del Webhook (N8N / Make / Zapier)</Label>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Input
+                  value={currentWebhookUrl}
+                  onChange={(e) => setCurrentWebhookUrl(e.target.value)}
+                  placeholder="http://localhost:5678/webhook/dulce-placer-marketing"
+                  className="text-xs font-mono bg-white dark:bg-slate-900"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isTestingWebhook}
+                  onClick={handleTestWebhook}
+                  className="text-xs whitespace-nowrap"
+                >
+                  {isTestingWebhook ? <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1.5" /> : null}
+                  Probar Conexión
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleSaveWebhook}
+                  className="text-xs bg-fuchsia-600 hover:bg-fuchsia-700 text-white whitespace-nowrap"
+                >
+                  Guardar
+                </Button>
+              </div>
+              {webhookStatusMsg && (
+                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 mt-1">
+                  {webhookStatusMsg}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-4 space-y-6">
@@ -454,12 +552,36 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
                 {/* ZONA DE SUBIDA */}
                 <div className="space-y-3">
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">1. Sube el Video o Audio Base</Label>
-                  <div className="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-8 text-center cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
+                  <input
+                    ref={videoInputRef}
+                    type="file"
+                    accept="video/*,audio/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) {
+                        if (f.size > 50 * 1024 * 1024) {
+                          toast.error('El archivo supera los 50MB permitidos.');
+                          return;
+                        }
+                        setVideoFile(f);
+                        toast.success(`Archivo cargado: ${f.name}`);
+                      }
+                    }}
+                  />
+                  <div 
+                    onClick={() => videoInputRef.current?.click()}
+                    className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors group ${videoFile ? 'border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20' : 'border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800/50'}`}
+                  >
                     <div className="w-12 h-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
-                      <Upload className="w-6 h-6 text-slate-400" />
+                      {videoFile ? <CheckCircle className="w-6 h-6 text-emerald-500" /> : <Upload className="w-6 h-6 text-slate-400" />}
                     </div>
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">Arrastra la grabación de Andrea</p>
-                    <p className="text-[10px] text-slate-500 mt-1">Soporta .MP4, .MOV, .MP3 (Máx 50MB)</p>
+                    <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                      {videoFile ? videoFile.name : 'Arrastra la grabación de Andrea'}
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {videoFile ? `${(videoFile.size / (1024 * 1024)).toFixed(2)} MB - Clic para cambiar` : 'Soporta .MP4, .MOV, .MP3 (Máx 50MB)'}
+                    </p>
                   </div>
                 </div>
 
@@ -468,15 +590,30 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
                   <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">2. Órdenes para N8N</Label>
                   <div className="space-y-2">
                     <label className="flex items-center gap-2 text-sm p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
-                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-600" />
+                      <input 
+                        type="checkbox" 
+                        checked={extraerSubtitulos} 
+                        onChange={(e) => setExtraerSubtitulos(e.target.checked)}
+                        className="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-600" 
+                      />
                       <span>Extraer Subtítulos Dinámicos IA</span>
                     </label>
                     <label className="flex items-center gap-2 text-sm p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
-                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-600" />
+                      <input 
+                        type="checkbox" 
+                        checked={generarThumbnail} 
+                        onChange={(e) => setGenerarThumbnail(e.target.checked)}
+                        className="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-600" 
+                      />
                       <span>Generar Portada (Thumbnail) Viral</span>
                     </label>
                     <label className="flex items-center gap-2 text-sm p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer">
-                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-600" />
+                      <input 
+                        type="checkbox" 
+                        checked={incluirLogo} 
+                        onChange={(e) => setIncluirLogo(e.target.checked)}
+                        className="rounded border-slate-300 text-fuchsia-600 focus:ring-fuchsia-600" 
+                      />
                       <span>Añadir Logo de Dulce Placer</span>
                     </label>
                   </div>
@@ -485,12 +622,27 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
 
               <Button 
                 disabled={isPublishing['N8N_VIDEO']}
-                onClick={() => {
-                  toast.success('Enviando video y órdenes a N8N para su procesamiento...');
+                onClick={async () => {
+                  setIsPublishing(prev => ({ ...prev, N8N_VIDEO: true }));
+                  try {
+                    await enviarVideoAN8N({
+                      videoNombre: videoFile?.name || 'grabacion_directa.mp4',
+                      extraerSubtitulos,
+                      generarThumbnail,
+                      incluirLogo,
+                      estrategia: selectedStrategy
+                    });
+                    toast.success('¡Video y directivas enviadas a N8N exitosamente! 🚀');
+                  } catch (error: any) {
+                    toast.error(error.message || 'Error al conectar con el Webhook de N8N. Verifica tu configuración.');
+                  } finally {
+                    setIsPublishing(prev => ({ ...prev, N8N_VIDEO: false }));
+                  }
                 }}
-                className="w-full h-12 bg-gradient-to-r from-rose-600 to-fuchsia-600 hover:from-rose-500 hover:to-fuchsia-500 text-white shadow-lg shadow-rose-500/25 font-black uppercase tracking-wider text-xs"
+                className="w-full h-12 bg-gradient-to-r from-rose-600 to-fuchsia-600 hover:from-rose-500 hover:to-fuchsia-500 text-white shadow-lg shadow-rose-500/25 font-black uppercase tracking-wider text-xs gap-2"
               >
-                <Sparkles className="w-4 h-4 mr-2" /> Iniciar Edición IA y Publicar Múltiple
+                {isPublishing['N8N_VIDEO'] ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                Iniciar Edición IA y Publicar Múltiple
               </Button>
             </CardContent>
           </Card>
