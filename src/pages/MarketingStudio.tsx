@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Bot, Sparkles, Image as ImageIcon, Copy, CheckCircle2, Megaphone, Target, TrendingUp, UserCircle, MapPin, Send, Instagram, PlaySquare, FileText, ShoppingBag, Radar } from 'lucide-react';
+import { Bot, Sparkles, Image as ImageIcon, Copy, CheckCircle2, Megaphone, Target, TrendingUp, UserCircle, MapPin, Send, Instagram, PlaySquare, FileText, ShoppingBag, Radar, Upload, RefreshCw, MessageCircle, Check, Share2, Facebook, Video, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';

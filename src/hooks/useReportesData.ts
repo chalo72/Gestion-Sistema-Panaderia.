@@ -73,7 +73,8 @@ import {
     getCompromisos, saveCompromisos, addCompromiso, deleteCompromiso, updateCompromiso,
     getVentasDiarias, addVentaDiaria, deleteVentaDiaria,
     calcularProyeccionQuincena, generarConsejo,
-    getProducciones, addProduccion, deleteProduccion, saveProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD
+    getProducciones, addProduccion, deleteProduccion, saveProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD,
+    sincronizarProduccionesConNube, sincronizarVentasDiariasConNube
 } from '@/lib/finanzas-personales';
 import { getBovedas, addBoveda, addMovimientoBoveda } from '@/lib/boveda-store';
 import { syncArqueoCajasABoveda } from '@/lib/boveda-pos-sync';
@@ -293,6 +294,11 @@ export function useReportesData(props: ReportesProps) {
         const refrescar = () => setProducciones(getProducciones());
         window.addEventListener('dp_producciones_changed', refrescar);
         window.addEventListener('storage', refrescar);
+        
+        // Sincronizar en segundo plano con Supabase al abrir
+        sincronizarProduccionesConNube().then(refrescar).catch(() => {});
+        sincronizarVentasDiariasConNube().catch(() => {});
+
         return () => {
             window.removeEventListener('dp_producciones_changed', refrescar);
             window.removeEventListener('storage', refrescar);
@@ -378,10 +384,12 @@ export function useReportesData(props: ReportesProps) {
                 saveProducciones(actualizados);
                 setProducciones(actualizados);
                 setEditProduccionId(null);
+                window.dispatchEvent(new Event('dp_producciones_changed'));
                 toast.success(`✅ Producción del ${data.fecha} actualizada`);
             } else {
                 const nueva = addProduccion(data);
                 setProducciones(getProducciones());
+                window.dispatchEvent(new Event('dp_producciones_changed'));
                 toast.success(`✅ Producción del ${nueva.fecha} registrada`);
             }
         } catch (err) {

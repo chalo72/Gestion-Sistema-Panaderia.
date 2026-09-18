@@ -19,32 +19,40 @@ interface CentinelaContextType {
 
 const CentinelaContext = createContext<CentinelaContextType | undefined>(undefined);
 
-// Barra de versión — cuenta 5s y ejecuta la recarga automáticamente.
+// Barra de versión — cuenta 5s y ejecuta la recarga nuclear automáticamente.
 function VersionBar({ onDismiss, recargar }: { onDismiss: () => void; recargar: () => void }) {
   const [secs, setSecs] = React.useState(5);
   const [flash, setFlash] = React.useState(false);
+  const reloadedRef = React.useRef(false);
+
   React.useEffect(() => {
     const t = setInterval(() => {
       setSecs(s => {
         if (s <= 1) {
           clearInterval(t);
           setFlash(true);
+          if (!reloadedRef.current) {
+            reloadedRef.current = true;
+            setTimeout(() => {
+              recargar();
+            }, 600);
+          }
           return 0;
         }
         return s - 1;
       });
     }, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [recargar]);
   
   return (
     <div style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
-      background: flash ? 'rgba(16,185,129,0.9)' : 'linear-gradient(90deg,#312e81,#4f46e5,#312e81)',
-      color: '#e0e7ff', padding: '4px 14px',
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+      background: flash ? 'rgba(16,185,129,0.95)' : 'linear-gradient(90deg,#312e81,#4f46e5,#312e81)',
+      color: '#e0e7ff', padding: '6px 14px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      fontSize: 11, fontWeight: 600,
-      boxShadow: '0 1px 6px rgba(79,70,229,0.3)',
+      fontSize: 12, fontWeight: 700,
+      boxShadow: '0 2px 10px rgba(79,70,229,0.5)',
       animation: flash ? 'vbFlash 0.3s ease 2' : 'vbSlide 0.3s ease',
       transition: 'background 0.2s',
     }}>
@@ -52,11 +60,12 @@ function VersionBar({ onDismiss, recargar }: { onDismiss: () => void; recargar: 
         @keyframes vbSlide{from{transform:translateY(-100%)}to{transform:translateY(0)}}
         @keyframes vbFlash{0%,100%{opacity:1}50%{opacity:0.15}}
       `}</style>
-      <span>&#128260; Nueva versión detectada — {secs > 0 ? `recargando en ${secs}s` : 'Actualizando...'}</span>
+      <span>&#128260; Nueva versión lista — {secs > 0 ? `actualizando en ${secs}s...` : 'Recargando ahora...'}</span>
       <button onClick={recargar} style={{
-        background:'rgba(255,255,255,0.18)',color:'#fff',border:'1px solid rgba(255,255,255,0.3)',
-        borderRadius:6,padding:'1px 10px',fontSize:10,fontWeight:700,cursor:'pointer',
-      }}>Aplicar ya</button>
+        background:'#10b981',color:'#fff',border:'none',
+        borderRadius:8,padding:'4px 12px',fontSize:11,fontWeight:800,cursor:'pointer',
+        boxShadow:'0 1px 4px rgba(0,0,0,0.2)'
+      }}>Actualizar ya</button>
     </div>
   );
 }

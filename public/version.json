@@ -1,7 +1,7 @@
 {
-  "version": "1.1.1160",
+  "version": "1.1.1162",
   "buildTime": "2026-09-15T13:48:00.000Z",
   "description": "Silenciamiento total de avisos rojos molestos de sincronización y optimización de cola outbox para sesiones de caja",
-  "timestamp": 1789675671861,
-  "buildDate": "2026-09-17"
+  "timestamp": 1789744541381,
+  "buildDate": "2026-09-18"
 }

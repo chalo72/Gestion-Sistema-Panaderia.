@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend, AreaChart, Area, ReferenceLine } from 'recharts';
 import { Package, TrendingUp, TrendingDown, Target, Layers, DollarSign, Activity, ShoppingBag, Brain, CalendarCheck, Shield, Plus, Trash2, CalendarDays, Wallet, BadgeAlert, CheckCircle2, AlertTriangle, XCircle, User, Flame, LifeBuoy, Gauge, Snowflake, CalendarRange, List, Percent, Sparkles, Bot, Loader2, ClipboardCheck, BellRing, Scale, CheckCheck, Save, ClipboardList, History, Edit2, ChevronDown, ChevronUp, Search, ChefHat, ShoppingCart, PlusCircle, MinusCircle, ChevronRight, Download } from 'lucide-react';
@@ -1154,7 +1154,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
         { label: "10 Arrobas", val: 10.0 },
     ];
     
-    return (
+    const contenidoTabs = (
         <TabsContent value="quincena" className="space-y-6 mt-0">
             {(() => {
                 // Modo Supervivencia: Cálculo de Cajas Sagradas vs Fondo Común
@@ -4824,6 +4824,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
             })()}
         </TabsContent>
     );
+    return modoLibretaHorno ? <Tabs value="quincena">{contenidoTabs}</Tabs> : contenidoTabs;
 }
 
 

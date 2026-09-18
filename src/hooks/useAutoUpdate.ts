@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 
 // ── Constantes ────────────────────────────────────────────────────────────────
-const CHECK_INTERVAL    = 5 * 60 * 1000; // Polling cada 5 minutos (evita bloqueos DDoS de Vercel)
+const CHECK_INTERVAL    = 45 * 1000;     // Polling cada 45 segundos
 const STORAGE_KEY       = 'nexus_build_ts';
 const BROADCAST_CHANNEL = 'nexus_update_v1';
-const COUNTDOWN_SECONDS = 8;           // Segundos antes del reload silencioso
-const HIDDEN_THRESHOLD  = 5 * 60 * 1000; // 5 min oculto → verificar al volver
+const HIDDEN_THRESHOLD  = 15 * 1000;     // 15s oculto → verificar de inmediato al volver (desbloqueo de celular)
 
 /**
  * HyperSync — actualización por 4 canales simultáneos:
@@ -16,10 +15,10 @@ const HIDDEN_THRESHOLD  = 5 * 60 * 1000; // 5 min oculto → verificar al volver
  *  Canal B — StorageEvent:      doble seguro del Canal A usando localStorage
  *            (compatible con navegadores que bloquean BroadcastChannel).
  *
- *  Canal C — version.json polling cada 30s + forzar SW.update() simultáneo.
+ *  Canal C — version.json polling cada 45s + forzar SW.update() simultáneo.
  *
- *  Canal D — "Modo Sombra":     si la app estuvo oculta >5 min, verifica
- *            dentro de los primeros 2s al volver (bloqueo de pantalla, cambio de tab).
+ *  Canal D — "Modo Sombra":     si la app estuvo oculta >15s, verifica
+ *            dentro de los primeros 1.5s al volver (desbloqueo de pantalla, cambio de app).
  *
  *  Ejecución: RECARGA NUCLEAR — desregistra SWs + limpia caches → va directo
  *             a Vercel sin intermediario, cargando la versión más nueva.
@@ -41,7 +40,8 @@ async function nuclearReload(): Promise<void> {
     }
   } catch { /* ignorar errores — recargar de todas formas */ }
   // 3. Forzar descarga fresca evitando caché del navegador
-  window.location.replace(window.location.href.split('?')[0] + '?_v=' + Date.now());
+  const cleanUrl = window.location.href.split('?')[0];
+  window.location.replace(`${cleanUrl}?_v=${Date.now()}`);
 }
 
 // ── Forzar descarga del SW nuevo ─────────────────────────────────────────────
@@ -88,25 +88,14 @@ export function useAutoUpdate() {
     try { localStorage.setItem('nexus_update_signal', `${ts}:${version}:${Date.now()}`); } catch { /**/ }
   }, []);
 
-  // ── Notificar nueva versión — muestra el banner, el usuario decide cuándo recargar
+  // ── Notificar nueva versión — activa el banner de actualización
   const iniciarContadorYRecargar = useCallback((version: string) => {
     if (reloadingRef.current) return;
     setUpdateAvailable(true);
     setNewVersion(version);
-    
-    // Solo mostrar el banner, el usuario decide cuándo recargar manualmente
-    setCountdown(null);
-    if (countdownRef.current) {
-      clearInterval(countdownRef.current);
-      countdownRef.current = null;
-    }
   }, []);
 
   // ── Capa 1 (SW): controllerchange ─────────────────────────────────────────
-  // Solo muestra el banner si ya había un controller activo (es decir,
-  // hay un SW anterior que fue REEMPLAZADO por uno nuevo). Si no había
-  // controller previo es la primera instalación — no hay nada nuevo.
-  // IMPORTANTE: no recargamos automáticamente — el usuario decide con el banner.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
 
@@ -114,7 +103,7 @@ export function useAutoUpdate() {
 
     const handleControllerChange = () => {
       if (hadController && !reloadingRef.current) {
-        // SW nuevo tomó el control → solo mostrar banner, el usuario decide cuándo recargar
+        // SW nuevo tomó el control → avisar al usuario
         iniciarContadorYRecargar('');
       }
     };
@@ -173,7 +162,8 @@ export function useAutoUpdate() {
     forceSWUpdate();
 
     try {
-      const res = await fetch('/version.json', {
+      // Query param _t evita caché de disco y red en Android WebView / iOS Safari
+      const res = await fetch(`/version.json?_t=${Date.now()}`, {
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache, no-store, max-age=0' },
       });
@@ -184,6 +174,8 @@ export function useAutoUpdate() {
       const version         = data.version   ?? '';
 
       setCurrentVersion(version);
+
+      if (serverTimestamp <= 0) return;
 
       if (savedTimestampRef.current === 0) {
         savedTimestampRef.current = serverTimestamp;
@@ -198,7 +190,6 @@ export function useAutoUpdate() {
         broadcastUpdate(version, serverTimestamp);
         iniciarContadorYRecargar(version);
       } else if (isWakeUp) {
-        // Wake-up sin cambio de versión → solo resetear el modo sombra
         hiddenSinceRef.current = null;
       }
     } catch {
@@ -210,30 +201,37 @@ export function useAutoUpdate() {
     // Verificar al montar
     checkForUpdates();
 
-    // Canal C: polling cada 30s
+    // Canal C: polling periódico
     const interval = setInterval(() => checkForUpdates(), CHECK_INTERVAL);
 
-    // Canal D: Modo Sombra — detectar cuando el dispositivo vuelve después de >5 min oculto
+    // Canal D: Modo Sombra + Desbloqueo / Foco
     const handleVisibility = () => {
       if (document.visibilityState === 'hidden') {
         hiddenSinceRef.current = Date.now();
       } else {
         const hiddenSince = hiddenSinceRef.current;
         hiddenSinceRef.current = null;
-        const wasLongHidden = hiddenSince !== null && (Date.now() - hiddenSince) >= HIDDEN_THRESHOLD;
+        const wasLongHidden = hiddenSince === null || (Date.now() - hiddenSince) >= HIDDEN_THRESHOLD;
 
         if (wasLongHidden) {
-          // Estaba oculto >5 min → verificar rápido al despertar (bloqueo de pantalla, multi-tarea)
-          setTimeout(() => checkForUpdates(true), 1500);
+          // Despertó del bloqueo o cambio de app → verificar de inmediato
+          setTimeout(() => checkForUpdates(true), 1200);
         }
       }
     };
 
+    const handleFocus = () => {
+      checkForUpdates(true);
+    };
+
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', () => checkForUpdates(true));
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [checkForUpdates]);
 

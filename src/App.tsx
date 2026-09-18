@@ -93,6 +93,7 @@ const Gastos = lazy(() => import('@/pages/Gastos'));
 const Proveedores = lazy(() => import('@/pages/Proveedores'));
 const Reportes = lazy(() => import('@/pages/Reportes'));
 const ModoAyudante       = lazy(() => import('@/pages/ModoAyudante'));
+const MonetizacionInfluencer = lazy(() => import('@/pages/MonetizacionInfluencer'));
 const Precios = lazy(() => import('@/pages/Precios'));
 const Clientes = lazy(() => import('@/pages/Clientes'));
 const BuscadorPrecios = lazy(() => import('@/pages/BuscadorPrecios'));

@@ -13,6 +13,7 @@ import { DistribuidorArroba } from '@/components/produccion/DistribuidorArroba';
 import { ModelosPanView } from '@/components/produccion/ModelosPanView';
 import { useAuditorias } from '@/hooks/useAuditorias';
 import { consultarAgente } from '@/constants/agentes';
+import { sincronizarAuditoriaDesdeProduccion } from '@/lib/finanzas-personales';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -711,7 +712,27 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                 analisisIA
             });
             
-            toast.success("Auditoría guardada exitosamente");
+            try {
+                sincronizarAuditoriaDesdeProduccion({
+                    fecha: fechaAuditoria,
+                    nombreMasa: f.nombre || 'Masa',
+                    cantidadArrobas: arrobas,
+                    panes: cortes.map((c: { modeloId?: string; cantidad?: number }) => ({
+                        tipoPan: modelosPan.find((m) => m.id === c.modeloId)?.nombre || 'Pan',
+                        totalPanes: Number(c.cantidad) || 0,
+                    })),
+                    notas: [
+                        'Sincronizado desde Recetas (Distribuidor de arroba)',
+                        `Masa libre: ${masaLibreKg.toFixed(1)} kg`,
+                        analisisIA ? `IA: ${analisisIA.slice(0, 280)}` : '',
+                    ].filter(Boolean).join(' · '),
+                });
+                window.dispatchEvent(new Event('dp_producciones_changed'));
+            } catch (syncErr) {
+                console.error('Puente a historial de Libreta falló:', syncErr);
+            }
+
+            toast.success("✅ Guardado en Libreta del Horno e Historial de Auditorías");
             setIsDistribucionOpen(false);
         } catch (error) {
             console.error(error);

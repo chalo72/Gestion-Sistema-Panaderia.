@@ -679,6 +679,7 @@ export function PlanDiarioView({
                           piqueGr: i.piqueGr !== undefined ? i.piqueGr : (resultados.rows.find(r => r?.id === i.id)?.piqueGr)
                         }))
                       }).then(() => {
+                        toast.success('✅ Plan del día guardado correctamente');
                         setItems([]);
                         setMasasObjetivo({});
                       }).catch((err) => {

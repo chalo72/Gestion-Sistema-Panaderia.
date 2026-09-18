@@ -11,6 +11,7 @@ import {
   fechaLocalHoy,
   getProducciones,
   normalizarFechaYYYYMMDD,
+  sincronizarProduccionesConNube,
   type RegistroProduccion,
 } from '@/lib/finanzas-personales';
 import { cn } from '@/lib/utils';
@@ -51,13 +52,25 @@ export function HistorialLibretaHorno({ limite = 40, className }: Props) {
   const [filtroFecha, setFiltroFecha] = useState<RangoFecha>('todos');
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const [fechaFin, setFechaFin] = useState<string>('');
+  const [sincronizando, setSincronizando] = useState(false);
 
   const refrescar = useCallback(() => {
     setItems(getProducciones());
   }, []);
 
+  const sincronizarManual = useCallback(async () => {
+    setSincronizando(true);
+    try {
+      const data = await sincronizarProduccionesConNube();
+      setItems(data);
+    } finally {
+      setSincronizando(false);
+    }
+  }, []);
+
   useEffect(() => {
     refrescar();
+    sincronizarProduccionesConNube().then(data => setItems(data)).catch(() => {});
     const onChange = () => refrescar();
     window.addEventListener('dp_producciones_changed', onChange);
     window.addEventListener('storage', onChange);
@@ -168,11 +181,12 @@ export function HistorialLibretaHorno({ limite = 40, className }: Props) {
             type="button"
             variant="ghost"
             size="icon"
-            onClick={refrescar}
+            onClick={sincronizarManual}
+            disabled={sincronizando}
             className="shrink-0 h-9 w-9 rounded-xl text-amber-700 hover:bg-amber-500/10"
-            title="Actualizar datos"
+            title="Sincronizar con la nube (Supabase)"
           >
-            <RefreshCw className="w-4 h-4" />
+            <RefreshCw className={cn("w-4 h-4", sincronizando && "animate-spin text-amber-500")} />
           </Button>
         </div>
 

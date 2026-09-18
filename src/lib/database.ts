@@ -421,6 +421,8 @@ class NexusDatabase implements IDatabase {
 
   // Productos
   async getAllProductos() { return this.adapter.getCollection('productos'); }
+  // Facturas escaneadas (stub local: solo Supabase persiste estas; ver supabase-db.ts)
+  async getAllFacturasEscaneadas(): Promise<any[]> { return []; }
   async addProducto(p: any) {
     await this.adapter.setDocument('productos', p.id, p);
     // 🔀 Sincronizar en Supabase para que otros dispositivos lo vean
@@ -1002,8 +1004,14 @@ class NexusDatabase implements IDatabase {
                 await (localAdapter as any).hydrateFromCloud('modelosPan', validM);
               }
             }
+
+            // Sincronizar producciones_data (Libreta del Horno)
+            const prodBackup = await supaDB.getBackup('producciones_data');
+            if (prodBackup && Array.isArray(prodBackup) && prodBackup.length > 0) {
+              await localAdapter.setDocument('backups', 'producciones_data', { id: 'producciones_data', data: prodBackup });
+            }
           } catch (e) {
-            console.warn('⚠️ [NEXUS] No se pudo sincronizar backups de formulaciones/modelos:', e);
+            console.warn('⚠️ [NEXUS] No se pudo sincronizar backups de formulaciones/modelos/producciones:', e);
           }
 
           cloudExito = true;

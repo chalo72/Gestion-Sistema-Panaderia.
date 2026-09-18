@@ -448,6 +448,11 @@ export function saveProducciones(list: RegistroProduccion[]): void {
   const normalizados = list.map((p) => ({ ...p, fecha: normalizarFechaYYYYMMDD(p.fecha) }));
   normalizados.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   localStorage.setItem(KEY_PRODUCCIONES, JSON.stringify(normalizados.slice(0, 365)));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('dp_producciones_changed'));
+  }
+  // Respaldo en la nube en segundo plano (no bloqueante)
+  pushProduccionesToCloud(normalizados).catch(() => {});
 }
 
 export function addProduccion(data: Omit<RegistroProduccion, 'id'>): RegistroProduccion {
@@ -457,13 +462,126 @@ export function addProduccion(data: Omit<RegistroProduccion, 'id'>): RegistroPro
     id: generateUUID(),
   };
   const existentes = getProducciones();
-  // Se remueve el filtro de fecha única para permitir múltiples lotes/auditorías por día
   saveProducciones([nuevo, ...existentes]);
   return nuevo;
 }
 
 export function deleteProduccion(id: string): void {
   saveProducciones(getProducciones().filter(p => p.id !== id));
+}
+
+/**
+ * Respaldo directo en la nube (Supabase)
+ */
+async function pushProduccionesToCloud(list: RegistroProduccion[]): Promise<void> {
+  try {
+    const { db } = await import('@/lib/database');
+    await db.saveBackup('producciones_data', list);
+  } catch (err) {
+    console.warn('⚠️ [Finanzas] Error enviando producciones a la nube:', err);
+  }
+}
+
+/**
+ * Sincronización y Fusión Bidireccional de la Libreta del Horno
+ * Une los registros locales con los de la nube sin perder datos de ningún dispositivo.
+ */
+export async function sincronizarProduccionesConNube(): Promise<RegistroProduccion[]> {
+  try {
+    const { db } = await import('@/lib/database');
+    const cloudRaw = await db.getBackup('producciones_data');
+    const cloudList: RegistroProduccion[] = Array.isArray(cloudRaw) ? cloudRaw : [];
+    const localList = getProducciones();
+
+    if (cloudList.length === 0 && localList.length === 0) return [];
+
+    // Fusión por ID único (Zero Data Loss)
+    const map = new Map<string, RegistroProduccion>();
+    // 1. Agregar nube
+    for (const item of cloudList) {
+      if (item && item.id) {
+        map.set(item.id, { ...item, fecha: normalizarFechaYYYYMMDD(item.fecha) });
+      }
+    }
+    // 2. Agregar/sobrescribir con local (LOCAL SIEMPRE GANA)
+    for (const item of localList) {
+      if (item && item.id) {
+        map.set(item.id, { ...item, fecha: normalizarFechaYYYYMMDD(item.fecha) });
+      }
+    }
+
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+    // Guardar en localStorage si hay cambios
+    const mergedSlice = merged.slice(0, 365);
+    localStorage.setItem(KEY_PRODUCCIONES, JSON.stringify(mergedSlice));
+    
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('dp_producciones_changed'));
+    }
+
+    // Si la lista fusionada tiene más elementos que la nube, actualizar la nube
+    if (merged.length !== cloudList.length) {
+      db.saveBackup('producciones_data', mergedSlice).catch(() => {});
+    }
+
+    return mergedSlice;
+  } catch (err) {
+    console.warn('⚠️ [Finanzas] Falló sincronización de producciones con nube:', err);
+    return getProducciones();
+  }
+}
+
+/**
+ * Sincronización y Fusión de Ventas Diarias Manuales
+ */
+export async function sincronizarVentasDiariasConNube(): Promise<VentaDiaria[]> {
+  try {
+    const { db } = await import('@/lib/database');
+    const cloudRaw = await db.getBackup('ventas_diarias_data');
+    const cloudList: VentaDiaria[] = Array.isArray(cloudRaw) ? cloudRaw : [];
+    const localList = getVentasDiarias();
+
+    if (cloudList.length === 0 && localList.length === 0) return [];
+
+    const map = new Map<string, VentaDiaria>();
+    for (const item of cloudList) {
+      if (item && item.id) map.set(item.id, item);
+    }
+    for (const item of localList) {
+      if (item && item.id) map.set(item.id, item);
+    }
+
+    const merged = Array.from(map.values());
+    merged.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+    const mergedSlice = merged.slice(0, 365);
+    localStorage.setItem(KEY_VENTAS_DIARIAS, JSON.stringify(mergedSlice));
+
+    if (merged.length !== cloudList.length) {
+      db.saveBackup('ventas_diarias_data', mergedSlice).catch(() => {});
+    }
+
+    return mergedSlice;
+  } catch (err) {
+    return getVentasDiarias();
+  }
+}
+
+/**
+ * Auto-arranque de sincronización al cargar o reconectar a internet
+ */
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    sincronizarProduccionesConNube().catch(() => {});
+    sincronizarVentasDiariasConNube().catch(() => {});
+  }, 2500);
+
+  window.addEventListener('online', () => {
+    sincronizarProduccionesConNube().catch(() => {});
+    sincronizarVentasDiariasConNube().catch(() => {});
+  });
 }
 
 /**
