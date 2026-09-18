@@ -1,7 +1,8 @@
 import { 
   BrainCircuit, Utensils, Package, Megaphone, Users, TrendingUp, Wallet, 
   Truck, CheckCircle, Wrench, MessageCircle, Leaf, Rocket, Building, 
-  Clipboard, Lightbulb, Scale, FileText, Target, Instagram, Shield
+  Clipboard, Lightbulb, Scale, FileText, Target, Instagram, Shield,
+  Sparkles, Crown, ShieldAlert
 } from 'lucide-react';
 
 import type { AgenteId } from '@/types/agente-id';
@@ -14,6 +15,41 @@ const getDb = async () => {
 };
 
 export const AGENTES_CONFIG: Record<AgenteId, { nombre: string; cargo: string; emoji: string; color: string; bg: string; icon: any; shadow: string; misionPanaderia: string; plantillas: string[] }> = {
+  // === TRINIDAD SUPREMA / HABILIDADES SUPREMAS ===
+  'madre-suprema': { 
+    nombre: 'MADRE SUPREMA', 
+    cargo: 'Núcleo Supremo & Mando Absoluto', 
+    emoji: '🌌', 
+    color: 'text-[#F43F5E]', 
+    bg: 'bg-rose-500/15 border-rose-500/40 shadow-[0_0_20px_rgba(244,63,94,0.2)]', 
+    icon: Sparkles, 
+    shadow: 'shadow-rose-500/40', 
+    misionPanaderia: 'Matriz omnisciente del holding. Orquestación cuántica de recursos, visión total 360°, directivas supremas y soberanía operativa.', 
+    plantillas: ['Directiva Suprema de Expansión', 'Auditoría Cuántica del Holding 360°', 'Sincronización Total de Casas y Módulos'] 
+  },
+  'guardian-supremo': { 
+    nombre: 'GUARDIÁN SUPREMO', 
+    cargo: 'Escudo Supremo & Blindaje Total', 
+    emoji: '🛡️', 
+    color: 'text-[#10B981]', 
+    bg: 'bg-emerald-500/15 border-emerald-500/40 shadow-[0_0_20px_rgba(16,185,129,0.2)]', 
+    icon: Shield, 
+    shadow: 'shadow-emerald-500/40', 
+    misionPanaderia: 'Protección inquebrantable de datos, código y UI. Verificación visual ("Si no lo veo no existe"), prevención de sobreescrituras y firewall humano-máquina.', 
+    plantillas: ['Protocolo Escudo Activo (Blindaje UI/POS)', 'Auditoría de Integridad y Respaldo Inmutable', 'Verificación Visual de Flujos de Venta'] 
+  },
+  'arbi-supremo': { 
+    nombre: 'ARBI SUPREMO', 
+    cargo: 'Árbitro & Juez Supremo', 
+    emoji: '⚖️', 
+    color: 'text-[#6366F1]', 
+    bg: 'bg-indigo-500/15 border-indigo-500/40 shadow-[0_0_20px_rgba(99,102,241,0.2)]', 
+    icon: Scale, 
+    shadow: 'shadow-indigo-500/40', 
+    misionPanaderia: 'Resolución suprema de conflictos, arbitraje de márgenes y debates inter-agentes, balanceo de decisiones financieras y veredicto definitivo para el Director.', 
+    plantillas: ['Veredicto Final de Márgenes y Fugas', 'Arbitraje de Precios vs Costos de Proveedor', 'Dictamen de Cajas, Gastos y Tesorería'] 
+  },
+
   gerente:      { nombre: 'NEXUS-VOLT',     cargo: 'Gerente General', emoji: '👑', color: 'text-[#DAA520]', bg: 'bg-[#DAA520]/10 border-[#DAA520]/20', icon: BrainCircuit, shadow: 'shadow-[#DAA520]/20', misionPanaderia: 'Orquestación de apertura de sucursales y mando global.', plantillas: ['Plan Estratégico de Expansión 2024', 'Informe de Desempeño Operativo Semanal', 'Análisis de Competencia en el Barrio'] },
   produccion:   { nombre: 'PRODUCCIÓN',     cargo: 'Jefe de Horno',   emoji: '🥖', color: 'text-[#F5DEB3]', bg: 'bg-[#F5DEB3]/10 border-[#F5DEB3]/20', icon: Utensils, shadow: 'shadow-[#F5DEB3]/20', misionPanaderia: 'Estandarización de horneado y garantía de receta maestra.', plantillas: ['Reporte de Horneado y Mermas Directas', 'Cronograma de Producción para Festivos', 'Auditoría de Calidad del Pan de Bono'] },
   inventario:   { nombre: 'INVENTARIO',     cargo: 'Guardián Bodega', emoji: '📦', color: 'text-[#fbbf24]', bg: 'bg-[#fbbf24]/10 border-[#fbbf24]/20', icon: Package, shadow: 'shadow-[#fbbf24]/20', misionPanaderia: 'Stock real, faltantes y pedido sugerido. Números en nombres (40*30) son texto, no cantidades.', plantillas: ['Hoja de Pedido a Proveedores (Harina/Azúcar)', 'Alerta de Caducidad de Insumos', 'Informe de Stock Crítico para PDF'] },

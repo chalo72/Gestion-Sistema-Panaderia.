@@ -674,6 +674,41 @@ export const contextoParaAgente = (agente: AgenteId | string, d: DatosCasas): st
     ].join(' | ');
   }
 
+  if (id === 'madre-suprema') {
+    return [
+      `CASA SUPREMA: NÚCLEO MATRIZ Y VISIÓN CUÁNTICA (${d.fechaLabel})`,
+      contextoGerente(d),
+      `Márgenes bajos: ${d.margenesBajosTxt}`,
+      `Deudores top: ${d.topDeudoresTxt}`,
+      `Órdenes abiertas: ${d.resumenProduccionTxt}`,
+      `Sistema: ${d.sistemaResumenTxt}`,
+      'Autoridad: SOBERANÍA ABSOLUTA Y ORQUESTACIÓN TOTAL.',
+    ].join(' | ');
+  }
+
+  if (id === 'guardian-supremo') {
+    return [
+      `CASA SUPREMA: ESCUDO & BLINDAJE TOTAL (${d.fechaLabel})`,
+      `Sistema: ${d.sistemaResumenTxt}`,
+      `Caja: ${d.cajaAbierta ? 'ABIERTA' : 'CERRADA'} (Apertura: $${d.montoApertura ?? 0})`,
+      `Ventas vs Gastos: $${d.ventasHoy.toLocaleString('es-CO')} vs $${d.egresosHoy.toLocaleString('es-CO')}`,
+      `Stock crítico: ${d.criticos.length} ítems (${d.topCriticosTxt})`,
+      `Fiados activos: ${d.creditosActivos} (Saldo: $${d.saldoCreditosPendiente.toLocaleString('es-CO')})`,
+      'Leyes: "Si no lo veo no existe" · LOCAL SIEMPRE GANA · Cero sobreescrituras.',
+    ].join(' | ');
+  }
+
+  if (id === 'arbi-supremo') {
+    return [
+      `CASA SUPREMA: JUICIO & ARBITRAJE DE CONFLICTOS (${d.fechaLabel})`,
+      `Márgenes en riesgo: ${d.margenesBajosTxt}`,
+      `Caja del día: Ventas $${d.ventasHoy.toLocaleString('es-CO')} · Gastos $${d.egresosHoy.toLocaleString('es-CO')} · Neto $${(d.ventasHoy - d.egresosHoy).toLocaleString('es-CO')}`,
+      `Producción vs Faltantes: ${d.ordenesProduccionAbiertas} órdenes · ${d.topCriticosTxt}`,
+      `Deudores en mora: ${d.creditosVencidos} de ${d.creditosActivos} fiados`,
+      'Misión: Emitir veredicto supremo e inapelable con base en evidencia contable y operativa.',
+    ].join(' | ');
+  }
+
   if (id === 'gerente') {
     return contextoGerente(d);
   }

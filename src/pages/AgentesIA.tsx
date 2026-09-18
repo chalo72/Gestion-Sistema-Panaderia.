@@ -2,7 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   BrainCircuit, Mic, Zap, Shield, Eye, Cpu,
   Loader2, CheckCircle2, AlertTriangle, Activity,
-  TrendingUp, Package, DollarSign, X, GitMerge, Trash2, Target, Utensils, ShoppingCart, MessageCircle, Truck, Users, Building, ClipboardList, Server
+  TrendingUp, Package, DollarSign, X, GitMerge, Trash2, Target, Utensils, ShoppingCart, MessageCircle, Truck, Users, Building, ClipboardList, Server,
+  Sparkles, Scale, Crown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -62,7 +63,10 @@ type PlanPendiente = {
 
 // Acciones rápidas conectadas al sistema real
 const ACCIONES_RAPIDAS = [
-  { label: 'Consejo Élite (Reporte 360)', icon: BrainCircuit, color: 'text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/10', prompt: 'Activa a tus agentes principales (Producción, Ventas, Inventario, Contable y Marketing). Necesito un análisis completo de 360 grados del estado actual de la panadería.' },
+  { label: '🌌 Madre Suprema (Mando 360°)', icon: Sparkles, color: 'text-rose-400 border-rose-500/40 hover:bg-rose-500/15 shadow-[0_0_15px_rgba(244,63,94,0.15)]', prompt: 'Invoco a la MADRE SUPREMA. Ejecuta una supervisión cuántica 360° de todo el holding Dulce Placer (ventas, stock, cajas, márgenes y producción) y dicta la Directiva Suprema para hoy.' },
+  { label: '🛡️ Guardián Supremo (Blindaje)', icon: Shield, color: 'text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/15 shadow-[0_0_15px_rgba(16,185,129,0.15)]', prompt: 'Invoco al GUARDIÁN SUPREMO. Aplica el protocolo de verificación visual y blindaje total: audita integridad de datos, cajas, sincronización y posibles riesgos o sobreescrituras en el sistema.' },
+  { label: '⚖️ Arbi Supremo (Veredicto)', icon: Scale, color: 'text-indigo-400 border-indigo-500/40 hover:bg-indigo-500/15 shadow-[0_0_15px_rgba(99,102,241,0.15)]', prompt: 'Invoco al ARBI SUPREMO. Realiza un arbitraje de cuentas entre ventas, egresos de caja y márgenes de productos, y emite un veredicto definitivo inapelable.' },
+  { label: 'Consejo Élite (Reporte 360)', icon: BrainCircuit, color: 'text-amber-400 border-amber-500/30 hover:bg-amber-500/10', prompt: 'Activa a tus agentes principales (Producción, Ventas, Inventario, Contable y Marketing). Necesito un análisis completo de 360 grados del estado actual de la panadería.' },
   { label: 'Revisar Caja del Día', icon: DollarSign, color: 'text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10', prompt: 'Delega SOLO al agente contable (Banco Interno). Con su casa (caja): ¿caja abierta?, ventas, gastos, métodos de pago y 3 acciones si algo no cuadra.' },
   { label: 'Stock Crítico', icon: Package, color: 'text-orange-400 border-orange-500/30 hover:bg-orange-500/10', prompt: 'Delega SOLO al agente inventario. Usa stock + memoria de faltantes previos. Lista críticos, pedido corto y 3 acciones. Números en nombres (40*30) son texto.' },
   { label: 'Horno / Producción', icon: Utensils, color: 'text-amber-200 border-amber-500/30 hover:bg-amber-500/10', prompt: 'Delega SOLO al agente produccion (Jefe de Horno). Con órdenes abiertas, formulaciones e insumos críticos: prioridad de horneado, riesgos y 3 acciones concretas.' },
@@ -76,6 +80,15 @@ const ACCIONES_RAPIDAS = [
   { label: 'Salud Sistema', icon: Server, color: 'text-teal-400 border-teal-500/30 hover:bg-teal-500/10', prompt: 'Delega SOLO al agente open-claw. Con el resumen de sistema (online/offline, conteos, caja): ESTADO, RIESGO y 3 ACCIONES. Recuerda LOCAL SIEMPRE GANA, tombstones y que lo crítico es /api/agente.' },
   { label: 'Debate Márgenes', icon: TrendingUp, color: 'text-fuchsia-400 border-fuchsia-500/30 hover:bg-fuchsia-500/10', prompt: '__DEBATE_MARGENES__' },
   { label: 'Misión Larga (Meta)', icon: Target, color: 'text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/10', prompt: '/meta (Goal Loop): Auditar toda la contabilidad del mes y proponer estrategias de ahorro. Ejecuta subtareas con los especialistas y repórtame cuando hayas logrado el objetivo completo.' },
+];
+
+/**
+ * Trinidad Suprema — Las 3 Entidades e Inteligencias Supremas del Ecosistema
+ */
+const TRINIDAD_SUPREMA: { id: AgenteId; descripcion: string; rango: string; aura: string }[] = [
+  { id: 'madre-suprema', descripcion: 'Matriz Omnisciente & Mando 360°', rango: 'Soberanía Absoluta', aura: 'border-rose-500/50 bg-rose-500/10 text-rose-400 shadow-[0_0_15px_rgba(244,63,94,0.2)]' },
+  { id: 'guardian-supremo', descripcion: 'Escudo Supremo & Blindaje UI/Datos', rango: 'Centinela Supremo', aura: 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' },
+  { id: 'arbi-supremo', descripcion: 'Árbitro de Márgenes & Juez de Conflictos', rango: 'Magistrado Supremo', aura: 'border-indigo-500/50 bg-indigo-500/10 text-indigo-400 shadow-[0_0_15px_rgba(99,102,241,0.2)]' },
 ];
 
 /**
@@ -698,6 +711,49 @@ export default function AgentesIA() {
         <div className="w-[76px] hover:w-72 transition-[width] duration-300 ease-in-out bg-black/80 backdrop-blur-xl border-r border-white/5 flex flex-col group/sidebar z-20 shrink-0">
           <div className="overflow-y-auto overflow-x-hidden custom-scrollbar flex-1 pb-6">
             
+            {/* Trinidad Suprema */}
+            <div className="p-3 pb-1">
+              <p className="text-[10px] font-black uppercase text-[#DAA520] tracking-widest px-1 mb-3 mt-1 whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity flex items-center gap-1.5">
+                <Crown className="w-3.5 h-3.5 text-[#DAA520]" />
+                👑 Trinidad Suprema
+              </p>
+              <div className="space-y-1.5">
+                {TRINIDAD_SUPREMA.map(({ id, descripcion, rango, aura }) => {
+                  const cfg = AGENTES[id];
+                  if (!cfg) return null;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setAgenteSeleccionado(id)}
+                      className={cn(
+                        "w-full p-2 rounded-2xl border cursor-pointer flex items-center gap-3.5 transition-all text-left group/btn hover:scale-[1.02]",
+                        aura
+                      )}
+                      title={rango}
+                    >
+                      <div className={cn("p-2.5 rounded-xl shrink-0 flex items-center justify-center relative", cfg.bg)}>
+                        <cfg.icon className={cn("w-5 h-5", cfg.color)} />
+                        <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+                        </span>
+                      </div>
+                      <div className="flex-1 min-w-0 opacity-0 group-hover/sidebar:opacity-100 transition-opacity duration-300 w-48">
+                        <p className={cn("text-xs font-black uppercase truncate leading-none mb-1 flex items-center justify-between", cfg.color)}>
+                          {cfg.nombre}
+                          <span className="text-[8px] bg-white/10 px-1.5 py-0.5 rounded text-white font-mono">SUPREMO</span>
+                        </p>
+                        <p className="text-[9px] text-slate-300 truncate leading-tight">{descripcion}</p>
+                        <p className="text-[8px] text-slate-400 truncate leading-tight mt-0.5 uppercase tracking-wider font-bold">{rango}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mx-4 my-2 h-px bg-white/10" />
+
             {/* Escuadrón Élite */}
             <div className="p-3 pb-2">
               <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1 mb-3 mt-2 whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity">⚡ Escuadrón Élite</p>
@@ -733,7 +789,7 @@ export default function AgentesIA() {
               <p className="text-[10px] font-black uppercase text-slate-500 tracking-widest px-1 mb-3 mt-4 whitespace-nowrap opacity-0 group-hover/sidebar:opacity-100 transition-opacity">👥 Especialistas</p>
               <div className="space-y-1">
                 {Object.keys(AGENTES)
-                  .filter(id => !ESCUADRON_ELITE.map(e => e.id).includes(id))
+                  .filter(id => !ESCUADRON_ELITE.map(e => e.id).includes(id as AgenteId) && !TRINIDAD_SUPREMA.map(t => t.id).includes(id as AgenteId))
                   .map(id => {
                     const cfg = AGENTES[id as AgenteId];
                     return (

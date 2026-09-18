@@ -1,4 +1,4 @@
-import { Shield, Zap, Database, Globe, Cloud, Bug } from 'lucide-react';
+import { Shield, Zap, Database, Globe, Cloud, Bug, Sparkles, Scale, Crown } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
@@ -12,6 +12,30 @@ interface Protocolo {
 }
 
 const PROTOCOLOS: Protocolo[] = [
+  {
+    id: 'madre-suprema',
+    nombre: '🌌 Madre Suprema (Matriz Cuántica)',
+    descripcion: 'Supervisión omnisciente 360°, orquestación total de recursos y directiva maestra inquebrantable.',
+    icon: Sparkles,
+    color: 'text-rose-400',
+    estado: 'Activo'
+  },
+  {
+    id: 'guardian-supremo',
+    nombre: '🛡️ Guardián Supremo (Escudo & Blindaje)',
+    descripcion: 'Ley visual "Si no lo veo no existe", prevención de sobreescrituras y resguardo de datos/código.',
+    icon: Shield,
+    color: 'text-emerald-400',
+    estado: 'Activo'
+  },
+  {
+    id: 'arbi-supremo',
+    nombre: '⚖️ Arbi Supremo (Juez & Arbitraje)',
+    descripcion: 'Arbitraje de márgenes y debates inter-agentes, balanceo de decisiones financieras y veredicto definitivo.',
+    icon: Scale,
+    color: 'text-indigo-400',
+    estado: 'Activo'
+  },
   {
     id: 'escudo-ki',
     nombre: 'Escudo de Ki',

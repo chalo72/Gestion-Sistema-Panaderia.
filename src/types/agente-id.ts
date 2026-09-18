@@ -29,4 +29,8 @@ export type AgenteId =
   | 'hermes'
   | 'odysseus'
   | 'vigia-app'
-  | 'arqui-tech';
+  | 'arqui-tech'
+  // === TRINIDAD SUPREMA / HABILIDADES SUPREMAS ===
+  | 'madre-suprema'
+  | 'guardian-supremo'
+  | 'arbi-supremo';
