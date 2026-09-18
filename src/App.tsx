@@ -460,7 +460,7 @@ const App = () => {
             inventario={inventario}
             ventas={ventas}
             cajaActiva={cajaActiva}
-            onCerrarCaja={cerrarCaja}
+            onCerrarCaja={(monto, ventasManual, nota) => cerrarCaja(monto, user?.nombre, ventasManual, nota)}
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
             onFinalizarTurno={cerrarCaja}
             onRegistrarVenta={registrarVenta}
@@ -898,6 +898,8 @@ const App = () => {
         return <Expedientes />;
       case 'fiados-empleados':
         return <FiadosEmpleados trabajadores={trabajadores} onAddGasto={addGasto} />;
+      case 'monetizacion-influencer':
+        return <MonetizacionInfluencer />;
       case 'marketing-studio':
         return <MarketingStudio />;
       case 'pedidos-tortas':

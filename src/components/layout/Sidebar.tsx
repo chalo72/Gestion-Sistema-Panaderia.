@@ -26,7 +26,6 @@ import {
   Building2,
   MessageCircle,
   CalendarCheck,
-  CalendarClock,
   RefreshCw,
   TrendingUp,
   Video,
@@ -147,11 +146,19 @@ export function Sidebar({
 
   const allMenuGroups: MenuGroup[] = [
     {
+      section: 'Ayudante',
+      emoji: '📝',
+      items: [
+        { id: 'modo-ayudante', label: 'Captura Rápida (Atrasados)', icon: FileCheck, permission: 'VER_DASHBOARD' },
+      ],
+    },
+    {
       section: 'Inicio',
       emoji: '🏛️', // Icono de oficina central/gobierno
       items: [
         { id: 'dashboard',       label: 'Centro de Mando',         icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
         { id: 'marketing-studio',label: 'Marketing Studio IA',     icon: Megaphone,       permission: 'VER_DASHBOARD' },
+        { id: 'monetizacion-influencer', label: 'Tablero de Monetización', icon: TrendingUp, permission: 'VER_DASHBOARD' },
         { id: 'fiados-empleados',label: 'Consumo Empleados',       icon: Coffee,          permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones',  label: 'Equipo & Checklist',      icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'pedidos-tortas',  label: 'Pedidos de Tortas',       icon: Cake,            permission: 'VER_DASHBOARD' },
@@ -179,13 +186,6 @@ export function Sidebar({
         { id: 'recetas',    label: 'Recetas Técnicas',   icon: ChefHat,   permission: 'VER_PRODUCCION' },
         { id: 'inventario', label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
         { id: 'control-merma', label: 'Control de Mermas', icon: AlertOctagon, permission: 'VER_PRODUCCION' },
-      ],
-    },
-    {
-      section: 'Ayudante',
-      emoji: '📝',
-      items: [
-        { id: 'modo-ayudante', label: 'Captura Rápida (Atrasados)', icon: CalendarClock, permission: 'VER_DASHBOARD' },
       ],
     },
     {
@@ -443,12 +443,21 @@ export function Sidebar({
       items: [
         { id: 'dashboard' as ViewType,       label: 'Centro de Mando',        icon: LayoutDashboard, permission: 'VER_DASHBOARD' },
         { id: 'marketing-studio' as ViewType,label: 'Marketing Studio IA',    icon: Megaphone,       permission: 'VER_DASHBOARD' },
+        { id: 'monetizacion-influencer' as ViewType, label: 'Monetización IA', icon: TrendingUp, permission: 'VER_DASHBOARD' },
         { id: 'agentes-ia' as ViewType,      label: 'Mando Superior (IA)',    icon: Shield,          permission: 'VER_DASHBOARD' },
         { id: 'fiados-empleados' as ViewType,    label: 'Consumo Empleados',      icon: Coffee,          permission: 'VER_DASHBOARD' },
         { id: 'comunicaciones' as ViewType,  label: 'Equipo & Checklist',     icon: MessageCircle,   permission: 'VER_DASHBOARD' },
         { id: 'pedidos-tortas' as ViewType,  label: 'Pedidos de Tortas',      icon: Cake,            permission: 'VER_DASHBOARD' },
         { id: 'videovigilancia' as ViewType, label: 'Videovigilancia',        icon: Video,           permission: 'VER_DASHBOARD' },
         { id: 'cctv' as ViewType,            label: 'Auditoría Digital',      icon: Shield,          permission: 'VER_DASHBOARD' },
+      ],
+    },
+    {
+      section: 'Ayudante',
+      emoji: '📝',
+      activeClass: 'bg-violet-600 text-white border-transparent shadow-lg',
+      items: [
+        { id: 'modo-ayudante' as ViewType, label: 'Captura Rápida', icon: FileCheck, permission: 'VER_DASHBOARD' },
       ],
     },
     {
@@ -474,14 +483,6 @@ export function Sidebar({
         { id: 'inventario' as ViewType, label: 'Inventario',         icon: Warehouse, permission: 'VER_INVENTARIO' },
         { id: 'control-merma' as ViewType, label: 'Mermas',          icon: AlertOctagon, permission: 'VER_PRODUCCION' },
         { id: 'productos' as ViewType,  label: 'Catálogo',           icon: Package,   permission: 'VER_PRODUCTOS' },
-      ],
-    },
-    {
-      section: 'Ayudante',
-      emoji: '📝',
-      activeClass: 'bg-sky-600 text-white border-transparent shadow-lg',
-      items: [
-        { id: 'modo-ayudante' as ViewType, label: 'Captura Rápida', icon: CalendarClock, permission: 'VER_DASHBOARD' },
       ],
     },
     {
