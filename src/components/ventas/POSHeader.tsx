@@ -1,8 +1,35 @@
 import { useState } from 'react';
-import { Zap, UtensilsCrossed, X, Users, Plus, ChevronDown, Coffee, BellRing, Search } from 'lucide-react';
+import { Zap, X, Users, Plus, ChevronDown, Coffee, BellRing, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 import { RadarNequi } from './RadarNequi';
+
+/** Icono nítido y alusivo a una Mesa de Restaurante con sillas */
+export function MesaIcon({ className = "w-5 h-5" }: { className?: string }) {
+    return (
+        <svg 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            className={className}
+        >
+            {/* Tablero superior de la mesa */}
+            <path d="M4 10h16" />
+            {/* Patas de la mesa */}
+            <path d="M7 10v9" />
+            <path d="M17 10v9" />
+            {/* Silla izquierda: respaldo y asiento */}
+            <path d="M2 5v14" />
+            <path d="M2 14h2" />
+            {/* Silla derecha: respaldo y asiento */}
+            <path d="M22 5v14" />
+            <path d="M20 14h2" />
+        </svg>
+    );
+}
 
 export interface TabPOS {
     id: string;
@@ -66,7 +93,7 @@ export function POSHeader({
                         )}
                         title="Mesas / Salón"
                     >
-                        <UtensilsCrossed className="w-3.5 h-3.5" />
+                        <MesaIcon className="w-3.5 h-3.5" />
                         <span className="text-[10px] font-black uppercase tracking-tight">Mesas</span>
                     </button>
                     <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
@@ -170,7 +197,7 @@ export function POSHeader({
                         )}
                         title="Mesas / Salón"
                     >
-                        <UtensilsCrossed className="w-5 h-5" />
+                        <MesaIcon className="w-5 h-5" />
                     </button>
                     {/* Búsqueda rápida — acceso directo de 1 toque para vendedoras */}
                     {onOpenMobileMenu && (
