@@ -181,6 +181,10 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
       toast.error('Debes asignar al menos un pan a la auditoría');
       return;
     }
+    if (estaSobregirado) {
+      toast.error(`Te pasaste de la masa disponible: usaste ${(pesoUtilizadoGr / 1000).toFixed(2)} kg de ${pesoTotalMasaKg.toFixed(2)} kg (${arrobas} arroba(s)). Baja alguna cantidad o sube las arrobas antes de guardar.`);
+      return;
+    }
 
     const payload = Object.entries(cortes)
       .filter(([_, cant]) => cant > 0)
@@ -645,7 +649,7 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                   disabled={pesoUtilizadoGr === 0}
                   className={cn(
                     "h-14 px-8 rounded-2xl font-black text-lg transition-all text-white border-b-4",
-                    estaSobregirado ? "bg-slate-300 border-slate-400 opacity-50 pointer-events-none" : "bg-emerald-600 hover:bg-emerald-700 border-emerald-800 shadow-lg shadow-emerald-500/25"
+                    estaSobregirado ? "bg-amber-500 hover:bg-amber-600 border-amber-700" : "bg-emerald-600 hover:bg-emerald-700 border-emerald-800 shadow-lg shadow-emerald-500/25"
                   )}
                 >
                   <Wand2 className="w-5 h-5 mr-2" /> Guardar en Libreta

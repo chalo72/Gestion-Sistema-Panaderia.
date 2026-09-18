@@ -74,11 +74,16 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     return sesion;
   }, []);
 
-  const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string, ventasManual?: number, nota?: string) => {
-    if (!cajaActiva) return undefined;
+  // cajaId opcional: permite cerrar UNA caja especifica de la lista (no siempre la
+  // "cajaActiva" de este dispositivo). Sin cajaId, se comporta exactamente igual que antes
+  // (cierra cajaActiva) - fix 2026-09-17 Claude Sonnet 5, ver mesa de trabajo en CORE_MEMORY.md.
+  const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string, ventasManual?: number, nota?: string, cajaId?: string) => {
+    const targetId = cajaId || cajaActiva?.id;
+    const target = !targetId ? undefined : (cajaActiva?.id === targetId ? cajaActiva : sesionesCaja.find(s => s.id === targetId));
+    if (!target) return undefined;
     const hayVentaManual = Number.isFinite(ventasManual) && (ventasManual as number) > 0;
     const sesion: CajaSesion = {
-      ...cajaActiva,
+      ...target,
       fechaCierre: new Date().toISOString(),
       montoCierre,
       estado: 'cerrada',
@@ -92,21 +97,21 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     await db.updateSesionCaja(sesion as any);
     _supaDB.updateSesionCaja(sesion as any).catch(() => {});
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
-    setCajaActiva(undefined);
+    if (cajaActiva?.id === sesion.id) setCajaActiva(undefined);
     // Generar cuadre de seguridad automáticamente
     try {
       procesarCuadreTurno({
-        usuarioId: cajaActiva.usuarioId || 'desconocido',
-        usuarioNombre: nombreUsuario || cajaActiva.usuarioId || 'Vendedora',
-        fechaApertura: cajaActiva.fechaApertura,
-        montoApertura: cajaActiva.montoApertura || 0,
+        usuarioId: target.usuarioId || 'desconocido',
+        usuarioNombre: nombreUsuario || target.usuarioId || 'Vendedora',
+        fechaApertura: target.fechaApertura,
+        montoApertura: target.montoApertura || 0,
         montoDeclarado: montoCierre,
-        ventasEfectivo: cajaActiva.totalVentasEfectivo || 0,
-        ventasNequi: (cajaActiva as any).totalVentasNequi || 0,
-        ventasTransferencia: (cajaActiva as any).totalVentasTransferencia || 0,
-        ventasCredito: cajaActiva.totalCreditos || 0,
+        ventasEfectivo: target.totalVentasEfectivo || 0,
+        ventasNequi: (target as any).totalVentasNequi || 0,
+        ventasTransferencia: (target as any).totalVentasTransferencia || 0,
+        ventasCredito: target.totalCreditos || 0,
       });
-      localStorage.removeItem('dp_caja_apertura_ts');
+      if (cajaActiva?.id === sesion.id) localStorage.removeItem('dp_caja_apertura_ts');
     } catch (e) {
       console.warn('[Security] Error al generar cuadre:', e);
     }
@@ -122,7 +127,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     }
     toast.success('Caja cerrada correctamente');
     return sesion;
-  }, [cajaActiva]);
+  }, [cajaActiva, sesionesCaja]);
 
   const registrarMovimientoCaja = useCallback(async (movimiento: Omit<MovimientoCaja, 'id' | 'fecha' | 'cajaId' | 'usuarioId'> | number, tipo?: 'entrada' | 'salida', motivo?: string, _usuarioId?: string, cajaId?: string) => {
     const targetCajaId = cajaId || cajaActiva?.id;

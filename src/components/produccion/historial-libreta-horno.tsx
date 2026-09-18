@@ -33,7 +33,7 @@ const totalPanes = (p: RegistroProduccion): number =>
 const totalArrobas = (p: RegistroProduccion): number =>
   (p.masas || []).reduce((s, m) => s + (Number(m.cantidadArrobas) || 0), 0);
 
-type RangoFecha = 'hoy' | 'ayer' | 'semana' | 'todos';
+type RangoFecha = 'hoy' | 'ayer' | 'semana' | 'todos' | 'personalizado';
 
 type Props = {
   /** Máximo de días a mostrar cuando no hay filtro específico */
@@ -49,6 +49,8 @@ export function HistorialLibretaHorno({ limite = 40, className }: Props) {
   const [items, setItems] = useState<RegistroProduccion[]>(() => getProducciones());
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filtroFecha, setFiltroFecha] = useState<RangoFecha>('todos');
+  const [fechaInicio, setFechaInicio] = useState<string>('');
+  const [fechaFin, setFechaFin] = useState<string>('');
 
   const refrescar = useCallback(() => {
     setItems(getProducciones());
@@ -96,6 +98,10 @@ export function HistorialLibretaHorno({ limite = 40, className }: Props) {
       if (filtroFecha === 'hoy' && fechaNorm !== hoyStr) return false;
       if (filtroFecha === 'ayer' && fechaNorm !== ayerStr) return false;
       if (filtroFecha === 'semana' && fechaNorm < hace7DiasStr) return false;
+      if (filtroFecha === 'personalizado') {
+        if (fechaInicio && fechaNorm < fechaInicio) return false;
+        if (fechaFin && fechaNorm > fechaFin) return false;
+      }
 
       // Filtro por buscador (nombre de pan, masa o notas)
       if (q) {
@@ -115,7 +121,7 @@ export function HistorialLibretaHorno({ limite = 40, className }: Props) {
 
       return true;
     });
-  }, [items, searchTerm, filtroFecha, hoyStr, ayerStr, hace7DiasStr]);
+  }, [items, searchTerm, filtroFecha, hoyStr, ayerStr, hace7DiasStr, fechaInicio, fechaFin]);
 
   // Resumen totalizador en el rango y término filtrado
   const totales = useMemo(() => {
@@ -251,7 +257,40 @@ export function HistorialLibretaHorno({ limite = 40, className }: Props) {
             >
               Todos ({items.length})
             </Button>
+            <Button
+              type="button"
+              variant={filtroFecha === 'personalizado' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroFecha('personalizado')}
+              className={cn(
+                'h-7 px-2.5 text-xs rounded-lg font-bold shrink-0',
+                filtroFecha === 'personalizado'
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                  : 'text-slate-600 hover:bg-amber-500/10 border-slate-300 dark:border-slate-700'
+              )}
+            >
+              Rango...
+            </Button>
           </div>
+          {filtroFecha === 'personalizado' && (
+            <div className="flex items-center gap-2 pt-2 animate-in slide-in-from-top-1 fade-in duration-200">
+              <Input
+                type="date"
+                value={fechaInicio}
+                onChange={(e) => setFechaInicio(e.target.value)}
+                className="h-8 text-xs bg-white dark:bg-slate-900 border-amber-500/30"
+                title="Fecha inicial"
+              />
+              <span className="text-slate-400 text-xs font-bold">a</span>
+              <Input
+                type="date"
+                value={fechaFin}
+                onChange={(e) => setFechaFin(e.target.value)}
+                className="h-8 text-xs bg-white dark:bg-slate-900 border-amber-500/30"
+                title="Fecha final"
+              />
+            </div>
+          )}
         </div>
 
         {/* Tarjetas de Resumen Totalizador */}

@@ -496,7 +496,7 @@ const App = () => {
             cajaActiva={cajaActiva}
             ventas={ventas}
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
-            onCerrarCaja={(monto, ventasManual) => cerrarCaja(monto, user?.nombre, ventasManual)}
+            onCerrarCaja={(monto, ventasManual, cajaId) => cerrarCaja(monto, user?.nombre, ventasManual, undefined, cajaId)}
             onViewHistorial={() => setCurrentView('historial-ventas')}
             onRegistrarMovimiento={registrarMovimientoCaja}
             formatCurrency={formatCurrency}

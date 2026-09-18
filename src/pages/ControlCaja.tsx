@@ -911,7 +911,7 @@ interface ControlCajaProps {
     categorias: Categoria[];
     productos: Producto[];
     onAbrirCaja: (monto: number) => Promise<any>;
-    onCerrarCaja: (monto: number, ventasManual?: number) => Promise<any>;
+    onCerrarCaja: (monto: number, ventasManual?: number, cajaId?: string) => Promise<any>;
     onViewHistorial?: () => void;
 }
 
@@ -2597,7 +2597,7 @@ export function ControlCaja({
                     onSubmit={registrarPrestamo}
                 />
             )}
-            <CierreCajaModal   isOpen={showCierreModal}   onClose={() => setShowCierreModal(false)}   onCerrar={onCerrarCaja} cajaActiva={cajaActiva} formatCurrency={formatCurrency} usuario={usuario} />
+            <CierreCajaModal   isOpen={showCierreModal}   onClose={() => setShowCierreModal(false)}   onCerrar={(monto, ventasManual) => onCerrarCaja(monto, ventasManual, cajaVista?.id)} cajaActiva={cajaVista} formatCurrency={formatCurrency} usuario={usuario} />
             <EntregaTurnoModal
                 caja={cajaEntregando}
                 isOpen={showEntregaModal}
