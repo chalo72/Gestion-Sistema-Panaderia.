@@ -1,0 +1,22 @@
+{
+  "name": "dulce-placer-mcp-server",
+  "version": "1.0.0",
+  "description": "Servidor MCP (Model Context Protocol) de Anthropic para la Agencia de Marketing Dulce Placer",
+  "main": "build/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node build/index.js",
+    "dev": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "puppeteer": "^23.4.1",
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.2",
+    "@types/node": "^22.5.5",
+    "@types/express": "^4.17.21"
+  }
+}

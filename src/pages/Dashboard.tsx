@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { GlassCard } from '@/components/dashboard/GlassCard';
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
 import { cn } from '@/lib/utils';
-import type { Producto, Proveedor, PrecioProveedor, AlertaPrecio } from '@/types';
+import type { Producto, AlertaPrecio } from '@/types';
 import { FindingsFeed } from '@/components/agentes/FindingsFeed';
 import { FinancialDashboard } from '@/components/FinancialDashboard';
 import { ManoDerechaDirector } from '@/components/dashboard/mano-derecha-director';
@@ -67,23 +67,15 @@ interface DashboardProps {
   onViewRecetas?: () => void;
   onViewCaja?: () => void;
   onViewProduccion?: () => void;
-  onViewConsumo?: () => void;
   onViewGastos?: () => void;
   onViewHistorial?: () => void;
   onViewReportes?: () => void;
-  getProveedorById: (id: string) => Proveedor | undefined;
+  getProveedorById: (id: string) => { nombre: string } | undefined;
   nombre?: string;
   getProductoById: (id: string) => Producto | undefined;
   formatCurrency: (value: number) => string;
   mesas?: unknown[]; // Reservado para uso futuro (mesas activas en POS)
   ventas: any[]; // Usando any[] temporalmente o importando Venta
-  // Para la búsqueda rápida dentro de la vista móvil (antes solo vivía en el menú lateral)
-  productos: Producto[];
-  proveedores: Proveedor[];
-  precios: PrecioProveedor[];
-  inventario?: any[];
-  getMejorPrecio: (productoId: string) => PrecioProveedor | null;
-  getPreciosByProducto: (productoId: string) => PrecioProveedor[];
 }
 
 export default function Dashboard(props: DashboardProps) {
@@ -102,22 +94,14 @@ export default function Dashboard(props: DashboardProps) {
     onViewCargaMasiva,
     onViewRecetas,
     onViewCaja,
-    onViewConsumo,
     onViewProduccion,
     onViewGastos,
     onViewHistorial,
     onViewReportes,
     getProductoById,
-    getProveedorById,
     formatCurrency,
     nombre,
-    ventas,
-    productos,
-    proveedores,
-    precios,
-    inventario,
-    getMejorPrecio,
-    getPreciosByProducto,
+    ventas
   } = props;
 
   const { check, isAdmin } = useCan();
@@ -256,14 +240,6 @@ export default function Dashboard(props: DashboardProps) {
         onViewAlertas={onViewAlertas}
         onViewRecetas={onViewRecetas}
         onViewReportes={onViewReportes}
-        onViewConsumo={onViewConsumo}
-        productos={productos}
-        proveedores={proveedores}
-        precios={precios}
-        inventario={inventario}
-        getMejorPrecio={getMejorPrecio}
-        getPreciosByProducto={getPreciosByProducto}
-        getProveedorById={getProveedorById}
       />
 
       {/* ═══ VISTA ESCRITORIO (Solo en pantallas >= 768px: 100% INTACTA) ═══ */}

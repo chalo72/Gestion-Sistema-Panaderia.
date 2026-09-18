@@ -926,6 +926,7 @@ const App = () => {
             onViewAhorros={() => setCurrentView('ahorro')}
             onViewCargaMasiva={() => setCurrentView('cargamasiva')}
             onViewRecetas={() => setCurrentView('recetas')}
+            onViewConsumo={() => setCurrentView('fiados-empleados')}
             onViewCaja={() => setCurrentView('caja')}
             onViewProduccion={() => setCurrentView('produccion')}
             onViewGastos={() => setCurrentView('gastos')}
