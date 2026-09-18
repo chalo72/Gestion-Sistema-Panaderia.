@@ -59,6 +59,8 @@ export function LibretaHornoForm({
     productos,
     categorias: categorias as never,
     proveedores,
+    formulaciones,
+    modelosPan,
   });
 
   return (

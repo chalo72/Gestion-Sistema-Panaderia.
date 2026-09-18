@@ -47,7 +47,21 @@ export function getVentasDiarias(): VentaDiaria[] {
 
 export function saveVentasDiarias(list: VentaDiaria[]): void {
   // Mantener últimas 365 entradas
-  localStorage.setItem(KEY_VENTAS_DIARIAS, JSON.stringify(list.slice(0, 365)));
+  const slice = list.slice(0, 365);
+  localStorage.setItem(KEY_VENTAS_DIARIAS, JSON.stringify(slice));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('dp_ventas_diarias_changed'));
+  }
+  pushVentasDiariasToCloud(slice).catch(() => {});
+}
+
+async function pushVentasDiariasToCloud(list: VentaDiaria[]): Promise<void> {
+  try {
+    const { db } = await import('@/lib/database');
+    await db.saveBackup('ventas_diarias_data', list);
+  } catch (err) {
+    console.warn('⚠️ [Finanzas] Error enviando ventas diarias a la nube:', err);
+  }
 }
 
 export function addVentaDiaria(data: Omit<VentaDiaria, 'id' | 'total'> & { id?: string }): VentaDiaria {
@@ -558,6 +572,10 @@ export async function sincronizarVentasDiariasConNube(): Promise<VentaDiaria[]> 
 
     const mergedSlice = merged.slice(0, 365);
     localStorage.setItem(KEY_VENTAS_DIARIAS, JSON.stringify(mergedSlice));
+    
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('dp_ventas_diarias_changed'));
+    }
 
     if (merged.length !== cloudList.length) {
       db.saveBackup('ventas_diarias_data', mergedSlice).catch(() => {});

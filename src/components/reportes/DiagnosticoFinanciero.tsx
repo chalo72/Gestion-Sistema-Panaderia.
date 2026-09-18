@@ -2982,7 +2982,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                         className="h-9 text-xs font-bold rounded-lg w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3"
                                                                     >
                                                                         <option value="">Selecciona Masa...</option>
-                                                                        {formulaciones?.filter((f: any) => f.activo).map((f: any) => (
+                                                                        {formulaciones?.filter((f: any) => f.activo !== false).map((f: any) => (
                                                                             <option key={f.id} value={f.nombre}>{f.nombre}</option>
                                                                         ))}
                                                                     </select>
@@ -3017,7 +3017,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                 className="h-9 text-xs font-bold rounded-lg w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3"
                                                             >
                                                                 <option value="">Selecciona Masa...</option>
-                                                                {formulaciones?.filter((f: any) => f.activo).map((f: any) => (
+                                                                {formulaciones?.filter((f: any) => f.activo !== false).map((f: any) => (
                                                                     <option key={f.id} value={f.nombre}>{f.nombre}</option>
                                                                 ))}
                                                             </select>
@@ -3069,8 +3069,14 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                             <div className="grid grid-cols-1 gap-4">
                                                 {hornadas.map((h, i) => {
                                                     const masaVinculada = masasPreparadas.find((x: any) => x.id === h.masaId);
-                                                    const formCorr = masaVinculada ? formulaciones?.find((f: any) => f.nombre === masaVinculada.nombre) : null;
-                                                    const modelosDisponibles = formCorr ? modelosPan?.filter((mod: any) => mod.formulacionId === formCorr.id) : modelosPan;
+                                                    const formCorr = masaVinculada 
+                                                        ? formulaciones?.find((f: any) => 
+                                                            (f.nombre || '').toLowerCase().trim() === (masaVinculada.nombre || '').toLowerCase().trim() ||
+                                                            f.id === masaVinculada.nombre
+                                                          ) 
+                                                        : null;
+                                                    const modelosFiltrados = formCorr ? modelosPan?.filter((mod: any) => mod.formulacionId === formCorr.id) : null;
+                                                    const modelosDisponibles = (modelosFiltrados && modelosFiltrados.length > 0) ? modelosFiltrados : modelosPan;
                                                     const panSeleccionado = (modelosDisponibles || modelosPan)?.find((m: any) => m.nombre === h.tipoPan);
                                                     const faltaConfiguracion = h.tipoPan && panSeleccionado && !panSeleccionado.piezasPorLata;
 

@@ -94,6 +94,8 @@ export interface ReportesProps {
     proveedores?: Proveedor[];
     precios?: PrecioProveedor[];
     cajaActiva?: CajaSesion;
+    formulaciones?: FormulacionBase[];
+    modelosPan?: ModeloPan[];
     addGasto?: (gasto: Omit<Gasto, 'id'>) => Promise<void>;
     updateGasto?: (id: string, updates: Partial<Gasto>) => Promise<void>;
     deleteGasto?: (id: string) => Promise<void>;
@@ -291,17 +293,24 @@ export function useReportesData(props: ReportesProps) {
     const [producciones, setProducciones] = useState<RegistroProduccion[]>(() => getProducciones());
 
     useEffect(() => {
-        const refrescar = () => setProducciones(getProducciones());
-        window.addEventListener('dp_producciones_changed', refrescar);
-        window.addEventListener('storage', refrescar);
+        const refrescarProd = () => setProducciones(getProducciones());
+        const refrescarVentas = () => setVentasDiarias(getVentasDiarias());
+        window.addEventListener('dp_producciones_changed', refrescarProd);
+        window.addEventListener('dp_ventas_diarias_changed', refrescarVentas);
+        const onStorage = () => {
+            refrescarProd();
+            refrescarVentas();
+        };
+        window.addEventListener('storage', onStorage);
         
         // Sincronizar en segundo plano con Supabase al abrir
-        sincronizarProduccionesConNube().then(refrescar).catch(() => {});
-        sincronizarVentasDiariasConNube().catch(() => {});
+        sincronizarProduccionesConNube().then(refrescarProd).catch(() => {});
+        sincronizarVentasDiariasConNube().then(refrescarVentas).catch(() => {});
 
         return () => {
-            window.removeEventListener('dp_producciones_changed', refrescar);
-            window.removeEventListener('storage', refrescar);
+            window.removeEventListener('dp_producciones_changed', refrescarProd);
+            window.removeEventListener('dp_ventas_diarias_changed', refrescarVentas);
+            window.removeEventListener('storage', onStorage);
         };
     }, []);
 
@@ -878,6 +887,7 @@ export function useReportesData(props: ReportesProps) {
         }
         
         setVentasDiarias(getVentasDiarias());
+        toast.success(`✅ Venta del ${nueva.fecha} (${nueva.turno || 'Día Completo'}) registrada y sincronizada`);
         setFormVenta(prev => ({ 
             id: undefined,
             fecha: prev.fecha,

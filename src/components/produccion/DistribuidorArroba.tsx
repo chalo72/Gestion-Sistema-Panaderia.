@@ -182,8 +182,7 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
       return;
     }
     if (estaSobregirado) {
-      toast.error(`Te pasaste de la masa disponible: usaste ${(pesoUtilizadoGr / 1000).toFixed(2)} kg de ${pesoTotalMasaKg.toFixed(2)} kg (${arrobas} arroba(s)). Baja alguna cantidad o sube las arrobas antes de guardar.`);
-      return;
+      toast.info(`Guardando producción con masa extra (+${((pesoUtilizadoGr - pesoTotalMasaGr) / 1000).toFixed(2)} kg sobre lo estimado)`);
     }
 
     const payload = Object.entries(cortes)
@@ -288,7 +287,9 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
               <div className="absolute top-0 left-0 w-full h-1.5 bg-slate-100 dark:bg-slate-800">
                 <div 
                   className={cn("h-full transition-all duration-700 ease-out", 
-                    estaSobregirado ? "bg-rose-500" : (porcentajeUtilizado > 95 ? "bg-amber-500" : "bg-emerald-500")
+                    estaSobregirado 
+                      ? "bg-amber-500" 
+                      : (porcentajeUtilizado >= 95 ? "bg-emerald-500" : "bg-rose-500")
                   )} 
                   style={{ width: `${Math.min(100, porcentajeUtilizado)}%` }} 
                 />
@@ -313,14 +314,20 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                 <div className="text-right flex-1 w-full flex gap-4 md:gap-8 justify-between md:justify-end">
                   <div>
                     <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Utilizada</h4>
-                    <span className={cn("text-2xl font-black", estaSobregirado ? "text-rose-500" : "text-emerald-500")}>
+                    <span className={cn("text-2xl font-black", estaSobregirado ? "text-amber-500" : (porcentajeUtilizado >= 95 ? "text-emerald-500" : "text-slate-700 dark:text-slate-200"))}>
                       {(pesoUtilizadoGr / 1000).toFixed(2)} <span className="text-sm">kg</span>
                     </span>
                   </div>
-                    <div>
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Sobrante</h4>
-                    <span className={cn("text-2xl font-black", pesoRestanteGr < 0 ? "text-rose-500" : "text-amber-500")}>
-                      {(pesoRestanteGr / 1000).toFixed(2)} <span className="text-sm">kg</span>
+                  <div>
+                    <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">
+                      {estaSobregirado ? 'Masa de Más' : (pesoRestanteGr === 0 ? 'Balance' : 'Falta Repartir')}
+                    </h4>
+                    <span className={cn("text-2xl font-black", 
+                      estaSobregirado 
+                        ? "text-amber-500" 
+                        : (pesoRestanteGr === 0 ? "text-emerald-500" : "text-rose-500")
+                    )}>
+                      {estaSobregirado ? `+${(Math.abs(pesoRestanteGr) / 1000).toFixed(2)}` : (pesoRestanteGr / 1000).toFixed(2)} <span className="text-sm">kg</span>
                     </span>
                   </div>
                 </div>
@@ -633,14 +640,16 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
               {onAñadirAlPlan && (
                 <Button 
                   onClick={handleConfirmar} 
-                  disabled={pesoUtilizadoGr === 0 || estaSobregirado}
+                  disabled={pesoUtilizadoGr === 0}
                   variant="outline"
                   className={cn(
                     "h-14 px-8 rounded-2xl font-black text-base transition-all border-2",
-                    estaSobregirado ? "opacity-50 pointer-events-none" : "border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+                    estaSobregirado 
+                      ? "border-amber-400 text-amber-700 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300" 
+                      : "border-indigo-300 text-indigo-700 hover:bg-indigo-50"
                   )}
                 >
-                  Sumar al plan del día <ArrowRight className="w-5 h-5 ml-2" />
+                  {estaSobregirado ? 'Sumar al plan (Masa Extra)' : 'Sumar al plan del día'} <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               )}
               {onGuardarAuditoria && (
@@ -649,10 +658,13 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                   disabled={pesoUtilizadoGr === 0}
                   className={cn(
                     "h-14 px-8 rounded-2xl font-black text-lg transition-all text-white border-b-4",
-                    estaSobregirado ? "bg-amber-500 hover:bg-amber-600 border-amber-700" : "bg-emerald-600 hover:bg-emerald-700 border-emerald-800 shadow-lg shadow-emerald-500/25"
+                    estaSobregirado 
+                      ? "bg-amber-500 hover:bg-amber-600 border-amber-700 shadow-lg shadow-amber-500/25" 
+                      : "bg-emerald-600 hover:bg-emerald-700 border-emerald-800 shadow-lg shadow-emerald-500/25"
                   )}
                 >
-                  <Wand2 className="w-5 h-5 mr-2" /> Guardar en Libreta
+                  <Wand2 className="w-5 h-5 mr-2" /> 
+                  {estaSobregirado ? 'Guardar en Libreta (Masa de Más)' : 'Guardar en Libreta'}
                 </Button>
               )}
             </div>
