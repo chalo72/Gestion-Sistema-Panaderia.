@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Zap, LayoutGrid, X, Users, Plus, ChevronDown, Coffee, BellRing, Search } from 'lucide-react';
+import { Zap, UtensilsCrossed, X, Users, Plus, ChevronDown, Coffee, BellRing, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { VendedoraQuickPicker, type VendedoraOption } from './VendedoraQuickPicker';
 import { RadarNequi } from './RadarNequi';
@@ -64,8 +64,9 @@ export function POSHeader({
                         className={cn("h-8 px-3 rounded-lg flex items-center gap-2 transition-all active:scale-95 shadow-sm border shrink-0",
                             viewMode === 'mesas' ? "bg-indigo-600 text-white border-indigo-700 font-bold" : "bg-white dark:bg-slate-800 text-slate-600 border-slate-200 dark:border-slate-700"
                         )}
+                        title="Mesas / Salón"
                     >
-                        <LayoutGrid className="w-3.5 h-3.5" />
+                        <UtensilsCrossed className="w-3.5 h-3.5" />
                         <span className="text-[10px] font-black uppercase tracking-tight">Mesas</span>
                     </button>
                     <div className="w-px h-6 bg-slate-200 dark:bg-slate-700" />
@@ -167,9 +168,9 @@ export function POSHeader({
                         className={cn("w-11 h-11 rounded-2xl flex items-center justify-center border-2 transition-all active:scale-95 shrink-0 shadow-sm",
                             viewMode === 'mesas' ? "bg-indigo-600 text-white border-indigo-700" : "bg-white dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
                         )}
-                        title="Mesas"
+                        title="Mesas / Salón"
                     >
-                        <LayoutGrid className="w-5 h-5" />
+                        <UtensilsCrossed className="w-5 h-5" />
                     </button>
                     {/* Búsqueda rápida — acceso directo de 1 toque para vendedoras */}
                     {onOpenMobileMenu && (
