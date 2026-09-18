@@ -28,7 +28,8 @@ import { PageTransition } from '@/components/layout/PageTransition';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { OfflineMonitor } from '@/components/common/OfflineMonitor';
 import { BottomNavBar } from '@/components/layout/BottomNavBar';
-import type { ViewType } from '@/types';
+import type { ViewType, Gasto } from '@/types';
+import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
 
 // Carga inmediata — pantallas críticas del flujo de entrada
 import Dashboard from '@/pages/Dashboard';
@@ -112,6 +113,8 @@ const App = () => {
 
   const [isSyncing, setIsSyncing] = useState(false);
   const [isStockAlertOpen, setIsStockAlertOpen] = useState(false);
+  const [isGastoExpressOpen, setIsGastoExpressOpen] = useState(false);
+  const [gastoExpressData, setGastoExpressData] = useState<Partial<Gasto>>({});
   const { theme, setTheme } = useTheme();
   const { usuario: user, logout, isLoading: isAuthLoading } = useAuth();
   const { check, isAdmin, role } = useCan();
@@ -349,6 +352,7 @@ const App = () => {
             onViewCargaMasiva={() => setCurrentView('cargamasiva')}
             onViewRecetas={() => setCurrentView('recetas')}
             onViewConsumo={() => setCurrentView('fiados-empleados')}
+            onGastoExpress={() => setIsGastoExpressOpen(true)}
             getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
@@ -927,6 +931,7 @@ const App = () => {
             onViewCargaMasiva={() => setCurrentView('cargamasiva')}
             onViewRecetas={() => setCurrentView('recetas')}
             onViewConsumo={() => setCurrentView('fiados-empleados')}
+            onGastoExpress={() => setIsGastoExpressOpen(true)}
             onViewCaja={() => setCurrentView('caja')}
             onViewProduccion={() => setCurrentView('produccion')}
             onViewGastos={() => setCurrentView('gastos')}
@@ -1153,6 +1158,24 @@ const App = () => {
           </footer>
         )}
       </main>
+
+      {isGastoExpressOpen && (
+        <ExpenseFormModal
+          isOpen={isGastoExpressOpen}
+          onOpenChange={setIsGastoExpressOpen}
+          formData={gastoExpressData}
+          setFormData={setGastoExpressData}
+          onSubmit={async () => {
+             await addGasto(gastoExpressData as any);
+             setIsGastoExpressOpen(false);
+             setGastoExpressData({});
+             toast.success('Gasto Express registrado!');
+          }}
+          bovedas={configuracion?.bovedas || []}
+          cajasAbiertas={sesionesCaja.filter(c => c.estado === 'abierta')}
+          proveedores={proveedores}
+        />
+      )}
 
       <Toaster position="top-right" richColors closeButton visibleToasts={1} duration={3000} />
     </div>

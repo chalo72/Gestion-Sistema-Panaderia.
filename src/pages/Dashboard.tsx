@@ -69,6 +69,7 @@ interface DashboardProps {
   onViewProduccion?: () => void;
   onViewConsumo?: () => void;
   onViewGastos?: () => void;
+  onGastoExpress?: () => void;
   onViewHistorial?: () => void;
   onViewReportes?: () => void;
   getProveedorById: (id: string) => Proveedor | undefined;
@@ -103,6 +104,7 @@ export default function Dashboard(props: DashboardProps) {
     onViewRecetas,
     onViewCaja,
     onViewConsumo,
+    onGastoExpress,
     onViewProduccion,
     onViewGastos,
     onViewHistorial,
@@ -257,6 +259,7 @@ export default function Dashboard(props: DashboardProps) {
         onViewRecetas={onViewRecetas}
         onViewReportes={onViewReportes}
         onViewConsumo={onViewConsumo}
+        onGastoExpress={onGastoExpress}
         productos={productos}
         proveedores={proveedores}
         precios={precios}
