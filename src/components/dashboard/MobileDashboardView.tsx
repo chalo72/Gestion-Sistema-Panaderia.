@@ -4,6 +4,7 @@ import {
   Banknote,
   Scale,
   Package,
+  Coffee,
   Eye,
   EyeOff,
   TrendingUp,
@@ -19,8 +20,9 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import type { AlertaPrecio } from '@/types';
+import type { AlertaPrecio, Producto, Proveedor, PrecioProveedor } from '@/types';
 import { FindingsFeed } from '@/components/agentes/FindingsFeed';
+import { BusquedaRapida } from '@/components/layout/BusquedaRapida';
 
 interface MobileDashboardViewProps {
   estadisticas: {
@@ -62,6 +64,14 @@ interface MobileDashboardViewProps {
   onViewAlertas: () => void;
   onViewRecetas?: () => void;
   onViewReportes?: () => void;
+  onViewConsumo?: () => void;
+  productos: Producto[];
+  proveedores: Proveedor[];
+  precios: PrecioProveedor[];
+  inventario?: any[];
+  getMejorPrecio: (productoId: string) => PrecioProveedor | null;
+  getPreciosByProducto: (productoId: string) => PrecioProveedor[];
+  getProveedorById: (id: string) => Proveedor | undefined;
 }
 
 export function MobileDashboardView({
@@ -84,6 +94,14 @@ export function MobileDashboardView({
   onViewAlertas,
   onViewRecetas,
   onViewReportes,
+  onViewConsumo,
+  productos,
+  proveedores,
+  precios,
+  inventario,
+  getMejorPrecio,
+  getPreciosByProducto,
+  getProveedorById,
 }: MobileDashboardViewProps) {
   const [saldoOculto, setSaldoOculto] = useState<boolean>(() => {
     return localStorage.getItem('dp_saldo_oculto_mobile') === 'true';
@@ -144,6 +162,18 @@ export function MobileDashboardView({
           )}
         </button>
       </div>
+
+      {/* ── BÚSQUEDA RÁPIDA — antes solo vivía en el menú lateral, no se veía en Inicio ── */}
+      <BusquedaRapida
+        productos={productos}
+        proveedores={proveedores}
+        precios={precios}
+        inventario={inventario}
+        getMejorPrecio={getMejorPrecio}
+        getPreciosByProducto={getPreciosByProducto}
+        getProveedorById={getProveedorById}
+        formatCurrency={formatCurrency}
+      />
 
       {/* ── TARJETA HERO: SALDO / INGRESOS DE HOY ── */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 text-white p-5 shadow-xl shadow-orange-600/20">
@@ -267,6 +297,21 @@ export function MobileDashboardView({
               Pedidos<br/><span className="text-[10px] text-slate-400 font-bold">A proveedor</span>
             </span>
           </button>
+
+          {/* Consumo Interno / Fiados */}
+          {onViewConsumo && (
+            <button
+              onClick={onViewConsumo}
+              className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-amber-50 dark:hover:bg-amber-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-500 text-white flex items-center justify-center shrink-0">
+                <Coffee className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
+                Consumo<br/><span className="text-[10px] text-slate-400 font-bold">Interno / Fiados</span>
+              </span>
+            </button>
+          )}
         </div>
       </div>
 
