@@ -48,6 +48,57 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       }
     } catch (e) { /* ignore */ }
 
+    // Blindaje: no abrir un turno duplicado para una caja que ya tiene uno abierto
+    // (bug real reportado por Gonzalo 2026-09-20: la app dejaba abrir varias veces la
+    // misma caja, sobre todo tras el crash del modal de apertura — ver AperturaCajaModal.tsx).
+    // Si ya hay una sesion 'abierta' con el mismo nombre de caja, avisamos y devolvemos
+    // esa sesion existente en vez de crear una nueva.
+    const nombreNuevaCajaNorm = String(extras.cajaNombre || '').trim().toLowerCase();
+    if (nombreNuevaCajaNorm) {
+      const yaAbierta = sesionesCaja.find(s => s.estado === 'abierta' && String(s.cajaNombre || '').trim().toLowerCase() === nombreNuevaCajaNorm);
+      if (yaAbierta) {
+        // Pedido de Gonzalo 2026-09-20: que el aviso de turno duplicado sea una decision real,
+        // no solo un bloqueo. Aceptar = seguir usando el turno ya abierto (comportamiento previo).
+        // Cancelar = cerrar ese turno viejo y abrir uno nuevo.
+        const horaApertura = new Date(yaAbierta.fechaApertura).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+        const entradasViejas = (yaAbierta.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
+        const salidasViejas = (yaAbierta.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
+        const esperadoViejo = (yaAbierta.montoApertura || 0) + (yaAbierta.totalVentasEfectivo || 0) + entradasViejas - salidasViejas;
+        const seguirUsando = window.confirm(
+          `⚠️ ${extras.cajaNombre} ya tiene un turno abierto desde las ${horaApertura} (${yaAbierta.vendedoraNombre || 'sin nombre'}).\n\n` +
+          `Aceptar = seguir usando ese turno que ya está abierto.\n` +
+          `Cancelar = cerrar ese turno (con $${esperadoViejo.toLocaleString('es-CO')} calculado por el sistema, no contado a mano) y abrir uno nuevo.`
+        );
+        if (seguirUsando) {
+          setCajaActiva(yaAbierta);
+          toast.success(`Se siguió usando el turno de ${extras.cajaNombre} que ya estaba abierto.`);
+          return yaAbierta;
+        }
+        // No seguir usando: cerrar el turno viejo (monto = efectivo esperado por el sistema,
+        // igual que el boton "Usar sistema" de Entrega de Turno) y depositarlo en Boveda
+        // Principal, igual que hace todo cierre normal en ControlCaja.tsx (handleEntregaTurno /
+        // handleCierreJornada) - para no dejar ese dinero sin registrar.
+        try {
+          await cerrarCaja(esperadoViejo, yaAbierta.vendedoraNombre, undefined, 'Cerrada automáticamente al abrir un turno nuevo en la misma caja (monto = efectivo esperado por el sistema, no contado a mano).', yaAbierta.id);
+          if (esperadoViejo > 0) {
+            const { addMovimientoBoveda } = await import('@/lib/boveda-store');
+            addMovimientoBoveda({
+              bovedaDestinoId: 'boveda-principal',
+              monto: esperadoViejo,
+              motivo: `Cierre automático (turno nuevo): ${yaAbierta.cajaNombre || 'Caja'} (${yaAbierta.vendedoraNombre || 'Vendedora'})`,
+              tipo: 'Ingreso',
+              usuarioResponsable: yaAbierta.vendedoraNombre || 'Sistema',
+              metodoPago: 'Efectivo'
+            });
+          }
+          toast.success(`✅ Se cerró el turno anterior de ${extras.cajaNombre} y se está abriendo uno nuevo.`);
+        } catch (e) {
+          console.error('Error cerrando turno anterior antes de abrir uno nuevo:', e);
+          toast.error('No se pudo cerrar el turno anterior automáticamente. Contacta al administrador.');
+        }
+      }
+    }
+
     const sesion: CajaSesion = {
       id: generateUUID(),
       usuarioId,
@@ -72,7 +123,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     localStorage.setItem('dp_caja_apertura_ts', sesion.fechaApertura);
     toast.success('Caja abierta correctamente');
     return sesion;
-  }, []);
+  }, [sesionesCaja]);
 
   // cajaId opcional: permite cerrar UNA caja especifica de la lista (no siempre la
   // "cajaActiva" de este dispositivo). Sin cajaId, se comporta exactamente igual que antes
@@ -97,6 +148,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     await db.updateSesionCaja(sesion as any);
     _supaDB.updateSesionCaja(sesion as any).catch(() => {});
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
+    window.dispatchEvent(new Event('dp_sesiones_caja_changed'));
     if (cajaActiva?.id === sesion.id) setCajaActiva(undefined);
     // Generar cuadre de seguridad automáticamente
     try {

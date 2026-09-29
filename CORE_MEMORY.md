@@ -1,5 +1,31 @@
 # 🧠 CORE MEMORY — Gestión de Precios y Proveedores (Dulce Placer)
-> Última actualización: 2026-09-15
+> Última actualización: 2026-09-19
+
+# 🛑🔴🛑🔴🛑 PARE — CUALQUIER AGENTE, CUALQUIER CHAT: LEE ESTO ANTES DE TOCAR VERCEL 🛑🔴🛑🔴🛑
+
+> ## ⛔ ESTO NO ES OPCIONAL. APLICA SIEMPRE QUE VAYAS A:
+> - Desplegar (`vercel --prod`, `PUBLICAR_A_PRODUCCION.bat`, o cualquier deploy)
+> - Editar código que se vaya a desplegar
+> - **Y TAMBIÉN cuando vayas a tocar CONFIGURACIÓN DE VERCEL — variables de entorno, dominios, deployments — YA SEA por el dashboard web O por herramientas de API/MCP (`mcp__Vercel__*`).** Esto NO es solo sobre deploys de código.
+
+## 🔴🔴🔴 REGLA #1 — HAY DOS PROYECTOS DE VERCEL EN LA CUENTA. UNO ES UNA TRAMPA. 🔴🔴🔴
+
+| | NOMBRE EN VERCEL | PROJECT ID | ¿ES EL REAL? |
+|---|---|---|---|
+| ✅ **USA SIEMPRE ESTE** | **`app`** | **`prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`** | **SÍ.** Sirve `app-eight-sigma-13.vercel.app` — el sitio que Gonzalo realmente abre y usa. |
+| ❌ **NUNCA USES ESTE** | `panaderia-dulce-placer` | `prj_FadaTb8fTqzTXtBNxcs1u9qHPA4Z` | **NO.** Proyecto huérfano/duplicado. Nadie lo abre. No sirve nada real. |
+
+**⚠️ TODOS LOS AGENTES SE CONFUNDEN CON ESTO, SIN EXCEPCIÓN, PORQUE `panaderia-dulce-placer` "SUENA" COMO EL PROYECTO CORRECTO POR EL NOMBRE DEL NEGOCIO — Y NO LO ES.**
+
+Confirmado repetidas veces, la más reciente el **2026-09-19**: un agente (Claude, esta misma familia de asistente) buscó el proyecto por nombre, encontró `panaderia-dulce-placer`, y agregó ahí una variable de entorno (`NVIDIA_API_KEY`) pensando que era el proyecto real. No tuvo ningún efecto porque ese proyecto no se usa — el usuario tuvo que corregir al agente explícitamente, citando ESTE MISMO documento, y hubo que repetir el cambio en `app` (el proyecto correcto).
+
+### ✅ CÓMO NO CAER EN LA TRAMPA
+**Antes de leer, escribir o cambiar CUALQUIER COSA en Vercel — env vars, dominios, deployments, lo que sea — usa siempre el Project ID exacto `prj_jYDczKuEmfcLp1zyX5GTIWNjMleq` directamente (o el nombre exacto `app`). NUNCA busques el proyecto "por nombre parecido al negocio" ni asumas que el que suena más obvio es el correcto — es al revés.** Si por cualquier razón tienes duda, compara el dominio/alias del proyecto (`app-eight-sigma-13.vercel.app`) contra lo que el usuario realmente abre en el navegador, ANTES de tocar nada.
+
+## 🔴🔴🔴 REGLA #2 — HAY DOS COPIAS DEL CÓDIGO FUENTE EN ESTE REPO 🔴🔴🔴
+Ver el detalle completo justo abajo, en "🚨 CUÁL COPIA ES LA BUENA". Resumen: `src/` (raíz) y `app/src/` están vinculadas al MISMO proyecto de Vercel (el de la tabla de arriba) — quien despliegue desde cualquiera de las dos carpetas sobrescribe a la otra en producción. Compara antes de asumir cuál es la buena.
+
+---
 
 ## 🚨 CUÁL COPIA ES LA BUENA — LÉELO ANTES DE DESPLEGAR O EDITAR (actualizado 2026-09-15, tarde)
 Hay **dos copias del código fuente** en este repo: `src/` (raíz) y `app/src/`. Ambas carpetas están vinculadas al **mismo proyecto de Vercel** (`projectId: prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`, nombre de proyecto "app", sirviendo `app-eight-sigma-13.vercel.app`) — quien sea que corra `vercel --prod` desde una u otra carpeta es lo que queda publicado. **Ninguna de las dos es "la buena" de forma permanente** — han evolucionado en paralelo con trabajo real e independiente en cada una, y se pisan entre sí cada vez que se despliega la que no toca. Antes de decir "esta es la buena", compara — no asumas.
@@ -77,6 +103,7 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 ## 🔑 Decisiones Clave (Historial)
 | Fecha | Decisión | Razón |
 |-------|----------|-------|
+| 2026-09-18 noche | Panes Faltantes ("Pan pequeño de queso"), Optimización Modo Ayudante Móvil y Auditoría/Edición de Cuadres de Caja | Solicitud explícita de Gonzalo: 1) **Panes Faltantes / Catálogo Universal**: Se aseguró la presencia de `"Pan pequeño de queso"` en `modelos-inmutables.ts` / `.json` y se actualizaron los selectores de modelos en `DiagnosticoFinanciero.tsx` y `DistribuidorArroba.tsx` para mostrar siempre todos los modelos agrupados (`optgroup` de sugeridos para la masa + todos los demás panes) evitando que se oculten panes por diferencias de formulación. 2) **Modo Ayudante en Móvil**: Las secciones ahora inician cerradas (`defaultAbierto = false`), el selector de masas se rediseñó verticalmente a ancho completo para evitar que quede aplastado en celulares, y se añadió historial reactivo inmediato bajo el formulario de Venta Diaria. 3) **Historial y Edición de Cuadres de Caja**: En `ControlCaja.tsx` y `useVentas.ts`, se habilitó el historial de cuadres en escritorio y móvil, con evento reactivo `dp_sesiones_caja_changed`, y se implementó un modal interactivo para ver el desglose completo y editar fecha, responsable, turno, monto de cierre y notas del cuadre. Verificado con `tsc --noEmit` (0 errores). |
 | 2026-09-18 tarde | Desbloqueo de Guardado con Masa Extra / Sobregirada y Sincronización Total de Modo Ayudante (Venta Diaria y Producción) | Solicitud explícita de Gonzalo: 1) **Producción sin bloqueos**: En `DistribuidorArroba.tsx` se eliminó el bloqueo que impedía guardar o sumar al plan cuando la masa sobrepasaba la cantidad estimada (`estaSobregirado`). Ahora se permite guardar con notificación informativa y estado amarillo/ámbar de "Masa de Más", verde para exacto/bien y rojo para falta por repartir. 2) **Sincronización Nube en Modo Ayudante y Libreta del Horno**: Se conectó `pushVentasDiariasToCloud` en `src/lib/finanzas-personales.ts`, se añadió el evento reactivo `dp_ventas_diarias_changed` y la sincronización bidireccional inmediata en `useReportesData.ts`, `LibretaHornoForm` y `VentaDiariaRapidaForm`. 3) En `DiagnosticoFinanciero.tsx` se ajustó el selector de masas para incluir todas las fórmulas maestras y se robusteció la selección de modelos de pan. Verificado con `tsc --noEmit` limpio (0 errores). |
 | 2026-09-18 tarde | Acceso a Modo Ayudante (Captura Rápida Atrasados) para el rol PANADERO | Solicitud explícita del usuario: el Panadero necesita registrar producciones atrasadas desde su sesión. Se incluyó `'modo-ayudante'` en `VER_PANADERO` y se implementó el parche automático `PATCH_PANADERO_MODO_AYUDANTE` en `src/hooks/usePermisosModulos.ts` para habilitarlo en sesiones existentes sin requerir reconfiguración manual. Verificado con `tsc --noEmit` limpio. |
 | 2026-09-18 tarde | Icono de Mesas en Ventas (POS): Mesa Real con Sillas de Restaurante (`MesaIcon`) | Solicitud explícita del usuario para reemplazar el icono previo por uno que dibuje literalmente una mesa de restaurante con sus sillas y tablero superior (`MesaIcon` SVG nítido). Se actualizó en `src/components/ventas/POSHeader.tsx` (tanto en la vista de escritorio como en la barra móvil de acceso rápido). Verificado con `tsc --noEmit` limpio. |
@@ -229,6 +256,14 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - La limpieza de fin de línea (CRLF) de todo el repo — ver hallazgo de arriba, pendiente de decisión de Gonzalo.
 - Verificación EN VIVO de estos 3 fixes — pendiente de un build + deploy real desde la PC de Gonzalo (u otro agente con acceso a esa PC).
 
+### 🔧 2026-09-19 — Claude Sonnet 5 (Cowork) — Modo Rapido arreglado: modelos de Groq/NVIDIA retirados, no la llave
+**Sintoma**: Marketing Studio -> Modo Rapido mostraba "Hubo un error generando la campana" en TODOS los intentos, incluso despues de poner una NVIDIA_API_KEY nueva y verificada en el proyecto correcto (`app`).
+**Causa real (verificada, no adivinada)**: `api/agente.ts` intentaba, en orden, Ollama (esperado que falle desde Vercel) -> Groq (via `OPENAI_API_KEY`) -> NVIDIA (`NVIDIA_API_KEY`) -> Anthropic (no configurado). Los modelos de texto por defecto que pedia el codigo (`llama-3.1-8b-instant` y `llama-3.3-70b-versatile` en Groq, `meta/llama-3.1-8b-instruct` y `meta/llama-3.1-405b-instruct` en NVIDIA) estaban RETIRADOS: Groq los apago oficialmente el 16-ago-2026 (ver https://console.groq.com/docs/deprecations), y el "Free Endpoint" de ese modelo en NVIDIA build.nvidia.com aparece marcado "Deprecated" en su propia pagina. Por eso los tres proveedores de respaldo fallaban siempre, sin importar que la llave de NVIDIA fuera nueva y correcta.
+**Verificacion antes de diagnosticar**: se reprodujo el error llamando directamente a `/api/agente` desde el navegador (fetch en la misma pagina en produccion) y se confirmo el 500 con "No hay proveedores de IA disponibles o todos fallaron." antes de tocar nada.
+**Arreglo**: en `api/agente.ts`, funcion `handleOpenAI`, se reemplazaron los 4 nombres de modelo retirados por modelos activos: NVIDIA -> `meta/llama-3.3-70b-instruct` (para ambos casos); Groq -> `openai/gpt-oss-120b` (modelos "importantes") y `openai/gpt-oss-20b` (default), que son los reemplazos que Groq recomienda oficialmente en su propia documentacion de deprecaciones.
+**Verificacion despues del deploy**: tras `PUBLICAR_A_PRODUCCION.bat`, se volvio a llamar `/api/agente` en produccion y esta vez respondio 200 con texto real generado por IA (no un error) — confirmado con la peticion real, no asumido.
+**Leccion para el futuro**: si el Modo Rapido (o cualquier feature que use `/api/agente`) vuelve a fallar con "todos los proveedores fallaron" DESPUES de confirmar que las llaves estan bien puestas en el proyecto correcto de Vercel, sospechar primero de nombres de modelo retirados por el proveedor (Groq/NVIDIA/OpenAI cambian sus catalogos con frecuencia) antes de tocar llaves o proyectos de nuevo.
+
 ### 🔧 2026-09-18 — Claude Sonnet 5 (Cowork) — Fase 0 completada: qué usa HOY realmente `/api/agente` (antes de agregar NVIDIA Build)
 
 **Contexto**: Gonzalo pidió agregar NVIDIA Build (build.nvidia.com/NIM, API gratis compatible con OpenAI) como proveedor de IA adicional, EN SINCRONÍA con lo que ya existe — sin reemplazar Ollama, sin reemplazar nada del código actual, y de forma resiliente a que NVIDIA cambie su oferta a futuro. Antes de tocar código, tocaba leer `api/agente.ts` completo (no se había leído en ninguna sesión anterior documentada aquí) y la config real de Vercel — no asumir.
@@ -243,3 +278,65 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Propuesta concreta para el siguiente paso (NO implementada aún, pendiente de que Gonzalo confirme)**: agregar NVIDIA Build como una rama más en `handleOpenAI` (mismo patrón que ya usa para distinguir Groq/DeepSeek por prefijo de key — una key de NVIDIA empieza `nvapi-`, fácil de detectar igual), apuntando a `https://integrate.api.nvidia.com/v1/chat/completions` cuando se detecte, usando una variable nueva y separada (ej. `NVIDIA_API_KEY`) que no pisa ni reemplaza `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/Ollama — puramente aditivo, cero riesgo para quien no configure esa variable nueva.
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
+
+---
+
+✅ COMPLETADO — Claude Sonnet 5 — 2026-09-19 — Auditoría en vivo pedida por Gonzalo: Modo Ayudante (masa/arrobas), acceso por rol VENDEDOR/PANADERO, e historial de Caja/Ventas.
+
+**Qué encontré (verificado entrando yo mismo a `app-eight-sigma-13.vercel.app`, no solo leyendo código)**:
+1. ✅ El selector de masa (Sal, Dulce, Hojaldre, Batido de Tortas, Vatido Galleta) y el campo de cantidad en arrobas en Modo Ayudante → Producción/Libreta → pestaña Masas SÍ funcionan en producción ahora mismo (probado: seleccioné "Masa de Dulce" + "Cuarto de Arroba", el cálculo de panes esperados salió bien). Esto ya lo había arreglado otro agente ayer (ver entradas 2026-09-18 arriba) — confirmado que sigue funcionando, no hacía falta tocar nada.
+2. ⚠️ El rol PANADERO sí tiene acceso a `modo-ayudante` (agregado ayer), pero el rol VENDEDOR nunca lo tuvo — confirmado leyendo `VER_VENDEDOR` en `usePermisosModulos.ts`, no tenía `'modo-ayudante'`. Esto explica el reporte de Gonzalo de que "a las vendedoras no les sale".
+3. 🚨 **Control de Caja e Historial de Ventas se cayeron completamente** (pantalla "Error en el módulo X", `Cannot read properties of undefined (reading 'trim')`) en una primera visita, con una sesión de caja/jornada abierta. Confirmado con el stack trace que el error viene del chunk compilado `CajaMovimientosModal-CMVun8CN.js`, dentro de un `.map()`. **Revisé el código fuente de `CajaMovimientosModal.tsx` en la raíz Y en `app/` — en NINGUNA de las dos existe (ni existió nunca en su historial de git) ningún `.trim()`** — así que no pude confirmar la causa exacta desde el código que tengo disponible. Al volver a entrar más tarde con "Sin jornada activa" (sin caja abierta), ambas pantallas cargaron bien — o sea, **el error es intermitente y depende de que haya una jornada/caja abierta con algún dato faltante** (probablemente un campo de un movimiento o cuadre existente que no tiene `motivo`/`turno`/`notas` y algo le hace `.trim()` sin chequear undefined). **No pude reproducir el crash a voluntad ni encontrar la línea exacta** — haría falta que alguien abra una jornada de prueba y mire si se cae, o revisar en Vercel qué build exacto está sirviendo ahora mismo (la fecha de build del `version.json` en vivo, 2026-09-19, no coincide con la fecha del build local de la raíz ni de `app/`, así que ninguna de las dos carpetas que tengo es garantizado que sea exactamente lo que está publicado).
+4. Aparte (no pedido, encontrado de pasada): errores repetidos en consola de Supabase `PGRST204: Could not find the 'fecha' column of 'tombstones' in the schema cache` al borrar `trabajadores` y `mesas` — sincronización de borrados silenciosamente fallando.
+
+**Qué hice** (con autorización de Gonzalo tras reportarle el hallazgo #2, cambio mínimo, archivo libre no protegido):
+- `src/hooks/usePermisosModulos.ts`: agregué `'modo-ayudante'` a `VER_VENDEDOR`, y agregué el parche `PATCH_VENDEDOR_MODO_AYUDANTE` (mismo patrón exacto que `PATCH_PANADERO_MODO_AYUDANTE` de ayer) para activarlo automáticamente en sesiones ya guardadas sin que Gonzalo tenga que reconfigurar manualmente en Roles y Permisos.
+
+**Cómo lo verifiqué**: `npx tsc --noEmit -p tsconfig.app.json` → 1784 errores totales (bajó respecto a la última medición de 1804, dentro de lo normal), el único error en ese archivo es un `TODOS` sin usar que YA existía antes, nada nuevo en las líneas que toqué.
+
+**Qué queda pendiente / NO hice**:
+- El bug de `.trim()` en Caja/Historial de Ventas (punto 3 arriba) — es intermitente, no lo pude fijar en código porque no coincide con ninguna copia local. **Necesita que alguien lo reproduza con una jornada real abierta y mire la consola**, o revise en el dashboard de Vercel el commit exacto del deploy activo.
+- No probado con un usuario VENDEDOR real todavía (solo tengo sesión de Administrador) — falta que Gonzalo o alguien con ese rol confirme que ahora sí le aparece "Captura Rápida" en el celular.
+- El tema de `tombstones.fecha` en Supabase (punto 4) — no se tocó, es un hallazgo aparte.
+
+---
+
+✅ RESUELTO — Claude Sonnet 5 — 2026-09-19 (cont.) — Encontrada y arreglada la causa REAL del crash de Control de Caja / Historial de Ventas (el punto 3 de la entrada anterior).
+
+**Gonzalo mandó captura de pantalla mostrando el error en vivo en su celular ("Cannot read properties of undefined (reading 'trim')")**, así que reproduje el mismo crash en el navegador (antes me había cargado bien porque no tenía jornada activa) y esta vez sí lo agarré. Bajé el archivo JS real que está sirviendo Vercel ahora mismo (`CajaMovimientosModal-CMVun8CN.js`, es un chunk que Vite empaquetó junto con `AperturaCajaModal.tsx`) y busqué el `.trim()` exacto en el código minificado — no adivinando, leyendo el bundle real.
+
+**Causa real**: en `src/components/ventas/AperturaCajaModal.tsx`, la función `normalizarNombreCaja(nombre)` hacía `nombre.trim().toLowerCase()` sin revisar que `nombre` existiera. `cargarCajasGuardadas()` la llama así: `cargarNombresEliminados().map(normalizarNombreCaja)` — **esta línea específica corre ANTES de cualquier `try/catch`** (los otros 2 usos de `limpiarListaCajas` en el mismo archivo sí están protegidos). Si la lista de "nombres de cajas eliminadas" guardada en `localStorage` (`dp_cajas_eliminadas`) tiene algún elemento `null`/`undefined` adentro — dato viejo o corrupto de algún dispositivo — truena ahí mismo, en el render inicial, y como es un `useState(cargarCajasGuardadas)` (inicializador de estado), React lo agarra como error de render y tumba toda la pantalla vía ErrorBoundary. Como `AperturaCajaModal` y `CajaMovimientosModal` quedaron en el mismo chunk de Vite, el mismo bug tumba tanto Control de Caja como Historial de Ventas (ambos renderizan ese chunk).
+
+**Fix aplicado** (archivo libre, no protegido, cambio de una función/3 líneas): `normalizarNombreCaja` ahora hace `(nombre || '').trim().toLowerCase()`. Con esto, cualquier dato dañado (nombre `null`/`undefined` en cualquiera de los 2 localStorage keys `dp_cajas_config`/`dp_cajas_eliminadas` o en el respaldo de Supabase `cajas_config`/`cajas_eliminadas`) simplemente se normaliza a cadena vacía en vez de tronar — arregla los 3 puntos de llamada de una sola vez, no hacía falta tocar cada uno.
+
+**Cómo lo verifiqué**: `npx tsc --noEmit -p tsconfig.app.json` → 1784 errores (idéntico al conteo de antes de este cambio), los únicos 2 errores que aparecen en este archivo (línea 122-123, tipo `unknown` en `db.getAllTrabajadores()`) ya existían antes y no tienen nada que ver con la función que toqué.
+
+**Qué queda pendiente**: 
+- Falta build + `PUBLICAR_A_PRODUCCION.bat` para que esto llegue a producción — no lo puedo hacer desde esta terminal remota (ver skill de build/deploy).
+- Este fix hace que la pantalla YA NO SE CAIGA, pero el dato corrupto (el nombre `null`/`undefined` guardado) sigue ahí — no se pierde nada ni hace falta borrarlo, simplemente ahora se ignora sin romper nada. Si en algún momento se quiere depurar ESE dato dañado específico, habría que revisar `localStorage['dp_cajas_eliminadas']` en el celular de Gonzalo con las herramientas de desarrollador — no es urgente, el síntoma visible (pantalla roja) ya no debería pasar una vez se publique este fix.
+
+---
+
+### 🔒 2026-09-28 — Claude Opus 5.5 (Claude Code) — Hooks de protección automáticos en `.claude/settings.json`
+
+**Qué hice**: agregué 2 hooks `PreToolUse` de Claude Code (versionados en el repo, aplican a cualquier sesión de Claude Code en esta carpeta):
+- `.claude/hooks/proteger-archivos.mjs` → antes de Edit/Write lee `LOCKED_RESOURCES.md` y, si el archivo está en la lista, **pide confirmación** al usuario (protocolo "AUTORIZO" ya no depende de que el agente se acuerde).
+- `.claude/hooks/proteger-deploy.mjs` → ante `vercel --prod`, `npm run deploy` o `PUBLICAR_A_PRODUCCION` **pide confirmación**; si se intenta desplegar desde `app/` (cwd con `NO_DESPLEGAR_DESDE_AQUI.txt` o `cd app`), **lo bloquea**.
+
+**Por qué**: la "guerra de despliegues" desde `app/` y ediciones a archivos protegidos sin autorización pasaron varias veces.
+
+**Cómo lo verifiqué**: 13 casos simulados (rutas Windows/relativas/app/, deploy raíz/bat/app/Set-Location, comandos libres como `vercel ls`) → todos con la decisión esperada. El hook de deploy además bloqueó en vivo un comando de prueba de esta misma sesión.
+
+**Ojo**: solo protege a Claude Code. Cursor y Antigravity NO leen estos hooks. Para agregar un archivo protegido basta con listarlo en `LOCKED_RESOURCES.md` (formato ``- `ruta` ``), el hook lo toma solo.
+
+**Para agentes con terminal**: el hook de deploy revisa el TEXTO de cada comando Bash/PowerShell. Si un `cat >> archivo <<EOF` o `echo` menciona `vercel --prod`, `npm run deploy` o `PUBLICAR_A_PRODUCCION`, se traba pidiendo confirmación aunque no sea un despliegue. Para escribir en archivos (incluido este) usar Edit/Write, nunca la terminal.
+
+---
+
+### 📤 2026-09-29 — Claude Opus 5.5 (Claude Code) — Cambios pendientes subidos a rama + PR (NO a main)
+
+**Qué hice**: a pedido de Gonzalo, subí todo el trabajo sin commitear (Marketing Studio, Videovigilancia, dictado por voz, ajustes de caja/sync, etc. — 44+ archivos de varios agentes) a la rama `feat/marketing-studio-y-ajustes` y abrí PR contra `main`. **No se tocó main ni producción.**
+
+**Excluido a propósito**: `n8n-setup/NIVEL DIOS - Agencia IA Autónoma1.json` y `n8n-setup/Publicacion-Directa-Dulce-Placer.json` tienen **tokens de Facebook en texto plano** → quedaron fuera y agregados a `.gitignore`. Si se necesitan en el repo, primero reemplazar el token por una credencial de n8n.
+
+**Estado de pruebas al subir**: `npm run test` → 25 fallos, **los mismos 25 que ya fallaban en `main` (11bb3e9e)**, o sea no hay regresión nueva. `tsc` tiene cientos de errores de tipos preexistentes en todo el proyecto (el build de Vercel usa `vite build` sin `tsc`, así que no bloquean).

@@ -25,8 +25,11 @@ const LS_DELETED_KEY = 'dp_cajas_eliminadas';
 interface CajaDefinicion { nombre: string; emoji: string; descripcion: string; }
 
 // Normaliza un nombre de caja para comparar (evita duplicados por mayusculas/espacios)
+// Blindado contra datos dañados: si "nombre" llegó undefined/null desde localStorage
+// o un respaldo viejo, no debe tumbar Control de Caja / Historial de Ventas (bug real
+// visto en producción 2026-09-19: "Cannot read properties of undefined (reading 'trim')").
 function normalizarNombreCaja(nombre: string): string {
-    return nombre.trim().toLowerCase();
+    return (nombre || '').trim().toLowerCase();
 }
 
 // Quita duplicados por nombre (conserva la primera aparicion) y filtra nombres eliminados
@@ -187,7 +190,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
         Object.fromEntries(cajasLista.map(c => [c.nombre, configDefault()]))
     );
 
-    const normalize = (n: string) => n.trim().toLowerCase();
+    const normalize = (n: string) => (n || '').trim().toLowerCase(); // blindado: cajaNombre puede venir undefined en sesiones dañadas (ver normalizarNombreCaja arriba)
     const abiertasSet = new Set(cajasAbiertasNombres.map(normalize));
     const cajasIncluidas = cajasLista.filter(c => configs[c.nombre]?.incluida && !abiertasSet.has(normalize(c.nombre)));
     const totalEfectivo  = usarMontoGlobal

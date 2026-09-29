@@ -15,6 +15,7 @@ import { ExpenseList } from '@/components/gastos/ExpenseList';
 import { TurboExpenseManager } from '@/components/gastos/TurboExpenseManager';
 import type { GastoCategoria, MetodoPago } from '@/types';
 import { normalizarFechaYYYYMMDD, getProducciones, deleteProduccion } from '@/lib/finanzas-personales';
+import { useAuth } from '@/contexts/AuthContext';
 import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
 import {
     Dialog,
@@ -694,6 +695,8 @@ const formatearFechaFicha = (fecha: string) =>
 
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHorno = false }: { data: any, addMovimientoBoveda?: any, modoLibretaHorno?: boolean }) {
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto, updateGasto, deleteGasto, proveedores, productos, precios, cajaActiva, sesionesCaja } = data;
+    const { usuario } = useAuth();
+    const esAdmin = usuario?.rol === 'ADMIN';
     const [editGastoId, setEditGastoId] = useState<string | null>(null);
     const [editGastoData, setEditGastoData] = useState<any>(null);
     const [isSavingGasto, setIsSavingGasto] = useState(false);
@@ -3009,12 +3012,22 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                             {/* VISTA MÓVIL (TARJETAS) */}
                                             <div className="md:hidden grid gap-2 mb-2">
                                                 {masasPreparadas.map((m) => (
-                                                    <div key={m.id} className="flex gap-2 items-center bg-slate-50 dark:bg-white/5 p-2 rounded-xl border border-slate-200 dark:border-white/5">
-                                                        <div className="flex-1">
+                                                    <div key={m.id} className="bg-slate-50 dark:bg-white/5 p-3 rounded-2xl border border-slate-200 dark:border-white/10 space-y-2.5 shadow-sm">
+                                                        <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-white/5 pb-1.5">
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+                                                                Masa Declarada
+                                                            </span>
+                                                            <button type="button" onClick={() => handleRemoveMasa(m.id)}
+                                                                className="h-7 px-2 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold">
+                                                                <Trash2 className="w-3.5 h-3.5" /> Quitar
+                                                            </button>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] font-bold text-slate-500 uppercase">Seleccionar Tipo de Masa</label>
                                                             <select
                                                                 value={m.nombre}
                                                                 onChange={e => handleMasaChange(m.id, 'nombre', e.target.value)}
-                                                                className="h-9 text-xs font-bold rounded-lg w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3"
+                                                                className="h-10 text-xs font-bold rounded-xl w-full border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 px-3 text-slate-800 dark:text-slate-100"
                                                             >
                                                                 <option value="">Selecciona Masa...</option>
                                                                 {formulaciones?.filter((f: any) => f.activo !== false).map((f: any) => (
@@ -3022,17 +3035,14 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                 ))}
                                                             </select>
                                                         </div>
-                                                        <div className="w-40 sm:w-48 shrink-0">
+                                                        <div className="space-y-1">
+                                                            <label className="text-[10px] font-bold text-slate-500 uppercase">Cantidad (Arrobas / Libras)</label>
                                                             <SelectorMedidaArroba
                                                                 value={m.cantidadArrobas || ''}
                                                                 opciones={opcionesArrobas}
                                                                 onChange={(val) => handleMasaChange(m.id, 'cantidadArrobas', val)}
                                                             />
                                                         </div>
-                                                        <button type="button" onClick={() => handleRemoveMasa(m.id)}
-                                                            className="h-9 w-9 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors">
-                                                            <Trash2 className="w-4 h-4" />
-                                                        </button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -3075,9 +3085,10 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                             f.id === masaVinculada.nombre
                                                           ) 
                                                         : null;
-                                                    const modelosFiltrados = formCorr ? modelosPan?.filter((mod: any) => mod.formulacionId === formCorr.id) : null;
-                                                    const modelosDisponibles = (modelosFiltrados && modelosFiltrados.length > 0) ? modelosFiltrados : modelosPan;
-                                                    const panSeleccionado = (modelosDisponibles || modelosPan)?.find((m: any) => m.nombre === h.tipoPan);
+                                                    const todosModelos = (modelosPan || []).filter((m: any) => m.activo !== false);
+                                                    const modelosSugeridos = formCorr ? todosModelos.filter((mod: any) => mod.formulacionId === formCorr.id) : [];
+                                                    const otrosModelos = formCorr ? todosModelos.filter((mod: any) => mod.formulacionId !== formCorr.id) : todosModelos;
+                                                    const panSeleccionado = todosModelos.find((m: any) => m.nombre === h.tipoPan);
                                                     const faltaConfiguracion = h.tipoPan && panSeleccionado && !panSeleccionado.piezasPorLata;
 
                                                     return (
@@ -3123,7 +3134,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                         onChange={e => {
                                                                             const val = e.target.value;
                                                                             handleHornadaChange(i, 'tipoPan', val);
-                                                                            const mod = (modelosDisponibles || modelosPan)?.find((m: any) => m.nombre === val);
+                                                                            const mod = todosModelos.find((m: any) => m.nombre === val);
                                                                             if (mod) {
                                                                                 if (mod.piezasPorLata) {
                                                                                     handleHornadaChange(i, 'panesPorBandeja', mod.piezasPorLata);
@@ -3134,9 +3145,24 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                         }}
                                                                     >
                                                                         <option value="">Seleccionar pan...</option>
-                                                                        {(modelosDisponibles || modelosPan)?.map((mod: any) => (
-                                                                            <option key={mod.id} value={mod.nombre}>{mod.nombre}</option>
-                                                                        ))}
+                                                                        {modelosSugeridos.length > 0 ? (
+                                                                            <>
+                                                                                <optgroup label="Sugeridos para esta masa">
+                                                                                    {modelosSugeridos.map((mod: any) => (
+                                                                                        <option key={mod.id} value={mod.nombre}>{mod.nombre}</option>
+                                                                                    ))}
+                                                                                </optgroup>
+                                                                                <optgroup label="Todos los demás modelos de pan">
+                                                                                    {otrosModelos.map((mod: any) => (
+                                                                                        <option key={mod.id} value={mod.nombre}>{mod.nombre}</option>
+                                                                                    ))}
+                                                                                </optgroup>
+                                                                            </>
+                                                                        ) : (
+                                                                            todosModelos.map((mod: any) => (
+                                                                                <option key={mod.id} value={mod.nombre}>{mod.nombre}</option>
+                                                                            ))
+                                                                        )}
                                                                     </select>
                                                                 </div>
                                                                 {masasPreparadas.length > 0 && (
@@ -3559,6 +3585,43 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             </CardHeader>
                             {historialExpanded && <CardContent className="p-4 sm:p-5">
                                 {(() => {
+                                    const describirProduccionIncompleta = (p: any): string[] => {
+                                        const problemas: string[] = [];
+                                        const masasChk = Array.isArray(p?.masas) ? p.masas : [];
+                                        const hornadasChk = Array.isArray(p?.hornadas) ? p.hornadas : [];
+                                        if (masasChk.length === 0) {
+                                            problemas.push('No se registró ninguna masa/tipo de masa preparada.');
+                                        } else {
+                                            masasChk.forEach((m: any, idx: number) => {
+                                                const tieneNombre = !!m?.nombre?.trim?.();
+                                                const tieneCantidad = Number(m?.cantidadArrobas) > 0;
+                                                if (!tieneNombre && !tieneCantidad) {
+                                                    problemas.push(`Masa #${idx + 1}: falta elegir el tipo de masa y la cantidad.`);
+                                                } else if (!tieneNombre) {
+                                                    problemas.push(`Masa #${idx + 1}: falta elegir el tipo de masa.`);
+                                                } else if (!tieneCantidad) {
+                                                    problemas.push(`Masa "${m.nombre.trim()}": falta la cantidad.`);
+                                                }
+                                            });
+                                        }
+                                        if (hornadasChk.length === 0) {
+                                            problemas.push('No se registró ninguna hornada/tipo de pan.');
+                                        } else {
+                                            hornadasChk.forEach((h: any, idx: number) => {
+                                                const tieneTipo = !!h?.tipoPan?.trim?.();
+                                                const tieneCantidad = Number(h?.bandejas) > 0 || Number(h?.totalPanes) > 0 || Number(h?.panesPorBandeja) > 0;
+                                                if (!tieneTipo && !tieneCantidad) {
+                                                    problemas.push(`Pan #${idx + 1}: falta elegir el tipo de pan y la cantidad.`);
+                                                } else if (!tieneTipo) {
+                                                    problemas.push(`Pan #${idx + 1}: falta elegir el tipo de pan.`);
+                                                } else if (!tieneCantidad) {
+                                                    problemas.push(`Pan "${h.tipoPan.trim()}": falta la cantidad de bandejas o panes.`);
+                                                }
+                                            });
+                                        }
+                                        return problemas;
+                                    };
+
                                     const calculateMetrics = (p: any) => {
                                         let masasSrc: Array<{ id: string; nombre?: string; cantidadArrobas?: number }> = Array.isArray(p.masas)
                                             ? p.masas.map((m: { id?: string; nombre?: string; cantidadArrobas?: number }, i: number) => ({
@@ -3723,6 +3786,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                     const renderDesktopTableRow = (p: any) => {
                                         const m = calculateMetrics(p);
                                         const masasLista = (m.masasSrc || p.masas || []) as { id?: string; nombre?: string; cantidadArrobas?: number }[];
+                                        const problemas = describirProduccionIncompleta(p);
                                         return (
                                             <tr
                                                 key={p.id}
@@ -3741,6 +3805,12 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                 <td className="px-4 py-3 align-top">
                                                     <div className="font-bold text-slate-800 dark:text-slate-200">{new Date(p.fecha + 'T12:00:00').toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' })}</div>
                                                     <div className="text-[10px] text-slate-500 line-clamp-2 max-w-[160px]">{p.notas || 'Sin notas'}</div>
+                                                    {problemas.length > 0 && (
+                                                        <div className="mt-1 flex items-start gap-1 text-[9px] font-bold text-rose-600 dark:text-rose-400" title={problemas.join(' · ')}>
+                                                            <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                                                            <span>Falta: {problemas.join(' · ')}</span>
+                                                        </div>
+                                                    )}
                                                     <div className="text-[9px] font-bold text-indigo-500 mt-1 flex items-center gap-0.5">
                                                         Ver detalles <ChevronRight className="w-3 h-3" />
                                                     </div>
@@ -3799,6 +3869,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                 <td className="px-4 py-3 align-top" onClick={(e) => e.stopPropagation()}>
                                                     <div className="flex items-center justify-end gap-1">
                                                         <button type="button" onClick={() => {
+                                                            if (!esAdmin) { toast.error('Solo un administrador puede editar una producción ya guardada.'); return; }
                                                             if (setEditProduccionId) {
                                                                 setEditProduccionId(p.id);
                                                                 setFormProd({ fecha: normalizarFechaYYYYMMDD(p.fecha), notas: p.notas || '' });
@@ -3808,7 +3879,10 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                                                             }
                                                         }} className="text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 p-1.5 rounded"><Edit2 className="w-3.5 h-3.5" /></button>
-                                                        <button type="button" onClick={() => { deleteProduccion(p.id); setProducciones(getProducciones()); toast.success('Eliminada'); }} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 p-1.5 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
+                                                        <button type="button" onClick={() => {
+                                                            if (!esAdmin) { toast.error('Solo un administrador puede eliminar una producción ya guardada.'); return; }
+                                                            deleteProduccion(p.id); setProducciones(getProducciones()); toast.success('Eliminada');
+                                                        }} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 p-1.5 rounded"><Trash2 className="w-3.5 h-3.5" /></button>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -3817,6 +3891,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
 
                                     const renderCard = (p: any) => {
                                         const { totalMasa, totalPanes, arrobasEquivalentes, diferencia, hasData, difAbs, masaKg, panKg, difKg, difHumana, explHist, chequeosHist, alertaRendHist, metaPanes } = calculateMetrics(p);
+                                        const problemas = describirProduccionIncompleta(p);
 
                                         return (
                                             <div
@@ -3833,6 +3908,12 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                 className="relative overflow-hidden bg-white dark:bg-slate-900/50 border border-slate-200 dark:border-white/10 rounded-2xl shadow-sm flex flex-col cursor-pointer hover:border-indigo-300 dark:hover:border-indigo-500/40 transition-colors"
                                                 title="Clic para ver detalles"
                                             >
+                                                {problemas.length > 0 && (
+                                                    <div className="px-4 py-2 bg-rose-50 dark:bg-rose-950/30 border-b border-rose-200 dark:border-rose-900/50 flex items-start gap-2">
+                                                        <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                                                        <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400">Falta: {problemas.join(' · ')}</span>
+                                                    </div>
+                                                )}
                                                 {/* VEREDICTO HEADER — explicación clara en kilos y arrobas */}
                                                 {hasData && (
                                                     <div className={cn("px-4 py-3 border-b",
@@ -4030,6 +4111,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                         <p className="text-[10px] text-slate-500 italic line-clamp-1 flex-1 pr-4">{p.notas || "Sin observaciones"}</p>
                                                         <div className="flex items-center gap-1 shrink-0">
                                                             <button type="button" onClick={() => {
+                                                                if (!esAdmin) { toast.error('Solo un administrador puede editar una producción ya guardada.'); return; }
                                                                 if (setEditProduccionId) {
                                                                     setEditProduccionId(p.id);
                                                                     setFormProd({ fecha: normalizarFechaYYYYMMDD(p.fecha), notas: p.notas || '' });
@@ -4042,7 +4124,10 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                 className="text-slate-400 hover:text-indigo-500 dark:text-slate-500 dark:hover:text-indigo-400 transition-colors p-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 rounded-md">
                                                                 <Edit2 className="w-3.5 h-3.5" />
                                                             </button>
-                                                            <button type="button" onClick={() => { deleteProduccion(p.id); setProducciones(getProducciones()); toast.success('Auditoría eliminada'); }}
+                                                            <button type="button" onClick={() => {
+                                                                if (!esAdmin) { toast.error('Solo un administrador puede eliminar una producción ya guardada.'); return; }
+                                                                deleteProduccion(p.id); setProducciones(getProducciones()); toast.success('Auditoría eliminada');
+                                                            }}
                                                                 className="text-slate-400 hover:text-rose-500 dark:text-slate-500 dark:hover:text-rose-400 transition-colors p-1.5 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-md">
                                                                 <Trash2 className="w-3.5 h-3.5" />
                                                             </button>
@@ -4410,6 +4495,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                         }
                                     }
                                     const metaDet = resumenChequeosPanes(chequeosDet);
+                                    const problemas = describirProduccionIncompleta(p);
                                     return (
                                         <>
                                             <DialogHeader>
@@ -4420,6 +4506,17 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                     Masas en lenguaje claro (1 arroba, media…) y cuántos panes debían salir.
                                                 </DialogDescription>
                                             </DialogHeader>
+                                            {problemas.length > 0 && (
+                                                <div className="rounded-xl border border-rose-200 dark:border-rose-500/30 p-3 bg-rose-50/80 dark:bg-rose-950/20 flex items-start gap-2">
+                                                    <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                                                    <div>
+                                                        <p className="text-[10px] font-black uppercase tracking-widest text-rose-700 dark:text-rose-400 mb-1">Registro incompleto</p>
+                                                        <ul className="text-xs text-rose-700 dark:text-rose-300 space-y-0.5 list-disc list-inside">
+                                                            {problemas.map((prob, i) => <li key={i}>{prob}</li>)}
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            )}
                                             <div className="space-y-4 text-sm">
                                                 <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/30 p-3 bg-emerald-50/80 dark:bg-emerald-950/20">
                                                     <p className="text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:text-emerald-400 mb-1">
@@ -4550,6 +4647,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                         type="button"
                                                         className="rounded-xl"
                                                         onClick={() => {
+                                                            if (!esAdmin) { toast.error('Solo un administrador puede editar una producción ya guardada.'); return; }
                                                             if (setEditProduccionId && p.id) {
                                                                 setEditProduccionId(p.id);
                                                                 setFormProd({ fecha: normalizarFechaYYYYMMDD(p.fecha || ''), notas: p.notas || '' });

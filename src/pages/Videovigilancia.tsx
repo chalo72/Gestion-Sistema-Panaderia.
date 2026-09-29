@@ -20,7 +20,9 @@ import {
   Download,
   MessageCircle,
   Send,
-  BrainCircuit
+  BrainCircuit,
+  Film,
+  FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -36,9 +38,22 @@ import {
   construirYamlGo2rtc,
   promptEscaneoOdysseus,
   promptPreguntaOdysseus,
+  promptAnalisisClipOdysseus,
+  parsearRespuestaClipOdysseus,
+  promptInformeDiarioOdysseus,
   type ReglaOdysseus,
   type TipoCamaraPuente,
 } from '@/lib/odysseus-vigilancia';
+import {
+  subirClipBitacora,
+  guardarClipBitacora,
+  marcarClipAnalizado,
+  buscarClipsBitacora,
+  urlFirmadaClip,
+  clipsDelDia,
+  type ClipBitacora,
+  type CategoriaBitacora,
+} from '@/lib/bitacora-visual';
 
 interface Camara {
   id: string;
@@ -76,6 +91,10 @@ const DEMOS_UI: Camara[] = [
     esDemo: true,
   },
 ];
+
+/** Bitácora Visual: duración de cada micro-video y cada cuánto se graba uno nuevo por cámara. */
+const DURACION_CLIP_MS = 10_000;
+const INTERVALO_GRABACION_MS = 60_000;
 
 const esUrlHttpLocal = (url: string) =>
   /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url);
@@ -115,6 +134,13 @@ export function Videovigilancia() {
   const [preguntaIa, setPreguntaIa] = useState('');
   const [camaraPreguntaId, setCamaraPreguntaId] = useState<string>('');
   const [preguntando, setPreguntando] = useState(false);
+  const [grabacionActiva, setGrabacionActiva] = useState(false);
+  const [busquedaTexto, setBusquedaTexto] = useState('');
+  const [buscandoClips, setBuscandoClips] = useState(false);
+  const [resultadosBusqueda, setResultadosBusqueda] = useState<ClipBitacora[]>([]);
+  const [generandoInforme, setGenerandoInforme] = useState(false);
+  const [informeDia, setInformeDia] = useState<string | null>(null);
+  const [mostrarInforme, setMostrarInforme] = useState(false);
   const reglasRef = useRef(reglasOdysseus);
 
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
@@ -122,6 +148,9 @@ export function Videovigilancia() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const camarasRef = useRef<Camara[]>([]);
   const odysseusRef = useRef(false);
+  const grabacionRef = useRef(false);
+  const grabacionIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const grabandoCamaraIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     camarasRef.current = camaras;
@@ -130,6 +159,10 @@ export function Videovigilancia() {
   useEffect(() => {
     odysseusRef.current = odysseusActivo;
   }, [odysseusActivo]);
+
+  useEffect(() => {
+    grabacionRef.current = grabacionActiva;
+  }, [grabacionActiva]);
 
   useEffect(() => {
     reglasRef.current = reglasOdysseus;
@@ -567,6 +600,210 @@ export function Videovigilancia() {
     }, 15000);
   };
 
+  /** Graba un micro-video de una cámara (canvas.captureStream + MediaRecorder), lo sube y lo manda a analizar. */
+  const grabarClipCamara = useCallback(
+    async (camara: Camara) => {
+      if (camara.esDemo || grabandoCamaraIds.current.has(camara.id)) return;
+      const img = videoRefs.current[camara.id];
+      const canvas = canvasRefs.current[camara.id];
+      if (!img || !canvas) return;
+
+      if (typeof MediaRecorder === 'undefined' || typeof canvas.captureStream !== 'function') {
+        return; // Navegador sin soporte: no insistimos con alertas repetidas.
+      }
+
+      grabandoCamaraIds.current.add(camara.id);
+      let dibujoInterval: ReturnType<typeof setInterval> | null = null;
+
+      try {
+        canvas.width = 480;
+        canvas.height = 360;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const stream = canvas.captureStream(5);
+        const mimeType =
+          ['video/webm;codecs=vp8', 'video/webm'].find((m) =>
+            typeof MediaRecorder.isTypeSupported === 'function' ? MediaRecorder.isTypeSupported(m) : false
+          ) || 'video/webm';
+        const recorder = new MediaRecorder(stream, { mimeType });
+        const chunks: BlobPart[] = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        const dibujar = async () => {
+          if (camara.tipo === 'snapshot') {
+            refrescarSnapshot(camara.id);
+            await new Promise((r) => setTimeout(r, 300));
+          }
+          try {
+            if (img.complete && img.naturalWidth > 0 && img.getAttribute('data-error') !== 'true') {
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            }
+          } catch {
+            /* CORS bloqueó ese frame puntual: se ignora y se sigue con el siguiente */
+          }
+        };
+
+        dibujoInterval = setInterval(() => {
+          void dibujar();
+        }, 500);
+        await dibujar();
+
+        const clipListo = new Promise<Blob>((resolve, reject) => {
+          recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+          recorder.onerror = (e) => reject(e);
+        });
+
+        recorder.start();
+        await new Promise((r) => setTimeout(r, DURACION_CLIP_MS));
+        recorder.stop();
+
+        const blob = await clipListo;
+        if (dibujoInterval) clearInterval(dibujoInterval);
+        dibujoInterval = null;
+
+        if (blob.size < 500) return; // Prácticamente vacío: no había imagen real que grabar
+
+        const ruta = await subirClipBitacora(blob, camara.id);
+        const registro = await guardarClipBitacora({
+          camara_id: camara.id,
+          camara_nombre: camara.nombre,
+          url_clip: ruta,
+          duracion_segundos: 10,
+        });
+
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+
+          const mensaje = promptAnalisisClipOdysseus(camara.nombre);
+          const res = await consultarAgente('odysseus', mensaje, () => {}, base64);
+          const { clasificacion, categorias, descripcion, alerta } = parsearRespuestaClipOdysseus(
+            (res || '').trim()
+          );
+          await marcarClipAnalizado(registro.id, {
+            descripcion_ia: descripcion,
+            clasificacion,
+            categorias_detectadas: categorias as CategoriaBitacora[],
+            alerta,
+          });
+
+          if (alerta) {
+            agregarLog(`[Bitácora · ${camara.nombre}] ${descripcion}`, true);
+            toast.error(`Bitácora: posible ${categorias.join(', ') || 'anomalía'} en ${camara.nombre}`);
+          }
+        } catch (err) {
+          // El clip ya quedó guardado; solo falló el análisis (se puede reintentar luego).
+          console.error('Bitácora visual: error analizando el clip:', err);
+        }
+      } catch (err) {
+        console.error('Bitácora visual: error grabando el clip:', err);
+      } finally {
+        if (dibujoInterval) clearInterval(dibujoInterval);
+        grabandoCamaraIds.current.delete(camara.id);
+      }
+    },
+    [agregarLog]
+  );
+
+  const cicloGrabacion = useCallback(() => {
+    if (!grabacionRef.current) return;
+    const activas = camarasRef.current.filter((c) => c.activa && !c.esDemo && !c.deletedAt);
+    activas.forEach((c) => {
+      void grabarClipCamara(c);
+    });
+  }, [grabarClipCamara]);
+
+  const toggleGrabacion = () => {
+    if (!puedeGestionar) {
+      toast.error('Solo ADMIN o GERENTE pueden activar la grabación');
+      return;
+    }
+    if (grabacionActiva) {
+      if (grabacionIntervalRef.current) {
+        clearInterval(grabacionIntervalRef.current);
+        grabacionIntervalRef.current = null;
+      }
+      setGrabacionActiva(false);
+      agregarLog('Grabación de bitácora visual detenida.');
+      return;
+    }
+    const reales = camaras.filter((c) => !c.esDemo && c.activa);
+    if (reales.length === 0) {
+      toast.error('Agrega al menos una cámara real para grabar bitácora');
+      return;
+    }
+    setGrabacionActiva(true);
+    agregarLog('Grabación de bitácora visual activada: clip de 10s cada 1 minuto por cámara (se guardan 30 días).');
+    cicloGrabacion();
+    if (grabacionIntervalRef.current) clearInterval(grabacionIntervalRef.current);
+    grabacionIntervalRef.current = setInterval(cicloGrabacion, INTERVALO_GRABACION_MS);
+  };
+
+  const ejecutarBusquedaBitacora = async () => {
+    const q = busquedaTexto.trim();
+    if (!q) return;
+    setBuscandoClips(true);
+    try {
+      const resultados = await buscarClipsBitacora(q);
+      setResultadosBusqueda(resultados);
+      if (resultados.length === 0) toast.message('Sin resultados. Prueba con otras palabras.');
+    } catch (err) {
+      toast.error('Error buscando en la bitácora visual');
+      console.error(err);
+    } finally {
+      setBuscandoClips(false);
+    }
+  };
+
+  const abrirClipBitacora = async (clip: ClipBitacora) => {
+    const url = await urlFirmadaClip(clip.url_clip);
+    if (!url) {
+      toast.error('No se pudo generar el enlace del clip');
+      return;
+    }
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const generarInformeDelDia = async () => {
+    if (!puedeGestionar) {
+      toast.error('Solo ADMIN o GERENTE pueden generar el informe');
+      return;
+    }
+    setGenerandoInforme(true);
+    try {
+      const clips = await clipsDelDia();
+      const analizados = clips.filter((c) => c.analizado && c.descripcion_ia);
+      if (analizados.length === 0) {
+        setInformeDia('No hay clips analizados hoy todavía.');
+        setMostrarInforme(true);
+        return;
+      }
+      const resumen = analizados
+        .map((c) => {
+          const hora = new Date(c.capturado_en).toLocaleTimeString('es-CO', { hour12: false });
+          const cats = c.categorias_detectadas?.length ? ` [${c.categorias_detectadas.join(', ')}]` : '';
+          return `${hora} · ${c.camara_nombre || c.camara_id}${cats}: ${c.descripcion_ia}`;
+        })
+        .join('\n');
+      const mensaje = promptInformeDiarioOdysseus(resumen);
+      const res = await consultarAgente('odysseus', mensaje, () => {});
+      setInformeDia((res || '').trim() || 'ODYSSEUS no respondió.');
+      setMostrarInforme(true);
+    } catch (err) {
+      toast.error('Error generando el informe del día');
+      console.error(err);
+    } finally {
+      setGenerandoInforme(false);
+    }
+  };
+
   const probarCaptura = async (camara: Camara) => {
     if (camara.esDemo) {
       toast.message('Es una demo. Prueba con una cámara real.');
@@ -639,6 +876,7 @@ export function Videovigilancia() {
   useEffect(() => {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      if (grabacionIntervalRef.current) clearInterval(grabacionIntervalRef.current);
     };
   }, []);
 
@@ -708,6 +946,19 @@ export function Videovigilancia() {
                 <Play className="w-4 h-4 mr-2" /> Activar ODYSSEUS
               </>
             )}
+          </Button>
+          <Button
+            onClick={toggleGrabacion}
+            disabled={!puedeGestionar}
+            className={cn(
+              'h-10 px-6 rounded-xl font-black uppercase text-xs tracking-widest transition-all disabled:opacity-40',
+              grabacionActiva
+                ? 'bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 animate-pulse'
+                : 'bg-sky-500/20 text-sky-400 border border-sky-500/50 hover:bg-sky-500/30'
+            )}
+            title="Graba clips de 10s cada 1 minuto por cámara y los guarda 30 días para auditoría"
+          >
+            <Film className="w-4 h-4 mr-2" /> {grabacionActiva ? 'Grabando Bitácora' : 'Activar Grabación'}
           </Button>
         </div>
       </header>
@@ -959,6 +1210,65 @@ export function Videovigilancia() {
                 <Send className="w-4 h-4" />
               </Button>
             </div>
+          </div>
+
+          {/* D: Bitácora Visual — buscar en clips guardados + informe del día */}
+          <div className="shrink-0 p-4 border-b border-white/5 space-y-2 bg-sky-500/5 max-h-[26%] overflow-y-auto">
+            <p className="text-[9px] font-black uppercase tracking-widest text-sky-300 flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5" />
+              Buscar en la Bitácora Visual
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={busquedaTexto}
+                onChange={(e) => setBusquedaTexto(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void ejecutarBusquedaBitacora();
+                }}
+                placeholder="Ej: alguien en caja a las 3pm"
+                className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500/50"
+              />
+              <Button
+                type="button"
+                disabled={buscandoClips}
+                onClick={() => void ejecutarBusquedaBitacora()}
+                className="h-9 w-9 shrink-0 rounded-lg bg-sky-500 hover:bg-sky-400 text-black"
+              >
+                <Search className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {resultadosBusqueda.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                {resultadosBusqueda.map((clip) => (
+                  <button
+                    key={clip.id}
+                    type="button"
+                    onClick={() => void abrirClipBitacora(clip)}
+                    className="w-full text-left p-2 rounded-lg bg-black/30 hover:bg-black/50 border border-white/5 transition-colors"
+                  >
+                    <p className="text-[9px] font-black uppercase tracking-widest text-sky-300">
+                      {new Date(clip.capturado_en).toLocaleString('es-CO', { hour12: false })} ·{' '}
+                      {clip.camara_nombre || clip.camara_id}
+                    </p>
+                    <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-2">
+                      {clip.descripcion_ia || 'Sin analizar todavía'}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <Button
+              type="button"
+              disabled={generandoInforme}
+              onClick={() => void generarInformeDelDia()}
+              className="w-full h-9 rounded-lg bg-black/40 hover:bg-black/60 border border-white/10 text-slate-200 text-[10px] font-black uppercase tracking-widest gap-1.5"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {generandoInforme ? 'Generando informe…' : 'Informe del día'}
+            </Button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
@@ -1387,6 +1697,29 @@ export function Videovigilancia() {
         </div>
       )}
       
+      {mostrarInforme && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto animate-ag-scale-in">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-black text-white uppercase tracking-tighter flex items-center gap-2">
+                <FileText className="w-5 h-5 text-sky-400" />
+                Informe del día
+              </h3>
+              <button
+                type="button"
+                onClick={() => setMostrarInforme(false)}
+                className="text-slate-500 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <pre className="whitespace-pre-wrap text-[12px] text-slate-200 leading-relaxed font-sans">
+              {informeDia}
+            </pre>
+          </div>
+        </div>
+      )}
+
       {showOjoIA && <OjoIA onClose={() => setShowOjoIA(false)} />}
     </div>
   );

@@ -215,7 +215,7 @@ export class SupabaseDatabase implements IDatabase {
             id: `${table}:${id}`,
             table: table,
             item_id: id,
-            fecha: new Date().toISOString()
+            deleted_at: new Date().toISOString()
         });
         if (error) console.error(`❌ Error al crear lápida en Supabase (${table}:${id}):`, error);
     }
@@ -873,6 +873,56 @@ export class SupabaseDatabase implements IDatabase {
     }
     async deleteTrabajador(id: string): Promise<void> {
         await supabase.from('trabajadores').delete().eq('id', id);
+    }
+
+    // --- Checklist Completadas ---
+    async getAllChecklistCompletadas(): Promise<any[]> {
+        const { data, error } = await supabase.from('checklist_completadas').select('*');
+        if (error) return [];
+        return data.map((c: any) => ({
+            id: c.id,
+            tareaId: c.tarea_id,
+            usuarioId: c.usuario_id,
+            usuarioNombre: c.usuario_nombre,
+            fecha: c.fecha,
+        }));
+    }
+    async addChecklistCompletada(c: any): Promise<void> {
+        await supabase.from('checklist_completadas').upsert({
+            id: c.id,
+            tarea_id: c.tareaId,
+            usuario_id: c.usuarioId,
+            usuario_nombre: c.usuarioNombre,
+            fecha: c.fecha,
+        });
+    }
+    async deleteChecklistCompletada(id: string): Promise<void> {
+        await supabase.from('checklist_completadas').delete().eq('id', id);
+    }
+
+    // --- Asistencias ---
+    async getAllAsistencias(): Promise<any[]> {
+        const { data, error } = await supabase.from('asistencias').select('*');
+        if (error) return [];
+        return data.map((a: any) => ({
+            id: a.id,
+            trabajadorId: a.usuario_id,
+            trabajadorNombre: a.usuario_nombre,
+            tipo: a.tipo,
+            fecha: a.fecha,
+            hora: a.timestamp ? new Date(a.timestamp).toISOString().slice(11, 16) : '',
+            createdAt: a.timestamp,
+        }));
+    }
+    async addAsistencia(a: any): Promise<void> {
+        await supabase.from('asistencias').upsert({
+            id: a.id,
+            usuario_id: a.trabajadorId,
+            usuario_nombre: a.trabajadorNombre,
+            tipo: a.tipo,
+            fecha: a.fecha,
+            timestamp: a.createdAt || new Date().toISOString(),
+        });
     }
 
     // --- Créditos Trabajadores ---
