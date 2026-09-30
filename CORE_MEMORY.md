@@ -243,3 +243,23 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Propuesta concreta para el siguiente paso (NO implementada aún, pendiente de que Gonzalo confirme)**: agregar NVIDIA Build como una rama más en `handleOpenAI` (mismo patrón que ya usa para distinguir Groq/DeepSeek por prefijo de key — una key de NVIDIA empieza `nvapi-`, fácil de detectar igual), apuntando a `https://integrate.api.nvidia.com/v1/chat/completions` cuando se detecte, usando una variable nueva y separada (ej. `NVIDIA_API_KEY`) que no pisa ni reemplaza `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/Ollama — puramente aditivo, cero riesgo para quien no configure esa variable nueva.
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
+
+---
+
+### 🔒 2026-09-29 — Claude Opus 5.5 (Claude Code) — Hooks 3 y 4: secretos en archivos y SQL destructivo en Supabase
+
+**Qué hice**: agregué 2 hooks `PreToolUse` más en `.claude/settings.json` (ahora son 4). Los dos **piden confirmación** (`ask`), no bloquean.
+- `.claude/hooks/detectar-secretos.mjs` (Edit|Write|MultiEdit) → si lo que se va a escribir tiene forma de clave real en texto plano: token de Facebook (`EAA` + 20+), clave OpenAI/Anthropic (`sk-` + 20+), clave de Google (`AIza` + 30+) o JWT (`eyJ…​.…`). El aviso muestra solo los primeros 8 caracteres, nunca el secreto completo.
+- `.claude/hooks/proteger-supabase.mjs` (conector MCP de Supabase: `execute_sql` y `apply_migration`) → si el SQL tiene `DROP TABLE`, `DROP SCHEMA`, `DROP FUNCTION`, `TRUNCATE`, `ALTER TABLE … DROP` (columna), `ALTER TABLE … TYPE` (cambio de tipo), o `DELETE`/`UPDATE` **sin WHERE**. SELECT y cambios con WHERE pasan sin preguntar. Ignora comentarios y texto entre comillas.
+
+**Por qué**: el 2026-09-29 aparecieron 2 flujos n8n con el token de Facebook en texto plano (se excluyeron del PR #3 y quedaron en `.gitignore`), y ahora hay conector MCP directo a la base real de Supabase.
+
+**Ojo — nombre real del conector**: en Claude Code está registrado como `mcp__claude_ai_Supabase__execute_sql` / `mcp__claude_ai_Supabase__apply_migration` (NO `mcp__Supabase__…`). El matcher usa `mcp__.*[Ss]upabase.*__(execute_sql|apply_migration)` para cubrir ambos.
+
+**Cómo lo verifiqué**: casos simulados pasándole al hook el mismo JSON que manda Claude Code. Secretos: 4/4 (los 4 tipos detectados, código normal pasa). Supabase: 15/15 (DELETE sin WHERE → pide; SELECT → pasa; UPDATE con WHERE → pasa; TRUNCATE, DROP TABLE/SCHEMA/FUNCTION, DROP COLUMN, cambio de TYPE → piden; ADD COLUMN, `SELECT … FOR UPDATE`, `'DELETE FROM'` dentro de un string, CREATE FUNCTION → pasan).
+
+**Límites conocidos**:
+- Con **cualquier** WHERE pasa (un `DELETE … WHERE 1=1` borra todo y no avisa) — decisión de Gonzalo: no entorpecer ediciones puntuales.
+- El de secretos también avisa con la anon key pública de Supabase (es JWT); ahí basta con aprobar. No ve lo que se escriba por terminal (`echo`/`cat >`).
+- Igual que los hooks 1 y 2: **solo protegen a Claude Code**. Cursor, Antigravity, la app y el panel de Supabase no pasan por aquí.
+- Los hooks nuevos no se cargan a mitad de sesión: rigen desde la sesión siguiente (o tras revisarlos en `/hooks`).
