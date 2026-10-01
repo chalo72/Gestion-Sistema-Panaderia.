@@ -367,8 +367,14 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
 
     // Auto-rellenar todos con cero
     const autoRellenar = () => {
-        const filled: Record<string, string> = {};
-        // cajas.forEach(c => { filled[c.id] = String(getEsperado(c)); }); // Eliminado para Cierre Ciego
+        const filled: Record<string, string> = { ...montos };
+        // Eliminado para Cierre Ciego, PERO auto-rellenamos con 0 las cajas que 
+        // no tuvieron movimientos (esperado == 0) para ahorrar trabajo
+        cajas.forEach(c => { 
+            if (getEsperado(c) === 0 && !filled[c.id]) {
+                filled[c.id] = '0'; 
+            }
+        });
         cajasExtra.forEach(c => { filled[c.id] = '0'; });
         setMontos(filled);
     };
