@@ -306,6 +306,7 @@ interface CajaExtra {
 function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrency, ventas = [] }: CierreJornadaModalProps) {
     const [montos,       setMontos]       = useState<Record<string, string>>({});
     const [loading,      setLoading]      = useState(false);
+    const [confirmAlertState, setConfirmAlertState] = useState(false);
     const [progreso,     setProgreso]     = useState(0);
     // Denominaciones: cajaId -> valor -> cantidad
     const [denoms,       setDenoms]       = useState<Record<string, Record<number, string>>>({});
@@ -417,9 +418,9 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
             toast.error(`⚠️ Falta ingresar el monto de: ${nombresFaltantes}. Completa esa(s) caja(s) antes de cerrar la jornada.`);
             return;
         }
-        if (hayAlerta && !window.confirm(
-            `Hay un FALTANTE neto de ${formatCurrency(Math.abs(diferenciaNeta))} en el cierre de jornada.\n\n¿Confirmas que quieres cerrar de todas formas?`
-        )) {
+        if (hayAlerta && !confirmAlertState) {
+            toast.error('¡ALERTA DE FALTANTE! Toca el botón CERRAR OTRA VEZ para confirmar forzosamente el faltante.', { duration: 5000 });
+            setConfirmAlertState(true);
             return;
         }
         setLoading(true);
@@ -899,12 +900,12 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                             onClick={handleConfirmar}
                             disabled={loading || cajasConMonto === 0}
                             className={cn(
-                                "flex-1 h-12 rounded-xl font-black text-xs uppercase text-white gap-2",
-                                hayAlerta ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-black"
+                                "flex-1 h-12 rounded-xl font-black text-xs uppercase text-white gap-2 transition-all duration-300",
+                                confirmAlertState ? "bg-red-600 hover:bg-red-700 animate-pulse ring-4 ring-red-500/50" : hayAlerta ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-black"
                             )}
                         >
                             <Lock className="w-4 h-4" />
-                            {loading ? `Cerrando ${progreso}/${cajas.length}...` : `Cerrar ${cajas.length} Cajas`}
+                            {loading ? `Cerrando ${progreso}/${cajas.length}...` : confirmAlertState ? '¡CONFIRMAR FALTANTE!' : `Cerrar ${cajas.length} Cajas`}
                         </Button>
                     </div>
                 </div>
