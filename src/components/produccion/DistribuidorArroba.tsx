@@ -429,34 +429,76 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
                       </div>
 
                       <div className="overflow-y-auto overscroll-contain flex-1 max-h-60 custom-scrollbar pr-0.5">
-                        <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex justify-between items-center">
-                          <span>Panes disponibles</span>
-                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-black">
-                            {modelosHijos.filter(m => cortes[m.id] === undefined && (breadSearch.trim() === '' || m.nombre.toLowerCase().includes(breadSearch.toLowerCase()))).length}
-                          </Badge>
-                        </div>
-                        {modelosHijos
-                          .filter(m => cortes[m.id] === undefined && (breadSearch.trim() === '' || m.nombre.toLowerCase().includes(breadSearch.toLowerCase())))
-                          .map(m => (
-                            <DropdownMenuItem
-                              key={m.id}
-                              onClick={() => {
-                                addModeloToList(m.id);
-                                setBreadSearch('');
-                              }}
-                              className="flex items-center justify-between p-2 rounded-xl font-bold cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
-                            >
-                              <span className="truncate text-slate-800 dark:text-slate-100 text-xs">{m.nombre}</span>
-                              <span className="shrink-0 ml-2 text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full">
-                                {m.pesoUnitarioGr}g
-                              </span>
-                            </DropdownMenuItem>
-                          ))}
-                        {modelosHijos.filter(m => cortes[m.id] === undefined && (breadSearch.trim() === '' || m.nombre.toLowerCase().includes(breadSearch.toLowerCase()))).length === 0 && (
-                          <div className="px-3 py-6 text-xs text-center text-slate-500 font-medium">
-                            {breadSearch.trim() !== '' ? 'No se encontraron panes con ese nombre' : 'Todos los panes de esta masa ya están agregados'}
-                          </div>
-                        )}
+                        {(() => {
+                          const query = breadSearch.trim().toLowerCase();
+                          const filtradosHijos = modelosHijos.filter(m => cortes[m.id] === undefined && (query === '' || m.nombre.toLowerCase().includes(query)));
+                          const otrosModelos = (modelos || []).filter(m => m.activo !== false && m.formulacionId !== formId && cortes[m.id] === undefined && (query === '' || m.nombre.toLowerCase().includes(query)));
+                          const totalDisponibles = filtradosHijos.length + otrosModelos.length;
+
+                          if (totalDisponibles === 0) {
+                            return (
+                              <div className="px-3 py-6 text-xs text-center text-slate-500 font-medium">
+                                {query !== '' ? 'No se encontraron panes con ese nombre' : 'Todos los panes ya están agregados'}
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <>
+                              {filtradosHijos.length > 0 && (
+                                <>
+                                  <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex justify-between items-center">
+                                    <span>Panes de esta masa</span>
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-black">
+                                      {filtradosHijos.length}
+                                    </Badge>
+                                  </div>
+                                  {filtradosHijos.map(m => (
+                                    <DropdownMenuItem
+                                      key={m.id}
+                                      onClick={() => {
+                                        addModeloToList(m.id);
+                                        setBreadSearch('');
+                                      }}
+                                      className="flex items-center justify-between p-2 rounded-xl font-bold cursor-pointer hover:bg-indigo-50 dark:hover:bg-indigo-950/40"
+                                    >
+                                      <span className="truncate text-slate-800 dark:text-slate-100 text-xs">{m.nombre}</span>
+                                      <span className="shrink-0 ml-2 text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-full">
+                                        {m.pesoUnitarioGr}g
+                                      </span>
+                                    </DropdownMenuItem>
+                                  ))}
+                                </>
+                              )}
+
+                              {otrosModelos.length > 0 && (
+                                <>
+                                  <div className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 flex justify-between items-center mt-2 border-t border-slate-100 dark:border-slate-800 pt-1">
+                                    <span>Otros panes del catálogo</span>
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 font-black">
+                                      {otrosModelos.length}
+                                    </Badge>
+                                  </div>
+                                  {otrosModelos.map(m => (
+                                    <DropdownMenuItem
+                                      key={m.id}
+                                      onClick={() => {
+                                        addModeloToList(m.id);
+                                        setBreadSearch('');
+                                      }}
+                                      className="flex items-center justify-between p-2 rounded-xl font-bold cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                                    >
+                                      <span className="truncate text-slate-700 dark:text-slate-300 text-xs">{m.nombre}</span>
+                                      <span className="shrink-0 ml-2 text-[10px] font-black text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">
+                                        {m.pesoUnitarioGr}g
+                                      </span>
+                                    </DropdownMenuItem>
+                                  ))}
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -469,7 +511,7 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 {Object.keys(cortes).map(modId => {
-                  const m = modelosHijos.find(x => x.id === modId);
+                  const m = modelos.find(x => x.id === modId) || modelosHijos.find(x => x.id === modId);
                   if (!m) return null;
 
                   const cant = cortes[m.id] || 0;

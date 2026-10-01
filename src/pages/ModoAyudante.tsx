@@ -65,7 +65,7 @@ function Seccion({
     icono,
     colorClass,
     children,
-    defaultAbierto = true,
+    defaultAbierto = false,
 }: {
     titulo: string;
     subtitulo: string;

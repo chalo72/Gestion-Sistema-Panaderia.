@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
-import type { UserRole } from '@/types';
+import type { UserRole, RegistroAsistencia } from '@/types';
+import { db } from '@/lib/database';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -37,18 +38,10 @@ interface TareaCheck {
 }
 
 interface CompletadaKey {
+  id: string;
   tareaId: string;
   usuarioId: string;
-  fecha: string;
-}
-
-interface RegistroAsistencia {
-  id: string;
-  usuarioId: string;
-  usuarioNombre: string;
-  usuarioRol: string;
-  tipo: 'entrada' | 'salida';
-  timestamp: string;
+  usuarioNombre?: string;
   fecha: string;
 }
 
@@ -115,16 +108,6 @@ const mapToDB = (a: Anuncio) => ({
   created_at:   a.timestamp,
 });
 
-const getCompletadas = (): CompletadaKey[] => {
-  try { return JSON.parse(localStorage.getItem('dp_checklist_completadas') || '[]'); } catch { return []; }
-};
-const saveCompletadas = (c: CompletadaKey[]) => localStorage.setItem('dp_checklist_completadas', JSON.stringify(c));
-
-const getAsistencias = (): RegistroAsistencia[] => {
-  try { return JSON.parse(localStorage.getItem('dp_asistencias') || '[]'); } catch { return []; }
-};
-const saveAsistencias = (a: RegistroAsistencia[]) => localStorage.setItem('dp_asistencias', JSON.stringify(a.slice(0, 200)));
-
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 type Tab = 'anuncios' | 'checklist' | 'asistencia';
@@ -143,24 +126,39 @@ export default function Comunicaciones() {
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   // ── Checklist ──
-  const [completadas, setCompletadas] = useState<CompletadaKey[]>(getCompletadas);
+  const [completadas, setCompletadas] = useState<CompletadaKey[]>([]);
   const [momento, setMomento] = useState<Momento>('apertura');
 
   // ── Asistencia ──
-  const [asistencias, setAsistencias] = useState<RegistroAsistencia[]>(getAsistencias);
+  const [asistencias, setAsistencias] = useState<RegistroAsistencia[]>([]);
 
   const rol = (usuario?.rol as UserRole) || 'AUXILIAR';
   const esAdmin = rol === 'ADMIN' || rol === 'GERENTE';
 
   // Refresca checklist al inicio de cada día + carga anuncios desde Supabase
   useEffect(() => {
-    // Limpiar tareas viejas
-    const hoy = HOY();
-    const limpias = completadas.filter(c => c.fecha === hoy);
-    if (limpias.length !== completadas.length) {
-      setCompletadas(limpias);
-      saveCompletadas(limpias);
-    }
+    // Cargar checklist completadas y asistencias reales desde la base de datos (Nexus Sync)
+    const cargarChecklistYAsistencia = async () => {
+      try {
+        const [comp, asis] = await Promise.all([
+          db.getAllChecklistCompletadas(),
+          db.getAllAsistencia(),
+        ]);
+        setCompletadas(comp as CompletadaKey[]);
+        setAsistencias(asis as RegistroAsistencia[]);
+      } catch (e) {
+        console.error('Error cargando checklist/asistencia:', e);
+      }
+    };
+    cargarChecklistYAsistencia();
+
+    const onRealtimeChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.table === 'checklist_completadas' || detail?.table === 'asistencias') {
+        cargarChecklistYAsistencia();
+      }
+    };
+    window.addEventListener('nexus-realtime-change', onRealtimeChange);
 
     // Marcar como leídos
     localStorage.setItem('dp_anuncios_ultima_vista', new Date().toISOString());
@@ -190,7 +188,10 @@ export default function Comunicaciones() {
       .subscribe();
 
     channelRef.current = channel;
-    return () => { channel.unsubscribe(); };
+    return () => {
+      channel.unsubscribe();
+      window.removeEventListener('nexus-realtime-change', onRealtimeChange);
+    };
   }, []);
 
   // ── Anuncios filtrados por rol ──
@@ -239,19 +240,28 @@ export default function Comunicaciones() {
   const estaCompletada = (tareaId: string) =>
     completadas.some(c => c.tareaId === tareaId && c.usuarioId === usuario?.id && c.fecha === HOY());
 
-  const toggleTarea = (tareaId: string) => {
+  const toggleTarea = async (tareaId: string) => {
     if (!usuario) return;
     const hoy = HOY();
     const yaCompletada = estaCompletada(tareaId);
-    let updated: CompletadaKey[];
     if (yaCompletada) {
-      updated = completadas.filter(c => !(c.tareaId === tareaId && c.usuarioId === usuario.id && c.fecha === hoy));
+      const existente = completadas.find(c => c.tareaId === tareaId && c.usuarioId === usuario.id && c.fecha === hoy);
+      setCompletadas(prev => prev.filter(c => !(c.tareaId === tareaId && c.usuarioId === usuario.id && c.fecha === hoy)));
+      if (existente?.id) {
+        try { await db.deleteChecklistCompletada(existente.id); } catch (e) { console.error('Error eliminando tarea completada:', e); }
+      }
     } else {
-      updated = [...completadas, { tareaId, usuarioId: usuario.id, fecha: hoy }];
+      const nuevo: CompletadaKey = {
+        id: `${tareaId}_${usuario.id}_${hoy}`,
+        tareaId,
+        usuarioId: usuario.id,
+        usuarioNombre: `${usuario.nombre} ${usuario.apellido || ''}`.trim(),
+        fecha: hoy,
+      };
+      setCompletadas(prev => [...prev, nuevo]);
       toast.success('¡Tarea completada!', { duration: 1500 });
+      try { await db.addChecklistCompletada(nuevo); } catch (e) { console.error('Error guardando tarea completada:', e); }
     }
-    setCompletadas(updated);
-    saveCompletadas(updated);
   };
 
   const progreso = tareasDelRol.length > 0
@@ -261,29 +271,29 @@ export default function Comunicaciones() {
   // ── Asistencia ──
   const miUltimoRegistroHoy = useMemo(() => {
     const hoy = HOY();
-    return asistencias.filter(a => a.usuarioId === usuario?.id && a.fecha === hoy).sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0];
+    return asistencias.filter(a => a.trabajadorId === usuario?.id && a.fecha === hoy).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
   }, [asistencias, usuario]);
 
-  const registrarAsistencia = (tipo: 'entrada' | 'salida') => {
+  const registrarAsistencia = async (tipo: 'entrada' | 'salida') => {
     if (!usuario) return;
+    const ahora = new Date();
     const nuevo: RegistroAsistencia = {
-      id: Date.now().toString(),
-      usuarioId: usuario.id,
-      usuarioNombre: `${usuario.nombre} ${usuario.apellido || ''}`.trim(),
-      usuarioRol: rol,
+      id: `${usuario.id}_${ahora.getTime()}`,
+      trabajadorId: usuario.id,
+      trabajadorNombre: `${usuario.nombre} ${usuario.apellido || ''}`.trim(),
       tipo,
-      timestamp: new Date().toISOString(),
       fecha: HOY(),
+      hora: ahora.toTimeString().slice(0, 5),
+      createdAt: ahora.toISOString(),
     };
-    const updated = [nuevo, ...asistencias];
-    setAsistencias(updated);
-    saveAsistencias(updated);
+    setAsistencias(prev => [nuevo, ...prev]);
     toast.success(tipo === 'entrada' ? '✅ Llegada registrada' : '👋 Salida registrada');
+    try { await db.addRegistroAsistencia(nuevo); } catch (e) { console.error('Error registrando asistencia:', e); }
   };
 
   const asistenciasHoy = useMemo(() => {
     const hoy = HOY();
-    return asistencias.filter(a => a.fecha === hoy).sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+    return asistencias.filter(a => a.fecha === hoy).sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   }, [asistencias]);
 
   const fmtHora = (iso: string) => {
@@ -585,7 +595,7 @@ export default function Comunicaciones() {
                     : "bg-slate-100 dark:bg-slate-800 text-slate-600"
                 )}>
                   {miUltimoRegistroHoy.tipo === 'entrada' ? <LogIn className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
-                  Último registro: {miUltimoRegistroHoy.tipo === 'entrada' ? 'Llegada' : 'Salida'} a las {fmtHora(miUltimoRegistroHoy.timestamp)}
+                  Último registro: {miUltimoRegistroHoy.tipo === 'entrada' ? 'Llegada' : 'Salida'} a las {fmtHora(miUltimoRegistroHoy.createdAt)}
                 </div>
               )}
 
@@ -628,14 +638,14 @@ export default function Comunicaciones() {
                           : <LogOut className="w-4 h-4 text-slate-500" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-black text-slate-800 dark:text-white truncate">{a.usuarioNombre}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">{a.usuarioRol}</p>
+                        <p className="text-sm font-black text-slate-800 dark:text-white truncate">{a.trabajadorNombre}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{usuarios?.find(u => u.id === a.trabajadorId)?.rol || ''}</p>
                       </div>
                       <div className="text-right shrink-0">
                         <p className={cn("text-xs font-black", a.tipo === 'entrada' ? 'text-emerald-600' : 'text-slate-500')}>
                           {a.tipo === 'entrada' ? 'Llegó' : 'Salió'}
                         </p>
-                        <p className="text-[10px] text-slate-400 font-bold tabular-nums">{fmtHora(a.timestamp)}</p>
+                        <p className="text-[10px] text-slate-400 font-bold tabular-nums">{fmtHora(a.createdAt)}</p>
                       </div>
                     </div>
                   ))}
@@ -648,17 +658,17 @@ export default function Comunicaciones() {
               <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mi historial de hoy</p>
               </div>
-              {asistenciasHoy.filter(a => a.usuarioId === usuario?.id).length === 0 ? (
+              {asistenciasHoy.filter(a => a.trabajadorId === usuario?.id).length === 0 ? (
                 <div className="px-4 py-6 text-center text-slate-400 text-xs font-bold">Sin registros hoy</div>
               ) : (
                 <div className="divide-y divide-slate-50 dark:divide-slate-800">
-                  {asistenciasHoy.filter(a => a.usuarioId === usuario?.id).map(a => (
+                  {asistenciasHoy.filter(a => a.trabajadorId === usuario?.id).map(a => (
                     <div key={a.id} className="flex items-center gap-3 px-4 py-3">
                       <span className="text-lg">{a.tipo === 'entrada' ? '✅' : '👋'}</span>
                       <p className="text-sm font-bold text-slate-700 dark:text-slate-300 flex-1">
                         {a.tipo === 'entrada' ? 'Registré llegada' : 'Registré salida'}
                       </p>
-                      <span className="text-xs font-black text-slate-400 tabular-nums">{fmtHora(a.timestamp)}</span>
+                      <span className="text-xs font-black text-slate-400 tabular-nums">{fmtHora(a.createdAt)}</span>
                     </div>
                   ))}
                 </div>

@@ -306,6 +306,7 @@ interface CajaExtra {
 function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrency, ventas = [] }: CierreJornadaModalProps) {
     const [montos,       setMontos]       = useState<Record<string, string>>({});
     const [loading,      setLoading]      = useState(false);
+    const [confirmAlertState, setConfirmAlertState] = useState(false);
     const [progreso,     setProgreso]     = useState(0);
     // Denominaciones: cajaId -> valor -> cantidad
     const [denoms,       setDenoms]       = useState<Record<string, Record<number, string>>>({});
@@ -367,8 +368,14 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
 
     // Auto-rellenar todos con cero
     const autoRellenar = () => {
-        const filled: Record<string, string> = {};
-        // cajas.forEach(c => { filled[c.id] = String(getEsperado(c)); }); // Eliminado para Cierre Ciego
+        const filled: Record<string, string> = { ...montos };
+        // Auto-rellenamos con 0 TODAS las cajas que estn vacas, 
+        // sin importar el esperado, para permitir forzar el cierre de cajas zombis
+        cajas.forEach(c => { 
+            if (!filled[c.id]) {
+                filled[c.id] = '0'; 
+            }
+        });
         cajasExtra.forEach(c => { filled[c.id] = '0'; });
         setMontos(filled);
     };
@@ -398,9 +405,22 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
     const retencionGlobal = Math.max(0, totalVentasJornada * 0.10);
 
     const handleConfirmar = async () => {
-        if (hayAlerta && !window.confirm(
-            `Hay un FALTANTE neto de ${formatCurrency(Math.abs(diferenciaNeta))} en el cierre de jornada.\n\n¿Confirmas que quieres cerrar de todas formas?`
-        )) {
+        // Pedido de Gonzalo 2026-09-20: no dejar guardar el cierre de jornada si a alguna
+        // caja le falto ingresar el monto (antes se rellenaba con 0 en silencio y nadie se
+        // enteraba de cual caja quedo sin cuadrar). Avisamos el nombre exacto de la(s) caja(s).
+        const faltanSistema = cajas.filter(c => montos[c.id] === undefined || montos[c.id] === '');
+        const faltanExtra   = cajasExtra.filter(c => montos[c.id] === undefined || montos[c.id] === '');
+        if (faltanSistema.length > 0 || faltanExtra.length > 0) {
+            const nombresFaltantes = [
+                ...faltanSistema.map(c => c.cajaNombre || 'Caja'),
+                ...faltanExtra.map(c => c.nombre || 'Caja Extra'),
+            ].join(', ');
+            toast.error(`⚠️ Falta ingresar el monto de: ${nombresFaltantes}. Completa esa(s) caja(s) antes de cerrar la jornada.`);
+            return;
+        }
+        if (hayAlerta && !confirmAlertState) {
+            toast.error('¡ALERTA DE FALTANTE! Toca el botón CERRAR OTRA VEZ para confirmar forzosamente el faltante.', { duration: 5000 });
+            setConfirmAlertState(true);
             return;
         }
         setLoading(true);
@@ -880,12 +900,12 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
                             onClick={handleConfirmar}
                             disabled={loading || cajasConMonto === 0}
                             className={cn(
-                                "flex-1 h-12 rounded-xl font-black text-xs uppercase text-white gap-2",
-                                hayAlerta ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-black"
+                                "flex-1 h-12 rounded-xl font-black text-xs uppercase text-white gap-2 transition-all duration-300",
+                                confirmAlertState ? "bg-red-600 hover:bg-red-700 animate-pulse ring-4 ring-red-500/50" : hayAlerta ? "bg-red-600 hover:bg-red-700" : "bg-slate-900 hover:bg-black"
                             )}
                         >
                             <Lock className="w-4 h-4" />
-                            {loading ? `Cerrando ${progreso}/${cajas.length}...` : `Cerrar ${cajas.length} Cajas`}
+                            {loading ? `Cerrando ${progreso}/${cajas.length}...` : confirmAlertState ? '¡CONFIRMAR FALTANTE!' : `Cerrar ${cajas.length} Cajas`}
                         </Button>
                     </div>
                 </div>
@@ -934,6 +954,102 @@ export function ControlCaja({
     const [showCierreJornada,    setShowCierreJornada]    = useState(false);
     // Caja seleccionada para Resumen / Arqueo / Movimientos
     const [cajaSeleccionadaId,   setCajaSeleccionadaId]   = useState<string>('');
+    const [sesionesLocales,      setSesionesLocales]      = useState<CajaSesion[]>(sesiones || []);
+    const [showHistorialMovil,   setShowHistorialMovil]   = useState(false);
+
+    // Modal de Ver y Editar Cuadre de Caja
+    const [cuadreModal, setCuadreModal] = useState<{
+        isOpen: boolean;
+        sesion: CajaSesion | null;
+        isEdit: boolean;
+        vendedora: string;
+        fechaApertura: string;
+        fechaCierre: string;
+        montoCierre: string;
+        observaciones: string;
+        turno: string;
+    }>({
+        isOpen: false,
+        sesion: null,
+        isEdit: false,
+        vendedora: '',
+        fechaApertura: '',
+        fechaCierre: '',
+        montoCierre: '',
+        observaciones: '',
+        turno: '',
+    });
+
+    useEffect(() => {
+        setSesionesLocales(sesiones || []);
+    }, [sesiones]);
+
+    useEffect(() => {
+        const refrescarSesiones = async () => {
+            try {
+                const todas = await db.getAllSesionesCaja();
+                if (todas && todas.length > 0) {
+                    setSesionesLocales(todas as CajaSesion[]);
+                }
+            } catch (err) {
+                console.warn('[ControlCaja] Error al refrescar sesiones:', err);
+            }
+        };
+
+        window.addEventListener('dp_sesiones_caja_changed', refrescarSesiones);
+        return () => window.removeEventListener('dp_sesiones_caja_changed', refrescarSesiones);
+    }, []);
+
+    const handleAbrirCuadreModal = (sesion: CajaSesion, isEdit: boolean = false) => {
+        // Pedido de Gonzalo 2026-09-20: editar un cuadre de caja ya guardado (por ejemplo uno
+        // que quedo mal guardado o incompleto) requiere autorizacion de administrador.
+        if (isEdit && !esAdmin) {
+            toast.error('Solo un administrador puede editar un cuadre de caja ya guardado.');
+            return;
+        }
+        setCuadreModal({
+            isOpen: true,
+            sesion,
+            isEdit,
+            vendedora: getVendedora(sesion) || sesion.usuarioId || '',
+            fechaApertura: sesion.fechaApertura || '',
+            fechaCierre: sesion.fechaCierre || new Date().toISOString(),
+            montoCierre: String(sesion.montoCierre || 0),
+            observaciones: sesion.observaciones || '',
+            turno: sesion.turno || 'Mañana',
+        });
+    };
+
+    const handleGuardarEdicionCuadre = async () => {
+        if (!cuadreModal.sesion) return;
+        if (!esAdmin) {
+            toast.error('Solo un administrador puede editar un cuadre de caja ya guardado.');
+            return;
+        }
+        const montoNum = parseFloat(String(cuadreModal.montoCierre).replace(/[^0-9.]/g, '')) || 0;
+        const sesionActualizada: CajaSesion = {
+            ...cuadreModal.sesion,
+            vendedoraNombre: cuadreModal.vendedora.trim() || cuadreModal.sesion.vendedoraNombre,
+            fechaApertura: cuadreModal.fechaApertura || cuadreModal.sesion.fechaApertura,
+            fechaCierre: cuadreModal.fechaCierre || cuadreModal.sesion.fechaCierre,
+            montoCierre: montoNum,
+            observaciones: cuadreModal.observaciones.trim(),
+            turno: (cuadreModal.turno as any) || cuadreModal.sesion.turno,
+        };
+
+        try {
+            await db.updateSesionCaja(sesionActualizada as any);
+            const { supabaseDB } = await import('@/lib/supabase-sync-bridge');
+            supabaseDB.updateSesionCaja(sesionActualizada as any).catch(() => {});
+
+            setSesionesLocales(prev => prev.map(s => s.id === sesionActualizada.id ? sesionActualizada : s));
+            window.dispatchEvent(new Event('dp_sesiones_caja_changed'));
+            toast.success('✅ Cuadre de caja actualizado');
+            setCuadreModal(prev => ({ ...prev, isOpen: false, sesion: null }));
+        } catch {
+            toast.error('Error al guardar cambios del cuadre');
+        }
+    };
 
     // Préstamos entre cajas
     const [prestamos,          setPrestamos]          = useState<PrestamoEntreCajas[]>([]);
@@ -1117,11 +1233,23 @@ export function ControlCaja({
     const pctDif           = balanceEsperado > 0 ? Math.abs(diferencia) / balanceEsperado : 0;
     const diferenciaColor  = diferencia === 0 ? 'emerald' : pctDif > 0.02 ? 'red' : 'amber';
 
-    const filtradoSesiones = useMemo(() =>
-        sesiones
-            .filter(s => s.usuarioId.toLowerCase().includes(searchTerm.toLowerCase()))
-            .sort((a, b) => new Date(b.fechaApertura).getTime() - new Date(a.fechaApertura).getTime())
-    , [sesiones, searchTerm]);
+    const filtradoSesiones = useMemo(() => {
+        const lista = sesionesLocales.length > 0 ? sesionesLocales : sesiones;
+        return lista
+            .filter(s => {
+                if (!searchTerm.trim()) return true;
+                const term = searchTerm.toLowerCase().trim();
+                return (
+                    (s.usuarioId || '').toLowerCase().includes(term) ||
+                    (s.vendedoraNombre || '').toLowerCase().includes(term) ||
+                    (s.cajaNombre || '').toLowerCase().includes(term) ||
+                    (s.fechaApertura || '').includes(term) ||
+                    (s.fechaCierre || '').includes(term) ||
+                    (s.observaciones || '').toLowerCase().includes(term)
+                );
+            })
+            .sort((a, b) => new Date(b.fechaCierre || b.fechaApertura).getTime() - new Date(a.fechaCierre || a.fechaApertura).getTime());
+    }, [sesiones, sesionesLocales, searchTerm]);
 
     // Cerrar una caja específica por ID (entrega de turno individual)
     const handleEntregaTurno = async (cajaId: string, montoCierre: number) => {
@@ -1496,30 +1624,174 @@ export function ControlCaja({
                             <LogOut className="w-5 h-5" /> Cerrar Jornada Global
                         </Button>
 
+                        <Button
+                            onClick={() => setShowHistorialMovil(!showHistorialMovil)}
+                            variant="outline"
+                            className="w-full h-12 rounded-2xl border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 font-black uppercase active:scale-95 transition-all text-xs gap-2"
+                        >
+                            <History className="w-4 h-4" /> {showHistorialMovil ? 'Ocultar Historial de Cuadres' : '📋 Ver Historial de Cuadres de Caja'}
+                        </Button>
+
                         {onViewHistorial && (
                             <Button
                                 onClick={onViewHistorial}
                                 variant="ghost"
-                                className="w-full h-12 rounded-2xl text-slate-500 dark:text-slate-400 font-black uppercase active:scale-95 transition-all text-xs gap-2"
+                                className="w-full h-11 rounded-2xl text-slate-500 dark:text-slate-400 font-black uppercase active:scale-95 transition-all text-xs gap-2"
                             >
-                                <History className="w-4 h-4" /> Ver Historial de Ventas
+                                <ShoppingCart className="w-4 h-4" /> Ver Historial de Ventas (Facturas)
                             </Button>
+                        )}
+
+                        {showHistorialMovil && (
+                            <div className="space-y-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500 px-1">
+                                    Cuadres y Cierres Anteriores ({filtradoSesiones.length})
+                                </h4>
+                                {filtradoSesiones.length === 0 ? (
+                                    <p className="text-xs text-slate-400 italic text-center py-4 bg-slate-50 dark:bg-white/5 rounded-2xl">
+                                        No hay turnos registrados
+                                    </p>
+                                ) : (
+                                    filtradoSesiones.map((sesion) => {
+                                        const nombreCaja = getNombreCaja(sesion);
+                                        const vendedora = getVendedora(sesion) || sesion.usuarioId;
+                                        const activo = sesion.id === cajaActiva?.id;
+                                        const ent = (sesion.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
+                                        const sal = (sesion.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
+                                        const balanceEsperadoSesion = sesion.montoApertura + sesion.totalVentas + ent - sal;
+                                        const difSesion = (sesion.montoCierre || 0) - balanceEsperadoSesion;
+
+                                        return (
+                                            <div
+                                                key={sesion.id}
+                                                className={cn(
+                                                    "bg-white dark:bg-slate-900 rounded-2xl border p-3.5 space-y-2 shadow-sm",
+                                                    activo ? "border-emerald-300 dark:border-emerald-700/50 bg-emerald-50/20" : "border-slate-200 dark:border-slate-800"
+                                                )}
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <p className="text-xs font-black uppercase text-slate-800 dark:text-white">
+                                                            {nombreCaja} · {vendedora}
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-400 font-medium">
+                                                            {new Date(sesion.fechaApertura).toLocaleDateString()} {new Date(sesion.fechaApertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            {sesion.fechaCierre && ` → Cierre: ${new Date(sesion.fechaCierre).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+                                                        </p>
+                                                    </div>
+                                                    <Badge className={cn("text-[10px] font-black uppercase px-2 py-0.5", activo ? "bg-emerald-500 text-white" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400")}>
+                                                        {activo ? 'Abierta' : 'Cerrada'}
+                                                    </Badge>
+                                                </div>
+                                                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-100 dark:border-slate-800">
+                                                    <div>
+                                                        <span className="text-[10px] text-slate-400 font-bold block">Ventas Turno:</span>
+                                                        <span className="font-black text-emerald-600">{formatCurrency(sesion.totalVentas)}</span>
+                                                    </div>
+                                                    <div>
+                                                        <span className="text-[10px] text-slate-400 font-bold block">Cierre Declarado:</span>
+                                                        <span className="font-black text-slate-800 dark:text-slate-200">
+                                                            {sesion.montoCierre ? formatCurrency(sesion.montoCierre) : (activo ? 'En curso' : '$0')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                {!activo && (
+                                                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 dark:border-slate-800">
+                                                        <span className={cn(
+                                                            "text-[10px] font-black px-2 py-0.5 rounded-lg",
+                                                            difSesion === 0 ? "bg-emerald-100 text-emerald-700" :
+                                                            difSesion > 0 ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-700"
+                                                        )}>
+                                                            {difSesion === 0 ? 'Exacto ✓' : difSesion > 0 ? `Sobrante +${formatCurrency(difSesion)}` : `Faltante ${formatCurrency(difSesion)}`}
+                                                        </span>
+                                                        <div className="flex gap-1.5">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleAbrirCuadreModal(sesion, false)}
+                                                                className="h-7 px-2.5 text-[10px] font-black rounded-lg gap-1"
+                                                            >
+                                                                <Eye className="w-3 h-3 text-indigo-500" /> Ver
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                onClick={() => handleAbrirCuadreModal(sesion, true)}
+                                                                className="h-7 px-2.5 text-[10px] font-black rounded-lg gap-1 border-amber-300 dark:border-amber-700/50 text-amber-700 dark:text-amber-400"
+                                                            >
+                                                                <Pencil className="w-3 h-3" /> Editar
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
                         )}
                     </>
                 ) : (
-                    <div className="py-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                        <Store className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                    <div className="py-12 text-center bg-white dark:bg-slate-900 rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
+                        <Store className="w-12 h-12 text-slate-200 mx-auto mb-1" />
                         <p className="text-sm font-black text-slate-400 uppercase tracking-widest">Caja Cerrada</p>
                         <Button onClick={() => setShowAperturaModal(true)}
-                            className="mt-6 h-12 px-8 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase gap-2 shadow-lg shadow-blue-200 active:scale-95">
+                            className="h-12 px-8 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase gap-2 shadow-lg shadow-blue-200 active:scale-95">
                             <PlusCircle className="w-4 h-4" /> Iniciar Jornada
                         </Button>
-                        {onViewHistorial && (
-                            <Button onClick={onViewHistorial}
-                                variant="ghost"
-                                className="mt-2 h-11 px-6 text-slate-400 rounded-2xl font-black text-xs uppercase gap-2">
-                                <History className="w-4 h-4" /> Ver Historial de Ventas
+                        <div className="flex flex-col gap-1.5 px-4 pt-2">
+                            <Button onClick={() => setShowHistorialMovil(!showHistorialMovil)}
+                                variant="outline"
+                                className="h-11 rounded-2xl border-indigo-200 dark:border-indigo-800 text-indigo-600 dark:text-indigo-400 font-black text-xs uppercase gap-2">
+                                <History className="w-4 h-4" /> {showHistorialMovil ? 'Ocultar Historial de Cuadres' : '📋 Ver Historial de Cuadres de Caja'}
                             </Button>
+                            {onViewHistorial && (
+                                <Button onClick={onViewHistorial}
+                                    variant="ghost"
+                                    className="h-11 text-slate-400 rounded-2xl font-black text-xs uppercase gap-2">
+                                    <ShoppingCart className="w-4 h-4" /> Ver Historial de Ventas
+                                </Button>
+                            )}
+                        </div>
+                        {showHistorialMovil && (
+                            <div className="space-y-2 px-3 text-left">
+                                <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500 px-1">
+                                    Cuadres y Cierres Anteriores ({filtradoSesiones.length})
+                                </h4>
+                                {filtradoSesiones.map((sesion) => {
+                                    const nombreCaja = getNombreCaja(sesion);
+                                    const vendedora = getVendedora(sesion) || sesion.usuarioId;
+                                    const activo = sesion.id === cajaActiva?.id;
+                                    return (
+                                        <div key={sesion.id} className="bg-slate-50 dark:bg-white/5 rounded-2xl border border-slate-200/70 dark:border-white/5 p-3 space-y-1.5">
+                                            <div className="flex items-center justify-between">
+                                                <p className="text-xs font-black uppercase text-slate-800 dark:text-white">
+                                                    {nombreCaja} · {vendedora}
+                                                </p>
+                                                <Badge className="text-[9px] font-black uppercase">
+                                                    {activo ? 'Abierta' : 'Cerrada'}
+                                                </Badge>
+                                            </div>
+                                            <p className="text-[10px] text-slate-400 font-medium">
+                                                Fecha: {new Date(sesion.fechaApertura).toLocaleDateString()} {new Date(sesion.fechaApertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </p>
+                                            <div className="flex items-center justify-between pt-1">
+                                                <span className="text-xs font-black text-emerald-600">
+                                                    Ventas: {formatCurrency(sesion.totalVentas)}
+                                                </span>
+                                                <div className="flex gap-1">
+                                                    <Button size="sm" variant="outline" onClick={() => handleAbrirCuadreModal(sesion, false)} className="h-7 text-[10px] font-black px-2">
+                                                        <Eye className="w-3 h-3 mr-1" /> Ver
+                                                    </Button>
+                                                    <Button size="sm" variant="outline" onClick={() => handleAbrirCuadreModal(sesion, true)} className="h-7 text-[10px] font-black px-2 text-amber-600">
+                                                        <Pencil className="w-3 h-3 mr-1" /> Editar
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
                         )}
                     </div>
                 )}
@@ -2371,12 +2643,12 @@ export function ControlCaja({
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
                         <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
                             <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
-                                <History className="w-4 h-4 text-slate-400" /> Auditoría de Turnos
+                                <History className="w-4 h-4 text-slate-400" /> Auditoría de Turnos y Cuadres de Caja
                             </h3>
                             <div className="relative w-full sm:w-64">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
                                 <Input
-                                    placeholder="Buscar operador..."
+                                    placeholder="Buscar vendedora, caja o fecha..."
                                     value={searchTerm}
                                     onChange={e => setSearchTerm(e.target.value)}
                                     className="pl-10 h-9 bg-slate-50 dark:bg-slate-800 text-xs rounded-xl border-slate-200 dark:border-slate-700"
@@ -2387,67 +2659,99 @@ export function ControlCaja({
                             <table className="w-full">
                                 <thead className="text-[11px] font-black uppercase text-slate-400 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-700">
                                     <tr>
-                                        <th className="px-5 py-3 text-left">Operador</th>
+                                        <th className="px-5 py-3 text-left">Caja / Responsable</th>
                                         <th className="px-5 py-3 text-left">
-                                            <span className="flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Apertura</span>
+                                            <span className="flex items-center gap-1"><CalendarDays className="w-3.5 h-3.5" /> Turno & Horario</span>
                                         </th>
                                         <th className="px-5 py-3 text-right">Monto Inicial</th>
                                         <th className="px-5 py-3 text-right">Ventas</th>
-                                        <th className="px-5 py-3 text-right">Balance</th>
+                                        <th className="px-5 py-3 text-right">Cierre Declarado</th>
+                                        <th className="px-5 py-3 text-right">Diferencia</th>
                                         <th className="px-5 py-3 text-center">Estado</th>
+                                        <th className="px-5 py-3 text-center">Acciones</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
                                     {filtradoSesiones.length > 0 ? filtradoSesiones.map(sesion => {
                                         const ent     = (sesion.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
                                         const sal     = (sesion.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
-                                        const balance = sesion.montoApertura + sesion.totalVentas + ent - sal;
+                                        const ventasEf = (sesion as any).totalVentasEfectivo ?? sesion.totalVentas;
+                                        const balanceEsperadoSesion = sesion.montoApertura + ventasEf + ent - sal;
+                                        const difSesion = (sesion.montoCierre || 0) - balanceEsperadoSesion;
                                         const activo  = sesion.id === cajaActiva?.id;
+                                        const nombreCaja = getNombreCaja(sesion);
+                                        const vendedora = getVendedora(sesion) || sesion.usuarioId;
                                         return (
                                             <tr key={sesion.id} className={cn("hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors", activo ? "bg-blue-50/40 dark:bg-blue-900/10" : "")}>
                                                 <td className="px-5 py-4">
                                                     <div className="flex items-center gap-3">
                                                         <div className={cn("w-8 h-8 rounded-xl flex items-center justify-center border", activo ? "bg-blue-100 border-blue-200 text-blue-600" : "bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400")}>
-                                                            <User className="w-4 h-4" />
+                                                            <Store className="w-4 h-4" />
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-black text-slate-800 dark:text-white uppercase">{sesion.usuarioId}</p>
-                                                            <p className="text-[10px] text-slate-400 font-mono">ID: {sesion.id.substring(0, 8)}</p>
+                                                            <p className="text-xs font-black text-slate-800 dark:text-white uppercase">{nombreCaja}</p>
+                                                            <p className="text-[10px] text-slate-500 font-bold uppercase">{vendedora}</p>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td className="px-5 py-4 text-xs text-slate-500 font-bold">
-                                                    {new Date(sesion.fechaApertura).toLocaleDateString()} {new Date(sesion.fechaApertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    <span className="font-black text-slate-700 dark:text-slate-300 block">{sesion.turno || 'Mañana'}</span>
+                                                    <span>{new Date(sesion.fechaApertura).toLocaleDateString()} {new Date(sesion.fechaApertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    {sesion.fechaCierre && (
+                                                        <span className="text-[10px] text-slate-400 block">Cierre: {new Date(sesion.fechaCierre).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                                    )}
                                                 </td>
                                                 <td className="px-5 py-4 text-right text-xs font-black text-slate-600 dark:text-slate-400 tabular-nums">{formatCurrency(sesion.montoApertura)}</td>
                                                 <td className="px-5 py-4 text-right text-xs font-black text-emerald-600 tabular-nums">{formatCurrency(sesion.totalVentas)}</td>
+                                                <td className="px-5 py-4 text-right text-xs font-black text-slate-900 dark:text-white tabular-nums">
+                                                    {sesion.montoCierre ? formatCurrency(sesion.montoCierre) : (activo ? <span className="text-slate-400 font-normal italic">En curso</span> : '$0')}
+                                                </td>
+                                                <td className="px-5 py-4 text-right text-xs tabular-nums">
+                                                    {!activo ? (
+                                                        <span className={cn(
+                                                            "font-black px-2 py-0.5 rounded-lg text-[10px]",
+                                                            difSesion === 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                                                            difSesion > 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                                                            "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
+                                                        )}>
+                                                            {difSesion === 0 ? 'Exacto ✓' : difSesion > 0 ? `+${formatCurrency(difSesion)}` : formatCurrency(difSesion)}
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-slate-400 text-[10px]">—</span>
+                                                    )}
+                                                </td>
                                                 <td className="px-5 py-4 text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <Badge className={cn("text-[10px] font-black px-2.5 py-1 rounded-lg uppercase", activo ? "bg-emerald-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
-                                                            {activo ? 'Activo' : 'Cerrado'}
-                                                        </Badge>
-                                                        {!activo && (
-                                                            <button 
-                                                                onClick={() => {
-                                                                    toast.promise(new Promise(resolve => setTimeout(resolve, 800)), {
-                                                                        loading: 'Preparando Reporte Z Histórico...',
-                                                                        success: 'Reporte Generado — Verificando Diferencias',
-                                                                        error: 'Error al generar reporte'
-                                                                    });
-                                                                }}
-                                                                className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 transition-colors"
-                                                                title="Ver Auditoría"
-                                                            >
-                                                                <Eye className="w-3.5 h-3.5" />
-                                                            </button>
-                                                        )}
+                                                    <Badge className={cn("text-[10px] font-black px-2.5 py-1 rounded-lg uppercase", activo ? "bg-emerald-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400")}>
+                                                        {activo ? 'Activo' : 'Cerrado'}
+                                                    </Badge>
+                                                </td>
+                                                <td className="px-5 py-4 text-center">
+                                                    <div className="flex items-center justify-center gap-1.5">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => handleAbrirCuadreModal(sesion, false)}
+                                                            className="h-8 px-2.5 text-xs text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-xl gap-1"
+                                                            title="Ver Detalle del Cuadre"
+                                                        >
+                                                            <Eye className="w-3.5 h-3.5" /> Ver
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() => handleAbrirCuadreModal(sesion, true)}
+                                                            className="h-8 px-2.5 text-xs text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl gap-1"
+                                                            title="Editar Cuadre de Caja"
+                                                        >
+                                                            <Pencil className="w-3.5 h-3.5" /> Editar
+                                                        </Button>
                                                     </div>
                                                 </td>
                                             </tr>
                                         );
                                     }) : (
                                         <tr>
-                                            <td colSpan={6} className="px-5 py-16 text-center text-xs text-slate-400 font-bold uppercase tracking-widest">
+                                            <td colSpan={8} className="px-5 py-16 text-center text-xs text-slate-400 font-bold uppercase tracking-widest">
                                                 No hay turnos registrados
                                             </td>
                                         </tr>
@@ -2656,6 +2960,228 @@ export function ControlCaja({
                 </DialogContent>
             </Dialog>
 
+            {/* ══ MODAL VER / EDITAR CUADRE DE CAJA ══ */}
+            <Dialog open={cuadreModal.isOpen} onOpenChange={open => { if (!open) setCuadreModal(prev => ({ ...prev, isOpen: false, sesion: null })); }}>
+                <DialogContent className="max-w-md rounded-2xl p-0 border-none shadow-2xl bg-white dark:bg-slate-900 overflow-hidden">
+                    <DialogHeader className="bg-slate-900 p-5">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className={cn(
+                                    "w-10 h-10 rounded-xl flex items-center justify-center border",
+                                    cuadreModal.isEdit ? "bg-amber-500/20 border-amber-400/30 text-amber-400" : "bg-white/10 border-white/10 text-white"
+                                )}>
+                                    {cuadreModal.isEdit ? <Pencil className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                                </div>
+                                <div>
+                                    <DialogTitle className="text-base font-black text-white uppercase">
+                                        {cuadreModal.isEdit ? 'Editar Cuadre de Caja' : 'Detalle del Cuadre'}
+                                    </DialogTitle>
+                                    <DialogDescription className="text-white/40 text-[10px] font-black uppercase tracking-widest">
+                                        {cuadreModal.sesion?.cajaNombre || 'Caja'} · Turno {cuadreModal.sesion?.turno || 'Mañana'}
+                                    </DialogDescription>
+                                </div>
+                            </div>
+                            <Badge className="bg-white/10 text-white border-white/10 text-[10px] font-black uppercase">
+                                {cuadreModal.sesion?.estado === 'abierta' ? 'En Curso' : 'Cerrada'}
+                            </Badge>
+                        </div>
+                    </DialogHeader>
+
+                    {cuadreModal.sesion && (
+                        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                            {!cuadreModal.isEdit ? (
+                                /* ── MODO VISTA (DETALLE) ── */
+                                <div className="space-y-4">
+                                    {/* Información general */}
+                                    <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl p-3.5 space-y-2 border border-slate-100 dark:border-slate-800">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400 font-bold uppercase text-[10px]">Responsable:</span>
+                                            <span className="font-black text-slate-800 dark:text-white uppercase">{getVendedora(cuadreModal.sesion) || cuadreModal.sesion.usuarioId}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400 font-bold uppercase text-[10px]">Caja / Turno:</span>
+                                            <span className="font-bold text-slate-700 dark:text-slate-300">{getNombreCaja(cuadreModal.sesion)} ({cuadreModal.sesion.turno || 'Mañana'})</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="text-slate-400 font-bold uppercase text-[10px]">Apertura:</span>
+                                            <span className="font-medium text-slate-600 dark:text-slate-400">
+                                                {new Date(cuadreModal.sesion.fechaApertura).toLocaleDateString()} {new Date(cuadreModal.sesion.fechaApertura).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        </div>
+                                        {cuadreModal.sesion.fechaCierre && (
+                                            <div className="flex justify-between items-center text-xs">
+                                                <span className="text-slate-400 font-bold uppercase text-[10px]">Cierre:</span>
+                                                <span className="font-medium text-slate-600 dark:text-slate-400">
+                                                    {new Date(cuadreModal.sesion.fechaCierre).toLocaleDateString()} {new Date(cuadreModal.sesion.fechaCierre).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Desglose Financiero */}
+                                    {(() => {
+                                        const s = cuadreModal.sesion;
+                                        const ent = (s.movimientos || []).filter(m => m.tipo === 'entrada').reduce((a, m) => a + m.monto, 0);
+                                        const sal = (s.movimientos || []).filter(m => m.tipo === 'salida').reduce((a, m) => a + m.monto, 0);
+                                        const ventasEf = (s as any).totalVentasEfectivo ?? s.totalVentas;
+                                        const balanceEsperado = s.montoApertura + ventasEf + ent - sal;
+                                        const declarado = s.montoCierre || 0;
+                                        const dif = declarado - balanceEsperado;
+
+                                        return (
+                                            <div className="space-y-3">
+                                                <div className="grid grid-cols-2 gap-2 text-center">
+                                                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800">
+                                                        <p className="text-[9px] font-black text-slate-400 uppercase">Monto Inicial</p>
+                                                        <p className="text-xs font-black text-slate-700 dark:text-slate-300">{formatCurrency(s.montoApertura)}</p>
+                                                    </div>
+                                                    <div className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30">
+                                                        <p className="text-[9px] font-black text-emerald-600 uppercase">Ventas Turno</p>
+                                                        <p className="text-xs font-black text-emerald-600">{formatCurrency(s.totalVentas)}</p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="p-3.5 rounded-2xl bg-slate-900 text-white space-y-2">
+                                                    <div className="flex justify-between items-center text-xs">
+                                                        <span className="text-slate-400 text-[10px] uppercase font-bold">Sistema esperaba:</span>
+                                                        <span className="font-bold text-slate-300 tabular-nums">{formatCurrency(balanceEsperado)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-sm border-t border-white/10 pt-1.5">
+                                                        <span className="text-white text-[11px] uppercase font-black">Cierre Declarado:</span>
+                                                        <span className="font-black text-emerald-400 text-base tabular-nums">{formatCurrency(declarado)}</span>
+                                                    </div>
+                                                    <div className="flex justify-between items-center text-xs border-t border-white/10 pt-1.5">
+                                                        <span className="text-slate-400 text-[10px] uppercase font-bold">Diferencia:</span>
+                                                        <span className={cn(
+                                                            "font-black text-xs px-2 py-0.5 rounded-lg tabular-nums",
+                                                            dif === 0 ? "bg-emerald-500/20 text-emerald-400" :
+                                                            dif > 0 ? "bg-amber-500/20 text-amber-300" : "bg-rose-500/20 text-rose-300"
+                                                        )}>
+                                                            {dif === 0 ? 'Cuadra Exacto ✓' : dif > 0 ? `Sobrante +${formatCurrency(dif)}` : `Faltante ${formatCurrency(dif)}`}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Observaciones si existen */}
+                                    {cuadreModal.sesion.observaciones && (
+                                        <div className="p-3 bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-800 rounded-xl">
+                                            <p className="text-[9px] font-black uppercase text-amber-700 dark:text-amber-400">Observaciones del turno:</p>
+                                            <p className="text-xs text-amber-900 dark:text-amber-200 mt-0.5 font-medium">{cuadreModal.sesion.observaciones}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Botones de acción */}
+                                    <div className="flex gap-2 pt-2">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1 h-10 rounded-xl font-black text-xs uppercase"
+                                            onClick={() => setCuadreModal(prev => ({ ...prev, isOpen: false, sesion: null }))}
+                                        >
+                                            Cerrar
+                                        </Button>
+                                        <Button
+                                            className="flex-1 h-10 rounded-xl font-black text-xs uppercase bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+                                            onClick={() => setCuadreModal(prev => ({ ...prev, isEdit: true }))}
+                                        >
+                                            <Pencil className="w-3.5 h-3.5" /> Editar Cuadre
+                                        </Button>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* ── MODO EDICIÓN ── */
+                                <div className="space-y-3.5">
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsable / Vendedora</label>
+                                        <Input
+                                            value={cuadreModal.vendedora}
+                                            onChange={e => setCuadreModal(prev => ({ ...prev, vendedora: e.target.value }))}
+                                            placeholder="Nombre de la responsable"
+                                            className="h-9 text-xs rounded-xl font-bold"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Turno</label>
+                                        <select
+                                            value={cuadreModal.turno}
+                                            onChange={e => setCuadreModal(prev => ({ ...prev, turno: e.target.value }))}
+                                            className="w-full h-9 px-3 text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none"
+                                        >
+                                            <option value="Mañana">☀️ Mañana</option>
+                                            <option value="Tarde">🌆 Tarde</option>
+                                            <option value="Noche">🌙 Noche</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto de Cierre Declarado ($)</label>
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            value={cuadreModal.montoCierre}
+                                            onChange={e => setCuadreModal(prev => ({ ...prev, montoCierre: e.target.value }))}
+                                            placeholder="Monto entregado al cerrar"
+                                            className="h-10 text-sm font-black rounded-xl tabular-nums"
+                                        />
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha Apertura</label>
+                                            <Input
+                                                type="datetime-local"
+                                                value={cuadreModal.fechaApertura ? new Date(cuadreModal.fechaApertura).toISOString().slice(0, 16) : ''}
+                                                onChange={e => setCuadreModal(prev => ({ ...prev, fechaApertura: e.target.value ? new Date(e.target.value).toISOString() : prev.fechaApertura }))}
+                                                className="h-8 text-[11px] rounded-xl font-medium"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha Cierre</label>
+                                            <Input
+                                                type="datetime-local"
+                                                value={cuadreModal.fechaCierre ? new Date(cuadreModal.fechaCierre).toISOString().slice(0, 16) : ''}
+                                                onChange={e => setCuadreModal(prev => ({ ...prev, fechaCierre: e.target.value ? new Date(e.target.value).toISOString() : prev.fechaCierre }))}
+                                                className="h-8 text-[11px] rounded-xl font-medium"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Notas / Observaciones del Cuadre</label>
+                                        <textarea
+                                            value={cuadreModal.observaciones}
+                                            onChange={e => setCuadreModal(prev => ({ ...prev, observaciones: e.target.value }))}
+                                            placeholder="Escribe motivos de diferencias, notas o aclaraciones..."
+                                            rows={2}
+                                            className="w-full p-2.5 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 outline-none resize-none font-medium"
+                                        />
+                                    </div>
+
+                                    <div className="flex gap-2 pt-2">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1 h-10 rounded-xl font-black text-xs uppercase"
+                                            onClick={() => setCuadreModal(prev => ({ ...prev, isEdit: false }))}
+                                        >
+                                            Cancelar
+                                        </Button>
+                                        <Button
+                                            className="flex-1 h-10 rounded-xl font-black text-xs uppercase bg-indigo-600 hover:bg-indigo-700 text-white"
+                                            onClick={handleGuardarEdicionCuadre}
+                                        >
+                                            Guardar Cambios
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+
             {/* ══ MODAL EDITAR CAJA ══ */}
             <Dialog open={!!editandoCaja} onOpenChange={() => setEditandoCaja(null)}>
                 <DialogContent className="max-w-sm rounded-2xl p-0 border-none shadow-2xl bg-white dark:bg-slate-900">
@@ -2707,6 +3233,7 @@ export function ControlCaja({
                     </div>
                 </DialogContent>
             </Dialog>
+
             {/* ══ BARRA FLOTANTE MÓVIL (Control de Caja) ══ */}
             {hayJornada && cajaActiva && (
                 <div className="md:hidden fixed bottom-[72px] left-0 right-0 p-3 z-40 bg-gradient-to-t from-white via-white to-transparent dark:from-slate-950 dark:via-slate-950 pb-6 pointer-events-none">

@@ -135,3 +135,8 @@ brain/*
 .vercel
 groq.txt
 .env.vercel
+.env*.local
+
+# Flujos n8n exportados con tokens de Facebook en texto plano — NO subir
+n8n-setup/NIVEL DIOS - Agencia IA Autónoma1.json
+n8n-setup/Publicacion-Directa-Dulce-Placer.json

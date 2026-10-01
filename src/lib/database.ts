@@ -141,6 +141,11 @@ export interface IDatabase {
   addRegistroAsistencia(r: any): Promise<void>;
   getAsistenciaByFecha(fecha: string): Promise<any[]>;
 
+  // Checklist de tareas (sincronizado — NEXUS)
+  getAllChecklistCompletadas(): Promise<any[]>;
+  addChecklistCompletada(c: any): Promise<void>;
+  deleteChecklistCompletada(id: string): Promise<void>;
+
   // Nóminas
   getAllNominas(): Promise<any[]>;
   addNomina(n: any): Promise<void>;
@@ -676,6 +681,11 @@ class NexusDatabase implements IDatabase {
     const all = await this.adapter.getCollection<any>('asistencia');
     return all.filter((r: any) => r.fecha === fecha);
   }
+
+  // Checklist de tareas (sincronizado — NEXUS)
+  async getAllChecklistCompletadas() { return this.adapter.getCollection('checklist_completadas'); }
+  async addChecklistCompletada(c: any) { return this.adapter.setDocument('checklist_completadas', c.id, c); }
+  async deleteChecklistCompletada(id: string) { return this._delete('checklist_completadas', id); }
 
   // Nóminas
   async getAllNominas() { return this.adapter.getCollection('nominas'); }

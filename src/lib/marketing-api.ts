@@ -4,11 +4,21 @@
  * para auto-publicar en redes sociales y procesar contenido multimedia.
  */
 
+/** Cada cuánto se debe repetir/programar la publicación enviada a N8N */
+export type FrecuenciaProgramacion = 'inmediata' | 'diaria' | 'cada_2_dias' | 'semanal';
+
+export interface ProgramacionEnvio {
+  frecuencia: FrecuenciaProgramacion;
+  /** Horas exactas del día en formato "HH:mm" (ej. ["08:00", "13:00", "19:00"]) en las que N8N debe publicar */
+  horas: string[];
+}
+
 export interface PublicacionRequest {
   redSocial: 'WHATSAPP' | 'INSTAGRAM' | 'TIKTOK' | 'AVATAR';
   texto: string;
   imagenUrl?: string | null;
   estrategia: string;
+  programacion?: ProgramacionEnvio;
 }
 
 export interface VideoProductionRequest {
@@ -18,10 +28,13 @@ export interface VideoProductionRequest {
   generarThumbnail: boolean;
   incluirLogo: boolean;
   estrategia: string;
+  programacion?: ProgramacionEnvio;
 }
 
 const DEFAULT_WEBHOOK_URL = 'http://localhost:5678/webhook/dulce-placer-marketing';
 const STORAGE_KEY = 'N8N_WEBHOOK_URL';
+const PROGRAMACION_STORAGE_KEY = 'N8N_PROGRAMACION';
+const DEFAULT_PROGRAMACION: ProgramacionEnvio = { frecuencia: 'inmediata', horas: [] };
 
 export function getWebhookUrl(): string {
   return localStorage.getItem(STORAGE_KEY) || DEFAULT_WEBHOOK_URL;
@@ -33,6 +46,26 @@ export function setWebhookUrl(url: string): void {
   } else {
     localStorage.setItem(STORAGE_KEY, url.trim());
   }
+}
+
+/** Lee la programación guardada (cada cuánto y a qué horas publicar). Si no hay nada guardado, "inmediata" sin horas fijas. */
+export function getProgramacion(): ProgramacionEnvio {
+  try {
+    const raw = localStorage.getItem(PROGRAMACION_STORAGE_KEY);
+    if (!raw) return DEFAULT_PROGRAMACION;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return DEFAULT_PROGRAMACION;
+    return {
+      frecuencia: parsed.frecuencia || 'inmediata',
+      horas: Array.isArray(parsed.horas) ? parsed.horas.filter((h: any) => typeof h === 'string' && h.trim() !== '') : [],
+    };
+  } catch {
+    return DEFAULT_PROGRAMACION;
+  }
+}
+
+export function setProgramacion(programacion: ProgramacionEnvio): void {
+  localStorage.setItem(PROGRAMACION_STORAGE_KEY, JSON.stringify(programacion));
 }
 
 export async function testWebhookConnection(url?: string): Promise<{ success: boolean; message: string }> {
@@ -80,7 +113,8 @@ export async function publicarEnRedSocial(datos: PublicacionRequest): Promise<bo
         action: 'publish_social',
         source: 'DulcePlacerERP',
         timestamp: new Date().toISOString(),
-        ...datos
+        ...datos,
+        programacion: datos.programacion ?? getProgramacion(),
       }),
     });
 
@@ -107,7 +141,8 @@ export async function enviarVideoAN8N(datos: VideoProductionRequest): Promise<bo
         action: 'process_video_factory',
         source: 'DulcePlacerERP',
         timestamp: new Date().toISOString(),
-        ...datos
+        ...datos,
+        programacion: datos.programacion ?? getProgramacion(),
       }),
     });
 

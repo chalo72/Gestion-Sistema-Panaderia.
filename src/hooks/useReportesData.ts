@@ -368,15 +368,57 @@ export function useReportesData(props: ReportesProps) {
     const [editProduccionId, setEditProduccionId] = useState<string | null>(null);
 
     const handleSaveProduccion = () => {
+        // Pedido de Gonzalo 2026-09-20: antes, una fila de masa con el tipo elegido pero sin
+        // cantidad (o con cantidad pero sin tipo elegido) se guardaba a medias, o una hornada
+        // en la misma situacion se descartaba en silencio - sin avisar nunca cual fila quedo
+        // incompleta. Actualizado el mismo dia (mismo pedido, ampliado): tambien pasaba que
+        // una fila se agregaba (con "Registrar Masa"/"+ Hornada") y se guardaba SIN elegir
+        // el tipo NI la cantidad - completamente vacia - y eso tampoco avisaba nada. Ahora
+        // CUALQUIER fila que quede en la lista sin completar (le falte el tipo, la cantidad,
+        // o los dos) bloquea el guardado y avisa exactamente cual fila y que le falta. Si una
+        // fila se agrego por error y no se va a usar, hay que quitarla con el boton de basura
+        // antes de guardar.
+        const masasIncompletas = masasPreparadas.filter(m => {
+            const tieneNombre = !!m.nombre?.trim();
+            const tieneCantidad = Number(m.cantidadArrobas) > 0;
+            return !(tieneNombre && tieneCantidad);
+        });
+        const hornadasIncompletas = hornadas.filter(h => {
+            const tieneTipo = !!h.tipoPan?.trim();
+            const tieneCantidad = Number(h.bandejas) > 0 || Number(h.totalPanes) > 0 || Number(h.panesPorBandeja) > 0;
+            return !(tieneTipo && tieneCantidad);
+        });
+        if (masasIncompletas.length > 0 || hornadasIncompletas.length > 0) {
+            const describirFaltanteMasa = (m: typeof masasPreparadas[number]) => {
+                const falta: string[] = [];
+                if (!m.nombre?.trim()) falta.push('elegir el tipo de masa');
+                if (!(Number(m.cantidadArrobas) > 0)) falta.push('la cantidad');
+                return `Masa "${m.nombre?.trim() || 'sin nombre'}" (falta ${falta.join(' y ')})`;
+            };
+            const describirFaltanteHornada = (h: typeof hornadas[number]) => {
+                const falta: string[] = [];
+                if (!h.tipoPan?.trim()) falta.push('elegir el tipo de pan');
+                if (!(Number(h.bandejas) > 0 || Number(h.totalPanes) > 0 || Number(h.panesPorBandeja) > 0)) falta.push('la cantidad de bandejas o panes');
+                return `Pan "${h.tipoPan?.trim() || 'sin tipo'}" (falta ${falta.join(' y ')})`;
+            };
+            const detalles = [
+                ...masasIncompletas.map(describirFaltanteMasa),
+                ...hornadasIncompletas.map(describirFaltanteHornada),
+            ].join(' · ');
+            toast.error(`⚠️ Faltan datos: ${detalles}. Completa esa(s) fila(s) o quítala(s) con el botón de basura antes de guardar.`);
+            return;
+        }
+
+        const masasCompletas = masasPreparadas.filter(m => m.nombre?.trim() && Number(m.cantidadArrobas) > 0);
         const validHornadas = hornadas.filter(h => h.tipoPan.trim() && (h.bandejas > 0 || h.totalPanes > 0));
         const data: Omit<RegistroProduccion, 'id'> = {
             // Fecha local YYYY-MM-DD (nunca toISOString: en Colombia de noche salta al día siguiente)
             fecha: normalizarFechaYYYYMMDD(formProd.fecha),
-            masas: masasPreparadas,
+            masas: masasCompletas,
             hornadas: validHornadas,
             notas: formProd.notas
         };
-        const masaTotal = masasPreparadas.reduce((sum, m) => sum + m.cantidadArrobas, 0);
+        const masaTotal = masasCompletas.reduce((sum, m) => sum + m.cantidadArrobas, 0);
         if (masaTotal === 0 && validHornadas.length === 0) {
             toast.error('Ingresa al menos una masa o una hornada del día');
             return;
