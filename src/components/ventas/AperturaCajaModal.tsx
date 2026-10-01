@@ -12,11 +12,13 @@ import { db } from '@/lib/database';
 const CAJAS_DEFAULT = [
     { nombre: 'Caja Principal',    emoji: '🏪', descripcion: 'Panes, dulces, bebidas' },
     { nombre: 'Helados',           emoji: '🍦', descripcion: 'Helados y postres fríos' },
-    { nombre: 'Fritos',            emoji: '🍟', descripcion: 'Empanadas, fritos varios' },
-    { nombre: 'Micheladas',        emoji: '🍺', descripcion: 'Micheladas y cervezas' },
+    { nombre: 'Fritos',            emoji: '🥟', descripcion: 'Empanadas, fritos varios' },
+    { nombre: 'Micheladas',        emoji: '🍹', descripcion: 'Micheladas y cervezas' },
     { nombre: 'Tortas',            emoji: '🎂', descripcion: 'Tortas del día' },
-    { nombre: 'Tinto/Capuchinos',  emoji: '☕', descripcion: 'Bebidas calientes' },
-    { nombre: 'Tortas Especiales', emoji: '🎁', descripcion: 'Tortas por encargo' },
+    { nombre: 'Tintos',            emoji: '☕', descripcion: 'Bebidas calientes' },
+    { nombre: 'Tortas Especiales', emoji: '🎂', descripcion: 'Tortas por encargo' },
+    { nombre: 'Juegos',            emoji: '🎮', descripcion: 'Máquinas y juegos' },
+    { nombre: 'Mecatos',           emoji: '🍬', descripcion: 'Mecatos' }
 ];
 
 const LS_KEY = 'dp_cajas_config';
@@ -711,3 +713,4 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
         </Dialog>
     );
 }
+

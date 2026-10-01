@@ -398,6 +398,8 @@ export function Ventas(props: VentasProps) {
     // ==========================================
     // FILTRO DE PRODUCTOS
     // ==========================================
+    const deferredSearchTerm = React.useDeferredValue(searchTerm);
+    
     const productosVenta = useMemo(() => {
         const categoriaNorm = (s: string) => safeString(s).toLowerCase().trim();
         const enCategoria = (p: Producto) =>
@@ -406,15 +408,15 @@ export function Ventas(props: VentasProps) {
 
         const catalogo = productos.filter((p) => esProductoBusquedaVenta(p) && enCategoria(p));
 
-        if (searchTerm.trim().length > 0) {
+        if (deferredSearchTerm.trim().length > 0) {
             // POS: permite PVP 0 para poder corregir/cobrar; ranking inteligente
-            return buscarProductosVenta(catalogo, searchTerm, { limite: 50, incluirSinPrecio: true });
+            return buscarProductosVenta(catalogo, deferredSearchTerm, { limite: 50, incluirSinPrecio: true });
         }
 
         return deduplicarPorNombre(catalogo).sort((a, b) =>
             (a.nombre || '').localeCompare(b.nombre || '')
         );
-    }, [productos, searchTerm, selectedCategory]);
+    }, [productos, deferredSearchTerm, selectedCategory]);
 
     const totalCart = useMemo(() => {
         return cart.reduce((sum, item) => {
@@ -1109,62 +1111,52 @@ export function Ventas(props: VentasProps) {
                             onDeleteMesa={onDeleteMesa}
                         />
                     ) : (
-                        <>
-                            {/* Móvil: En POS, SIEMPRE renderizamos el catálogo en el fondo. El ticket va en un modal. */}
-                            <div className="lg:hidden flex-1 flex flex-col min-h-0 h-full">
-                                <ProductCatalog
-                                    productos={productosVenta}
-                                    inventario={inventario}
-                                    onAddToCart={addToCart}
-                                    formatCurrency={formatCurrency}
-                                    searchTerm={searchTerm}
-                                    setSearchTerm={setSearchTerm}
-                                    selectedCategory={selectedCategory}
-                                    setSelectedCategory={setSelectedCategory}
-                                    categorias={categorias}
-                                    onEditProduct={onUpdateProducto}
-                                    onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
-                                    onAjustarStock={onAjustarStock}
-                                    onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
-                                    cart={cart}
-                                />
-                            </div>
-
-                            {/* Desktop (lg:flex): Siempre catálogo a la izquierda */}
-                            <div className="hidden lg:flex flex-1 flex-col min-h-0 h-full">
-                                <ProductCatalog
-                                    productos={productosVenta}
-                                    inventario={inventario}
-                                    onAddToCart={addToCart}
-                                    formatCurrency={formatCurrency}
-                                    searchTerm={searchTerm}
-                                    setSearchTerm={setSearchTerm}
-                                    selectedCategory={selectedCategory}
-                                    setSelectedCategory={setSelectedCategory}
-                                    categorias={categorias}
-                                    onEditProduct={onUpdateProducto}
-                                    onAjustarStock={onAjustarStock}
-                                    onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
-                                    onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
-                                    cart={cart}
-                                />
-                            </div>
-                        </>
+                        <div className="flex-1 flex flex-col min-h-0 h-full relative">
+                            <ProductCatalog
+                                productos={productosVenta}
+                                inventario={inventario}
+                                onAddToCart={addToCart}
+                                formatCurrency={formatCurrency}
+                                searchTerm={searchTerm}
+                                setSearchTerm={setSearchTerm}
+                                selectedCategory={selectedCategory}
+                                setSelectedCategory={setSelectedCategory}
+                                categorias={categorias}
+                                onEditProduct={onUpdateProducto}
+                                onAjustarStock={onAjustarStock}
+                                onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
+                                onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
+                                cart={cart}
+                            />
+                        </div>
                     )}
                 </div>
 
-                {/* Panel derecho: Carrito — Desktop */}
-                <div className="hidden lg:flex w-[460px] xl:w-[520px] shrink-0 flex-col min-h-0 bg-white/95 dark:bg-slate-900/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-slate-200/50 dark:shadow-black/50 border border-slate-200/60 dark:border-slate-700/60 overflow-hidden transition-all duration-300" style={{ minHeight: '0' }}>
-                    {renderCartPanel()}
-                </div>
+                {/* FAB (Floating Action Button) Carrito en Desktop */}
+                {viewMode === 'pos' && cart.length > 0 && (
+                    <div className="hidden lg:block fixed bottom-6 right-8 z-[50]">
+                        <button
+                            onClick={() => setMobileActiveView('ticket')}
+                            className="h-16 px-6 bg-indigo-600 hover:bg-indigo-500 text-white rounded-[2rem] shadow-2xl shadow-indigo-500/40 flex items-center gap-4 transition-all hover:scale-105 active:scale-95 border border-indigo-400/30"
+                        >
+                            <div className="relative">
+                                <ShoppingCart className="w-6 h-6" />
+                                <span className="absolute -top-2 -right-2 bg-white text-indigo-600 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black shadow-sm">
+                                    {cart.reduce((s, i) => s + i.cantidad, 0)}
+                                </span>
+                            </div>
+                            <div className="flex flex-col items-start border-l border-white/20 pl-4">
+                                <span className="text-[10px] font-black uppercase tracking-widest text-indigo-200">Ver Ticket</span>
+                                <span className="text-lg font-black">{formatCurrency(totalACobrar)}</span>
+                            </div>
+                        </button>
+                    </div>
+                )}
 
-                {/* Modal / Sheet Cart (Móvil) - "encima suspendido" para POS y Mesas */}
+                {/* Modal / Sheet Cart (Móvil y Desktop) - "encima suspendido" */}
                 <Sheet open={mobileActiveView === 'ticket'} onOpenChange={(o) => !o && setMobileActiveView('catalogo')}>
-                    <SheetContent side="bottom" className="h-[90vh] p-0 pb-6 flex flex-col bg-slate-50 dark:bg-slate-950 border-t-0 rounded-t-3xl border-x-0 outline-none z-[60]">
-                        {/* Indicador de arrastre */}
-                        <div className="w-full flex justify-center py-2 shrink-0 bg-white dark:bg-slate-900 rounded-t-3xl shadow-sm z-10">
-                            <div className="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-slate-700" />
-                        </div>
+                    <SheetContent side="right" className="w-full sm:max-w-[420px] p-0 flex flex-col bg-slate-50 dark:bg-slate-950 outline-none z-[60] border-l border-slate-200 dark:border-slate-800 shadow-2xl">
+                        {/* Botón Volver (solo visible si quisiéramos) */}
                         <div className="flex-1 flex flex-col min-h-0 relative">
                             {renderCartPanel()}
                         </div>
@@ -1503,10 +1495,11 @@ export function Ventas(props: VentasProps) {
 
             {/* Modal de Movimientos de Caja (Entrada/Salida) */}
             <CajaMovimientosModal
-                open={!!movimientoCaja}
-                onOpenChange={(open) => !open && setMovimientoCaja(null)}
+                isOpen={!!movimientoCaja}
+                onOpenChange={(open) => { if (!open) setMovimientoCaja(null); }}
                 tipo={movimientoCaja?.tipo || 'entrada'}
-                onSave={async (monto, motivo) => {
+                cajaActiva={cajaActiva}
+                onSubmit={async (monto, motivo) => {
                     await onRegistrarMovimientoCaja(monto, movimientoCaja!.tipo, motivo, usuario?.id || '');
                     setMovimientoCaja(null);
                 }}

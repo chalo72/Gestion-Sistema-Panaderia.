@@ -291,7 +291,7 @@ export function ProductCatalog({
                             )}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                             {productos.map(producto => (
                                 <FastSearchCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
@@ -337,7 +337,7 @@ export function ProductCatalog({
                             <p className="text-sm font-bold text-slate-400">Sin productos en esta categoría</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
                             {productos.map(producto => (
                                 <ProductCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
@@ -415,7 +415,9 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
     const enCarrito = (cantidadEnCarrito ?? 0) > 0;
 
     return (
-        <div className={cn(
+        <div 
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '220px' }}
+            className={cn(
             "group bg-white dark:bg-slate-800 rounded-3xl border transition-all duration-300 cursor-pointer active:scale-[0.95] overflow-hidden flex flex-col",
             enCarrito
                 ? "border-emerald-400 dark:border-emerald-600 ring-2 ring-emerald-400/40 shadow-lg shadow-emerald-500/20"
@@ -505,6 +507,7 @@ function FastSearchCard({ producto, inventario, categorias, onAddToCart, formatC
 
     return (
         <div
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
             onClick={() => onAddToCart(producto)}
             className={cn(
                 "group relative bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border-2 flex items-center justify-between gap-4 cursor-pointer transition-all active:scale-[0.98]",
