@@ -368,10 +368,10 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
     // Auto-rellenar todos con cero
     const autoRellenar = () => {
         const filled: Record<string, string> = { ...montos };
-        // Eliminado para Cierre Ciego, PERO auto-rellenamos con 0 las cajas que 
-        // no tuvieron movimientos (esperado == 0) para ahorrar trabajo
+        // Auto-rellenamos con 0 TODAS las cajas que estn vacas, 
+        // sin importar el esperado, para permitir forzar el cierre de cajas zombis
         cajas.forEach(c => { 
-            if (getEsperado(c) === 0 && !filled[c.id]) {
+            if (!filled[c.id]) {
                 filled[c.id] = '0'; 
             }
         });
