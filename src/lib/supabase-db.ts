@@ -446,8 +446,10 @@ export class SupabaseDatabase implements IDatabase {
             unidades: data.unidades || data.metadata?.unidades || [],
             destinos: data.destinos || data.metadata?.destinos || [],
             latasPorHorno: data.metadata?.latasPorHorno,
-            pesoArrobaKg: data.metadata?.pesoArrobaKg
-        };
+            pesoArrobaKg: data.metadata?.pesoArrobaKg,
+            updatedAt: data.metadata?.updated_at ?? data.updated_at,
+            updated_at: data.metadata?.updated_at ?? data.updated_at
+        } as any;
     }
 
     async getAllConfiguraciones(): Promise<any[]> {
@@ -457,28 +459,30 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async saveConfiguracion(config: DBConfiguracion): Promise<void> {
+        const anyConfig = config as any;
         const dbConfig = {
             id: 'main',
-            nombre_negocio: config.nombreNegocio,
-            direccion_negocio: config.direccionNegocio,
-            telefono_negocio: config.telefonoNegocio,
-            email_negocio: config.emailNegocio,
+            nombre_negocio: config.nombreNegocio ?? anyConfig.nombre_negocio,
+            direccion_negocio: config.direccionNegocio ?? anyConfig.direccion_negocio,
+            telefono_negocio: config.telefonoNegocio ?? anyConfig.telefono_negocio,
+            email_negocio: config.emailNegocio ?? anyConfig.email_negocio,
             moneda: config.moneda,
-            margen_utilidad_default: config.margenUtilidadDefault,
-            impuesto_porcentaje: config.impuestoPorcentaje,
-            umbral_alerta: config.umbralAlerta,
-            ajuste_automatico: config.ajusteAutomatico,
-            notificar_subidas: config.notificarSubidas,
-            mostrar_utilidad_en_lista: config.mostrarUtilidadEnLista,
+            margen_utilidad_default: config.margenUtilidadDefault ?? anyConfig.margen_utilidad_default,
+            impuesto_porcentaje: config.impuestoPorcentaje ?? anyConfig.impuesto_porcentaje,
+            umbral_alerta: config.umbralAlerta ?? anyConfig.umbral_alerta,
+            ajuste_automatico: config.ajusteAutomatico ?? anyConfig.ajuste_automatico,
+            notificar_subidas: config.notificarSubidas ?? anyConfig.notificar_subidas,
+            mostrar_utilidad_en_lista: config.mostrarUtilidadEnLista ?? anyConfig.mostrar_utilidad_en_lista,
             categorias: config.categorias,
-            unidades: (config as any).unidades || [],
-            destinos: (config as any).destinos || [],
+            unidades: anyConfig.unidades || [],
+            destinos: anyConfig.destinos || [],
             metadata: {
-              ...(config as any).metadata,
-              unidades: (config as any).unidades,
-              destinos: (config as any).destinos,
-              latasPorHorno: config.latasPorHorno,
-              pesoArrobaKg: config.pesoArrobaKg
+              ...anyConfig.metadata,
+              unidades: anyConfig.unidades,
+              destinos: anyConfig.destinos,
+              latasPorHorno: anyConfig.latasPorHorno,
+              pesoArrobaKg: anyConfig.pesoArrobaKg,
+              updated_at: anyConfig.updatedAt ?? anyConfig.updated_at ?? new Date().toISOString()
             }
         };
         const { error } = await supabase.from('configuracion').upsert(dbConfig);
@@ -606,6 +610,12 @@ export class SupabaseDatabase implements IDatabase {
             imagen_factura: recepcion.imagenFactura,
             items: recepcion.items
         }).eq('id', recepcion.id);
+        if (error) throw error;
+    }
+
+    // Fix 2026-09-30 (AUTORIZO Gonzalo): faltaba — borrar una recepción no llegaba a la nube.
+    async deleteRecepcion(id: string): Promise<void> {
+        const { error } = await supabase.from('recepciones').delete().eq('id', id);
         if (error) throw error;
     }
 
@@ -1310,7 +1320,12 @@ export class SupabaseDatabase implements IDatabase {
             montoCierre: c.monto_cierre,
             totalVentas: c.total_ventas,
             ventasIds: c.ventas_ids || [],
-            estado: c.estado
+            movimientos: c.movimientos || [],
+            estado: c.estado,
+            cajaNombre: c.arqueo_por_caja?.cajaNombre,
+            vendedoraNombre: c.arqueo_por_caja?.vendedoraNombre,
+            turno: c.arqueo_por_caja?.turno,
+            eventoEspecial: c.arqueo_por_caja?.eventoEspecial
         };
     }
 
@@ -1324,7 +1339,14 @@ export class SupabaseDatabase implements IDatabase {
             monto_cierre: safeN(c.montoCierre),
             total_ventas: safeN(c.totalVentas),
             ventas_ids: Array.isArray(c.ventasIds) ? c.ventasIds : [],
-            estado: c.estado || 'abierta'
+            movimientos: Array.isArray(c.movimientos) ? c.movimientos : [],
+            estado: c.estado || 'abierta',
+            arqueo_por_caja: {
+                cajaNombre: (c as any).cajaNombre,
+                vendedoraNombre: (c as any).vendedoraNombre,
+                turno: (c as any).turno,
+                eventoEspecial: (c as any).eventoEspecial
+            }
         };
     }
 
