@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, Plus, Package, ArrowLeft, Edit2, X, Save, Zap, Mic } from 'lucide-react';
 import { CalculadoraRapida } from './CalculadoraRapida';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,29 @@ export function ProductCatalog({
     const [editForm, setEditForm] = useState({ nombre: '', precioVenta: 0, descripcion: '', stock: 0 });
     const [multiplier, setMultiplier] = useState(1);
     const [modoHoraPico, setModoHoraPico] = useState(false);
+
+    // Paginación infinita (Virtualización suave) para evitar congelar el celular
+    const [visibleCount, setVisibleCount] = useState(24);
+    const observerTarget = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setVisibleCount(24);
+    }, [searchTerm, selectedCategory]);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting) {
+                    setVisibleCount(prev => prev + 24);
+                }
+            },
+            { rootMargin: '200px' }
+        );
+        if (observerTarget.current) observer.observe(observerTarget.current);
+        return () => observer.disconnect();
+    }, []);
+
+    const visibleProducts = useMemo(() => productos.slice(0, visibleCount), [productos, visibleCount]);
 
     const handleAddToCart = (producto: Producto) => {
         for (let i = 0; i < multiplier; i++) onAddToCart(producto);
@@ -292,7 +315,7 @@ export function ProductCatalog({
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-                            {productos.map(producto => (
+                            {visibleProducts.map(producto => (
                                 <FastSearchCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
                                     onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
@@ -338,7 +361,7 @@ export function ProductCatalog({
                         </div>
                     ) : (
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
-                            {productos.map(producto => (
+                            {visibleProducts.map(producto => (
                                 <ProductCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
                                     onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
@@ -347,6 +370,8 @@ export function ProductCatalog({
                         </div>
                     )
                 )}
+                {/* Intersection Observer Target */}
+                <div ref={observerTarget} className="h-10 w-full shrink-0" />
                 </div>
             )}
 
