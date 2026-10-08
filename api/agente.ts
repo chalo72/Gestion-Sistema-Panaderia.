@@ -319,6 +319,21 @@ export default async function handler(req: Request) {
     systemPrompt += `\n\n=== DATOS REALES DEL NEGOCIO HOY (${new Date().toLocaleDateString('es-CO')}) ===\n${contexto}\n=== FIN DE DATOS ===\n\nAnáliza los datos anteriores para responder con información precisa y real del negocio. No inventes cifras.`;
   }
 
+  // === REGLA ANTI-INVENCION (2026-09-19) ===
+  // Motivo real: una campana generada nombro "la calle 42" y "Manhattan" y llamo "torta"
+  // a un bollo de canela — todo inventado. Publicar datos falsos es un riesgo de
+  // credibilidad y legal para el negocio, asi que se prohibe explicitamente.
+  systemPrompt += `
+
+=== REGLAS OBLIGATORIAS DE VERACIDAD (NO NEGOCIABLES) ===
+1. NUNCA inventes direcciones, calles, barrios, ciudades, paises, numeros de telefono, horarios, precios ni nombres de lugares. Si no te los dieron en este mensaje, NO los menciones.
+2. NUNCA inventes testimonios, resenas, opiniones de clientes, cifras de ventas, premios ni cantidades de seguidores. Nada de "prueba social" falsa.
+3. Si no sabes que producto es exactamente, describelo de forma general (ej: "nuestro producto recien horneado") en vez de adivinar un nombre concreto.
+4. El negocio es colombiano. Escribe siempre en espanol de Colombia, con modismos locales naturales. Jamas uses referencias de otros paises (Manhattan, downtown, etc.).
+5. Para el llamado a la accion usa formulas que no requieran datos que no tienes: "escribenos por WhatsApp", "visitanos en el punto de venta", "mira el enlace en nuestra bio".
+=== FIN DE REGLAS DE VERACIDAD ===
+`;
+
   if (!PROMPTS[tipo] && !soberania) return new Response('Agente desconocido', { status: 400 });
 
   // 2. CONFIGURACIÓN DE PROVEEDORES (TRIPLE-HÍBRIDO)
@@ -331,6 +346,10 @@ export default async function handler(req: Request) {
   // No reemplaza a ninguno de los anteriores: si NVIDIA_API_KEY no está configurada,
   // el comportamiento es idéntico al de antes de este cambio.
   const NVIDIA_KEY = process.env.NVIDIA_API_KEY;
+  // Google Gemini — UNICO proveedor con VISION real (ve fotos y videos).
+  // Los demas (Groq/NVIDIA/Ollama en la nube) solo leen texto: si no hay Gemini,
+  // la IA NO ve la foto que sube el usuario y se inventa lo que hay en ella.
+  const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
   const providers = [];
   if (aiMode === 'local') {
@@ -339,10 +358,12 @@ export default async function handler(req: Request) {
     // Add available providers
     if (PRIMARY_PROVIDER === 'ollama') {
       providers.push('ollama');
+      if (GEMINI_KEY) providers.push('gemini');
       if (OPENAI_KEY) providers.push('openai');
       if (NVIDIA_KEY) providers.push('nvidia');
       if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
     } else {
+      if (GEMINI_KEY) providers.push('gemini');
       if (OPENAI_KEY) providers.push('openai');
       if (NVIDIA_KEY) providers.push('nvidia');
       if (ANTHROPIC_KEY && ANTHROPIC_KEY !== "sk-ant-xxx") providers.push('anthropic');
@@ -353,6 +374,9 @@ export default async function handler(req: Request) {
   // Intentar con los proveedores en orden
   for (const provider of providers) {
     try {
+      if (provider === 'gemini' && GEMINI_KEY) {
+        return await handleGemini(GEMINI_KEY, mensaje, imagen, systemPrompt);
+      }
       if (provider === 'openai' && OPENAI_KEY) {
         // Standard OpenAI-compatible API call (works for OpenAI, DeepSeek, Together, etc)
         return await handleOpenAI(OPENAI_KEY, tipo, mensaje, imagen, systemPrompt);
@@ -463,14 +487,93 @@ async function handleOllama(model: string, mensaje: string, imagen: string | und
   return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }
 
+async function handleGemini(apiKey: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
+  // Modelo configurable por variable de entorno. Por defecto se usa el alias "-latest",
+  // que Google mantiene apuntando al modelo vigente: asi NO se rompe cuando retiran
+  // una version (que fue exactamente lo que paso con Groq y NVIDIA el 2026-09-19).
+  const model = process.env.GEMINI_MODEL || 'gemini-flash-latest';
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+
+  const parts: any[] = [{ text: mensaje }];
+  if (imagen) {
+    const base64Data = imagen.includes(',') ? imagen.split(',')[1] : imagen;
+    const mimeMatch = imagen.match(/^data:([^;]+);base64,/);
+    parts.push({
+      inlineData: {
+        mimeType: mimeMatch ? mimeMatch[1] : 'image/jpeg',
+        data: base64Data,
+      },
+    });
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ role: 'user', parts }],
+      generationConfig: { maxOutputTokens: 4096 },
+    }),
+  });
+
+  if (!response.ok) {
+    const detalle = await response.text().catch(() => '');
+    throw new Error(`Gemini error ${response.status}: ${detalle.slice(0, 300)}`);
+  }
+
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder('utf-8');
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      let buffer = '';
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const data = trimmed.slice(5).trim();
+            if (!data || data === '[DONE]') continue;
+            try {
+              const parsed = JSON.parse(data);
+              const cand = parsed.candidates?.[0];
+              const textoPartes = cand?.content?.parts || [];
+              for (const p of textoPartes) {
+                if (p.thought) continue; // no enviar el "pensamiento" interno al usuario
+                if (typeof p.text === 'string' && p.text) {
+                  controller.enqueue(new TextEncoder().encode(p.text));
+                }
+              }
+            } catch (e) {
+              console.error('Gemini: chunk no parseable:', data.slice(0, 120));
+            }
+          }
+        }
+        controller.close();
+      } catch (e) { controller.error(e); }
+    },
+  });
+
+  return new Response(readable, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+}
+
 async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, imagen: string | undefined, systemPrompt: string) {
   const isGroq = apiKey.startsWith('gsk_');
   const isNvidia = apiKey.startsWith('nvapi-');
   const isDeepSeek = apiKey.length === 32 && !apiKey.startsWith('sk-proj-') && !isGroq && !isNvidia;
 
   let model = ['gerente', 'madre-suprema', 'guardian-supremo', 'arbi-supremo', 'pico-claw', 'open-claw', 'auto-claw'].includes(tipo)
-    ? (isNvidia ? 'meta/llama-3.1-405b-instruct' : isGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o')
-    : (isNvidia ? 'meta/llama-3.1-8b-instruct' : isGroq ? 'llama-3.1-8b-instant' : 'gpt-4o-mini');
+    // 2026-09-19: modelos anteriores (meta/llama-3.1-405b-instruct, llama-3.3-70b-versatile,
+    // meta/llama-3.1-8b-instruct, llama-3.1-8b-instant) fueron retirados por Groq (16-ago-2026)
+    // y por NVIDIA (free endpoint deprecado) — por eso Modo Rapido fallaba con "todos los
+    // proveedores fallaron". Reemplazados por modelos activos verificados esa fecha.
+    ? (isNvidia ? 'meta/llama-3.3-70b-instruct' : isGroq ? 'openai/gpt-oss-120b' : 'gpt-4o')
+    : (isNvidia ? 'meta/llama-3.3-70b-instruct' : isGroq ? 'openai/gpt-oss-20b' : 'gpt-4o-mini');
 
   const actualModel = isDeepSeek ? 'deepseek-chat' : model;
 
@@ -481,6 +584,18 @@ async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, image
       : isNvidia
         ? 'https://integrate.api.nvidia.com/v1/chat/completions'
         : 'https://api.openai.com/v1/chat/completions';
+
+  // Si hay foto pero este proveedor es de solo texto, hay que DECIRSELO:
+  // si no, el modelo actua como si la hubiera visto y se inventa lo que aparece.
+  let promptSistema = systemPrompt;
+  if (imagen && (isDeepSeek || isGroq || isNvidia)) {
+    promptSistema += `
+
+=== AVISO CRITICO ===
+NO puedes ver la imagen que subio el usuario. NO la describas, NO digas de que producto se trata, NO inventes colores, formas ni ingredientes. Escribe el texto de la campana de forma general, valida para cualquier producto de panaderia, sin afirmar nada sobre la foto.
+=== FIN DEL AVISO ===
+`;
+  }
 
   const content: any[] = [{ type: 'text', text: mensaje }];
   if (imagen && !isDeepSeek && !isGroq && !isNvidia) { // DeepSeek/Groq/NVIDIA (modelos de texto) no soportan visión por este formato exacto
@@ -499,7 +614,7 @@ async function handleOpenAI(apiKey: string, tipo: string, mensaje: string, image
     body: JSON.stringify({
       model: actualModel,
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: promptSistema },
         { role: 'user', content }
       ],
       stream: true,

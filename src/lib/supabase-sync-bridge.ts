@@ -76,6 +76,8 @@ const WRITES: WriteSpec[] = [
   { method: 'saveConfiguracion', table: 'configuracion', fn: (d) => supabaseDB.saveConfiguracion(d as never) },
   { method: 'addNomina', table: 'nominas', fn: (d) => supabaseDB.addNomina(d as never) },
   { method: 'updateNomina', table: 'nominas', fn: (d) => supabaseDB.updateNomina(d as never) },
+  { method: 'addChecklistCompletada', table: 'checklist_completadas', fn: (d) => supabaseDB.addChecklistCompletada(d as never) },
+  { method: 'addRegistroAsistencia', table: 'asistencias', fn: (d) => supabaseDB.addAsistencia(d as never) },
 ];
 
 /** Deletes → nube (tombstone local ya lo hace database._delete). Realtime avisa a otros aparatos. */
@@ -93,6 +95,7 @@ const DELETES: DeleteSpec[] = [
   { method: 'deleteMesa', table: 'mesas', localTable: 'mesas', fn: (id) => supabaseDB.deleteMesa(id) },
   { method: 'deletePedidoActivo', table: 'pedidos_activos', localTable: 'pedidos_activos', fn: (id) => supabaseDB.deletePedidoActivo(id) },
   { method: 'deleteCliente', table: 'clientes', localTable: 'clientes', fn: (id) => supabaseDB.deleteCliente(id) },
+  { method: 'deleteChecklistCompletada', table: 'checklist_completadas', localTable: 'checklist_completadas', fn: (id) => supabaseDB.deleteChecklistCompletada(id) },
 ];
 
 const UPSERT_BY_TABLE: Record<string, (d: unknown) => Promise<void>> = {
@@ -115,6 +118,8 @@ const UPSERT_BY_TABLE: Record<string, (d: unknown) => Promise<void>> = {
   clientes: (d) => supabaseDB.addCliente(d as never),
   configuracion: (d) => supabaseDB.saveConfiguracion(d as never),
   nominas: (d) => supabaseDB.addNomina(d as never),
+  checklist_completadas: (d) => supabaseDB.addChecklistCompletada(d as never),
+  asistencias: (d) => supabaseDB.addAsistencia(d as never),
 };
 
 const DELETE_BY_TABLE: Record<string, (id: string) => Promise<void>> = {
@@ -131,6 +136,7 @@ const DELETE_BY_TABLE: Record<string, (id: string) => Promise<void>> = {
   mesas: (id) => supabaseDB.deleteMesa(id),
   pedidos_activos: (id) => supabaseDB.deletePedidoActivo(id),
   clientes: (id) => supabaseDB.deleteCliente(id),
+  checklist_completadas: (id) => supabaseDB.deleteChecklistCompletada(id),
 };
 
 /** Reintenta cola de pendientes (llamar al volver online / syncNow). */

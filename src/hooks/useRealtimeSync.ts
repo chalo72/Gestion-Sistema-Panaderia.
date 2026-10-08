@@ -170,6 +170,18 @@ const HANDLERS: Record<string, Handler> = {
     },
     deleteFromLocal: async () => {},
   },
+  checklist_completadas: {
+    localTableName:  'checklist_completadas',
+    getFromSupabase: () => _sdb.getAllChecklistCompletadas(),
+    writeToLocal:    (d) => orig('addChecklistCompletada', db.addChecklistCompletada.bind(db))(d),
+    deleteFromLocal: (id) => orig('deleteChecklistCompletada', db.deleteChecklistCompletada.bind(db))(id),
+  },
+  asistencias: {
+    localTableName:  'asistencia',
+    getFromSupabase: () => _sdb.getAllAsistencias(),
+    writeToLocal:    (d) => orig('addRegistroAsistencia', db.addRegistroAsistencia.bind(db))(d),
+    deleteFromLocal: async () => {},
+  },
 };
 
 export const TABLE_LABELS: Record<string, string> = {
@@ -192,6 +204,8 @@ export const TABLE_LABELS: Record<string, string> = {
   clientes:               'Clientes',
   nominas:                'Nóminas',
   configuracion:          'Configuración',
+  checklist_completadas:  'Checklist de Tareas',
+  asistencias:            'Asistencia',
 };
 
 export interface RemoteSyncEvent {
