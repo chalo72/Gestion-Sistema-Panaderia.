@@ -85,6 +85,18 @@ function EntregaTurnoModal({ caja, isOpen, onClose, onConfirmar, formatCurrency 
     const turnoEmoji = caja.turno === 'Mañana' ? '☀️' : caja.turno === 'Tarde' ? '🌆' : '🌙';
     const cajaEmoji  = CAJA_EMOJIS[caja.cajaNombre || ''] || '📦';
 
+    const handleBorrarCajaError = async () => {
+        if (!window.confirm('¿Seguro que quieres borrar este turno abierto por error? Se eliminará sin registrar nada.')) return;
+        setLoading(true);
+        try {
+            await db.adapter.deleteDocument('sesiones_caja', caja.id);
+            window.location.reload();
+        } catch(e) {
+            console.error(e);
+            setLoading(false);
+        }
+    };
+
     const handleConfirmar = async () => {
         if (hayAlerta && !window.confirm(
             `Hay un FALTANTE de ${formatCurrency(Math.abs(diferencia))} respecto a lo que el sistema esperaba.\n\n¿Confirmas que quieres cerrar el turno de todas formas?`
@@ -403,6 +415,18 @@ function CierreJornadaModal({ cajas, isOpen, onClose, onConfirmar, formatCurrenc
     const totalCajas     = cajas.length + cajasExtra.length;
     const totalVentasJornada = ventas?.reduce((acc, v) => acc + v.total, 0) || 0;
     const retencionGlobal = Math.max(0, totalVentasJornada * 0.10);
+
+    const handleBorrarCajaError = async () => {
+        if (!window.confirm('¿Seguro que quieres borrar este turno abierto por error? Se eliminará sin registrar nada.')) return;
+        setLoading(true);
+        try {
+            await db.adapter.deleteDocument('sesiones_caja', caja.id);
+            window.location.reload();
+        } catch(e) {
+            console.error(e);
+            setLoading(false);
+        }
+    };
 
     const handleConfirmar = async () => {
         // Pedido de Gonzalo 2026-09-20: no dejar guardar el cierre de jornada si a alguna
@@ -966,6 +990,7 @@ export function ControlCaja({
         fechaApertura: string;
         fechaCierre: string;
         montoCierre: string;
+        montoApertura: string;
         observaciones: string;
         turno: string;
     }>({
@@ -976,6 +1001,7 @@ export function ControlCaja({
         fechaApertura: '',
         fechaCierre: '',
         montoCierre: '',
+        montoApertura: '',
         observaciones: '',
         turno: '',
     });
@@ -1015,6 +1041,7 @@ export function ControlCaja({
             fechaApertura: sesion.fechaApertura || '',
             fechaCierre: sesion.fechaCierre || new Date().toISOString(),
             montoCierre: String(sesion.montoCierre || 0),
+            montoApertura: String(sesion.montoApertura || 0),
             observaciones: sesion.observaciones || '',
             turno: sesion.turno || 'Mañana',
         });
@@ -1027,12 +1054,17 @@ export function ControlCaja({
             return;
         }
         const montoNum = parseFloat(String(cuadreModal.montoCierre).replace(/[^0-9.]/g, '')) || 0;
+        // Pedido de Gonzalo 2026-10-07: el admin tambien corrige el monto de APERTURA
+        // (ej: cajas que quedaron abiertas con 100.000 por error).
+        const aperturaTxt = String(cuadreModal.montoApertura ?? '').replace(/[^0-9.]/g, '');
+        const aperturaNum = aperturaTxt === '' ? cuadreModal.sesion.montoApertura : (parseFloat(aperturaTxt) || 0);
         const sesionActualizada: CajaSesion = {
             ...cuadreModal.sesion,
             vendedoraNombre: cuadreModal.vendedora.trim() || cuadreModal.sesion.vendedoraNombre,
             fechaApertura: cuadreModal.fechaApertura || cuadreModal.sesion.fechaApertura,
             fechaCierre: cuadreModal.fechaCierre || cuadreModal.sesion.fechaCierre,
             montoCierre: montoNum,
+            montoApertura: aperturaNum,
             observaciones: cuadreModal.observaciones.trim(),
             turno: (cuadreModal.turno as any) || cuadreModal.sesion.turno,
         };
@@ -1054,12 +1086,13 @@ export function ControlCaja({
     // Préstamos entre cajas
     const [prestamos,          setPrestamos]          = useState<PrestamoEntreCajas[]>([]);
     const [showPrestamoModal,  setShowPrestamoModal]  = useState(false);
-    const esAdmin = usuario?.rol === 'ADMIN';
+    const esAdmin = (usuario?.rol === 'ADMIN' || usuario?.rol === 'admin' || usuario?.rol === 'superadmin');
 
     // Cargar préstamos al montar
     useEffect(() => {
         if (!esAdmin) return;
-        db.getAllPrestamosCaja().then(data => setPrestamos(data as PrestamoEntreCajas[])).catch(() => {});
+        // 🩹 2026-10-07: db no tiene getAllPrestamosCaja → antes tumbaba la pantalla al entrar como ADMIN.
+        Promise.resolve((db as any).getAllPrestamosCaja?.() ?? []).then((data: any) => setPrestamos((data || []) as PrestamoEntreCajas[])).catch(() => {});
     }, [esAdmin]);
 
     const registrarPrestamo = async (params: {
@@ -1075,7 +1108,7 @@ export function ControlCaja({
             usuarioId: usuario?.id || 'admin',
             usuarioNombre: usuario?.nombre || 'Admin',
         };
-        await db.addPrestamoCaja(nuevo);
+        await (db as any).addPrestamoCaja?.(nuevo);
         // Registrar movimientos en cada caja (salida en origen, entrada en destino)
         await registrarMovimientoCaja(params.monto, 'salida',
             `Préstamo a ${params.cajaDestinoNombre}`, usuario?.id || 'admin', params.cajaOrigenId);
@@ -1091,7 +1124,7 @@ export function ControlCaja({
             estado: 'devuelto',
             fechaDevolucion: new Date().toISOString(),
         };
-        await db.updatePrestamoCaja(actualizado);
+        await (db as any).updatePrestamoCaja?.(actualizado);
         // Movimientos inversos: regresa el dinero
         await registrarMovimientoCaja(prestamo.monto, 'entrada',
             `Devolución de ${prestamo.cajaDestinoNombre}`, usuario?.id || 'admin', prestamo.cajaOrigenId);
@@ -1304,7 +1337,8 @@ export function ControlCaja({
                     totalVentas: 0
                 };
                 try {
-                    await db.insertSesionCaja(baseNueva);
+                    // 🩹 2026-10-07: insertSesionCaja no existe → la caja extra nunca se guardaba.
+                    await db.addSesionCaja({ ...baseNueva, id: generateUUID() });
                     cerradas++;
                 } catch (err) {
                     console.error('Error guardando caja extra', err);
@@ -1539,6 +1573,7 @@ export function ControlCaja({
                                 </div>
                                 <Button
                                     onClick={() => { setCajaEntregando(caja); setShowEntregaModal(true); }}
+                                    disabled={caja.estado === 'cerrada'}
                                     className="shrink-0 h-11 px-3 bg-slate-900 hover:bg-black dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl font-black text-[10px] uppercase gap-1"
                                 >
                                     <Handshake className="w-3.5 h-3.5" /> Cuadrar
@@ -2081,6 +2116,7 @@ export function ControlCaja({
                                             {/* Botón entrega */}
                                             <Button
                                                 onClick={() => { setCajaEntregando(caja); setShowEntregaModal(true); }}
+                                    disabled={caja.estado === 'cerrada'}
                                                 className="w-full h-11 bg-slate-900 hover:bg-black dark:bg-slate-700 dark:hover:bg-slate-600 text-white rounded-xl font-black text-xs uppercase gap-2 mt-auto"
                                             >
                                                 <Handshake className="w-4 h-4" /> Registrar Entrega de Turno
@@ -3117,6 +3153,18 @@ export function ControlCaja({
                                     </div>
 
                                     <div className="space-y-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto de Apertura ($)</label>
+                                        <Input
+                                            type="number"
+                                            min="0"
+                                            value={cuadreModal.montoApertura}
+                                            onChange={e => setCuadreModal(prev => ({ ...prev, montoApertura: e.target.value }))}
+                                            placeholder="Con cuánto abrió la caja"
+                                            className="h-10 text-sm font-black rounded-xl tabular-nums"
+                                        />
+                                    </div>
+
+                                    <div className="space-y-1">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monto de Cierre Declarado ($)</label>
                                         <Input
                                             type="number"
@@ -3266,3 +3314,8 @@ export function ControlCaja({
         </div>
     );
 }
+
+
+
+
+

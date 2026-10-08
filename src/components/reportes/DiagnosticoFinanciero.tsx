@@ -50,6 +50,33 @@ const panesDeHornada = (h: {
     return Math.round(bandejas * porLata);
 };
 
+/**
+ * Totales de un grupo de lotes: arrobas metidas y panes que salieron.
+ * Agregado 2026-09-29 a pedido de Gonzalo (total del día, del mes y general).
+ *
+ * OJO CON LA MASA: los lotes nuevos la traen en el arreglo `masas`, pero los
+ * viejos la tienen en cuatro campos sueltos. Si solo se mira `masas`, todos
+ * los días antiguos salen en cero. Por eso se contemplan las dos formas,
+ * igual que hace el detalle de cada lote más abajo.
+ */
+const totalesDeLotes = (lotes: any[]): { arrobas: number; panes: number } => {
+    let arrobas = 0;
+    let panes = 0;
+    for (const p of lotes || []) {
+        const masas = Array.isArray(p?.masas) ? p.masas : [];
+        if (masas.length > 0) {
+            arrobas += masas.reduce((s: number, m: any) => s + (Number(m?.cantidadArrobas) || 0), 0);
+        } else {
+            arrobas += (Number(p?.masaDulce) || 0)
+                + (Number(p?.masaHojaldrado) || 0)
+                + (Number(p?.masaBatidoTorta) || 0)
+                + (Number(p?.masaBatidoGalleta) || 0);
+        }
+        panes += (p?.hornadas || []).reduce((s: number, h: any) => s + panesDeHornada(h), 0);
+    }
+    return { arrobas: Math.round(arrobas * 100) / 100, panes };
+};
+
 /** Arrobas/libras en letra para leer fácil (ej. 1.5 → «una arroba y media»). */
 const ARROBAS_EN_LETRAS: OpcionMedida[] = [
     { val: 0.04, label: '1 libra' },
@@ -693,10 +720,47 @@ const formatearFechaFicha = (fecha: string) =>
         month: 'long',
     });
 
+const describirProduccionIncompleta = (p: any): string[] => {
+    const problemas: string[] = [];
+    const masasChk = Array.isArray(p?.masas) ? p.masas : [];
+    const hornadasChk = Array.isArray(p?.hornadas) ? p.hornadas : [];
+    if (masasChk.length === 0) {
+        problemas.push('No se registró ninguna masa/tipo de masa preparada.');
+    } else {
+        masasChk.forEach((m: any, idx: number) => {
+            const tieneNombre = !!m?.nombre?.trim?.();
+            const tieneCantidad = Number(m?.cantidadArrobas) > 0;
+            if (!tieneNombre && !tieneCantidad) {
+                problemas.push(`Masa #${idx + 1}: falta elegir el tipo de masa y la cantidad.`);
+            } else if (!tieneNombre) {
+                problemas.push(`Masa #${idx + 1}: falta elegir el tipo de masa.`);
+            } else if (!tieneCantidad) {
+                problemas.push(`Masa "${m.nombre.trim()}": falta la cantidad.`);
+            }
+        });
+    }
+    if (hornadasChk.length === 0) {
+        problemas.push('No se registró ninguna hornada/tipo de pan.');
+    } else {
+        hornadasChk.forEach((h: any, idx: number) => {
+            const tieneTipo = !!h?.tipoPan?.trim?.();
+            const tieneCantidad = Number(h?.bandejas) > 0 || Number(h?.totalPanes) > 0 || Number(h?.panesPorBandeja) > 0;
+            if (!tieneTipo && !tieneCantidad) {
+                problemas.push(`Pan #${idx + 1}: falta elegir el tipo de pan y la cantidad.`);
+            } else if (!tieneTipo) {
+                problemas.push(`Pan #${idx + 1}: falta elegir el tipo de pan.`);
+            } else if (!tieneCantidad) {
+                problemas.push(`Pan "${h.tipoPan.trim()}": falta la cantidad de bandejas o panes.`);
+            }
+        });
+    }
+    return problemas;
+};
+
 export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHorno = false }: { data: any, addMovimientoBoveda?: any, modoLibretaHorno?: boolean }) {
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto, updateGasto, deleteGasto, proveedores, productos, precios, cajaActiva, sesionesCaja } = data;
     const { usuario } = useAuth();
-    const esAdmin = usuario?.rol === 'ADMIN';
+    const esAdmin = (usuario?.rol === 'ADMIN' || usuario?.rol === 'admin' || usuario?.rol === 'superadmin');
     const [editGastoId, setEditGastoId] = useState<string | null>(null);
     const [editGastoData, setEditGastoData] = useState<any>(null);
     const [isSavingGasto, setIsSavingGasto] = useState(false);
@@ -3585,43 +3649,6 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                             </CardHeader>
                             {historialExpanded && <CardContent className="p-4 sm:p-5">
                                 {(() => {
-                                    const describirProduccionIncompleta = (p: any): string[] => {
-                                        const problemas: string[] = [];
-                                        const masasChk = Array.isArray(p?.masas) ? p.masas : [];
-                                        const hornadasChk = Array.isArray(p?.hornadas) ? p.hornadas : [];
-                                        if (masasChk.length === 0) {
-                                            problemas.push('No se registró ninguna masa/tipo de masa preparada.');
-                                        } else {
-                                            masasChk.forEach((m: any, idx: number) => {
-                                                const tieneNombre = !!m?.nombre?.trim?.();
-                                                const tieneCantidad = Number(m?.cantidadArrobas) > 0;
-                                                if (!tieneNombre && !tieneCantidad) {
-                                                    problemas.push(`Masa #${idx + 1}: falta elegir el tipo de masa y la cantidad.`);
-                                                } else if (!tieneNombre) {
-                                                    problemas.push(`Masa #${idx + 1}: falta elegir el tipo de masa.`);
-                                                } else if (!tieneCantidad) {
-                                                    problemas.push(`Masa "${m.nombre.trim()}": falta la cantidad.`);
-                                                }
-                                            });
-                                        }
-                                        if (hornadasChk.length === 0) {
-                                            problemas.push('No se registró ninguna hornada/tipo de pan.');
-                                        } else {
-                                            hornadasChk.forEach((h: any, idx: number) => {
-                                                const tieneTipo = !!h?.tipoPan?.trim?.();
-                                                const tieneCantidad = Number(h?.bandejas) > 0 || Number(h?.totalPanes) > 0 || Number(h?.panesPorBandeja) > 0;
-                                                if (!tieneTipo && !tieneCantidad) {
-                                                    problemas.push(`Pan #${idx + 1}: falta elegir el tipo de pan y la cantidad.`);
-                                                } else if (!tieneTipo) {
-                                                    problemas.push(`Pan #${idx + 1}: falta elegir el tipo de pan.`);
-                                                } else if (!tieneCantidad) {
-                                                    problemas.push(`Pan "${h.tipoPan.trim()}": falta la cantidad de bandejas o panes.`);
-                                                }
-                                            });
-                                        }
-                                        return problemas;
-                                    };
-
                                     const calculateMetrics = (p: any) => {
                                         let masasSrc: Array<{ id: string; nombre?: string; cantidadArrobas?: number }> = Array.isArray(p.masas)
                                             ? p.masas.map((m: { id?: string; nombre?: string; cantidadArrobas?: number }, i: number) => ({
@@ -4329,9 +4356,9 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                         <Sparkles className="w-4 h-4 text-indigo-500" />
                                                         Producción del Día ({new Date(`${fechaFiltro}T12:00:00`).toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'short' })})
                                                     </span>
-                                                    <Badge variant="outline" className="bg-white dark:bg-slate-900 text-[10px] font-bold text-indigo-600 border-indigo-200">
+                                                    <span className="flex items-center gap-1.5 shrink-0"><Badge variant="outline" className="bg-white dark:bg-slate-900 text-[10px] font-bold text-indigo-600 border-indigo-200">
                                                         {produccionesHoy.length} lotes
-                                                    </Badge>
+                                                    </Badge><Badge variant="outline" className="text-[9px] font-bold shrink-0 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">{totalesDeLotes(produccionesHoy).arrobas} @</Badge><Badge className="text-[9px] font-black shrink-0 bg-emerald-600 text-white border-none">{totalesDeLotes(produccionesHoy).panes.toLocaleString('es-CO')} panes</Badge></span>
                                                 </div>
 
                                                 {produccionesHoy.length === 0 ? (
@@ -4376,9 +4403,9 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                             <History className="w-4 h-4 text-slate-400" />
                                                             Historial por fecha
                                                         </span>
-                                                        <Badge variant="secondary" className="text-[10px] font-bold">
+                                                        <span className="flex items-center gap-1.5 shrink-0"><Badge variant="secondary" className="text-[10px] font-bold">
                                                             {produccionesAnteriores.length} lotes
-                                                        </Badge>
+                                                        </Badge><Badge variant="outline" className="text-[9px] font-bold shrink-0 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">{totalesDeLotes(produccionesAnteriores).arrobas} @</Badge><Badge className="text-[9px] font-black shrink-0 bg-emerald-600 text-white border-none">{totalesDeLotes(produccionesAnteriores).panes.toLocaleString('es-CO')} panes</Badge></span>
                                                     </div>
 
                                                     <div className="max-h-[32rem] overflow-y-auto space-y-8 pr-1 pb-4">
@@ -4389,7 +4416,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                 <div key={mesStr} className="space-y-4">
                                                                     <div className="sticky top-0 z-20 bg-slate-50/95 dark:bg-slate-950/95 backdrop-blur-md py-2 border-b border-slate-200 dark:border-white/10 flex items-center justify-between">
                                                                         <h3 className="text-xs font-black uppercase tracking-widest text-slate-800 dark:text-slate-100">{mesNombre}</h3>
-                                                                        <Badge variant="outline" className="text-[9px] text-slate-500 bg-transparent border-slate-200 dark:border-white/10">{diasMes.length} {diasMes.length === 1 ? 'día' : 'días'}</Badge>
+                                                                        <span className="flex items-center gap-1.5 shrink-0"><Badge variant="outline" className="text-[9px] text-slate-500 bg-transparent border-slate-200 dark:border-white/10">{diasMes.length} {diasMes.length === 1 ? 'día' : 'días'}</Badge><Badge variant="outline" className="text-[9px] font-bold shrink-0 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">{totalesDeLotes(diasMes.flatMap(([, l]: any) => l)).arrobas} @</Badge><Badge className="text-[9px] font-black shrink-0 bg-emerald-600 text-white border-none">{totalesDeLotes(diasMes.flatMap(([, l]: any) => l)).panes.toLocaleString('es-CO')} panes</Badge></span>
                                                                     </div>
                                                                     <div className="space-y-6">
                                                                         {diasMes.map(([fechaGrupo, lotes]) => (
@@ -4399,9 +4426,9 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                                                         <CalendarDays className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
                                                                                         {tituloFechaLarga(fechaGrupo)}
                                                                                     </span>
-                                                                                    <Badge variant="outline" className="text-[9px] font-bold shrink-0 bg-white dark:bg-slate-800">
+                                                                                    <span className="flex items-center gap-1.5 shrink-0"><Badge variant="outline" className="text-[9px] font-bold shrink-0 bg-white dark:bg-slate-800">
                                                                                         {lotes.length} {lotes.length === 1 ? 'lote' : 'lotes'}
-                                                                                    </Badge>
+                                                                                    </Badge><Badge variant="outline" className="text-[9px] font-bold shrink-0 bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900">{totalesDeLotes(lotes).arrobas} @</Badge><Badge className="text-[9px] font-black shrink-0 bg-emerald-600 text-white border-none">{totalesDeLotes(lotes).panes.toLocaleString('es-CO')} panes</Badge></span>
                                                                                 </div>
                                                                                 {/* VISTA ESCRITORIO (TABLA) */}
                                                                                 <div className="hidden md:block w-full overflow-x-auto rounded-xl border border-slate-200 dark:border-white/10 mt-3">
@@ -4930,6 +4957,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
     );
     return modoLibretaHorno ? <Tabs value="quincena">{contenidoTabs}</Tabs> : contenidoTabs;
 }
+
 
 
 

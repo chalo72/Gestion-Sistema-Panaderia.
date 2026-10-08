@@ -851,32 +851,40 @@ export class SupabaseDatabase implements IDatabase {
     async getAllTrabajadores(): Promise<any[]> {
         const { data, error } = await supabase.from('trabajadores').select('*');
         if (error) return [];
-        return data.map((t: any) => ({
-            id: t.id,
-            nombre: t.nombre,
-            cargo: t.cargo,
-            telefono: t.telefono,
-            documento: t.documento,
-            salario: t.salario,
-            fechaIngreso: t.fecha_ingreso,
-            estado: t.estado,
-            horario: t.horario,
-            notas: t.notas,
-        }));
+        const ROLES = ['panadero', 'vendedor', 'cajero', 'repartidor', 'administrador', 'otro'];
+        return data.map((t: any) => {
+            const cargo = String(t.cargo ?? '').trim().toLowerCase();
+            const ingreso = typeof t.fecha_ingreso === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(t.fecha_ingreso)
+                ? t.fecha_ingreso.slice(0, 10)
+                : t.fecha_ingreso;
+            return {
+                id: t.id,
+                nombre: t.nombre,
+                cedula: t.documento ?? undefined,
+                telefono: t.telefono ?? undefined,
+                rol: ROLES.includes(cargo) ? cargo : 'otro',
+                salarioBase: Number(t.salario) || 0,
+                fechaIngreso: ingreso,
+                estado: t.estado,
+                horario: t.turno ?? undefined,
+                observaciones: t.notas ?? undefined,
+            };
+        });
     }
     async addTrabajador(t: any): Promise<void> {
-        await supabase.from('trabajadores').upsert({
+        const { error } = await supabase.from('trabajadores').upsert({
             id: t.id,
             nombre: t.nombre,
-            cargo: t.cargo,
-            telefono: t.telefono,
-            documento: t.documento,
-            salario: t.salario,
-            fecha_ingreso: t.fechaIngreso,
+            cargo: t.rol ?? t.cargo ?? null,
+            telefono: t.telefono ?? null,
+            documento: t.cedula ?? t.documento ?? null,
+            salario: t.salarioBase ?? t.salario ?? 0,
+            fecha_ingreso: t.fechaIngreso || null,
             estado: t.estado,
-            horario: t.horario,
-            notas: t.notas,
+            turno: t.horario ?? t.turno ?? null,
+            notas: t.observaciones ?? t.notas ?? null,
         });
+        if (error) console.warn('⚠️ [supabase-db] addTrabajador falló:', error.message);
     }
     async updateTrabajador(t: any): Promise<void> {
         await this.addTrabajador(t);
@@ -939,26 +947,49 @@ export class SupabaseDatabase implements IDatabase {
     async getAllCreditosTrabajadores(): Promise<any[]> {
         const { data, error } = await supabase.from('creditos_trabajadores').select('*');
         if (error) return [];
-        return data.map((c: any) => ({
-            id: c.id,
-            trabajadorId: c.trabajador_id,
-            monto: c.monto,
-            tipo: c.tipo,
-            descripcion: c.descripcion,
-            fecha: c.fecha,
-            estado: c.estado,
-        }));
+        return data.map((c: any) => {
+            const fechaMs = c.fecha ? new Date(c.fecha).getTime() : NaN;
+            return {
+                id: c.id,
+                trabajadorId: c.trabajador_id,
+                trabajadorNombre: c.trabajador_nombre ?? '',
+                trabajadorRol: c.trabajador_rol ?? undefined,
+                monto: Number(c.monto) || 0,
+                saldo: c.saldo === null || c.saldo === undefined ? (Number(c.monto) || 0) : Number(c.saldo),
+                tipo: c.tipo || 'consumo',
+                descripcion: c.descripcion ?? '',
+                fecha: Number.isNaN(fechaMs) ? c.fecha : new Date(fechaMs).toISOString(),
+                fechaVencimiento: c.fecha_vencimiento ?? undefined,
+                estado: c.estado,
+                items: Array.isArray(c.items) ? c.items : [],
+                pagos: Array.isArray(c.pagos) ? c.pagos : [],
+                fotoEvidencia: c.foto_evidencia ?? undefined,
+                descontarDeSalario: c.descontar_de_salario !== false,
+                usuarioId: c.usuario_id ?? undefined,
+            };
+        });
     }
     async addCreditoTrabajador(c: any): Promise<void> {
-        await supabase.from('creditos_trabajadores').upsert({
+        const { error } = await supabase.from('creditos_trabajadores').upsert({
             id: c.id,
             trabajador_id: c.trabajadorId,
+            trabajador_nombre: c.trabajadorNombre ?? null,
+            trabajador_rol: c.trabajadorRol ?? null,
             monto: c.monto,
-            tipo: c.tipo,
+            saldo: c.saldo ?? c.monto ?? 0,
+            tipo: c.tipo || 'consumo',
             descripcion: c.descripcion,
             fecha: c.fecha,
+            fecha_vencimiento: c.fechaVencimiento ?? null,
             estado: c.estado,
+            items: c.items ?? [],
+            pagos: c.pagos ?? [],
+            foto_evidencia: c.fotoEvidencia ?? null,
+            descontar_de_salario: c.descontarDeSalario !== false,
+            usuario_id: c.usuarioId ?? null,
+            created_at: c.createdAt ?? c.fecha ?? new Date().toISOString(),
         });
+        if (error) console.warn('⚠️ [supabase-db] addCreditoTrabajador falló:', error.message);
     }
     async updateCreditoTrabajador(c: any): Promise<void> {
         await this.addCreditoTrabajador(c);
