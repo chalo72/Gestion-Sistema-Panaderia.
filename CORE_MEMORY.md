@@ -243,3 +243,22 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Propuesta concreta para el siguiente paso (NO implementada aún, pendiente de que Gonzalo confirme)**: agregar NVIDIA Build como una rama más en `handleOpenAI` (mismo patrón que ya usa para distinguir Groq/DeepSeek por prefijo de key — una key de NVIDIA empieza `nvapi-`, fácil de detectar igual), apuntando a `https://integrate.api.nvidia.com/v1/chat/completions` cuando se detecte, usando una variable nueva y separada (ej. `NVIDIA_API_KEY`) que no pisa ni reemplaza `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/Ollama — puramente aditivo, cero riesgo para quien no configure esa variable nueva.
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
+
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Recepciones: producto nuevo ahora se vincula al catálogo del proveedor (sin commitear)
+
+**Problema**: al crear un producto nuevo desde Recepciones (ej. "Vainilla 10 ltros", 13:23), la app creaba el producto + su inventario pero NO la fila de `precios` (PrecioProveedor) que lo une al proveedor. Gestión de Proveedores arma su catálogo desde esa tabla, así que el producto no aparecía en "DistriHelados - Colombina (Cajas)". Diagnóstico hecho en otro chat contra la nube (sin acceso al código).
+
+**Qué se hizo** (cambio mínimo, `Recepciones.tsx` no es archivo protegido):
+- `src/lib/vinculo-proveedor.ts` (nuevo, función pura `armarVinculoProveedor`) + `vinculo-proveedor.test.ts` (9 tests pasan). Proveedor = el elegido en el formulario del producto, o si está vacío el de la factura en curso. Solo vincula si hay proveedor y costo > 0 (regla de precios del proyecto).
+- `src/pages/Recepciones.tsx` → `handleSubmitModal`: usa el producto devuelto por `onAddProducto` (el `addProducto` real de `usePriceControl` ya devolvía `Producto`, el tipo del prop decía `void`) y llama `onAddOrUpdatePrecio` con ese id. Si el nombre ya existe (`addProducto` devuelve `null`) ahora sale sin marcar "creado" (antes quedaba la bandera `isCreatingNewFromAction` colgada). Avisa con toast si vinculó, si falló o si no pudo vincular.
+- No se tocó `App.tsx` ni ningún archivo protegido: ya le pasa `addProducto` y `addOrUpdatePrecio` a Recepciones.
+
+**Verificación**: vitest del archivo nuevo OK; suite completa: 13 archivos / 133 tests OK, pero 21 errores de arranque de workers (timeout del pool en esta PC, no fallos de test). `tsc`: 1784 errores totales (deuda previa), ninguno en las líneas nuevas. NO probado en la app real todavía.
+
+**Pendiente / NO hecho**:
+- Probar en la app: crear producto nuevo en una recepción y revisar el catálogo del proveedor.
+- Datos ya existentes (RESUELTO en la nube, con AUTORIZO de Gonzalo, 2026-10-18): vainilla `c09e6177-d5e6-413e-b50a-d3ad87f86d43` renombrada a "Vainilla 10 litros" y vinculada en `precios` a "DistriHelados - Colombina (Cajas )" (nótese el espacio final del nombre real) con precio_costo 55595.96, destino insumo, tipo_embalaje caja, cantidad 1 (mismo formato que sus hermanos del catálogo). Releído tras escribir. Ojo: por "LOCAL SIEMPRE GANA", un dispositivo que ya tenga el producto con "ltros" conservará ese nombre local; el vínculo sí debería bajar por ser fila nueva.
+- Si el costo queda en 0 al crear el producto, no se vincula (solo avisa). Posible mejora: vincular al confirmar la recepción con el precio facturado.
+- Observado, no tocado: la app reenvía recepciones ya subidas y la nube responde 409.
+- Fallback frágil sin tocar: el `useEffect` que agrega el producto recién creado a la factura toma `productos[productos.length - 1]` en vez del id devuelto.
