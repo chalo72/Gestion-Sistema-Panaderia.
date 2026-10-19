@@ -243,3 +243,14 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Propuesta concreta para el siguiente paso (NO implementada aún, pendiente de que Gonzalo confirme)**: agregar NVIDIA Build como una rama más en `handleOpenAI` (mismo patrón que ya usa para distinguir Groq/DeepSeek por prefijo de key — una key de NVIDIA empieza `nvapi-`, fácil de detectar igual), apuntando a `https://integrate.api.nvidia.com/v1/chat/completions` cuando se detecte, usando una variable nueva y separada (ej. `NVIDIA_API_KEY`) que no pisa ni reemplaza `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/Ollama — puramente aditivo, cero riesgo para quien no configure esa variable nueva.
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
+
+### 🔧 2026-10-18 (noche) — Claude Sonnet 5.5 — Ventas al Mayor: auditoría y adaptación SOLO móvil (rama feat/mayoristas-movil, desde main)
+
+**Pedido de Gonzalo**: auditar y mejorar el módulo Ventas al Mayor SOLO en móvil; escritorio no debe cambiar.
+
+**Hallazgo principal**: la barra "Ver ticket" del Mini-POS era `static` al final de la página (con 42 productos había que bajar ~1750 px). Además el encabezado + márgenes ocupaban ~720 px antes de las pestañas (el `Card` de shadcn trae `py-6 gap-6` y se sumaba al padding), tarjetas de ~200 px y áreas de toque de 12–32 px.
+
+**Hecho** (`src/pages/Mayoristas.tsx`, todo con `max-md:` para no tocar escritorio): barra del ticket `sticky` sobre la barra inferior; encabezado/márgenes/KPIs/tarjetas compactos; pestañas 44 px; lápiz de precio y editar/eliminar cliente con área ≥ 40–44 px; teclado decimal en el precio manual; selector de cliente legible. Informe completo y pendientes: `docs/AUDITORIA_MAYORISTAS_MOVIL_2026-10-18.md`. Test guardián: `src/lib/mayoristas-movil.test.ts` (12 tests).
+
+**NO incluido (requiere PR aparte / AUTORIZO)**: `parseFloat` en dinero (escribir `1.500` guarda 1.5 — usar parseo colombiano), `confirm()` nativo al eliminar cliente (se bloquea en PWA iPhone), partir el archivo de 4100 líneas, textos < 11 px.
+**No probado en celular físico.**
