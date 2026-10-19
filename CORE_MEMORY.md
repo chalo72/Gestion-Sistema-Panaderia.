@@ -281,3 +281,22 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - `src/lib/supabase-db.ts` (`mapCajaToDB` / `mapCajaFromDB`): envían y leen esos 4 campos SOLO cuando tienen valor (un upsert solo toca las columnas del payload, así una versión sin el dato no borra el de otro aparato).
 - Test nuevo `src/lib/caja-multicaja-mapeo.test.ts` (4 tests pasan). `tsc` sigue en 1784 errores (sin nuevos).
 - **Pendiente**: las cajas abiertas ANTES de este cambio (ej. las de 2026-10-18 19:46 UTC desde el celular) siguen sin nombre/turno en la nube; se llenan cuando el celular, ya con la versión nueva, las vuelva a subir (sync manual). Los `movimientos` de caja tampoco se mapean todavía (la columna existe en la nube): ingresos/egresos de caja del celular no llegan al PC. NO probado en vivo; necesita build + deploy.
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Auditoría de cajas/arranque móvil + arreglos (commits a400046d, 52f1242f, b8461db1 en la rama claude/gracious-nobel-afff36; NO mergeados a main)
+
+**Qué reportó Gonzalo**: en el celular la app se queda en el logo; las cajas de cuadre cargan a veces, tardan o se reinician; las cajas de la tarde no salen en el historial.
+
+**Hallazgos (Supabase solo lectura + código)**: cada día se abren ~10 cajas de golpe (594 en total, 10 abiertas hoy 09:35 sin ventas); la tabla `ventas` solo tiene 18 filas (última 2026-07-24) → las ventas no llegan a la nube; el turno "Tarde" aparece hasta 2026-10-08.
+
+**Cambios hechos (AUTORIZO de Gonzalo)**:
+- `src/hooks/useVentas.ts`: el evento realtime de `caja` ya no reemplaza `cajaActiva` por la primera caja abierta de otro dispositivo (solo la suelta si ESA caja se cerró); errores de nube que se tragaban con `.catch(() => {})` ahora van a consola vía `avisarFalloNube` (sin toast rojo); venta del día con fecha local.
+- `src/pages/ControlCaja.tsx` y `src/components/reportes/ArqueoCajas.tsx`: "hoy"/día de la caja con calendario local (antes UTC: desde las 7 p. m. se saltaba al día siguiente).
+- `src/lib/indexedDBAdapter.ts`: `init()` con timeout de 15 s, `onblocked` y `onversionchange` (antes podía colgarse para siempre si otra pestaña tenía la base abierta); permite reintentar.
+- Nuevo `src/lib/fecha-local.ts` + tests: `fecha-local.test.ts`, `indexedDBAdapter.test.ts`, `src/hooks/useVentas.test.tsx` (13 tests, pasan).
+
+**Verificación**: suite completa 630 pasan / 25 fallan; la rama limpia (HEAD sin mis cambios) falla EXACTAMENTE los mismos 25 (deuda previa, no tocada). `tsc`: 1785 errores antes y después (0 nuevos).
+
+**Pendiente / NO hecho**: no probado en celular real; sin merge a main ni publicación; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
+**Ojo**: otro agente trabaja ControlCaja.tsx, supabase-db.ts e historial-cajas.ts en la carpeta principal (rama feat/marketing-studio-y-ajustes) → posible conflicto al juntar. Este worktree usa un enlace (junction) a node_modules de la carpeta principal.
+
+**Nota al juntar con el PR 6 (2026-10-19)**: el conflicto en `useVentas.ts` se resolvió quedándose con la versión de main (la caja activa de este aparato NUNCA se reemplaza por una de otro; solo se suelta si se cerró) y conservando del PR 6 solo que el listener acepta también el evento `'sesiones_caja'` (la clave con la que sale el evento realtime/sync manual; la tabla remota real es `caja`).

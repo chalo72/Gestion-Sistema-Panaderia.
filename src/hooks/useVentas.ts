@@ -16,8 +16,14 @@ import type {
 import { toast } from 'sonner';
 import { procesarCuadreTurno } from '@/lib/security-agent';
 import { upsertCajaEnVentaDiaria } from '@/lib/finanzas-personales';
+import { hoyLocalYMD } from '@/lib/fecha-local';
 
 const _supaDB = new SupabaseDatabase();
+
+/** Registra en consola (sin toast rojo) un fallo de nube que antes se tragaba en silencio. */
+export const avisarFalloNube = (accion: string) => (err: unknown) => {
+  console.warn(`⚠️ [Caja] No se pudo ${accion} en la nube:`, err);
+};
 
 interface UseVentasParams {
   onAjustarStock: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
@@ -66,7 +72,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       eventoEspecial: extras.eventoEspecial
     };
     await db.addSesionCaja(sesion as any);
-    _supaDB.addSesionCaja(sesion as any).catch(() => {});
+    _supaDB.addSesionCaja(sesion as any).catch(avisarFalloNube('subir apertura de caja'));
     setSesionesCaja(prev => [...prev, sesion]);
     setCajaActiva(sesion);
     localStorage.setItem('dp_caja_apertura_ts', sesion.fechaApertura);
@@ -95,7 +101,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       ...(nota ? { observaciones: nota } : {}),
     };
     await db.updateSesionCaja(sesion as any);
-    _supaDB.updateSesionCaja(sesion as any).catch(() => {});
+    _supaDB.updateSesionCaja(sesion as any).catch(avisarFalloNube('subir cierre de caja'));
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
     if (cajaActiva?.id === sesion.id) setCajaActiva(undefined);
     // Generar cuadre de seguridad automáticamente
@@ -119,7 +125,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     // para no tener que anotarlo dos veces en pantallas distintas.
     if (hayVentaManual) {
       try {
-        const fechaHoy = new Date().toISOString().split('T')[0];
+        const fechaHoy = hoyLocalYMD(); // día local, no UTC (desde las 7 p. m. UTC ya es "mañana")
         upsertCajaEnVentaDiaria(fechaHoy, sesion.cajaNombre || 'Caja', ventasManual as number);
       } catch (e) {
         console.warn('[Caja] No se pudo sincronizar con Ventas del Día:', e);
@@ -206,7 +212,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
 
     // 1. Guardar venta en DB local + Supabase (para que otros dispositivos la vean)
     await db.addVenta(venta as any);
-    _supaDB.addVenta(venta as any).catch(() => {});
+    _supaDB.addVenta(venta as any).catch(avisarFalloNube('subir venta'));
     setVentas(prev => [venta, ...prev]);
 
     // 2. Descontar del inventario
@@ -299,13 +305,15 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
         // El evento realtime/syncNow llega con la clave 'sesiones_caja' (la tabla remota es 'caja').
         db.getAllSesionesCaja().then(sesiones => {
           setSesionesCaja(sesiones as any);
-          // No arrebatar la caja que este dispositivo ya tiene en uso: solo elegir una abierta
-          // si la actual se cerró o no había ninguna.
+          // La caja activa es la de ESTE dispositivo: un cambio remoto no debe cambiarla por la
+          // primera caja abierta de otro dispositivo (eso hacía "saltar"/reiniciar la pantalla).
+          // Solo se suelta si esa misma caja ya fue cerrada desde otro lado.
           setCajaActiva(prev => {
-            const abiertas = (sesiones as any[]).filter((s: any) => s.estado === 'abierta');
-            return abiertas.find((s: any) => s.id === prev?.id) ?? abiertas[0];
+            if (!prev) return prev;
+            const actual = (sesiones as any[]).find((s: any) => s.id === prev.id);
+            return actual && actual.estado !== 'abierta' ? undefined : prev;
           });
-        }).catch(() => {});
+        }).catch(avisarFalloNube('releer cajas tras cambio remoto'));
       } else if (table === 'mesas') {
         if (eventType === 'DELETE') {
           setMesas(prev => prev.filter(m => m.id !== id));
