@@ -282,7 +282,19 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - Test nuevo `src/lib/caja-multicaja-mapeo.test.ts` (4 tests pasan). `tsc` sigue en 1784 errores (sin nuevos).
 - **Pendiente**: las cajas abiertas ANTES de este cambio (ej. las de 2026-10-18 19:46 UTC desde el celular) siguen sin nombre/turno en la nube; se llenan cuando el celular, ya con la versión nueva, las vuelva a subir (sync manual). Los `movimientos` de caja tampoco se mapean todavía (la columna existe en la nube): ingresos/egresos de caja del celular no llegan al PC. NO probado en vivo; necesita build + deploy.
 
-### 🔧 2026-10-18 — Claude Sonnet 5.5 — Auditoría de cajas/arranque móvil + arreglos (commits a400046d, 52f1242f, b8461db1 en la rama claude/gracious-nobel-afff36; NO mergeados a main)
+### 🔧 2026-10-18 (noche) — Claude Sonnet 5.5 — Ventas al Mayor: auditoría y adaptación SOLO móvil (PR #7; seguimiento en PR #8 y #9, ya mergeados a main el 2026-10-19)
+
+**Pedido de Gonzalo**: auditar y mejorar el módulo Ventas al Mayor SOLO en móvil; escritorio no debe cambiar.
+
+**Hallazgo principal**: la barra "Ver ticket" del Mini-POS era `static` al final de la página (con 42 productos había que bajar ~1750 px). Además el encabezado + márgenes ocupaban ~720 px antes de las pestañas (el `Card` de shadcn trae `py-6 gap-6` y se sumaba al padding), tarjetas de ~200 px y áreas de toque de 12–32 px.
+
+**Hecho** (`src/pages/Mayoristas.tsx`, todo con `max-md:` para no tocar escritorio): barra del ticket `sticky` sobre la barra inferior; encabezado/márgenes/KPIs/tarjetas compactos; pestañas 44 px; lápiz de precio y editar/eliminar cliente con área ≥ 40–44 px; teclado decimal en el precio manual; selector de cliente legible. Informe completo y pendientes: `docs/AUDITORIA_MAYORISTAS_MOVIL_2026-10-18.md`. Test guardián: `src/lib/mayoristas-movil.test.ts` (12 tests).
+
+**Seguimiento (PR aparte, ya en main)**: PR #8 — el precio manual (único campo de dinero de tipo texto; abonos y monto libre son `type="number"` y NO tenían el problema) usa `parsearDineroCO` (`src/lib/parseo-dinero.ts`); PR #9 — `useConfirmar` reemplaza `window.confirm` al eliminar cliente/abono/registro y al vender sin stock.
+**Aún pendiente**: los 3 `window.confirm('¿Reemplazar … ticket …?')` (funciones síncronas), partir el archivo de 4100 líneas, textos < 11 px.
+**No probado en celular físico; el diálogo de #9 no se vio en navegador (solo tests jsdom).**
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Auditoría de cajas/arranque móvil + arreglos (PR #5, mergeado a main el 2026-10-19; NO publicado/probado en celular real)
 
 **Qué reportó Gonzalo**: en el celular la app se queda en el logo; las cajas de cuadre cargan a veces, tardan o se reinician; las cajas de la tarde no salen en el historial.
 
