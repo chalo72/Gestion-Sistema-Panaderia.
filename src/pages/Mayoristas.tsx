@@ -1574,7 +1574,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
                                         {/* Lista de créditos pendientes */}
                                         {creditosFiltrados.length === 0 ? (
-                                            <div className="py-8 flex flex-col items-center gap-2 opacity-50">
+                                            <div className="py-8 max-md:py-3 flex flex-col items-center gap-2 max-md:gap-1 opacity-50">
                                                 {busquedaTicket ? (
                                                     <>
                                                         <Search className="w-8 h-8 text-slate-300"/>
@@ -3124,8 +3124,11 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                     </div>
                 </div>
 
-                {/* ── Navegación móvil mini-POS: dos botones siempre visibles ── */}
-                <div className="lg:hidden shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+                {/* ── Navegación móvil mini-POS: dos botones siempre visibles ──
+                    sticky: antes quedaba al final de la lista (static) y la vendedora tenía que
+                    bajar toda la página para ver el total y abrir el ticket. 68px = alto de la
+                    barra inferior de la app (solo existe < md). */}
+                <div className="lg:hidden sticky bottom-[calc(68px+env(safe-area-inset-bottom,0px))] md:bottom-0 md:pb-[env(safe-area-inset-bottom,0px)] z-30 shrink-0 flex border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-[0_-6px_20px_rgba(0,0,0,0.10)]">
                     {/* Productos */}
                     <button
                         onClick={() => setShowMobilePOSCart(false)}
@@ -3449,34 +3452,35 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     }
 
     return (
-        <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+        <div className="min-h-full flex flex-col gap-5 max-md:gap-3 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
 
             {/* ── Header ──────────────────────────────────────────────────── */}
-            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
-                <div className="flex items-center gap-4">
+            <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 max-md:gap-3 bg-white dark:bg-slate-900 px-5 py-4 max-md:px-4 max-md:py-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                <div className="flex items-center gap-4 max-md:gap-3">
                     <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center shrink-0">
                         <Store className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                     </div>
                     <div>
                         <h2 className="text-xl font-black text-slate-900 dark:text-white">Ventas al Mayor</h2>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                        {/* En celular el subtítulo ocupaba 3 líneas antes de poder tocar nada */}
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5 max-md:hidden">
                             Precios para tiendas y vendedores · Sin perder, con ganancia para todos
                         </p>
                     </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                    <Button onClick={abrirNuevoCliente} className="h-10 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl gap-2 font-black uppercase tracking-widest text-xs">
+                <div className="flex flex-wrap gap-2 max-md:grid max-md:grid-cols-2 max-md:w-full">
+                    <Button onClick={abrirNuevoCliente} className="h-10 px-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl gap-2 font-black uppercase tracking-widest text-xs max-md:h-11 max-md:px-2 max-md:text-[11px] max-md:tracking-wide">
                         <Plus className="w-4 h-4" /> Agregar cliente
                     </Button>
-                    <Button onClick={exportarListaPrecios} variant="outline" className="h-10 px-4 rounded-xl gap-2 font-black uppercase tracking-widest text-xs border-indigo-200 text-indigo-600">
+                    <Button onClick={exportarListaPrecios} variant="outline" className="h-10 px-4 rounded-xl gap-2 font-black uppercase tracking-widest text-xs border-indigo-200 text-indigo-600 max-md:h-11 max-md:px-2 max-md:text-[11px] max-md:tracking-wide">
                         <Download className="w-4 h-4" /> Exportar lista
                     </Button>
                 </div>
             </header>
 
             {/* ── Config de márgenes ──────────────────────────────────────── */}
-            <Card className="rounded-2xl border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/50 dark:bg-indigo-950/10">
-                <CardContent className="p-5">
+            <Card className="rounded-2xl border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/50 dark:bg-indigo-950/10 max-md:py-0 max-md:gap-0">
+                <CardContent className="p-5 max-md:p-3">
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-xl bg-indigo-600/10 flex items-center justify-center">
@@ -3524,30 +3528,31 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 </div>
                             </div>
                         ) : (
-                            <Button variant="outline" size="sm" onClick={() => { setConfigTemp(config); setEditandoConfig(true); }} className="h-8 gap-1.5 text-xs font-black border-indigo-200 text-indigo-600">
+                            <Button variant="outline" size="sm" onClick={() => { setConfigTemp(config); setEditandoConfig(true); }} className="h-8 gap-1.5 text-xs font-black border-indigo-200 text-indigo-600 max-md:h-10 max-md:w-full">
                                 <Pencil className="w-3 h-3" /> Editar márgenes
                             </Button>
                         )}
                     </div>
 
                     {/* Explicación visual de la cadena de precios */}
-                    <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] font-black uppercase tracking-widest">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
+                    {/* En celular la cadena va en UNA fila deslizable (antes ocupaba ~230px de alto) */}
+                    <div className="mt-4 max-md:mt-3 flex flex-wrap max-md:flex-nowrap max-md:overflow-x-auto max-md:no-scrollbar max-md:pb-1 items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl max-md:shrink-0 max-md:whitespace-nowrap bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700">
                             <DollarSign className="w-3 h-3 text-slate-500" />
                             <span className="text-slate-600 dark:text-slate-400">Costo</span>
                         </div>
-                        <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200">
+                        <ArrowRight className="w-3 h-3 text-muted-foreground max-md:shrink-0" />
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl max-md:shrink-0 max-md:whitespace-nowrap bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-200">
                             <TrendingUp className="w-3 h-3 text-indigo-600" />
                             <span className="text-indigo-600">+{config.margenNegocio}% = Precio Mayorista</span>
                         </div>
-                        <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200">
+                        <ArrowRight className="w-3 h-3 text-muted-foreground max-md:shrink-0" />
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl max-md:shrink-0 max-md:whitespace-nowrap bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200">
                             <Store className="w-3 h-3 text-emerald-600" />
                             <span className="text-emerald-600">+{margenRevendedorEfectivo}% = P. Reventa Recomendado</span>
                         </div>
-                        <ArrowRight className="w-3 h-3 text-muted-foreground" />
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200">
+                        <ArrowRight className="w-3 h-3 text-muted-foreground max-md:shrink-0" />
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl max-md:shrink-0 max-md:whitespace-nowrap bg-slate-50 dark:bg-slate-900 border border-slate-200">
                             <Users className="w-3 h-3 text-slate-500" />
                             <span className="text-slate-500">PVP Mercado</span>
                         </div>
@@ -3557,11 +3562,12 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="bg-card/40 border border-white/5 rounded-2xl h-14 p-1 mb-5 flex items-center gap-1 overflow-x-auto no-scrollbar w-full">
-                    <TabsTrigger value="precios" className="rounded-xl h-9 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-                        <BarChart3 className="w-4 h-4 mr-2" /> Lista de Precios
+                    {/* En celular: pestañas de ancho mitad y 44px de alto (antes "Lista de Precios" se cortaba por la izquierda) */}
+                    <TabsTrigger value="precios" className="rounded-xl h-9 px-4 max-md:flex-1 max-md:h-11 max-md:px-2 max-md:text-[11px] max-md:tracking-wide font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+                        <BarChart3 className="w-4 h-4 mr-2 max-md:mr-1" /> <span className="max-md:hidden">Lista de&nbsp;</span>Precios
                     </TabsTrigger>
-                    <TabsTrigger value="clientes" className="rounded-xl h-9 px-4 font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-                        <Users className="w-4 h-4 mr-2" /> Clientes ({clientes.length})
+                    <TabsTrigger value="clientes" className="rounded-xl h-9 px-4 max-md:flex-1 max-md:h-11 max-md:px-2 max-md:text-[11px] max-md:tracking-wide font-black uppercase text-xs tracking-widest data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
+                        <Users className="w-4 h-4 mr-2 max-md:mr-1" /> Clientes ({clientes.length})
                     </TabsTrigger>
                 </TabsList>
 
@@ -3570,21 +3576,21 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 ══════════════════════════════════════════════════ */}
                 <TabsContent value="precios" className="space-y-5 mt-0">
                     {/* KPIs */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-md:gap-2">
                         {[
                             { label: 'Productos viables', value: stats.excelentes + stats.viables, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-500/10', sub: 'Se pueden vender al mayor' },
                             { label: 'Excelentes', value: stats.excelentes, icon: ShieldCheck, color: 'text-indigo-600', bg: 'bg-indigo-500/10', sub: 'Ganan todos bien' },
                             { label: 'Inviables', value: stats.inviables, icon: XCircle, color: 'text-rose-600', bg: 'bg-rose-500/10', sub: 'Sin margen suficiente' },
                             { label: 'Margen promedio', value: `${stats.promedioMargenNegocio.toFixed(1)}%`, icon: Percent, color: 'text-amber-600', bg: 'bg-amber-500/10', sub: 'Del negocio en mayoreo' },
                         ].map((k, i) => (
-                            <Card key={i} className="rounded-2xl border-white/5 bg-card/30 backdrop-blur-md">
-                                <CardContent className="p-4">
-                                    <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center mb-3', k.bg, k.color)}>
+                            <Card key={i} className="rounded-2xl border-white/5 bg-card/30 backdrop-blur-md max-md:py-0 max-md:gap-0">
+                                <CardContent className="p-4 max-md:p-3">
+                                    <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center mb-3 max-md:w-7 max-md:h-7 max-md:mb-1.5', k.bg, k.color)}>
                                         <k.icon className="w-4 h-4" />
                                     </div>
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-muted-foreground mb-1">{k.label}</p>
-                                    <p className="text-2xl font-black tracking-tighter text-foreground">{k.value}</p>
-                                    <p className="text-[9px] text-muted-foreground mt-0.5">{k.sub}</p>
+                                    <p className="text-[9px] max-md:text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">{k.label}</p>
+                                    <p className="text-2xl max-md:text-xl font-black tracking-tighter text-foreground">{k.value}</p>
+                                    <p className="text-[9px] text-muted-foreground mt-0.5 max-md:hidden">{k.sub}</p>
                                 </CardContent>
                             </Card>
                         ))}
@@ -3598,7 +3604,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 placeholder="Buscar producto..."
                                 value={busqueda}
                                 onChange={e => setBusqueda(e.target.value)}
-                                className="pl-10 pr-10 h-10 rounded-xl border-slate-200 dark:border-slate-700 text-sm font-bold"
+                                className="pl-10 pr-10 h-10 max-md:h-11 rounded-xl border-slate-200 dark:border-slate-700 text-sm font-bold"
                             />
                             {busqueda && (
                                 <button
@@ -3612,7 +3618,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         </div>
                         <button
                             onClick={() => setSoloViables(v => !v)}
-                            className={cn('flex items-center gap-2 px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest border transition-all',
+                            className={cn('flex items-center gap-2 px-4 h-10 max-md:h-11 rounded-xl text-xs font-black uppercase tracking-widest border transition-all',
                                 soloViables ? 'bg-emerald-600 text-white border-emerald-600' : 'border-slate-200 dark:border-slate-700 text-muted-foreground hover:border-emerald-300'
                             )}
                         >
@@ -3633,7 +3639,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         )}
                         {clientes.length > 0 && !clienteSeleccionado && (
                             <select
-                                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold uppercase tracking-widest outline-none focus:border-indigo-400"
+                                className="h-10 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs font-bold uppercase tracking-widest outline-none focus:border-indigo-400 max-md:h-11 max-md:flex-1 max-md:text-slate-700 max-md:dark:text-slate-200"
                                 value=""
                                 onChange={e => {
                                     const c = clientes.find(cl => cl.id === e.target.value);
@@ -3681,10 +3687,10 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 const isOpen = expandido === d.producto.id;
 
                                 return (
-                                    <Card key={d.producto.id} className={cn('rounded-2xl overflow-hidden border-l-4 transition-all', vConf.border)}>
+                                    <Card key={d.producto.id} className={cn('rounded-2xl overflow-hidden border-l-4 transition-all max-md:py-0 max-md:gap-0', vConf.border)}>
                                         {/* Fila principal */}
                                         <div
-                                            className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                                            className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 max-md:p-3 max-md:gap-2 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
                                             onClick={() => setExpandido(isOpen ? null : d.producto.id)}
                                         >
                                             {/* Nombre + badge viabilidad */}
@@ -3699,13 +3705,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                             </div>
 
                                             {/* Precios clave */}
-                                            <div className="flex flex-wrap items-center gap-3 sm:gap-6 shrink-0">
+                                            <div className="flex flex-wrap items-center gap-3 sm:gap-6 shrink-0 max-md:w-full max-md:justify-between max-md:gap-2">
                                                 <div className="text-center">
-                                                    <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Costo</p>
+                                                    <p className="text-[8px] max-md:text-[10px] font-black uppercase tracking-widest text-muted-foreground">Costo</p>
                                                     <p className="text-xs font-black text-slate-600 dark:text-slate-400 tabular-nums">{formatCurrency(d.costo)}</p>
                                                 </div>
                                                 <div className="text-center">
-                                                    <p className="text-[8px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-1 justify-center">
+                                                    <p className="text-[8px] max-md:text-[10px] font-black uppercase tracking-widest text-indigo-500 flex items-center gap-1 justify-center">
                                                         Mayorista {d.tieneOverride && <span className="text-amber-500 text-[10px]">✎</span>}
                                                     </p>
                                                     {editandoPrecioId === d.producto.id ? (
@@ -3723,25 +3729,27 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                     if (e.key === 'Escape') setEditandoPrecioId(null);
                                                                 }}
                                                                 autoFocus
-                                                                className="w-20 h-7 text-xs font-black text-center border border-indigo-400 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
+                                                                inputMode="decimal"
+                                                                className="w-20 h-7 text-xs font-black text-center border border-indigo-400 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 bg-white max-md:w-24 max-md:h-10 max-md:text-base"
                                                                 step="0.01" min="0"
                                                             />
-                                                            <button onClick={e => { e.stopPropagation(); const v = parseFloat(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3.5 h-3.5" /></button>
-                                                            <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(null); }} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                                                            <button onClick={e => { e.stopPropagation(); const v = parseFloat(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }} aria-label="Guardar precio" className="text-emerald-600 hover:text-emerald-700 max-md:p-2.5"><Check className="w-3.5 h-3.5" /></button>
+                                                            <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(null); }} aria-label="Cancelar" className="text-slate-400 hover:text-slate-600 max-md:p-2.5"><X className="w-3.5 h-3.5" /></button>
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-1 justify-center">
                                                             <p className={`text-sm font-black tabular-nums ${d.tieneOverride ? 'text-amber-600' : 'text-indigo-600'}`}>{formatCurrency(d.precioMayorista)}</p>
-                                                            <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(d.producto.id); setTempPrecio(String(d.precioMayorista)); }} className="text-slate-300 hover:text-indigo-500 transition-colors"><Pencil className="w-3 h-3" /></button>
+                                                            {/* max-md: área de toque ~40px (el icono mide 12px) sin mover el diseño */}
+                                                            <button aria-label="Editar precio mayorista" onClick={e => { e.stopPropagation(); setEditandoPrecioId(d.producto.id); setTempPrecio(String(d.precioMayorista)); }} className="text-slate-300 hover:text-indigo-500 transition-colors max-md:p-4 max-md:-m-4 max-md:text-slate-400"><Pencil className="w-3 h-3" /></button>
                                                         </div>
                                                     )}
                                                 </div>
                                                 <div className="text-center">
-                                                    <p className="text-[8px] font-black uppercase tracking-widest text-emerald-500">Reventa</p>
+                                                    <p className="text-[8px] max-md:text-[10px] font-black uppercase tracking-widest text-emerald-500">Reventa</p>
                                                     <p className="text-sm font-black text-emerald-600 tabular-nums">{formatCurrency(d.precioReventa)}</p>
                                                 </div>
                                                 <div className="text-center">
-                                                    <p className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">PVP</p>
+                                                    <p className="text-[8px] max-md:text-[10px] font-black uppercase tracking-widest text-muted-foreground">PVP</p>
                                                     <p className="text-xs font-black text-slate-500 tabular-nums">{formatCurrency(d.pvp)}</p>
                                                 </div>
                                                 <Badge className={cn('text-[9px] font-black border-none', vConf.bg, vConf.color)}>
@@ -3923,9 +3931,9 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                 {clientesFiltrados.map(c => {
                                     const tConf = TIPO_CONFIG[c.tipo] || TIPO_CONFIG.mayorista;
                                     return (
-                                        <Card key={c.id} className="rounded-2xl border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md transition-all overflow-hidden">
-                                            <div 
-                                                className="p-5 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
+                                        <Card key={c.id} className="rounded-2xl border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 hover:shadow-md transition-all overflow-hidden max-md:py-0 max-md:gap-0">
+                                            <div
+                                                className="p-5 max-md:p-4 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors"
                                                 onClick={() => setExpandedClienteId(expandedClienteId === c.id ? null : c.id)}
                                             >
                                             <div className="flex items-start justify-between mb-3">
@@ -3941,13 +3949,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                     </div>
                                                 </div>
                                                 <div className="flex gap-1 items-center">
-                                                    <button onClick={(e) => { e.stopPropagation(); abrirEditarCliente(c); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 transition-all">
+                                                    <button aria-label="Editar cliente" onClick={(e) => { e.stopPropagation(); abrirEditarCliente(c); }} className="w-8 h-8 max-md:w-11 max-md:h-11 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 transition-all">
                                                         <Pencil className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <button onClick={(e) => { e.stopPropagation(); eliminarCliente(c.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all">
+                                                    <button aria-label="Eliminar cliente" onClick={(e) => { e.stopPropagation(); eliminarCliente(c.id); }} className="w-8 h-8 max-md:w-11 max-md:h-11 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-all">
                                                         <Trash2 className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <div className="w-8 h-8 ml-2 rounded-lg flex items-center justify-center text-slate-400">
+                                                    <div className="w-8 h-8 max-md:w-10 max-md:h-10 ml-2 max-md:ml-0 rounded-lg flex items-center justify-center text-slate-400">
                                                         {expandedClienteId === c.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
                                                     </div>
                                                 </div>
