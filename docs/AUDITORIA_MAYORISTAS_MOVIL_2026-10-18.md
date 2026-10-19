@@ -22,11 +22,13 @@ overflow) antes y después. Los "antes" de alto de tarjeta son aproximados (leí
 
 Estos cambios afectarían también a escritorio o a datos, así que quedan para PR aparte con autorización:
 
-1. **Dinero mal parseado (P0).** `parseFloat` en el precio manual, abonos y monto libre
-   (`Mayoristas.tsx` ~líneas 176, 483, 600, 663, 3048, 3719…): escribir `1.500` o `1,500` guarda **1.5** / **1**.
-   Debe usar una función de parseo colombiano (ver skill `parseo-numeros-dinero-dulce-placer`) con tests.
-2. **`confirm()` nativo al eliminar cliente** (`eliminarCliente`, línea ~1146). En PWA de iPhone el diálogo
-   nativo se bloquea (ya se corrigió así en otras pantallas: commit `153d3b71`). Reemplazar por confirmación en pantalla.
+1. **Dinero mal parseado (P0) — corregido en PR #8.** `parseFloat` en el **precio manual** (único campo de dinero
+   de tipo texto): escribir `1.500` o `1,500` guardaba **1.5** / **1**. *(Corrección: la primera versión de este informe
+   decía que también fallaban abonos y monto libre; no es así, esos campos son `type="number"` y el navegador ya entrega
+   `"1500"`/`"1500.5"`.)*
+2. **`confirm()` nativo** al eliminar cliente / abono / registro y al vender con stock insuficiente — corregido en PR #9.
+   En PWA de iPhone el diálogo nativo se bloquea (ya se corrigió así en otras pantallas: commit `153d3b71`).
+   Siguen con `window.confirm` los 3 "¿Reemplazar ticket…?" (funciones síncronas; requieren volverlas `async`).
 3. **Archivo de 4 100 líneas y 34 `useState`**: partir en componentes (Lista de precios, Clientes, Mini-POS, Perfil)
    y `React.memo` en las filas de producto; es probable (no medido) que cada tecla del buscador re-renderice las 42 tarjetas.
 4. **281 textos < 11 px** (etiquetas `text-[8px]`/`text-[9px]`): subir a 10–11 px en móvil en todo el módulo
