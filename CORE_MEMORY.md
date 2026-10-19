@@ -275,3 +275,9 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Verificación**: `tsc` 1784 errores (idéntico al total previo, ninguno nuevo). NO probado en vivo: hace falta build/deploy y abrir turno en celular con el PC abierto.
 
 **Limitación conocida, NO tocada**: la tabla `caja` de la nube solo tiene id, usuario_id, fechas, montos, ventas_ids, movimientos, estado, caja_fisica_id, arqueo_por_caja. `mapCajaToDB` no envía `cajaNombre`, `turno`, `vendedoraNombre` ni `eventoEspecial`, así que una caja abierta en el celular aparecerá en el PC SIN esos nombres. Arreglarlo requiere columnas nuevas en Supabase + cambiar `supabase-db.ts` (protegido, pide AUTORIZO).
+
+**Seguimiento (mismo día, con AUTORIZO de Gonzalo) — limitación anterior RESUELTA en código y nube**:
+- Migración aplicada en Supabase (`caja_agregar_nombre_turno_vendedora_evento`): columnas de texto opcionales `caja_nombre`, `turno`, `vendedora_nombre`, `evento_especial` en `caja`. Releídas en `information_schema` tras aplicar.
+- `src/lib/supabase-db.ts` (`mapCajaToDB` / `mapCajaFromDB`): envían y leen esos 4 campos SOLO cuando tienen valor (un upsert solo toca las columnas del payload, así una versión sin el dato no borra el de otro aparato).
+- Test nuevo `src/lib/caja-multicaja-mapeo.test.ts` (4 tests pasan). `tsc` sigue en 1784 errores (sin nuevos).
+- **Pendiente**: las cajas abiertas ANTES de este cambio (ej. las de 2026-10-18 19:46 UTC desde el celular) siguen sin nombre/turno en la nube; se llenan cuando el celular, ya con la versión nueva, las vuelva a subir (sync manual). Los `movimientos` de caja tampoco se mapean todavía (la columna existe en la nube): ingresos/egresos de caja del celular no llegan al PC. NO probado en vivo; necesita build + deploy.
