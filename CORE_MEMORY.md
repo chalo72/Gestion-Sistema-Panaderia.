@@ -321,4 +321,12 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **No hecho**: no se tocó `indexedDBAdapter.ts` ni se agregaron reintentos automáticos (con timeout de 15 s empeorarían la espera); falta que Gonzalo confirme la causa real con el "Detalle técnico" que ahora se muestra.
 
+### 🔧 2026-10-19 — Claude Sonnet 5.5 — CAUSA REAL del "Error Crítico de Inicio": base local en versión 9, código de main en versión 8 (indexedDBAdapter.ts)
+
+**Causa (confirmada con git y Vercel)**: `feat/marketing-studio-y-ajustes` subió `DB_VERSION` de IndexedDB a **9** el 2026-09-29 (agrega el almacén `checklist_completadas`); `main` sigue en **8**. Producción (`app-eight-sigma-13.vercel.app`) se publicó desde `feat/marketing-studio-y-ajustes` (commit 13ee607a, varios despliegues) hasta el 2026-10-18/19 y después desde `main` (PR #8, #9, #7). Un navegador que ya abrió la versión 9 no puede abrirse con `indexedDB.open(nombre, 8)`: IndexedDB no baja de versión → `VersionError` → `db.init()` falla → pantalla "Error Crítico de Inicio" (la misma historia del 2026-09-07, commit 210062ca "version 7 a 8"). Gonzalo lo vio en Brave en producción. Es otra vez la "guerra de despliegues" (ver memoria `divergencia-app-vs-root-git`).
+
+**Arreglo** (`src/lib/indexedDBAdapter.ts`, no protegido): si `open` falla con `VersionError`, se abre la base tal como está (`indexedDB.open(nombre)` sin versión) con el mismo límite de 15 s. Una base más nueva contiene todos los almacenes que el código viejo necesita. +3 tests en `indexedDBAdapter.test.ts` (14 pasan con los de error-inicio); `tsc` 1784 (igual).
+
+**OJO — producción hoy corre `main`**, que NO tiene lo de `feat/marketing-studio-y-ajustes` (PR #3, sin mergear): Consumo y Préstamos con créditos en la nube, mejoras de ControlCaja/historial, Marketing Studio, etc. Decidir si se mergea el PR #3 a main o se publica desde esa rama, y que NADIE vuelva a publicar a producción desde otra carpeta sin avisar. Hasta que el arreglo de esta entrada llegue a producción (merge del PR #6 a main), los navegadores en versión 9 seguirán viendo el error.
+
 **Nota al juntar con el PR 6 (2026-10-19)**: el conflicto en `useVentas.ts` se resolvió quedándose con la versión de main (la caja activa de este aparato NUNCA se reemplaza por una de otro; solo se suelta si se cerró) y conservando del PR 6 solo que el listener acepta también el evento `'sesiones_caja'` (la clave con la que sale el evento realtime/sync manual; la tabla remota real es `caja`).

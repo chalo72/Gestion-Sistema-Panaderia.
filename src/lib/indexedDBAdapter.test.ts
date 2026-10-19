@@ -68,6 +68,49 @@ describe('IndexedDBAdapter.init — bloqueo por otra pestaña', () => {
     expect(open).toHaveBeenCalledTimes(2);
   });
 
+  it('VersionError (base local más nueva que el código): abre la versión existente en vez de fallar', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const adapter = new IndexedDBAdapter();
+    const p = adapter.init();
+    const primera = req;
+    // El navegador responde que la base ya está en una versión mayor a la pedida.
+    primera.onerror({ target: { error: { name: 'VersionError' } } });
+
+    // Segunda apertura: sin número de versión.
+    expect(open).toHaveBeenCalledTimes(2);
+    expect(open.mock.calls[1]).toHaveLength(1);
+    const db = { close: vi.fn(), onversionchange: null as any };
+    req.onsuccess({ target: { result: db } });
+    await expect(p).resolves.toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it('VersionError y la segunda apertura también falla: rechaza y deja reintentar', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const adapter = new IndexedDBAdapter();
+    const p = adapter.init();
+    const rechazo = expect(p).rejects.toBeTruthy();
+    req.onerror({ target: { error: { name: 'VersionError' } } });
+    req.onerror({ target: { error: { name: 'UnknownError', message: 'backend roto' } } });
+    await rechazo;
+    adapter.init();
+    expect(open).toHaveBeenCalledTimes(3);
+    err.mockRestore();
+    warn.mockRestore();
+  });
+
+  it('otros errores de apertura siguen rechazando sin abrir una segunda vez', async () => {
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const adapter = new IndexedDBAdapter();
+    const p = adapter.init();
+    const rechazo = expect(p).rejects.toBeTruthy();
+    req.onerror({ target: { error: { name: 'QuotaExceededError' } } });
+    await rechazo;
+    expect(open).toHaveBeenCalledTimes(1);
+    err.mockRestore();
+  });
+
   it('onblocked solo avisa en consola y no rechaza (la otra pestaña puede liberar a tiempo)', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const adapter = new IndexedDBAdapter();
