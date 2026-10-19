@@ -244,6 +244,44 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
 
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Recepciones: producto nuevo ahora se vincula al catálogo del proveedor (sin commitear)
+
+**Problema**: al crear un producto nuevo desde Recepciones (ej. "Vainilla 10 ltros", 13:23), la app creaba el producto + su inventario pero NO la fila de `precios` (PrecioProveedor) que lo une al proveedor. Gestión de Proveedores arma su catálogo desde esa tabla, así que el producto no aparecía en "DistriHelados - Colombina (Cajas)". Diagnóstico hecho en otro chat contra la nube (sin acceso al código).
+
+**Qué se hizo** (cambio mínimo, `Recepciones.tsx` no es archivo protegido):
+- `src/lib/vinculo-proveedor.ts` (nuevo, función pura `armarVinculoProveedor`) + `vinculo-proveedor.test.ts` (9 tests pasan). Proveedor = el elegido en el formulario del producto, o si está vacío el de la factura en curso. Solo vincula si hay proveedor y costo > 0 (regla de precios del proyecto).
+- `src/pages/Recepciones.tsx` → `handleSubmitModal`: usa el producto devuelto por `onAddProducto` (el `addProducto` real de `usePriceControl` ya devolvía `Producto`, el tipo del prop decía `void`) y llama `onAddOrUpdatePrecio` con ese id. Si el nombre ya existe (`addProducto` devuelve `null`) ahora sale sin marcar "creado" (antes quedaba la bandera `isCreatingNewFromAction` colgada). Avisa con toast si vinculó, si falló o si no pudo vincular.
+- No se tocó `App.tsx` ni ningún archivo protegido: ya le pasa `addProducto` y `addOrUpdatePrecio` a Recepciones.
+
+**Verificación**: vitest del archivo nuevo OK; suite completa: 13 archivos / 133 tests OK, pero 21 errores de arranque de workers (timeout del pool en esta PC, no fallos de test). `tsc`: 1784 errores totales (deuda previa), ninguno en las líneas nuevas. NO probado en la app real todavía.
+
+**Pendiente / NO hecho**:
+- Probar en la app: crear producto nuevo en una recepción y revisar el catálogo del proveedor.
+- Datos ya existentes (RESUELTO en la nube, con AUTORIZO de Gonzalo, 2026-10-18): vainilla `c09e6177-d5e6-413e-b50a-d3ad87f86d43` renombrada a "Vainilla 10 litros" y vinculada en `precios` a "DistriHelados - Colombina (Cajas )" (nótese el espacio final del nombre real) con precio_costo 55595.96, destino insumo, tipo_embalaje caja, cantidad 1 (mismo formato que sus hermanos del catálogo). Releído tras escribir. Ojo: por "LOCAL SIEMPRE GANA", un dispositivo que ya tenga el producto con "ltros" conservará ese nombre local; el vínculo sí debería bajar por ser fila nueva.
+- Si el costo queda en 0 al crear el producto, no se vincula (solo avisa). Posible mejora: vincular al confirmar la recepción con el precio facturado.
+- Observado, no tocado: la app reenvía recepciones ya subidas y la nube responde 409.
+- Fallback frágil sin tocar: el `useEffect` que agrega el producto recién creado a la factura toma `productos[productos.length - 1]` en vez del id devuelto.
+
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Abrir turno en el celular no aparecía en el PC (realtime de caja) — sin commitear
+
+**Causa (confirmada contra la nube y el código)**: `useRealtimeSync.ts` suscribe un canal realtime por cada clave de `HANDLERS`, usando esa clave como nombre de tabla. La clave de cajas era `sesiones_caja`, pero en Supabase la tabla se llama `caja` (`supabase-db.ts` lee/escribe `caja`; `sesiones_caja` NO existe y `caja` sí está en la publicación `supabase_realtime`). Realtime no da error al escuchar una tabla inexistente: simplemente nunca llega nada. Además `useVentas.ts` escuchaba el evento con `table === 'caja'`, pero el evento sale con la clave `'sesiones_caja'`, así que ni siquiera el sync manual refrescaba la lista en pantalla. La subida SÍ funcionaba: el 2026-10-18 19:46 UTC hay varias cajas `abierta` en la nube (apertura múltiple desde el celular).
+
+**Qué se hizo** (2 archivos, ninguno protegido):
+- `src/hooks/useRealtimeSync.ts`: `Handler` gana el campo opcional `remoteTable`; el handler `sesiones_caja` usa `remoteTable: 'caja'` + `mapFromRecord` (reusa `mapCajaFromDB` por el registro del evento, sin bajar toda la tabla); la suscripción usa `remoteTable ?? table`.
+- `src/hooks/useVentas.ts`: el listener acepta `'caja'` y `'sesiones_caja'`, y al refrescar NO le quita a este dispositivo su `cajaActiva` si sigue abierta (antes habría tomado "la primera abierta", o sea cualquiera del otro aparato).
+
+**Verificación**: `tsc` 1784 errores (idéntico al total previo, ninguno nuevo). NO probado en vivo: hace falta build/deploy y abrir turno en celular con el PC abierto.
+
+**Limitación conocida, NO tocada**: la tabla `caja` de la nube solo tiene id, usuario_id, fechas, montos, ventas_ids, movimientos, estado, caja_fisica_id, arqueo_por_caja. `mapCajaToDB` no envía `cajaNombre`, `turno`, `vendedoraNombre` ni `eventoEspecial`, así que una caja abierta en el celular aparecerá en el PC SIN esos nombres. Arreglarlo requiere columnas nuevas en Supabase + cambiar `supabase-db.ts` (protegido, pide AUTORIZO).
+
+**Seguimiento (mismo día, con AUTORIZO de Gonzalo) — limitación anterior RESUELTA en código y nube**:
+- Migración aplicada en Supabase (`caja_agregar_nombre_turno_vendedora_evento`): columnas de texto opcionales `caja_nombre`, `turno`, `vendedora_nombre`, `evento_especial` en `caja`. Releídas en `information_schema` tras aplicar.
+- `src/lib/supabase-db.ts` (`mapCajaToDB` / `mapCajaFromDB`): envían y leen esos 4 campos SOLO cuando tienen valor (un upsert solo toca las columnas del payload, así una versión sin el dato no borra el de otro aparato).
+- Test nuevo `src/lib/caja-multicaja-mapeo.test.ts` (4 tests pasan). `tsc` sigue en 1784 errores (sin nuevos).
+- **Pendiente**: las cajas abiertas ANTES de este cambio (ej. las de 2026-10-18 19:46 UTC desde el celular) siguen sin nombre/turno en la nube; se llenan cuando el celular, ya con la versión nueva, las vuelva a subir (sync manual). Los `movimientos` de caja tampoco se mapean todavía (la columna existe en la nube): ingresos/egresos de caja del celular no llegan al PC. NO probado en vivo; necesita build + deploy.
+
 ### 🔧 2026-10-18 (noche) — Claude Sonnet 5.5 — Ventas al Mayor: auditoría y adaptación SOLO móvil (PR #7; seguimiento en PR #8 y #9, ya mergeados a main el 2026-10-19)
 
 **Pedido de Gonzalo**: auditar y mejorar el módulo Ventas al Mayor SOLO en móvil; escritorio no debe cambiar.
@@ -272,3 +310,23 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **Pendiente / NO hecho**: no probado en celular real; sin merge a main ni publicación; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
 **Ojo**: otro agente trabaja ControlCaja.tsx, supabase-db.ts e historial-cajas.ts en la carpeta principal (rama feat/marketing-studio-y-ajustes) → posible conflicto al juntar. Este worktree usa un enlace (junction) a node_modules de la carpeta principal.
+
+### 🔧 2026-10-19 — Claude Sonnet 5.5 — Pantalla "Error Crítico de Inicio" ahora explica la causa (main.tsx, con AUTORIZO de Gonzalo) — commiteado, sin push
+
+**Reporte**: Gonzalo vio "Error Crítico de Inicio — La base de datos local no pudo iniciar. Por favor, recarga la página." (captura). Ese texto sale del `catch` de `bootstrap()` en `src/main.tsx` cuando `db.init()` falla; no dice por qué.
+
+**Diagnóstico**: la vista previa del PR 6 (Vercel) abre bien en un navegador limpio (pantalla "¿Quién eres?"), o sea el código no rompe el arranque; el fallo es del navegador de Gonzalo (causas probables: otra pestaña/PWA con la base ocupada → el `init()` de `indexedDBAdapter.ts` espera 15 s y rechaza; o almacenamiento bloqueado/lleno/modo privado). No se pudo ver el error real de su consola.
+
+**Cambio**: `src/lib/error-inicio.ts` (nuevo, función pura `describirErrorInicio`, 6 tests) + `src/main.tsx`: el `catch` llama a `mostrarErrorInicio(err)`, que arma la pantalla con `textContent` (sin innerHTML), muestra el detalle técnico real, dice qué hacer (cerrar otras pestañas/ventanas, liberar espacio o salir de incógnito según el caso), advierte NO borrar los datos del sitio (ahí está lo no subido) y trae botón "Reintentar" (recarga). Verificado visualmente en el navegador de prueba. `tsc` 1784 (igual que antes; los 4 errores de main.tsx ya existían).
+
+**No hecho**: no se tocó `indexedDBAdapter.ts` ni se agregaron reintentos automáticos (con timeout de 15 s empeorarían la espera); falta que Gonzalo confirme la causa real con el "Detalle técnico" que ahora se muestra.
+
+### 🔧 2026-10-19 — Claude Sonnet 5.5 — CAUSA REAL del "Error Crítico de Inicio": base local en versión 9, código de main en versión 8 (indexedDBAdapter.ts)
+
+**Causa (confirmada con git y Vercel)**: `feat/marketing-studio-y-ajustes` subió `DB_VERSION` de IndexedDB a **9** el 2026-09-29 (agrega el almacén `checklist_completadas`); `main` sigue en **8**. Producción (`app-eight-sigma-13.vercel.app`) se publicó desde `feat/marketing-studio-y-ajustes` (commit 13ee607a, varios despliegues) hasta el 2026-10-18/19 y después desde `main` (PR #8, #9, #7). Un navegador que ya abrió la versión 9 no puede abrirse con `indexedDB.open(nombre, 8)`: IndexedDB no baja de versión → `VersionError` → `db.init()` falla → pantalla "Error Crítico de Inicio" (la misma historia del 2026-09-07, commit 210062ca "version 7 a 8"). Gonzalo lo vio en Brave en producción. Es otra vez la "guerra de despliegues" (ver memoria `divergencia-app-vs-root-git`).
+
+**Arreglo** (`src/lib/indexedDBAdapter.ts`, no protegido): si `open` falla con `VersionError`, se abre la base tal como está (`indexedDB.open(nombre)` sin versión) con el mismo límite de 15 s. Una base más nueva contiene todos los almacenes que el código viejo necesita. +3 tests en `indexedDBAdapter.test.ts` (14 pasan con los de error-inicio); `tsc` 1784 (igual).
+
+**OJO — producción hoy corre `main`**, que NO tiene lo de `feat/marketing-studio-y-ajustes` (PR #3, sin mergear): Consumo y Préstamos con créditos en la nube, mejoras de ControlCaja/historial, Marketing Studio, etc. Decidir si se mergea el PR #3 a main o se publica desde esa rama, y que NADIE vuelva a publicar a producción desde otra carpeta sin avisar. Hasta que el arreglo de esta entrada llegue a producción (merge del PR #6 a main), los navegadores en versión 9 seguirán viendo el error.
+
+**Nota al juntar con el PR 6 (2026-10-19)**: el conflicto en `useVentas.ts` se resolvió quedándose con la versión de main (la caja activa de este aparato NUNCA se reemplaza por una de otro; solo se suelta si se cerró) y conservando del PR 6 solo que el listener acepta también el evento `'sesiones_caja'` (la clave con la que sale el evento realtime/sync manual; la tabla remota real es `caja`).

@@ -301,7 +301,8 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
         } else {
           db.getAllVentas().then(setVentas).catch(() => {});
         }
-      } else if (table === 'caja') {
+      } else if (table === 'caja' || table === 'sesiones_caja') {
+        // El evento realtime/syncNow llega con la clave 'sesiones_caja' (la tabla remota es 'caja').
         db.getAllSesionesCaja().then(sesiones => {
           setSesionesCaja(sesiones as any);
           // La caja activa es la de ESTE dispositivo: un cambio remoto no debe cambiarla por la

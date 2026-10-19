@@ -21,6 +21,7 @@ import { db } from '@/lib/database';
 import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor, MetodoPago, CajaSesion } from '@/types';
 import { procesarImagenFactura, matchProductoEnCatalogo, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
+import { armarVinculoProveedor } from '@/lib/vinculo-proveedor';
 import type { Categoria as CategoriaTipo } from '@/types';
 
 interface RecepcionesProps {
@@ -33,7 +34,7 @@ interface RecepcionesProps {
     cajasAbiertas?: CajaSesion[];
     onAddRecepcion: (data: Omit<Recepcion, 'id'>) => Promise<Recepcion>;
     onConfirmarRecepcion: (recepcion: Recepcion) => Promise<void>;
-    onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<void>;
+    onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<{ id: string } | null | void>;
     onUpdateProducto: (id: string, updates: Partial<Producto>) => Promise<void>;
     onAddOrUpdatePrecio?: (data: {
         id?: string;
@@ -344,7 +345,28 @@ export default function Recepciones({
                 await onUpdateProducto(productToEdit.id, productoData);
                 toast.success('Producto actualizado');
             } else {
-                await onAddProducto(productoData);
+                const nuevo = await onAddProducto(productoData);
+                // addProducto responde null si el nombre ya existe (y ya avisó con un toast)
+                if (!nuevo) return;
+                // Sin este vínculo el producto no aparece en el catálogo del proveedor
+                // (Gestión de Proveedores lee la tabla de precios, no el historial de recepciones)
+                const vinculo = armarVinculoProveedor({
+                    productoId: nuevo.id,
+                    proveedorIdForm: formDataModal.proveedorId,
+                    proveedorIdRecepcion: newRecepcion.proveedorId,
+                    precioCosto: costo,
+                    notas: formDataModal.notasPrecio,
+                });
+                if (vinculo && onAddOrUpdatePrecio) {
+                    try {
+                        await onAddOrUpdatePrecio(vinculo);
+                        toast.success(`Vinculado al catálogo de ${getProveedorById(vinculo.proveedorId)?.nombre || 'el proveedor'}`);
+                    } catch {
+                        toast.warning('El producto se creó, pero no se pudo vincular al proveedor. Agrégalo desde Gestión de Proveedores.');
+                    }
+                } else {
+                    toast.info('Producto creado sin vincular a un proveedor (falta proveedor o costo mayor a 0)');
+                }
                 setIsCreatingNewFromAction(true);
             }
             setIsProductModalOpen(false);
