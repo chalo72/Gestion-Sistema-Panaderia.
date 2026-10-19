@@ -244,7 +244,7 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
 
-### 🔧 2026-10-18 — Claude Sonnet 5.5 — Auditoría de cajas/arranque móvil + 4 arreglos (SIN commit, rama claude/gracious-nobel-afff36)
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Auditoría de cajas/arranque móvil + arreglos (commits a400046d, 52f1242f, b8461db1 en la rama claude/gracious-nobel-afff36; NO mergeados a main)
 
 **Qué reportó Gonzalo**: en el celular la app se queda en el logo; las cajas de cuadre cargan a veces, tardan o se reinician; las cajas de la tarde no salen en el historial.
 
@@ -258,5 +258,5 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **Verificación**: suite completa 630 pasan / 25 fallan; la rama limpia (HEAD sin mis cambios) falla EXACTAMENTE los mismos 25 (deuda previa, no tocada). `tsc`: 1785 errores antes y después (0 nuevos).
 
-**Pendiente / NO hecho**: no probado en celular real; sin commit ni merge; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
+**Pendiente / NO hecho**: no probado en celular real; sin merge a main ni publicación; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
 **Ojo**: otro agente trabaja ControlCaja.tsx, supabase-db.ts e historial-cajas.ts en la carpeta principal (rama feat/marketing-studio-y-ajustes) → posible conflicto al juntar. Este worktree usa un enlace (junction) a node_modules de la carpeta principal.
