@@ -30,6 +30,7 @@ import type { ClienteMayorista, MetodoPago, Abono, TicketPendiente, HistorialMay
 // Clientes se manejan por props ahora
 
 import { cargarConfig, guardarConfig, calcularCosto } from '@/lib/mayoristas-utils';
+import { useConfirmar } from '@/hooks/useConfirmar';
 import { parsearDineroCO } from '@/lib/parseo-dinero';
 
 const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -46,6 +47,7 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 // ─── Componente principal ────────────────────────────────────────────────────
 export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
     const { usuario } = useAuth();
+    const { confirmar, dialogo } = useConfirmar();
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -632,7 +634,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     };
 
     const eliminarAbono = async (historialId: string, abonoId: string | undefined, abonoIndex: number) => {
-        if (!confirm('¿Seguro que quieres eliminar este abono?')) return;
+        if (!(await confirmar({ titulo: '¿Eliminar este abono?', descripcion: 'Se quitará del historial del cliente.', confirmarTexto: 'Eliminar', destructivo: true }))) return;
 
         // Respaldo en central (nube)
         if (updateCreditoCliente) {
@@ -890,7 +892,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     };
 
     const eliminarHistorial = async (historialId: string) => {
-        if (!confirm('¿Seguro que quieres eliminar este registro?')) return;
+        if (!(await confirmar({ titulo: '¿Eliminar este registro?', descripcion: 'Se quitará del historial del cliente.', confirmarTexto: 'Eliminar', destructivo: true }))) return;
         const esCentral = creditosClientes?.find(c => c.id === historialId);
         if (esCentral) {
             if (deleteCreditoCliente) {
@@ -1144,7 +1146,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     };
 
     const eliminarCliente = async (id: string) => {
-        if (!confirm('¿Seguro que quieres eliminar este cliente?')) return;
+        if (!(await confirmar({ titulo: '¿Eliminar este cliente?', descripcion: 'Esta acción no se puede deshacer.', confirmarTexto: 'Eliminar', destructivo: true }))) return;
         try {
             await deleteCliente(id);
             if (clienteSeleccionado?.id === id) setClienteSeleccionado(null);
@@ -1388,6 +1390,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
         return (
             <div className="min-h-screen flex flex-col gap-0 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+                {dialogo}
 
                 {/* Header */}
                 <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 border-b border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-20">
@@ -2737,7 +2740,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 }
                                             }
                                             if (sinStock.length > 0) {
-                                                const continuar = window.confirm(`Stock insuficiente:\n${sinStock.join('\n')}\n\n¿Deseas confirmar la venta de todas formas?`);
+                                                const continuar = await confirmar({ titulo: 'Stock insuficiente', descripcion: `${sinStock.join('\n')}\n\n¿Deseas confirmar la venta de todas formas?`, confirmarTexto: 'Vender de todas formas' });
                                                 if (!continuar) return;
                                             }
                                             await guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
@@ -3451,6 +3454,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     return (
         <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+            {dialogo}
 
             {/* ── Header ──────────────────────────────────────────────────── */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
