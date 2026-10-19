@@ -262,3 +262,16 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - Si el costo queda en 0 al crear el producto, no se vincula (solo avisa). Posible mejora: vincular al confirmar la recepción con el precio facturado.
 - Observado, no tocado: la app reenvía recepciones ya subidas y la nube responde 409.
 - Fallback frágil sin tocar: el `useEffect` que agrega el producto recién creado a la factura toma `productos[productos.length - 1]` en vez del id devuelto.
+
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Abrir turno en el celular no aparecía en el PC (realtime de caja) — sin commitear
+
+**Causa (confirmada contra la nube y el código)**: `useRealtimeSync.ts` suscribe un canal realtime por cada clave de `HANDLERS`, usando esa clave como nombre de tabla. La clave de cajas era `sesiones_caja`, pero en Supabase la tabla se llama `caja` (`supabase-db.ts` lee/escribe `caja`; `sesiones_caja` NO existe y `caja` sí está en la publicación `supabase_realtime`). Realtime no da error al escuchar una tabla inexistente: simplemente nunca llega nada. Además `useVentas.ts` escuchaba el evento con `table === 'caja'`, pero el evento sale con la clave `'sesiones_caja'`, así que ni siquiera el sync manual refrescaba la lista en pantalla. La subida SÍ funcionaba: el 2026-10-18 19:46 UTC hay varias cajas `abierta` en la nube (apertura múltiple desde el celular).
+
+**Qué se hizo** (2 archivos, ninguno protegido):
+- `src/hooks/useRealtimeSync.ts`: `Handler` gana el campo opcional `remoteTable`; el handler `sesiones_caja` usa `remoteTable: 'caja'` + `mapFromRecord` (reusa `mapCajaFromDB` por el registro del evento, sin bajar toda la tabla); la suscripción usa `remoteTable ?? table`.
+- `src/hooks/useVentas.ts`: el listener acepta `'caja'` y `'sesiones_caja'`, y al refrescar NO le quita a este dispositivo su `cajaActiva` si sigue abierta (antes habría tomado "la primera abierta", o sea cualquiera del otro aparato).
+
+**Verificación**: `tsc` 1784 errores (idéntico al total previo, ninguno nuevo). NO probado en vivo: hace falta build/deploy y abrir turno en celular con el PC abierto.
+
+**Limitación conocida, NO tocada**: la tabla `caja` de la nube solo tiene id, usuario_id, fechas, montos, ventas_ids, movimientos, estado, caja_fisica_id, arqueo_por_caja. `mapCajaToDB` no envía `cajaNombre`, `turno`, `vendedoraNombre` ni `eventoEspecial`, así que una caja abierta en el celular aparecerá en el PC SIN esos nombres. Arreglarlo requiere columnas nuevas en Supabase + cambiar `supabase-db.ts` (protegido, pide AUTORIZO).

@@ -295,11 +295,16 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
         } else {
           db.getAllVentas().then(setVentas).catch(() => {});
         }
-      } else if (table === 'caja') {
+      } else if (table === 'caja' || table === 'sesiones_caja') {
+        // El evento realtime/syncNow llega con la clave 'sesiones_caja' (la tabla remota es 'caja').
         db.getAllSesionesCaja().then(sesiones => {
           setSesionesCaja(sesiones as any);
-          const activa = (sesiones as any[]).find((s: any) => s.estado === 'abierta');
-          setCajaActiva(activa);
+          // No arrebatar la caja que este dispositivo ya tiene en uso: solo elegir una abierta
+          // si la actual se cerró o no había ninguna.
+          setCajaActiva(prev => {
+            const abiertas = (sesiones as any[]).filter((s: any) => s.estado === 'abierta');
+            return abiertas.find((s: any) => s.id === prev?.id) ?? abiertas[0];
+          });
         }).catch(() => {});
       } else if (table === 'mesas') {
         if (eventType === 'DELETE') {
