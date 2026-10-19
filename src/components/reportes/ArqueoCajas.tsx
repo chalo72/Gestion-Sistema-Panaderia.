@@ -17,6 +17,7 @@ import {
     Cell
 } from 'recharts';
 import { cn } from '@/lib/utils';
+import { ymdLocalDeISO } from '@/lib/fecha-local';
 
 interface ArqueoCajasProps {
     ventasDiarias: VentaDiaria[];
@@ -136,7 +137,7 @@ export function ArqueoCajas({ ventasDiarias, sesionesCaja = [] }: ArqueoCajasPro
     const datosCajaReal = useMemo(() => {
         const cerradas = (sesionesCaja || []).filter((s: any) => {
             if (s.estado !== 'cerrada') return false;
-            const fechaSesion = (s.fechaCierre || s.fechaApertura || '').slice(0, 10);
+            const fechaSesion = ymdLocalDeISO(s.fechaCierre || s.fechaApertura);
             return fechaSesion >= fechaInicio && fechaSesion <= fechaFin;
         });
         const totalEfectivo = cerradas.reduce((s: number, c: any) => s + (Number(c.totalVentasEfectivo ?? c.totalVentas) || 0), 0);
@@ -145,7 +146,7 @@ export function ArqueoCajas({ ventasDiarias, sesionesCaja = [] }: ArqueoCajasPro
         const fechasConManual = new Set(
             ventasDiarias.filter(v => v.fecha >= fechaInicio && v.fecha <= fechaFin).map(v => v.fecha)
         );
-        const fechasConCajaReal = new Set(cerradas.map((c: any) => (c.fechaCierre || c.fechaApertura || '').slice(0, 10)));
+        const fechasConCajaReal = new Set(cerradas.map((c: any) => ymdLocalDeISO(c.fechaCierre || c.fechaApertura)));
 
         const diasFaltantes: string[] = [];
         const hoy = new Date();
