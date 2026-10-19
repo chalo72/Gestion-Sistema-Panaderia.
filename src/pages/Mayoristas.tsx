@@ -30,6 +30,8 @@ import type { ClienteMayorista, MetodoPago, Abono, TicketPendiente, HistorialMay
 // Clientes se manejan por props ahora
 
 import { cargarConfig, guardarConfig, calcularCosto } from '@/lib/mayoristas-utils';
+import { useConfirmar } from '@/hooks/useConfirmar';
+import { parsearDineroCO } from '@/lib/parseo-dinero';
 
 const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
     mayorista:  { label: 'Al por Mayor',  color: 'text-indigo-600',  bg: 'bg-indigo-50  dark:bg-indigo-950/20' },
@@ -45,6 +47,7 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 // ─── Componente principal ────────────────────────────────────────────────────
 export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
     const { usuario } = useAuth();
+    const { confirmar, dialogo } = useConfirmar();
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -631,7 +634,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     };
 
     const eliminarAbono = async (historialId: string, abonoId: string | undefined, abonoIndex: number) => {
-        if (!confirm('¿Seguro que quieres eliminar este abono?')) return;
+        if (!(await confirmar({ titulo: '¿Eliminar este abono?', descripcion: 'Se quitará del historial del cliente.', confirmarTexto: 'Eliminar', destructivo: true }))) return;
 
         // Respaldo en central (nube)
         if (updateCreditoCliente) {
@@ -889,7 +892,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     };
 
     const eliminarHistorial = async (historialId: string) => {
-        if (!confirm('¿Seguro que quieres eliminar este registro?')) return;
+        if (!(await confirmar({ titulo: '¿Eliminar este registro?', descripcion: 'Se quitará del historial del cliente.', confirmarTexto: 'Eliminar', destructivo: true }))) return;
         const esCentral = creditosClientes?.find(c => c.id === historialId);
         if (esCentral) {
             if (deleteCreditoCliente) {
@@ -1143,7 +1146,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
     };
 
     const eliminarCliente = async (id: string) => {
-        if (!confirm('¿Seguro que quieres eliminar este cliente?')) return;
+        if (!(await confirmar({ titulo: '¿Eliminar este cliente?', descripcion: 'Esta acción no se puede deshacer.', confirmarTexto: 'Eliminar', destructivo: true }))) return;
         try {
             await deleteCliente(id);
             if (clienteSeleccionado?.id === id) setClienteSeleccionado(null);
@@ -1387,6 +1390,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
         return (
             <div className="min-h-screen flex flex-col gap-0 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+                {dialogo}
 
                 {/* Header */}
                 <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 border-b border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-20">
@@ -2736,7 +2740,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                 }
                                             }
                                             if (sinStock.length > 0) {
-                                                const continuar = window.confirm(`Stock insuficiente:\n${sinStock.join('\n')}\n\n¿Deseas confirmar la venta de todas formas?`);
+                                                const continuar = await confirmar({ titulo: 'Stock insuficiente', descripcion: `${sinStock.join('\n')}\n\n¿Deseas confirmar la venta de todas formas?`, confirmarTexto: 'Vender de todas formas' });
                                                 if (!continuar) return;
                                             }
                                             await guardarEnHistorial(carritoPos, totalCarrito, fotoFactura, metodoPagoSeleccionado);
@@ -3453,6 +3457,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     return (
         <div className="min-h-full flex flex-col gap-5 max-md:gap-3 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+            {dialogo}
 
             {/* ── Header ──────────────────────────────────────────────────── */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 max-md:gap-3 bg-white dark:bg-slate-900 px-5 py-4 max-md:px-4 max-md:py-3 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -3722,7 +3727,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 onChange={e => setTempPrecio(e.target.value)}
                                                                 onKeyDown={e => {
                                                                     if (e.key === 'Enter') {
-                                                                        const v = parseFloat(tempPrecio);
+                                                                        const v = parsearDineroCO(tempPrecio);
                                                                         if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v);
                                                                         setEditandoPrecioId(null);
                                                                     }
@@ -3733,14 +3738,14 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 className="w-20 h-7 text-xs font-black text-center border border-indigo-400 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 bg-white max-md:w-24 max-md:h-10 max-md:text-base"
                                                                 step="0.01" min="0"
                                                             />
-                                                            <button onClick={e => { e.stopPropagation(); const v = parseFloat(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }} aria-label="Guardar precio" className="text-emerald-600 hover:text-emerald-700 max-md:p-2.5"><Check className="w-3.5 h-3.5" /></button>
+                                                            <button onClick={e => { e.stopPropagation(); const v = parsearDineroCO(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }} aria-label="Guardar precio" className="text-emerald-600 hover:text-emerald-700 max-md:p-2.5"><Check className="w-3.5 h-3.5" /></button>
                                                             <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(null); }} aria-label="Cancelar" className="text-slate-400 hover:text-slate-600 max-md:p-2.5"><X className="w-3.5 h-3.5" /></button>
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-1 justify-center">
                                                             <p className={`text-sm font-black tabular-nums ${d.tieneOverride ? 'text-amber-600' : 'text-indigo-600'}`}>{formatCurrency(d.precioMayorista)}</p>
                                                             {/* max-md: área de toque ~40px (el icono mide 12px) sin mover el diseño */}
-                                                            <button aria-label="Editar precio mayorista" onClick={e => { e.stopPropagation(); setEditandoPrecioId(d.producto.id); setTempPrecio(String(d.precioMayorista)); }} className="text-slate-300 hover:text-indigo-500 transition-colors max-md:p-4 max-md:-m-4 max-md:text-slate-400"><Pencil className="w-3 h-3" /></button>
+                                                            <button aria-label="Editar precio mayorista" onClick={e => { e.stopPropagation(); setEditandoPrecioId(d.producto.id); setTempPrecio(String(Math.round(d.precioMayorista * 100) / 100)); }} className="text-slate-300 hover:text-indigo-500 transition-colors max-md:p-4 max-md:-m-4 max-md:text-slate-400"><Pencil className="w-3 h-3" /></button>
                                                         </div>
                                                     )}
                                                 </div>

@@ -244,7 +244,7 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
 
-### 🔧 2026-10-18 (noche) — Claude Sonnet 5.5 — Ventas al Mayor: auditoría y adaptación SOLO móvil (rama feat/mayoristas-movil, desde main)
+### 🔧 2026-10-18 (noche) — Claude Sonnet 5.5 — Ventas al Mayor: auditoría y adaptación SOLO móvil (PR #7; seguimiento en PR #8 y #9, ya mergeados a main el 2026-10-19)
 
 **Pedido de Gonzalo**: auditar y mejorar el módulo Ventas al Mayor SOLO en móvil; escritorio no debe cambiar.
 
@@ -252,5 +252,23 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **Hecho** (`src/pages/Mayoristas.tsx`, todo con `max-md:` para no tocar escritorio): barra del ticket `sticky` sobre la barra inferior; encabezado/márgenes/KPIs/tarjetas compactos; pestañas 44 px; lápiz de precio y editar/eliminar cliente con área ≥ 40–44 px; teclado decimal en el precio manual; selector de cliente legible. Informe completo y pendientes: `docs/AUDITORIA_MAYORISTAS_MOVIL_2026-10-18.md`. Test guardián: `src/lib/mayoristas-movil.test.ts` (12 tests).
 
-**NO incluido (requiere PR aparte / AUTORIZO)**: `parseFloat` en dinero (escribir `1.500` guarda 1.5 — usar parseo colombiano), `confirm()` nativo al eliminar cliente (se bloquea en PWA iPhone), partir el archivo de 4100 líneas, textos < 11 px.
-**No probado en celular físico.**
+**Seguimiento (PR aparte, ya en main)**: PR #8 — el precio manual (único campo de dinero de tipo texto; abonos y monto libre son `type="number"` y NO tenían el problema) usa `parsearDineroCO` (`src/lib/parseo-dinero.ts`); PR #9 — `useConfirmar` reemplaza `window.confirm` al eliminar cliente/abono/registro y al vender sin stock.
+**Aún pendiente**: los 3 `window.confirm('¿Reemplazar … ticket …?')` (funciones síncronas), partir el archivo de 4100 líneas, textos < 11 px.
+**No probado en celular físico; el diálogo de #9 no se vio en navegador (solo tests jsdom).**
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Auditoría de cajas/arranque móvil + arreglos (PR #5, mergeado a main el 2026-10-19; NO publicado/probado en celular real)
+
+**Qué reportó Gonzalo**: en el celular la app se queda en el logo; las cajas de cuadre cargan a veces, tardan o se reinician; las cajas de la tarde no salen en el historial.
+
+**Hallazgos (Supabase solo lectura + código)**: cada día se abren ~10 cajas de golpe (594 en total, 10 abiertas hoy 09:35 sin ventas); la tabla `ventas` solo tiene 18 filas (última 2026-07-24) → las ventas no llegan a la nube; el turno "Tarde" aparece hasta 2026-10-08.
+
+**Cambios hechos (AUTORIZO de Gonzalo)**:
+- `src/hooks/useVentas.ts`: el evento realtime de `caja` ya no reemplaza `cajaActiva` por la primera caja abierta de otro dispositivo (solo la suelta si ESA caja se cerró); errores de nube que se tragaban con `.catch(() => {})` ahora van a consola vía `avisarFalloNube` (sin toast rojo); venta del día con fecha local.
+- `src/pages/ControlCaja.tsx` y `src/components/reportes/ArqueoCajas.tsx`: "hoy"/día de la caja con calendario local (antes UTC: desde las 7 p. m. se saltaba al día siguiente).
+- `src/lib/indexedDBAdapter.ts`: `init()` con timeout de 15 s, `onblocked` y `onversionchange` (antes podía colgarse para siempre si otra pestaña tenía la base abierta); permite reintentar.
+- Nuevo `src/lib/fecha-local.ts` + tests: `fecha-local.test.ts`, `indexedDBAdapter.test.ts`, `src/hooks/useVentas.test.tsx` (13 tests, pasan).
+
+**Verificación**: suite completa 630 pasan / 25 fallan; la rama limpia (HEAD sin mis cambios) falla EXACTAMENTE los mismos 25 (deuda previa, no tocada). `tsc`: 1785 errores antes y después (0 nuevos).
+
+**Pendiente / NO hecho**: no probado en celular real; sin merge a main ni publicación; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
+**Ojo**: otro agente trabaja ControlCaja.tsx, supabase-db.ts e historial-cajas.ts en la carpeta principal (rama feat/marketing-studio-y-ajustes) → posible conflicto al juntar. Este worktree usa un enlace (junction) a node_modules de la carpeta principal.
