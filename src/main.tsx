@@ -8,6 +8,7 @@ import { CentinelaProvider } from '@/components/providers/CentinelaProvider'
 import { ErrorBoundary } from '@/components/common/ErrorBoundary'
 import './index.css'
 import { NexusDiagnostics } from '@/lib/nexus-diagnostics'
+import { describirErrorInicio, AVISO_NO_BORRAR_DATOS } from '@/lib/error-inicio'
 
 // Exponer herramientas de diagnóstico Nexus
 NexusDiagnostics.expose();
@@ -142,8 +143,37 @@ async function bootstrap() {
     );
   } catch (err) {
     console.error("❌ CRITICAL: Falló el inicio de la app:", err);
-    document.body.innerHTML = '<div style="color:red;padding:2rem;text-align:center;"><h2>⚠️ Error Crítico de Inicio</h2><p>La base de datos local no pudo iniciar. Por favor, recarga la página.</p></div>';
+    mostrarErrorInicio(err);
   }
+}
+
+// Pantalla de error de inicio: muestra la causa real, qué hacer y un botón Reintentar.
+// Se arma con textContent (no innerHTML) porque el mensaje de error es texto externo.
+function mostrarErrorInicio(err: unknown) {
+  const { causa, consejo } = describirErrorInicio(err);
+
+  const contenedor = document.createElement('div');
+  contenedor.style.cssText = 'max-width:34rem;margin:0 auto;padding:2rem 1.25rem;text-align:center;font-family:system-ui,sans-serif;color:#f1f5f9;';
+
+  const crear = (etiqueta: string, texto: string, estilo: string) => {
+    const el = document.createElement(etiqueta);
+    el.textContent = texto;
+    el.style.cssText = estilo;
+    contenedor.appendChild(el);
+    return el;
+  };
+
+  crear('h2', '⚠️ La app no pudo iniciar', 'color:#f87171;font-size:1.25rem;margin:0 0 0.75rem;');
+  crear('p', 'La base de datos local de este navegador no se pudo abrir.', 'margin:0 0 0.75rem;');
+  crear('p', consejo, 'margin:0 0 0.75rem;');
+  crear('p', AVISO_NO_BORRAR_DATOS, 'margin:0 0 1rem;font-size:0.85rem;color:#fbbf24;');
+
+  const boton = crear('button', 'Reintentar', 'background:#4f46e5;color:#fff;border:0;border-radius:0.5rem;padding:0.75rem 1.5rem;font-size:1rem;font-weight:700;cursor:pointer;');
+  boton.addEventListener('click', () => window.location.reload());
+
+  crear('p', `Detalle técnico: ${causa}`, 'margin:1.25rem 0 0;font-size:0.75rem;color:#94a3b8;word-break:break-word;');
+
+  document.body.replaceChildren(contenedor);
 }
 
 bootstrap();

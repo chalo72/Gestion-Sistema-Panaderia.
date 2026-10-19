@@ -311,4 +311,14 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Pendiente / NO hecho**: no probado en celular real; sin merge a main ni publicación; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
 **Ojo**: otro agente trabaja ControlCaja.tsx, supabase-db.ts e historial-cajas.ts en la carpeta principal (rama feat/marketing-studio-y-ajustes) → posible conflicto al juntar. Este worktree usa un enlace (junction) a node_modules de la carpeta principal.
 
+### 🔧 2026-10-19 — Claude Sonnet 5.5 — Pantalla "Error Crítico de Inicio" ahora explica la causa (main.tsx, con AUTORIZO de Gonzalo) — commiteado, sin push
+
+**Reporte**: Gonzalo vio "Error Crítico de Inicio — La base de datos local no pudo iniciar. Por favor, recarga la página." (captura). Ese texto sale del `catch` de `bootstrap()` en `src/main.tsx` cuando `db.init()` falla; no dice por qué.
+
+**Diagnóstico**: la vista previa del PR 6 (Vercel) abre bien en un navegador limpio (pantalla "¿Quién eres?"), o sea el código no rompe el arranque; el fallo es del navegador de Gonzalo (causas probables: otra pestaña/PWA con la base ocupada → el `init()` de `indexedDBAdapter.ts` espera 15 s y rechaza; o almacenamiento bloqueado/lleno/modo privado). No se pudo ver el error real de su consola.
+
+**Cambio**: `src/lib/error-inicio.ts` (nuevo, función pura `describirErrorInicio`, 6 tests) + `src/main.tsx`: el `catch` llama a `mostrarErrorInicio(err)`, que arma la pantalla con `textContent` (sin innerHTML), muestra el detalle técnico real, dice qué hacer (cerrar otras pestañas/ventanas, liberar espacio o salir de incógnito según el caso), advierte NO borrar los datos del sitio (ahí está lo no subido) y trae botón "Reintentar" (recarga). Verificado visualmente en el navegador de prueba. `tsc` 1784 (igual que antes; los 4 errores de main.tsx ya existían).
+
+**No hecho**: no se tocó `indexedDBAdapter.ts` ni se agregaron reintentos automáticos (con timeout de 15 s empeorarían la espera); falta que Gonzalo confirme la causa real con el "Detalle técnico" que ahora se muestra.
+
 **Nota al juntar con el PR 6 (2026-10-19)**: el conflicto en `useVentas.ts` se resolvió quedándose con la versión de main (la caja activa de este aparato NUNCA se reemplaza por una de otro; solo se suelta si se cerró) y conservando del PR 6 solo que el listener acepta también el evento `'sesiones_caja'` (la clave con la que sale el evento realtime/sync manual; la tabla remota real es `caja`).
