@@ -31,6 +31,7 @@ import type { ClienteMayorista, MetodoPago, Abono, TicketPendiente, HistorialMay
 
 import { cargarConfig, guardarConfig, calcularCosto } from '@/lib/mayoristas-utils';
 import { useConfirmar } from '@/hooks/useConfirmar';
+import { parsearDineroCO } from '@/lib/parseo-dinero';
 
 const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
     mayorista:  { label: 'Al por Mayor',  color: 'text-indigo-600',  bg: 'bg-indigo-50  dark:bg-indigo-950/20' },
@@ -3720,7 +3721,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 onChange={e => setTempPrecio(e.target.value)}
                                                                 onKeyDown={e => {
                                                                     if (e.key === 'Enter') {
-                                                                        const v = parseFloat(tempPrecio);
+                                                                        const v = parsearDineroCO(tempPrecio);
                                                                         if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v);
                                                                         setEditandoPrecioId(null);
                                                                     }
@@ -3730,13 +3731,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                                 className="w-20 h-7 text-xs font-black text-center border border-indigo-400 rounded-lg outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
                                                                 step="0.01" min="0"
                                                             />
-                                                            <button onClick={e => { e.stopPropagation(); const v = parseFloat(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3.5 h-3.5" /></button>
+                                                            <button onClick={e => { e.stopPropagation(); const v = parsearDineroCO(tempPrecio); if (!isNaN(v) && v > 0) setOverridePrecio(d.producto.id, v); setEditandoPrecioId(null); }} className="text-emerald-600 hover:text-emerald-700"><Check className="w-3.5 h-3.5" /></button>
                                                             <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(null); }} className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
                                                         </div>
                                                     ) : (
                                                         <div className="flex items-center gap-1 justify-center">
                                                             <p className={`text-sm font-black tabular-nums ${d.tieneOverride ? 'text-amber-600' : 'text-indigo-600'}`}>{formatCurrency(d.precioMayorista)}</p>
-                                                            <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(d.producto.id); setTempPrecio(String(d.precioMayorista)); }} className="text-slate-300 hover:text-indigo-500 transition-colors"><Pencil className="w-3 h-3" /></button>
+                                                            <button onClick={e => { e.stopPropagation(); setEditandoPrecioId(d.producto.id); setTempPrecio(String(Math.round(d.precioMayorista * 100) / 100)); }} className="text-slate-300 hover:text-indigo-500 transition-colors"><Pencil className="w-3 h-3" /></button>
                                                         </div>
                                                     )}
                                                 </div>

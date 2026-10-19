@@ -16,6 +16,8 @@ import { mergeHydrateItem } from './sync-merge-local-gana';
 
 const DB_NAME = 'dulce-placer-db';
 const DB_VERSION = 8;
+/** Máximo de espera al abrir IndexedDB antes de fallar en vez de quedarse colgado en el logo. */
+export const INIT_TIMEOUT_MS = 15000;
 
 /** Colecciones conocidas — cada una se convierte en un Object Store de IndexedDB */
 const COLLECTIONS = [
@@ -67,6 +69,21 @@ export class IndexedDBAdapter implements DatabaseAdapter {
     this.initPromise = new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
+      // Si otra pestaña/PWA vieja mantiene la base abierta, la actualización de versión queda
+      // bloqueada y `open` nunca responde: la app se quedaba en el logo para siempre.
+      // Un límite de tiempo convierte ese cuelgue en un error visible y reintentable.
+      let terminado = false;
+      const timer = setTimeout(() => {
+        if (terminado) return;
+        terminado = true;
+        this.initPromise = null; // permite reintentar init()
+        reject(new Error(`IndexedDB no respondió en ${INIT_TIMEOUT_MS / 1000}s (¿otra pestaña de la app abierta?)`));
+      }, INIT_TIMEOUT_MS);
+
+      request.onblocked = () => {
+        console.warn('⚠️ [IndexedDB]: apertura bloqueada por otra pestaña de la app. Cierra las demás pestañas.');
+      };
+
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
         // Crear Object Stores para cada colección si no existen aún
@@ -78,11 +95,26 @@ export class IndexedDBAdapter implements DatabaseAdapter {
       };
 
       request.onsuccess = (event) => {
-        this.db = (event.target as IDBOpenDBRequest).result;
+        clearTimeout(timer);
+        const abierta = (event.target as IDBOpenDBRequest).result;
+        // Si se agotó el tiempo, esta apertura tardía ya no se usa: se cierra para no bloquear a otros.
+        if (terminado) { abierta.close(); return; }
+        terminado = true;
+        this.db = abierta;
+        // Una versión nueva de la app (otra pestaña) necesita actualizar la base: soltarla en vez de bloquearla.
+        abierta.onversionchange = () => {
+          abierta.close();
+          if (this.db === abierta) this.db = null;
+          this.initPromise = null;
+        };
         resolve();
       };
 
       request.onerror = (event) => {
+        clearTimeout(timer);
+        if (terminado) return;
+        terminado = true;
+        this.initPromise = null; // permite reintentar init()
         const error = (event.target as IDBOpenDBRequest).error;
         console.error('❌ [IndexedDB]: Error al abrir la DB:', error);
         reject(error);

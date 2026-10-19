@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { db } from '@/lib/database';
+import { hoyLocalYMD, ymdLocalDeISO } from '@/lib/fecha-local';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -1063,8 +1064,9 @@ export function ControlCaja({
     }, [arqueo]);
 
     const ventasHoy = useMemo(() => {
-        const hoy = new Date().toISOString().split('T')[0];
-        return ventas.filter(v => v.fecha?.startsWith(hoy));
+        // Día LOCAL: con UTC, desde las 7 p. m. las ventas de la tarde dejaban de contar como "hoy".
+        const hoy = hoyLocalYMD();
+        return ventas.filter(v => ymdLocalDeISO(v.fecha) === hoy);
     }, [ventas]);
 
     const totalVentasHoy = useMemo(() =>
