@@ -7,6 +7,7 @@ Instrucciones para cualquier agente de IA (Antigravity, Cursor, Claude Code u ot
 Este proyecto se trabaja alternando entre varios agentes de IA en sesiones distintas, no simultáneas: cuando a uno se le acaban los créditos/tokens, el usuario continúa la misma tarea con otro agente.
 
 - **Antes de empezar cualquier tarea no trivial**, lee `CORE_MEMORY.md` en la raíz de este repo. Contiene el estado real del proyecto, decisiones recientes, errores conocidos y pendientes que puede haber dejado otro agente en otra herramienta.
+- **🚨 Esto incluye ANTES de tocar Vercel de cualquier forma** — no solo antes de desplegar o editar código. También antes de leer o escribir variables de entorno, dominios o deployments vía dashboard O vía API/MCP. `CORE_MEMORY.md` tiene, en las primeras líneas, cuál es el Project ID de Vercel correcto (`app` / `prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`) y cuál es un proyecto huérfano/trampa que NUNCA hay que tocar (`panaderia-dulce-placer`). Nunca busques el proyecto de Vercel por nombre parecido al del negocio.
 - **Después de completar algo significativo**, agrega una entrada en `CORE_MEMORY.md` (sección "Decisiones Clave" o "Estado Actual y Pendientes") con fecha, qué se hizo y por qué. Si no queda escrito ahí, el siguiente agente no lo sabrá.
 - No asumas que el estado del proyecto es el que recuerdas de tu propia conversación o memoria interna — esa memoria es privada de cada herramienta y no la ven las demás. Solo lo que está en archivos del repo es visible para todos los agentes.
 

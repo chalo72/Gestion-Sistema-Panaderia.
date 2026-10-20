@@ -15,7 +15,9 @@ import { mergeHydrateItem } from './sync-merge-local-gana';
  */
 
 const DB_NAME = 'dulce-placer-db';
-const DB_VERSION = 8;
+// v9 agrega el almacén 'checklist_completadas' (rama feat). Una base ya abierta en v8 sube a v9 sola;
+// una ya en v9 se abre tal cual. Si alguna vez existiera una más nueva, el manejo de VersionError la abre igual.
+const DB_VERSION = 9;
 /** Máximo de espera al abrir IndexedDB antes de fallar en vez de quedarse colgado en el logo. */
 export const INIT_TIMEOUT_MS = 15000;
 
@@ -52,6 +54,7 @@ const COLLECTIONS = [
   'agente_config',
   'bitacora_ia',
   'asistencia',
+  'checklist_completadas',
   'nominas',
   'auditorias_produccion',
   'planes_diarios',
