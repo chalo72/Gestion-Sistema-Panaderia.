@@ -129,6 +129,71 @@ export const promptPreguntaOdysseus = (
   ].join('\n');
 };
 
+export const CATEGORIAS_BITACORA: { id: string; label: string }[] = [
+  { id: 'robo', label: 'Robo' },
+  { id: 'consumo_no_registrado', label: 'Consumo no registrado (se come producto sin registrar crédito)' },
+  { id: 'producto_regalado', label: 'Producto vendido o regalado sin autorización' },
+  { id: 'devolucion_simulada', label: 'Devolución de dinero simulada (la venta sigue activa)' },
+  { id: 'incumplimiento', label: 'No está haciendo lo que debe (comportamiento / tareas)' },
+];
+
+/** Prompt para analizar un micro-video (10s) de la Bitácora Visual. */
+export const promptAnalisisClipOdysseus = (nombreCamara: string): string => {
+  return [
+    `Cámara: ${nombreCamara}. Panadería Dulce Placer.`,
+    'Analiza el video/imagen adjunto. Busca ESPECÍFICAMENTE:',
+    '1. Robo (alguien se lleva producto o dinero sin pagar).',
+    '2. Un trabajador comiéndose un producto sin registrarlo como crédito/consumo.',
+    '3. Vender o regalar producto sin autorización.',
+    '4. Registrar una devolución de dinero mientras la venta sigue activa (simular una devolución).',
+    '5. Comportamiento general: si el trabajador está haciendo lo que debe.',
+    'Responde EXACTAMENTE en este formato, 3 líneas, nada más:',
+    'CLASIFICACION: bueno|regular|malo|por_mejorar',
+    'CATEGORIAS: robo,consumo_no_registrado,producto_regalado,devolucion_simulada,incumplimiento (las que apliquen, separadas por coma, o "ninguna")',
+    'DESCRIPCION: 1-2 frases de lo que se ve, en español, sin inventar nada que no se vea.',
+    'Si no ves nada relevante o el video no cargó, responde: CLASIFICACION: bueno / CATEGORIAS: ninguna / DESCRIPCION: SIN_IMAGEN: no pude ver la cámara.',
+  ].join('\n');
+};
+
+/** Interpreta la respuesta de texto de ODYSSEUS al formato de arriba. */
+export const parsearRespuestaClipOdysseus = (
+  texto: string
+): {
+  clasificacion: 'bueno' | 'regular' | 'malo' | 'por_mejorar' | null;
+  categorias: string[];
+  descripcion: string;
+  alerta: boolean;
+} => {
+  const clasMatch = texto.match(/CLASIFICACION:\s*(bueno|regular|malo|por_mejorar)/i);
+  const catMatch = texto.match(/CATEGORIAS:\s*([^\n]+)/i);
+  const descMatch = texto.match(/DESCRIPCION:\s*([\s\S]+)/i);
+
+  const clasificacion =
+    (clasMatch?.[1]?.toLowerCase() as 'bueno' | 'regular' | 'malo' | 'por_mejorar' | undefined) || null;
+  const categorias = (catMatch?.[1] || '')
+    .split(',')
+    .map((c) => c.trim().toLowerCase())
+    .filter((c) => c && c !== 'ninguna');
+  const descripcion = (descMatch?.[1] || texto).trim();
+  const alerta = categorias.length > 0 || clasificacion === 'malo';
+
+  return { clasificacion, categorias, descripcion, alerta };
+};
+
+/** Prompt del informe de fin de jornada, a partir del resumen de los clips ya analizados. */
+export const promptInformeDiarioOdysseus = (resumen: string): string => {
+  return [
+    'Eres ODYSSEUS. Abajo tienes el resumen de los clips de cámara analizados hoy en la panadería Dulce Placer.',
+    'Con base SOLO en esa información (no inventes nada que no esté ahí), organiza el día en 4 grupos:',
+    'COSAS BUENAS, COSAS REGULARES, COSAS MALAS, COSAS POR MEJORAR.',
+    'Sé breve y concreto, en español, con viñetas cortas. Si un grupo no tiene nada, escribe "Sin novedades".',
+    'Si el resumen está vacío, responde: "No hay clips analizados hoy."',
+    '',
+    'Resumen del día:',
+    resumen,
+  ].join('\n');
+};
+
 export type TipoCamaraPuente = 'v380' | 'hikvision';
 
 /** RTSP Hikvision: canal 1 → 101, canal 2 → 201, … */

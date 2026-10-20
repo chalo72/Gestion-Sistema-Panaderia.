@@ -25,6 +25,10 @@ type Handler = {
   // Opcional: mapea el registro que ya viene en el evento realtime, sin traer toda la
   // tabla. Si no está definido, se usa el camino viejo (getFromSupabase + find).
   mapFromRecord?:  (record: any) => any;
+  // Nombre REAL de la tabla en Supabase cuando difiere de la clave del handler.
+  // Realtime solo notifica sobre tablas que existen: escuchar un nombre inexistente
+  // no da error, simplemente nunca llega ningún evento.
+  remoteTable?:    string;
 };
 
 function orig(name: string, fallback: (...a: any[]) => Promise<any>) {
@@ -72,6 +76,11 @@ const HANDLERS: Record<string, Handler> = {
   sesiones_caja: {
     localTableName:  'sesiones_caja',
     getFromSupabase: () => _sdb.getAllSesionesCaja(),
+    // 🩹 FIX 2026-10-18: en Supabase la tabla se llama `caja`, no `sesiones_caja`. Sin esto,
+    // abrir turno en el celular nunca llegaba por realtime al PC (el canal escuchaba una
+    // tabla inexistente). Se mapea el registro del evento para no bajar toda la tabla.
+    remoteTable:     'caja',
+    mapFromRecord:   (r) => (_sdb as any).mapCajaFromDB(r),
     writeToLocal:    (d) => orig('updateSesionCaja', db.updateSesionCaja.bind(db))(d),
     deleteFromLocal: async () => {},
   },
@@ -170,6 +179,18 @@ const HANDLERS: Record<string, Handler> = {
     },
     deleteFromLocal: async () => {},
   },
+  checklist_completadas: {
+    localTableName:  'checklist_completadas',
+    getFromSupabase: () => _sdb.getAllChecklistCompletadas(),
+    writeToLocal:    (d) => orig('addChecklistCompletada', db.addChecklistCompletada.bind(db))(d),
+    deleteFromLocal: (id) => orig('deleteChecklistCompletada', db.deleteChecklistCompletada.bind(db))(id),
+  },
+  asistencias: {
+    localTableName:  'asistencia',
+    getFromSupabase: () => _sdb.getAllAsistencias(),
+    writeToLocal:    (d) => orig('addRegistroAsistencia', db.addRegistroAsistencia.bind(db))(d),
+    deleteFromLocal: async () => {},
+  },
 };
 
 export const TABLE_LABELS: Record<string, string> = {
@@ -192,6 +213,8 @@ export const TABLE_LABELS: Record<string, string> = {
   clientes:               'Clientes',
   nominas:                'Nóminas',
   configuracion:          'Configuración',
+  checklist_completadas:  'Checklist de Tareas',
+  asistencias:            'Asistencia',
 };
 
 export interface RemoteSyncEvent {
@@ -715,7 +738,7 @@ export function useRealtimeSync() {
     channelsRef.current = tables.map(table =>
       supabase
         .channel(`nexus_rt_${table}_v3`)
-        .on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: HANDLERS[table].remoteTable ?? table }, (payload) => {
           const record = Object.keys(payload.new ?? {}).length > 0
             ? payload.new : payload.old;
           applyRemoteChange(table, payload.eventType, record);

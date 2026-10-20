@@ -211,6 +211,79 @@ export function VentaDiariaRapidaForm(props: Props) {
             >
                 <Plus className="w-4 h-4 mr-1" /> Registrar cierre del día
             </Button>
+
+            {/* Historial al instante de ventas guardadas */}
+            <div className="mt-4 pt-3 border-t border-slate-100 dark:border-white/5 space-y-2">
+                <div className="flex items-center justify-between">
+                    <Label className="text-[10px] font-black uppercase text-muted-foreground tracking-wider">
+                        Historial de Cierres ({props.ventas?.length ? 'Guardados' : 'Registros'})
+                    </Label>
+                    <span className="text-[9px] font-bold text-slate-400">Actualizado al instante</span>
+                </div>
+                {(() => {
+                    const localVentas = (() => {
+                        try {
+                            const raw = localStorage.getItem('dp_ventas_diarias');
+                            return raw ? JSON.parse(raw) : [];
+                        } catch {
+                            return [];
+                        }
+                    })();
+
+                    if (localVentas.length === 0) {
+                        return (
+                            <p className="text-[11px] text-slate-400 text-center py-2 italic bg-slate-50 dark:bg-white/5 rounded-xl border border-slate-100 dark:border-white/5">
+                                No hay cierres registrados aún
+                            </p>
+                        );
+                    }
+
+                    const ultimas = [...localVentas].sort((a: any, b: any) => (b.fecha || '').localeCompare(a.fecha || '')).slice(0, 5);
+
+                    return (
+                        <div className="space-y-1.5">
+                            {ultimas.map((vd: any, idx: number) => {
+                                const totalEf = Object.values(vd.cajas || {}).reduce((s: number, v: any) => s + (Number(v) || 0), 0) + (Number(vd.totalEfectivo) || 0);
+                                const totalOtros = (Number(vd.totalNequi) || 0) + (Number(vd.totalTransferencia) || 0) + (Number(vd.totalCredito) || 0);
+                                const granTotal = totalEf + totalOtros;
+
+                                return (
+                                    <div
+                                        key={vd.id || idx}
+                                        className="flex items-center justify-between bg-slate-50 dark:bg-white/5 p-2.5 rounded-xl border border-slate-200/70 dark:border-white/5 text-xs"
+                                    >
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="font-black text-slate-800 dark:text-slate-200 text-xs">
+                                                    📅 {vd.fecha}
+                                                </span>
+                                                <span className="text-[9px] font-bold px-1.5 py-0.2 bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 rounded-md">
+                                                    {vd.turno || 'Día Completo'}
+                                                </span>
+                                            </div>
+                                            {vd.notas && (
+                                                <p className="text-[10px] text-slate-400 truncate max-w-[200px] mt-0.5">
+                                                    {vd.notas}
+                                                </p>
+                                            )}
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <span className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums">
+                                                {props.formatCurrency(granTotal)}
+                                            </span>
+                                            {totalOtros > 0 && (
+                                                <p className="text-[9px] text-slate-400">
+                                                    Ef: {props.formatCurrency(totalEf)} · Dig: {props.formatCurrency(totalOtros)}
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    );
+                })()}
+            </div>
         </div>
     );
 }

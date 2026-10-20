@@ -1,7 +1,49 @@
 # 🧠 CORE MEMORY — Gestión de Precios y Proveedores (Dulce Placer)
-> Última actualización: 2026-09-15
+> Última actualización: 2026-10-20
 
-## 🚨 CUÁL COPIA ES LA BUENA — LÉELO ANTES DE DESPLEGAR O EDITAR (actualizado 2026-09-15, tarde)
+# 🚨🚨 VERSIÓN OFICIAL — LEER ANTES DE PUBLICAR, JUNTAR RAMAS O TOCAR LA BASE LOCAL (vigente desde 2026-10-20)
+
+**La versión verdadera de la app es la rama `main` de GitHub (carpeta RAÍZ del repo, `src/`; nunca `app/`).** Lo que no esté en `main` no es oficial, sin importar quién lo haya hecho o en qué carpeta/rama esté.
+
+**Cómo se publica a producción** (`app-eight-sigma-13.vercel.app`, proyecto Vercel `app`, `prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`):
+1. El cambio se junta primero en `main` **mezclando un PR en GitHub** (botón verde "Merge pull request", lo pulsa Gonzalo). Vercel publica solo desde `main`.
+2. **NADIE publica a producción desde otra carpeta, otra rama, un worktree (`.claude/worktrees/`) ni desde `app/`** (nada de `vercel --prod` a mano, `PUBLICAR_A_PRODUCCION.bat` ni `npm run deploy` fuera de `main` limpia y al día). Cada publicación desde otro lado pisa a la anterior: ya pasó en septiembre (`src/` vs `app/`) y en octubre (rama feat vs `main`).
+3. Lista de chequeo antes/después de publicar y prueba de humo: skill `publicar-solo-desde-main-dulce-placer` (en `~/.claude/skills`, fuera del repo; resumen: `main` limpia, PR en verde —Quality Check, Build, Vercel; los rojos de Netlify `symphonious-douhua-7d50ce` no cuentan—, abrir la vista previa con un navegador limpio y con uno que ya tenga datos, y nunca pedir "borrar datos del sitio").
+
+**Qué pasó con la base local (DB_VERSION 8 vs 9) — 2026-10-19:** la rama `feat/marketing-studio-y-ajustes` subió la base local IndexedDB a la **versión 9** (almacén nuevo `checklist_completadas`). Producción se publicaba desde esa rama; al pasar a publicarse desde `main` (que seguía en **versión 8**) los navegadores que ya habían abierto la 9 dieron "Error Crítico de Inicio" (`VersionError`: pedida 8 < existente 9; IndexedDB no baja de versión) y las vendedoras no podían entrar. **Arreglo definitivo (2026-10-20):** las dos versiones se juntaron en `main`; `DB_VERSION = 9` en `src/lib/indexedDBAdapter.ts`, y si alguna vez la base existente es más nueva el código la abre igual (manejo de `VersionError`). **Regla: `DB_VERSION` solo sube, nunca baja**, y una rama que la suba debe llegar a `main` antes de publicarse.
+
+**Frenos automáticos (desde 2026-10-20):** `.claude/hooks/proteger-deploy.mjs` ahora, ante cualquier publicación a producción, (a) NIEGA si la rama no es `main`, si se está en un worktree o desde `app/`, y (b) pide confirmación si `main` tiene cambios sin guardar o está atrasada respecto a `origin/main`. Se prueba con `node .claude/hooks/proteger-deploy.prueba.mjs`. Además, la regla `.claude/hookify.doble-toque-guardado-dulce-placer.local.md` avisa (no bloquea) cuando se escribe un guardado asíncrono en `.tsx` sin protección contra doble toque (origen: 11 consumos duplicados el 2026-10-18; el arreglo `crearGuardiaEnvio` está en la rama `claude/dazzling-pasteur-8d42ae`, pendiente de juntar).
+
+**Avisos anteriores = HISTÓRICOS:** "CUÁL COPIA ES LA BUENA" (2026-09-15/17) y los incidentes de abajo siguen siendo historia útil (y lo de `app/` vs raíz sigue valiendo), pero su "estado a las 22:00" y la idea de publicar desde una rama de feature **ya no aplican**: manda este aviso.
+
+
+# 🛑🔴🛑🔴🛑 PARE — CUALQUIER AGENTE, CUALQUIER CHAT: LEE ESTO ANTES DE TOCAR VERCEL 🛑🔴🛑🔴🛑
+
+> ## ⛔ ESTO NO ES OPCIONAL. APLICA SIEMPRE QUE VAYAS A:
+> - Desplegar (`vercel --prod`, `PUBLICAR_A_PRODUCCION.bat`, o cualquier deploy)
+> - Editar código que se vaya a desplegar
+> - **Y TAMBIÉN cuando vayas a tocar CONFIGURACIÓN DE VERCEL — variables de entorno, dominios, deployments — YA SEA por el dashboard web O por herramientas de API/MCP (`mcp__Vercel__*`).** Esto NO es solo sobre deploys de código.
+
+## 🔴🔴🔴 REGLA #1 — HAY DOS PROYECTOS DE VERCEL EN LA CUENTA. UNO ES UNA TRAMPA. 🔴🔴🔴
+
+| | NOMBRE EN VERCEL | PROJECT ID | ¿ES EL REAL? |
+|---|---|---|---|
+| ✅ **USA SIEMPRE ESTE** | **`app`** | **`prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`** | **SÍ.** Sirve `app-eight-sigma-13.vercel.app` — el sitio que Gonzalo realmente abre y usa. |
+| ❌ **NUNCA USES ESTE** | `panaderia-dulce-placer` | `prj_FadaTb8fTqzTXtBNxcs1u9qHPA4Z` | **NO.** Proyecto huérfano/duplicado. Nadie lo abre. No sirve nada real. |
+
+**⚠️ TODOS LOS AGENTES SE CONFUNDEN CON ESTO, SIN EXCEPCIÓN, PORQUE `panaderia-dulce-placer` "SUENA" COMO EL PROYECTO CORRECTO POR EL NOMBRE DEL NEGOCIO — Y NO LO ES.**
+
+Confirmado repetidas veces, la más reciente el **2026-09-19**: un agente (Claude, esta misma familia de asistente) buscó el proyecto por nombre, encontró `panaderia-dulce-placer`, y agregó ahí una variable de entorno (`NVIDIA_API_KEY`) pensando que era el proyecto real. No tuvo ningún efecto porque ese proyecto no se usa — el usuario tuvo que corregir al agente explícitamente, citando ESTE MISMO documento, y hubo que repetir el cambio en `app` (el proyecto correcto).
+
+### ✅ CÓMO NO CAER EN LA TRAMPA
+**Antes de leer, escribir o cambiar CUALQUIER COSA en Vercel — env vars, dominios, deployments, lo que sea — usa siempre el Project ID exacto `prj_jYDczKuEmfcLp1zyX5GTIWNjMleq` directamente (o el nombre exacto `app`). NUNCA busques el proyecto "por nombre parecido al negocio" ni asumas que el que suena más obvio es el correcto — es al revés.** Si por cualquier razón tienes duda, compara el dominio/alias del proyecto (`app-eight-sigma-13.vercel.app`) contra lo que el usuario realmente abre en el navegador, ANTES de tocar nada.
+
+## 🔴🔴🔴 REGLA #2 — HAY DOS COPIAS DEL CÓDIGO FUENTE EN ESTE REPO 🔴🔴🔴
+Ver el detalle completo justo abajo, en "🚨 CUÁL COPIA ES LA BUENA". Resumen: `src/` (raíz) y `app/src/` están vinculadas al MISMO proyecto de Vercel (el de la tabla de arriba) — quien despliegue desde cualquiera de las dos carpetas sobrescribe a la otra en producción. Compara antes de asumir cuál es la buena.
+
+---
+
+## 📜 [HISTÓRICO — superado por el aviso "VERSIÓN OFICIAL" de arriba, 2026-10-20] CUÁL COPIA ES LA BUENA — raíz vs `app/` (actualizado 2026-09-15, tarde)
 Hay **dos copias del código fuente** en este repo: `src/` (raíz) y `app/src/`. Ambas carpetas están vinculadas al **mismo proyecto de Vercel** (`projectId: prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`, nombre de proyecto "app", sirviendo `app-eight-sigma-13.vercel.app`) — quien sea que corra `vercel --prod` desde una u otra carpeta es lo que queda publicado. **Ninguna de las dos es "la buena" de forma permanente** — han evolucionado en paralelo con trabajo real e independiente en cada una, y se pisan entre sí cada vez que se despliega la que no toca. Antes de decir "esta es la buena", compara — no asumas.
 
 **Estado a las 22:00 del 2026-09-15**: la copia de la **raíz** (`src/`) es la más completa — tiene los módulos de la semana (Radar Nequi, Consumo Interno/Fiados, Control de Merma, Pedidos Tortas, Marketing Studio) **y** se le portaron a mano las mejoras recientes de `app/` (recuperación de borrador en Recepciones, precio→catálogo de proveedor, imprimir en Pedidos, tarjetas táctiles más grandes) **y** los 7 bugs de "variable no definida" que causaban crashes en producción ya están arreglados ahí. `app/` sigue teniendo su propio trabajo en curso (menú móvil táctil en Ventas/Caja, fixes de sincronización/login) que la raíz no tiene — si alguien sigue trabajando ahí, hay que volver a portar esos cambios a la raíz antes de desplegar, no asumir que ya están.
@@ -77,6 +119,16 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 ## 🔑 Decisiones Clave (Historial)
 | Fecha | Decisión | Razón |
 |-------|----------|-------|
+| 2026-10-06 | Seguridad Supabase (Riesgo RLS Aceptado) | Para no romper el acceso de las vendedoras y el flujo actual (login local sin `supabase.auth`), se decidió mantener temporalmente la política `allow_all_access` en las tablas de Supabase. Este es un riesgo aceptado (Option 3) dado que es un sistema POS interno. La ofuscación de la URL y el `.env` son la defensa principal actual. |
+| 2026-10-06 | Optimización Arquitectura (God Hook Mitigado) | Para solucionar el problema de re-renders masivos causados por `usePriceControl.ts` en `App.tsx` *sin* destruir el contexto global ni reescribir la app, se inyectaron `useCallback` en los handlers de menú de `App.tsx` y se envolvieron `Sidebar` y `BottomNavBar` con `React.memo`. Esto frena drásticamente el recalentamiento en móviles al aislar las actualizaciones. |
+| 2026-10-06 | Cirugía TypeScript y Preservación de Contexto | Siguiendo instrucción estricta de NO borrar datos/contexto: Se repararon únicamente los errores estructurales graves en `Ventas.tsx` (aserciones incompletas de Producto perdiendo `margenUtilidad` y `createdAt`) y `Reportes.tsx` (fallo de interfaz en `exportCSV` y propiedad fantasma `v.hora`). Los +1500 warnings de "variables no usadas" se dejaron intactos para no romper flujos en desarrollo. |
+| 2026-10-06 | Auditoría Extrema, Fix PWA Lazy Load y Fix Bug Producción | 1) **PWA Lazy Load**: Se detectó que solo \`Inventario.tsx\` estaba protegido contra fallos de caché PWA. Se parcheó \`App.tsx\` para usar \`lazyWithRetry\` en rutas críticas (\`Ventas\`, \`ControlCaja\`, \`Produccion\`). 2) **Bug Producción Semana**: Se corrigió bug en \`Produccion.tsx\` -> \`handleLanzarPlan\` donde \`cantidadPlaneada\` era nula al lanzar desde el Plan Semanal (el item no tenía propiedad \`panes\`). Ahora calcula con: \`item.panes || Math.round(item.arrobas * modelo.panesPorArroba)\`. 3) **Deuda Técnica**: Reportada necesidad de limpiar miles de warnings de Typescript y refactorizar \`usePriceControl.ts\` (God Hook) para evitar re-renders. |
+| 2026-09-30 | Fix Reversión de Moneda (Euro a COP) y Reparación/Optimización Crítica de Nómina | 1) **Moneda (Reversión a Euro)**: La configuración perdía el formato `COP` al recargar porque en la función `saveConfiguracion` (local IndexedDB) faltaba agregar explícitamente el `updated_at`. Como consecuencia, `useRealtimeSync.ts` (encargado de sincronizar la nube con lo local) detectaba que la versión remota (Euro, que nunca se actualizó por tener timestamp más nuevo que la local) era la correcta y sobrescribía el cambio local con `EUR`. Se agregó autoestampado seguro de fecha en `src/lib/database.ts` -> `saveConfiguracion()`. 2) **Crash en Nómina (Blank Page) y Optimización**: Históricamente los registros `nominaExistente.items` llegaban de la base de datos sin arreglo instanciado (`undefined`), lo que provocaba crash de React al hacer un `.reduce()`. Se agregó un fallback. A su vez, el cálculo de asistencia empleaba filtros anidados de orden $O(N^3)$ que congelaba la pestaña; se reemplazó por un mapeo estricto `Map(O(1))` en `Nomina.tsx`. |
+| 2026-09-30 | Fix crítico de Sincronización en Libreta de Horno y Catálogo de Panes Faltantes | 1) **Sincronización destructiva reparada**: El PC sobrescribía la copia en la nube al llamar a `pushProduccionesToCloud` sin fusionar cuando se abría o actualizaba. Se reemplazó por `sincronizarProduccionesConNube` en `saveProducciones` para asegurar que todo guardado local baje, fusione y luego suba los datos sin pisar lo del celular. 2) **Buscador Inteligente de Panes**: "Pan de mantequilla" no aparecía si el pan se llamaba "Pan Mantequilla" (búsqueda exacta). Se actualizó `DistribuidorArroba.tsx` para usar división por palabras. 3) **Carga Inmutable Forzada**: Se quitó la limitante (`hasRealMod ? [] : ...`) en `useProduccionHook.ts` que impedía cargar los panes de `modelos-inmutables.ts` si existía al menos un dato en la DB, asegurando que ningún pan blindado desaparezca de la lista. Falta hacer deploy manual con el `.bat` en PC. |
+| 2026-09-30 | Playwright agregado al MCP de Claude (Desktop y Claude Code), paquete `@playwright/mcp@latest`. No usa clave. Reiniciar Claude para que aparezca. | Pedido de Gonzalo, mismo sitio que Perplexity. |
+| 2026-09-29 noche | Perplexity agregado al MCP de Claude (Desktop `claude_desktop_config.json` y Claude Code en `~/.claude.json`), paquete `@perplexity-ai/mcp-server`. | Pedido de Gonzalo. No había clave `PERPLEXITY_API_KEY` en el equipo: el campo quedó vacío. Hay que pegar la clave de https://www.perplexity.ai/settings/api y reiniciar Claude. |
+| 2026-09-29 noche | Instaladas las protecciones del paquete `_instalar_protecciones_2026-09-30` (Cursor, `INSTALAR.ps1`). No se tocó código de la app. | Quedaron: hooks Claude Code (revisión de tipos tras cada edición y aviso al iniciar), agentes de solo lectura en `.claude/agents/`, y chequeo git en `.git/hooks/pre-commit` + `.githooks/` que frena commits con `key.txt`, `.env` u otras claves. Deshacer: `powershell -ExecutionPolicy Bypass -File _instalar_protecciones_2026-09-30\DESHACER.ps1`. La clave ya publicada en GitHub sigue expuesta: hay que rotarla en el proveedor. La primera revisión de tipos de Claude Code tarda cerca de un minuto; las siguientes, unos segundos. |
+| 2026-09-18 noche | Panes Faltantes ("Pan pequeño de queso"), Optimización Modo Ayudante Móvil y Auditoría/Edición de Cuadres de Caja | Solicitud explícita de Gonzalo: 1) **Panes Faltantes / Catálogo Universal**: Se aseguró la presencia de `"Pan pequeño de queso"` en `modelos-inmutables.ts` / `.json` y se actualizaron los selectores de modelos en `DiagnosticoFinanciero.tsx` y `DistribuidorArroba.tsx` para mostrar siempre todos los modelos agrupados (`optgroup` de sugeridos para la masa + todos los demás panes) evitando que se oculten panes por diferencias de formulación. 2) **Modo Ayudante en Móvil**: Las secciones ahora inician cerradas (`defaultAbierto = false`), el selector de masas se rediseñó verticalmente a ancho completo para evitar que quede aplastado en celulares, y se añadió historial reactivo inmediato bajo el formulario de Venta Diaria. 3) **Historial y Edición de Cuadres de Caja**: En `ControlCaja.tsx` y `useVentas.ts`, se habilitó el historial de cuadres en escritorio y móvil, con evento reactivo `dp_sesiones_caja_changed`, y se implementó un modal interactivo para ver el desglose completo y editar fecha, responsable, turno, monto de cierre y notas del cuadre. Verificado con `tsc --noEmit` (0 errores). |
 | 2026-09-18 tarde | Desbloqueo de Guardado con Masa Extra / Sobregirada y Sincronización Total de Modo Ayudante (Venta Diaria y Producción) | Solicitud explícita de Gonzalo: 1) **Producción sin bloqueos**: En `DistribuidorArroba.tsx` se eliminó el bloqueo que impedía guardar o sumar al plan cuando la masa sobrepasaba la cantidad estimada (`estaSobregirado`). Ahora se permite guardar con notificación informativa y estado amarillo/ámbar de "Masa de Más", verde para exacto/bien y rojo para falta por repartir. 2) **Sincronización Nube en Modo Ayudante y Libreta del Horno**: Se conectó `pushVentasDiariasToCloud` en `src/lib/finanzas-personales.ts`, se añadió el evento reactivo `dp_ventas_diarias_changed` y la sincronización bidireccional inmediata en `useReportesData.ts`, `LibretaHornoForm` y `VentaDiariaRapidaForm`. 3) En `DiagnosticoFinanciero.tsx` se ajustó el selector de masas para incluir todas las fórmulas maestras y se robusteció la selección de modelos de pan. Verificado con `tsc --noEmit` limpio (0 errores). |
 | 2026-09-18 tarde | Acceso a Modo Ayudante (Captura Rápida Atrasados) para el rol PANADERO | Solicitud explícita del usuario: el Panadero necesita registrar producciones atrasadas desde su sesión. Se incluyó `'modo-ayudante'` en `VER_PANADERO` y se implementó el parche automático `PATCH_PANADERO_MODO_AYUDANTE` en `src/hooks/usePermisosModulos.ts` para habilitarlo en sesiones existentes sin requerir reconfiguración manual. Verificado con `tsc --noEmit` limpio. |
 | 2026-09-18 tarde | Icono de Mesas en Ventas (POS): Mesa Real con Sillas de Restaurante (`MesaIcon`) | Solicitud explícita del usuario para reemplazar el icono previo por uno que dibuje literalmente una mesa de restaurante con sus sillas y tablero superior (`MesaIcon` SVG nítido). Se actualizó en `src/components/ventas/POSHeader.tsx` (tanto en la vista de escritorio como en la barra móvil de acceso rápido). Verificado con `tsc --noEmit` limpio. |
@@ -229,6 +281,14 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - La limpieza de fin de línea (CRLF) de todo el repo — ver hallazgo de arriba, pendiente de decisión de Gonzalo.
 - Verificación EN VIVO de estos 3 fixes — pendiente de un build + deploy real desde la PC de Gonzalo (u otro agente con acceso a esa PC).
 
+### 🔧 2026-09-19 — Claude Sonnet 5 (Cowork) — Modo Rapido arreglado: modelos de Groq/NVIDIA retirados, no la llave
+**Sintoma**: Marketing Studio -> Modo Rapido mostraba "Hubo un error generando la campana" en TODOS los intentos, incluso despues de poner una NVIDIA_API_KEY nueva y verificada en el proyecto correcto (`app`).
+**Causa real (verificada, no adivinada)**: `api/agente.ts` intentaba, en orden, Ollama (esperado que falle desde Vercel) -> Groq (via `OPENAI_API_KEY`) -> NVIDIA (`NVIDIA_API_KEY`) -> Anthropic (no configurado). Los modelos de texto por defecto que pedia el codigo (`llama-3.1-8b-instant` y `llama-3.3-70b-versatile` en Groq, `meta/llama-3.1-8b-instruct` y `meta/llama-3.1-405b-instruct` en NVIDIA) estaban RETIRADOS: Groq los apago oficialmente el 16-ago-2026 (ver https://console.groq.com/docs/deprecations), y el "Free Endpoint" de ese modelo en NVIDIA build.nvidia.com aparece marcado "Deprecated" en su propia pagina. Por eso los tres proveedores de respaldo fallaban siempre, sin importar que la llave de NVIDIA fuera nueva y correcta.
+**Verificacion antes de diagnosticar**: se reprodujo el error llamando directamente a `/api/agente` desde el navegador (fetch en la misma pagina en produccion) y se confirmo el 500 con "No hay proveedores de IA disponibles o todos fallaron." antes de tocar nada.
+**Arreglo**: en `api/agente.ts`, funcion `handleOpenAI`, se reemplazaron los 4 nombres de modelo retirados por modelos activos: NVIDIA -> `meta/llama-3.3-70b-instruct` (para ambos casos); Groq -> `openai/gpt-oss-120b` (modelos "importantes") y `openai/gpt-oss-20b` (default), que son los reemplazos que Groq recomienda oficialmente en su propia documentacion de deprecaciones.
+**Verificacion despues del deploy**: tras `PUBLICAR_A_PRODUCCION.bat`, se volvio a llamar `/api/agente` en produccion y esta vez respondio 200 con texto real generado por IA (no un error) — confirmado con la peticion real, no asumido.
+**Leccion para el futuro**: si el Modo Rapido (o cualquier feature que use `/api/agente`) vuelve a fallar con "todos los proveedores fallaron" DESPUES de confirmar que las llaves estan bien puestas en el proyecto correcto de Vercel, sospechar primero de nombres de modelo retirados por el proveedor (Groq/NVIDIA/OpenAI cambian sus catalogos con frecuencia) antes de tocar llaves o proyectos de nuevo.
+
 ### 🔧 2026-09-18 — Claude Sonnet 5 (Cowork) — Fase 0 completada: qué usa HOY realmente `/api/agente` (antes de agregar NVIDIA Build)
 
 **Contexto**: Gonzalo pidió agregar NVIDIA Build (build.nvidia.com/NIM, API gratis compatible con OpenAI) como proveedor de IA adicional, EN SINCRONÍA con lo que ya existe — sin reemplazar Ollama, sin reemplazar nada del código actual, y de forma resiliente a que NVIDIA cambie su oferta a futuro. Antes de tocar código, tocaba leer `api/agente.ts` completo (no se había leído en ninguna sesión anterior documentada aquí) y la config real de Vercel — no asumir.
@@ -243,6 +303,44 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Propuesta concreta para el siguiente paso (NO implementada aún, pendiente de que Gonzalo confirme)**: agregar NVIDIA Build como una rama más en `handleOpenAI` (mismo patrón que ya usa para distinguir Groq/DeepSeek por prefijo de key — una key de NVIDIA empieza `nvapi-`, fácil de detectar igual), apuntando a `https://integrate.api.nvidia.com/v1/chat/completions` cuando se detecte, usando una variable nueva y separada (ej. `NVIDIA_API_KEY`) que no pisa ni reemplaza `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`/Ollama — puramente aditivo, cero riesgo para quien no configure esa variable nueva.
 
 **No se editó ningún archivo de código en esta entrada** — solo lectura de `api/agente.ts`, `.env.vercel`, `.env.example`, `src/constants/agentes.ts` y este mismo archivo (`CORE_MEMORY.md`, para cumplir el protocolo de coordinación antes de empezar). Archivo `api/agente.ts` no está en `LOCKED_RESOURCES.md` (no requiere "AUTORIZO"), pero se espera confirmación de Gonzalo sobre qué modelo(s) de NVIDIA usar por defecto antes de escribir el cambio.
+
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Recepciones: producto nuevo ahora se vincula al catálogo del proveedor (sin commitear)
+
+**Problema**: al crear un producto nuevo desde Recepciones (ej. "Vainilla 10 ltros", 13:23), la app creaba el producto + su inventario pero NO la fila de `precios` (PrecioProveedor) que lo une al proveedor. Gestión de Proveedores arma su catálogo desde esa tabla, así que el producto no aparecía en "DistriHelados - Colombina (Cajas)". Diagnóstico hecho en otro chat contra la nube (sin acceso al código).
+
+**Qué se hizo** (cambio mínimo, `Recepciones.tsx` no es archivo protegido):
+- `src/lib/vinculo-proveedor.ts` (nuevo, función pura `armarVinculoProveedor`) + `vinculo-proveedor.test.ts` (9 tests pasan). Proveedor = el elegido en el formulario del producto, o si está vacío el de la factura en curso. Solo vincula si hay proveedor y costo > 0 (regla de precios del proyecto).
+- `src/pages/Recepciones.tsx` → `handleSubmitModal`: usa el producto devuelto por `onAddProducto` (el `addProducto` real de `usePriceControl` ya devolvía `Producto`, el tipo del prop decía `void`) y llama `onAddOrUpdatePrecio` con ese id. Si el nombre ya existe (`addProducto` devuelve `null`) ahora sale sin marcar "creado" (antes quedaba la bandera `isCreatingNewFromAction` colgada). Avisa con toast si vinculó, si falló o si no pudo vincular.
+- No se tocó `App.tsx` ni ningún archivo protegido: ya le pasa `addProducto` y `addOrUpdatePrecio` a Recepciones.
+
+**Verificación**: vitest del archivo nuevo OK; suite completa: 13 archivos / 133 tests OK, pero 21 errores de arranque de workers (timeout del pool en esta PC, no fallos de test). `tsc`: 1784 errores totales (deuda previa), ninguno en las líneas nuevas. NO probado en la app real todavía.
+
+**Pendiente / NO hecho**:
+- Probar en la app: crear producto nuevo en una recepción y revisar el catálogo del proveedor.
+- Datos ya existentes (RESUELTO en la nube, con AUTORIZO de Gonzalo, 2026-10-18): vainilla `c09e6177-d5e6-413e-b50a-d3ad87f86d43` renombrada a "Vainilla 10 litros" y vinculada en `precios` a "DistriHelados - Colombina (Cajas )" (nótese el espacio final del nombre real) con precio_costo 55595.96, destino insumo, tipo_embalaje caja, cantidad 1 (mismo formato que sus hermanos del catálogo). Releído tras escribir. Ojo: por "LOCAL SIEMPRE GANA", un dispositivo que ya tenga el producto con "ltros" conservará ese nombre local; el vínculo sí debería bajar por ser fila nueva.
+- Si el costo queda en 0 al crear el producto, no se vincula (solo avisa). Posible mejora: vincular al confirmar la recepción con el precio facturado.
+- Observado, no tocado: la app reenvía recepciones ya subidas y la nube responde 409.
+- Fallback frágil sin tocar: el `useEffect` que agrega el producto recién creado a la factura toma `productos[productos.length - 1]` en vez del id devuelto.
+
+
+### 🔧 2026-10-18 — Claude Sonnet 5.5 — Abrir turno en el celular no aparecía en el PC (realtime de caja) — sin commitear
+
+**Causa (confirmada contra la nube y el código)**: `useRealtimeSync.ts` suscribe un canal realtime por cada clave de `HANDLERS`, usando esa clave como nombre de tabla. La clave de cajas era `sesiones_caja`, pero en Supabase la tabla se llama `caja` (`supabase-db.ts` lee/escribe `caja`; `sesiones_caja` NO existe y `caja` sí está en la publicación `supabase_realtime`). Realtime no da error al escuchar una tabla inexistente: simplemente nunca llega nada. Además `useVentas.ts` escuchaba el evento con `table === 'caja'`, pero el evento sale con la clave `'sesiones_caja'`, así que ni siquiera el sync manual refrescaba la lista en pantalla. La subida SÍ funcionaba: el 2026-10-18 19:46 UTC hay varias cajas `abierta` en la nube (apertura múltiple desde el celular).
+
+**Qué se hizo** (2 archivos, ninguno protegido):
+- `src/hooks/useRealtimeSync.ts`: `Handler` gana el campo opcional `remoteTable`; el handler `sesiones_caja` usa `remoteTable: 'caja'` + `mapFromRecord` (reusa `mapCajaFromDB` por el registro del evento, sin bajar toda la tabla); la suscripción usa `remoteTable ?? table`.
+- `src/hooks/useVentas.ts`: el listener acepta `'caja'` y `'sesiones_caja'`, y al refrescar NO le quita a este dispositivo su `cajaActiva` si sigue abierta (antes habría tomado "la primera abierta", o sea cualquiera del otro aparato).
+
+**Verificación**: `tsc` 1784 errores (idéntico al total previo, ninguno nuevo). NO probado en vivo: hace falta build/deploy y abrir turno en celular con el PC abierto.
+
+**Limitación conocida, NO tocada**: la tabla `caja` de la nube solo tiene id, usuario_id, fechas, montos, ventas_ids, movimientos, estado, caja_fisica_id, arqueo_por_caja. `mapCajaToDB` no envía `cajaNombre`, `turno`, `vendedoraNombre` ni `eventoEspecial`, así que una caja abierta en el celular aparecerá en el PC SIN esos nombres. Arreglarlo requiere columnas nuevas en Supabase + cambiar `supabase-db.ts` (protegido, pide AUTORIZO).
+
+**Seguimiento (mismo día, con AUTORIZO de Gonzalo) — limitación anterior RESUELTA en código y nube**:
+- Migración aplicada en Supabase (`caja_agregar_nombre_turno_vendedora_evento`): columnas de texto opcionales `caja_nombre`, `turno`, `vendedora_nombre`, `evento_especial` en `caja`. Releídas en `information_schema` tras aplicar.
+- `src/lib/supabase-db.ts` (`mapCajaToDB` / `mapCajaFromDB`): envían y leen esos 4 campos SOLO cuando tienen valor (un upsert solo toca las columnas del payload, así una versión sin el dato no borra el de otro aparato).
+- Test nuevo `src/lib/caja-multicaja-mapeo.test.ts` (4 tests pasan). `tsc` sigue en 1784 errores (sin nuevos).
+- **Pendiente**: las cajas abiertas ANTES de este cambio (ej. las de 2026-10-18 19:46 UTC desde el celular) siguen sin nombre/turno en la nube; se llenan cuando el celular, ya con la versión nueva, las vuelva a subir (sync manual). Los `movimientos` de caja tampoco se mapean todavía (la columna existe en la nube): ingresos/egresos de caja del celular no llegan al PC. NO probado en vivo; necesita build + deploy.
 
 ### 🔧 2026-10-18 (noche) — Claude Sonnet 5.5 — Ventas al Mayor: auditoría y adaptación SOLO móvil (PR #7; seguimiento en PR #8 y #9, ya mergeados a main el 2026-10-19)
 
@@ -272,3 +370,194 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **Pendiente / NO hecho**: no probado en celular real; sin merge a main ni publicación; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
 **Ojo**: otro agente trabaja ControlCaja.tsx, supabase-db.ts e historial-cajas.ts en la carpeta principal (rama feat/marketing-studio-y-ajustes) → posible conflicto al juntar. Este worktree usa un enlace (junction) a node_modules de la carpeta principal.
+
+### 🔧 2026-10-19 — Claude Sonnet 5.5 — Pantalla "Error Crítico de Inicio" ahora explica la causa (main.tsx, con AUTORIZO de Gonzalo) — commiteado, sin push
+
+**Reporte**: Gonzalo vio "Error Crítico de Inicio — La base de datos local no pudo iniciar. Por favor, recarga la página." (captura). Ese texto sale del `catch` de `bootstrap()` en `src/main.tsx` cuando `db.init()` falla; no dice por qué.
+
+**Diagnóstico**: la vista previa del PR 6 (Vercel) abre bien en un navegador limpio (pantalla "¿Quién eres?"), o sea el código no rompe el arranque; el fallo es del navegador de Gonzalo (causas probables: otra pestaña/PWA con la base ocupada → el `init()` de `indexedDBAdapter.ts` espera 15 s y rechaza; o almacenamiento bloqueado/lleno/modo privado). No se pudo ver el error real de su consola.
+
+**Cambio**: `src/lib/error-inicio.ts` (nuevo, función pura `describirErrorInicio`, 6 tests) + `src/main.tsx`: el `catch` llama a `mostrarErrorInicio(err)`, que arma la pantalla con `textContent` (sin innerHTML), muestra el detalle técnico real, dice qué hacer (cerrar otras pestañas/ventanas, liberar espacio o salir de incógnito según el caso), advierte NO borrar los datos del sitio (ahí está lo no subido) y trae botón "Reintentar" (recarga). Verificado visualmente en el navegador de prueba. `tsc` 1784 (igual que antes; los 4 errores de main.tsx ya existían).
+
+**No hecho**: no se tocó `indexedDBAdapter.ts` ni se agregaron reintentos automáticos (con timeout de 15 s empeorarían la espera); falta que Gonzalo confirme la causa real con el "Detalle técnico" que ahora se muestra.
+
+### 🔧 2026-10-19 — Claude Sonnet 5.5 — CAUSA REAL del "Error Crítico de Inicio": base local en versión 9, código de main en versión 8 (indexedDBAdapter.ts)
+
+**Causa (confirmada con git y Vercel)**: `feat/marketing-studio-y-ajustes` subió `DB_VERSION` de IndexedDB a **9** el 2026-09-29 (agrega el almacén `checklist_completadas`); `main` sigue en **8**. Producción (`app-eight-sigma-13.vercel.app`) se publicó desde `feat/marketing-studio-y-ajustes` (commit 13ee607a, varios despliegues) hasta el 2026-10-18/19 y después desde `main` (PR #8, #9, #7). Un navegador que ya abrió la versión 9 no puede abrirse con `indexedDB.open(nombre, 8)`: IndexedDB no baja de versión → `VersionError` → `db.init()` falla → pantalla "Error Crítico de Inicio" (la misma historia del 2026-09-07, commit 210062ca "version 7 a 8"). Gonzalo lo vio en Brave en producción. Es otra vez la "guerra de despliegues" (ver memoria `divergencia-app-vs-root-git`).
+
+**Arreglo** (`src/lib/indexedDBAdapter.ts`, no protegido): si `open` falla con `VersionError`, se abre la base tal como está (`indexedDB.open(nombre)` sin versión) con el mismo límite de 15 s. Una base más nueva contiene todos los almacenes que el código viejo necesita. +3 tests en `indexedDBAdapter.test.ts` (14 pasan con los de error-inicio); `tsc` 1784 (igual).
+
+**OJO — producción hoy corre `main`**, que NO tiene lo de `feat/marketing-studio-y-ajustes` (PR #3, sin mergear): Consumo y Préstamos con créditos en la nube, mejoras de ControlCaja/historial, Marketing Studio, etc. Decidir si se mergea el PR #3 a main o se publica desde esa rama, y que NADIE vuelva a publicar a producción desde otra carpeta sin avisar. Hasta que el arreglo de esta entrada llegue a producción (merge del PR #6 a main), los navegadores en versión 9 seguirán viendo el error.
+
+**Nota al juntar con el PR 6 (2026-10-19)**: el conflicto en `useVentas.ts` se resolvió quedándose con la versión de main (la caja activa de este aparato NUNCA se reemplaza por una de otro; solo se suelta si se cerró) y conservando del PR 6 solo que el listener acepta también el evento `'sesiones_caja'` (la clave con la que sale el evento realtime/sync manual; la tabla remota real es `caja`).
+---
+
+✅ COMPLETADO — Claude Sonnet 5 — 2026-09-19 — Auditoría en vivo pedida por Gonzalo: Modo Ayudante (masa/arrobas), acceso por rol VENDEDOR/PANADERO, e historial de Caja/Ventas.
+
+**Qué encontré (verificado entrando yo mismo a `app-eight-sigma-13.vercel.app`, no solo leyendo código)**:
+1. ✅ El selector de masa (Sal, Dulce, Hojaldre, Batido de Tortas, Vatido Galleta) y el campo de cantidad en arrobas en Modo Ayudante → Producción/Libreta → pestaña Masas SÍ funcionan en producción ahora mismo (probado: seleccioné "Masa de Dulce" + "Cuarto de Arroba", el cálculo de panes esperados salió bien). Esto ya lo había arreglado otro agente ayer (ver entradas 2026-09-18 arriba) — confirmado que sigue funcionando, no hacía falta tocar nada.
+2. ⚠️ El rol PANADERO sí tiene acceso a `modo-ayudante` (agregado ayer), pero el rol VENDEDOR nunca lo tuvo — confirmado leyendo `VER_VENDEDOR` en `usePermisosModulos.ts`, no tenía `'modo-ayudante'`. Esto explica el reporte de Gonzalo de que "a las vendedoras no les sale".
+3. 🚨 **Control de Caja e Historial de Ventas se cayeron completamente** (pantalla "Error en el módulo X", `Cannot read properties of undefined (reading 'trim')`) en una primera visita, con una sesión de caja/jornada abierta. Confirmado con el stack trace que el error viene del chunk compilado `CajaMovimientosModal-CMVun8CN.js`, dentro de un `.map()`. **Revisé el código fuente de `CajaMovimientosModal.tsx` en la raíz Y en `app/` — en NINGUNA de las dos existe (ni existió nunca en su historial de git) ningún `.trim()`** — así que no pude confirmar la causa exacta desde el código que tengo disponible. Al volver a entrar más tarde con "Sin jornada activa" (sin caja abierta), ambas pantallas cargaron bien — o sea, **el error es intermitente y depende de que haya una jornada/caja abierta con algún dato faltante** (probablemente un campo de un movimiento o cuadre existente que no tiene `motivo`/`turno`/`notas` y algo le hace `.trim()` sin chequear undefined). **No pude reproducir el crash a voluntad ni encontrar la línea exacta** — haría falta que alguien abra una jornada de prueba y mire si se cae, o revisar en Vercel qué build exacto está sirviendo ahora mismo (la fecha de build del `version.json` en vivo, 2026-09-19, no coincide con la fecha del build local de la raíz ni de `app/`, así que ninguna de las dos carpetas que tengo es garantizado que sea exactamente lo que está publicado).
+4. Aparte (no pedido, encontrado de pasada): errores repetidos en consola de Supabase `PGRST204: Could not find the 'fecha' column of 'tombstones' in the schema cache` al borrar `trabajadores` y `mesas` — sincronización de borrados silenciosamente fallando.
+
+**Qué hice** (con autorización de Gonzalo tras reportarle el hallazgo #2, cambio mínimo, archivo libre no protegido):
+- `src/hooks/usePermisosModulos.ts`: agregué `'modo-ayudante'` a `VER_VENDEDOR`, y agregué el parche `PATCH_VENDEDOR_MODO_AYUDANTE` (mismo patrón exacto que `PATCH_PANADERO_MODO_AYUDANTE` de ayer) para activarlo automáticamente en sesiones ya guardadas sin que Gonzalo tenga que reconfigurar manualmente en Roles y Permisos.
+
+**Cómo lo verifiqué**: `npx tsc --noEmit -p tsconfig.app.json` → 1784 errores totales (bajó respecto a la última medición de 1804, dentro de lo normal), el único error en ese archivo es un `TODOS` sin usar que YA existía antes, nada nuevo en las líneas que toqué.
+
+**Qué queda pendiente / NO hice**:
+- El bug de `.trim()` en Caja/Historial de Ventas (punto 3 arriba) — es intermitente, no lo pude fijar en código porque no coincide con ninguna copia local. **Necesita que alguien lo reproduza con una jornada real abierta y mire la consola**, o revise en el dashboard de Vercel el commit exacto del deploy activo.
+- No probado con un usuario VENDEDOR real todavía (solo tengo sesión de Administrador) — falta que Gonzalo o alguien con ese rol confirme que ahora sí le aparece "Captura Rápida" en el celular.
+- El tema de `tombstones.fecha` en Supabase (punto 4) — no se tocó, es un hallazgo aparte.
+
+---
+
+✅ RESUELTO — Claude Sonnet 5 — 2026-09-19 (cont.) — Encontrada y arreglada la causa REAL del crash de Control de Caja / Historial de Ventas (el punto 3 de la entrada anterior).
+
+**Gonzalo mandó captura de pantalla mostrando el error en vivo en su celular ("Cannot read properties of undefined (reading 'trim')")**, así que reproduje el mismo crash en el navegador (antes me había cargado bien porque no tenía jornada activa) y esta vez sí lo agarré. Bajé el archivo JS real que está sirviendo Vercel ahora mismo (`CajaMovimientosModal-CMVun8CN.js`, es un chunk que Vite empaquetó junto con `AperturaCajaModal.tsx`) y busqué el `.trim()` exacto en el código minificado — no adivinando, leyendo el bundle real.
+
+**Causa real**: en `src/components/ventas/AperturaCajaModal.tsx`, la función `normalizarNombreCaja(nombre)` hacía `nombre.trim().toLowerCase()` sin revisar que `nombre` existiera. `cargarCajasGuardadas()` la llama así: `cargarNombresEliminados().map(normalizarNombreCaja)` — **esta línea específica corre ANTES de cualquier `try/catch`** (los otros 2 usos de `limpiarListaCajas` en el mismo archivo sí están protegidos). Si la lista de "nombres de cajas eliminadas" guardada en `localStorage` (`dp_cajas_eliminadas`) tiene algún elemento `null`/`undefined` adentro — dato viejo o corrupto de algún dispositivo — truena ahí mismo, en el render inicial, y como es un `useState(cargarCajasGuardadas)` (inicializador de estado), React lo agarra como error de render y tumba toda la pantalla vía ErrorBoundary. Como `AperturaCajaModal` y `CajaMovimientosModal` quedaron en el mismo chunk de Vite, el mismo bug tumba tanto Control de Caja como Historial de Ventas (ambos renderizan ese chunk).
+
+**Fix aplicado** (archivo libre, no protegido, cambio de una función/3 líneas): `normalizarNombreCaja` ahora hace `(nombre || '').trim().toLowerCase()`. Con esto, cualquier dato dañado (nombre `null`/`undefined` en cualquiera de los 2 localStorage keys `dp_cajas_config`/`dp_cajas_eliminadas` o en el respaldo de Supabase `cajas_config`/`cajas_eliminadas`) simplemente se normaliza a cadena vacía en vez de tronar — arregla los 3 puntos de llamada de una sola vez, no hacía falta tocar cada uno.
+
+**Cómo lo verifiqué**: `npx tsc --noEmit -p tsconfig.app.json` → 1784 errores (idéntico al conteo de antes de este cambio), los únicos 2 errores que aparecen en este archivo (línea 122-123, tipo `unknown` en `db.getAllTrabajadores()`) ya existían antes y no tienen nada que ver con la función que toqué.
+
+**Qué queda pendiente**: 
+- Falta build + `PUBLICAR_A_PRODUCCION.bat` para que esto llegue a producción — no lo puedo hacer desde esta terminal remota (ver skill de build/deploy).
+- Este fix hace que la pantalla YA NO SE CAIGA, pero el dato corrupto (el nombre `null`/`undefined` guardado) sigue ahí — no se pierde nada ni hace falta borrarlo, simplemente ahora se ignora sin romper nada. Si en algún momento se quiere depurar ESE dato dañado específico, habría que revisar `localStorage['dp_cajas_eliminadas']` en el celular de Gonzalo con las herramientas de desarrollador — no es urgente, el síntoma visible (pantalla roja) ya no debería pasar una vez se publique este fix.
+
+---
+
+### 🔒 2026-09-28 — Claude Opus 5.5 (Claude Code) — Hooks de protección automáticos en `.claude/settings.json`
+
+**Qué hice**: agregué 2 hooks `PreToolUse` de Claude Code (versionados en el repo, aplican a cualquier sesión de Claude Code en esta carpeta):
+- `.claude/hooks/proteger-archivos.mjs` → antes de Edit/Write lee `LOCKED_RESOURCES.md` y, si el archivo está en la lista, **pide confirmación** al usuario (protocolo "AUTORIZO" ya no depende de que el agente se acuerde).
+- `.claude/hooks/proteger-deploy.mjs` → ante `vercel --prod`, `npm run deploy` o `PUBLICAR_A_PRODUCCION` **pide confirmación**; si se intenta desplegar desde `app/` (cwd con `NO_DESPLEGAR_DESDE_AQUI.txt` o `cd app`), **lo bloquea**.
+
+**Por qué**: la "guerra de despliegues" desde `app/` y ediciones a archivos protegidos sin autorización pasaron varias veces.
+
+**Cómo lo verifiqué**: 13 casos simulados (rutas Windows/relativas/app/, deploy raíz/bat/app/Set-Location, comandos libres como `vercel ls`) → todos con la decisión esperada. El hook de deploy además bloqueó en vivo un comando de prueba de esta misma sesión.
+
+**Ojo**: solo protege a Claude Code. Cursor y Antigravity NO leen estos hooks. Para agregar un archivo protegido basta con listarlo en `LOCKED_RESOURCES.md` (formato ``- `ruta` ``), el hook lo toma solo.
+
+**Para agentes con terminal**: el hook de deploy revisa el TEXTO de cada comando Bash/PowerShell. Si un `cat >> archivo <<EOF` o `echo` menciona `vercel --prod`, `npm run deploy` o `PUBLICAR_A_PRODUCCION`, se traba pidiendo confirmación aunque no sea un despliegue. Para escribir en archivos (incluido este) usar Edit/Write, nunca la terminal.
+
+---
+
+### 🔒 2026-09-29 — Claude Opus 5.5 (Claude Code) — Hooks 3 y 4: secretos en archivos y SQL destructivo en Supabase
+
+**Qué hice**: agregué 2 hooks `PreToolUse` más en `.claude/settings.json` (ahora son 4). Los dos **piden confirmación** (`ask`), no bloquean.
+- `.claude/hooks/detectar-secretos.mjs` (Edit|Write|MultiEdit) → si lo que se va a escribir tiene forma de clave real en texto plano: token de Facebook (`EAA` + 20+), clave OpenAI/Anthropic (`sk-` + 20+), clave de Google (`AIza` + 30+) o JWT (`eyJ…​.…`). El aviso muestra solo los primeros 8 caracteres, nunca el secreto completo.
+- `.claude/hooks/proteger-supabase.mjs` (conector MCP de Supabase: `execute_sql` y `apply_migration`) → si el SQL tiene `DROP TABLE`, `DROP SCHEMA`, `DROP FUNCTION`, `TRUNCATE`, `ALTER TABLE … DROP` (columna), `ALTER TABLE … TYPE` (cambio de tipo), o `DELETE`/`UPDATE` **sin WHERE**. SELECT y cambios con WHERE pasan sin preguntar. Ignora comentarios y texto entre comillas.
+
+**Por qué**: el 2026-09-29 aparecieron 2 flujos n8n con el token de Facebook en texto plano (se excluyeron del PR #3 y quedaron en `.gitignore`), y ahora hay conector MCP directo a la base real de Supabase.
+
+**Ojo — nombre real del conector**: en Claude Code está registrado como `mcp__claude_ai_Supabase__execute_sql` / `mcp__claude_ai_Supabase__apply_migration` (NO `mcp__Supabase__…`). El matcher usa `mcp__.*[Ss]upabase.*__(execute_sql|apply_migration)` para cubrir ambos.
+
+**Cómo lo verifiqué**: casos simulados pasándole al hook el mismo JSON que manda Claude Code. Secretos: 4/4 (los 4 tipos detectados, código normal pasa). Supabase: 15/15 (DELETE sin WHERE → pide; SELECT → pasa; UPDATE con WHERE → pasa; TRUNCATE, DROP TABLE/SCHEMA/FUNCTION, DROP COLUMN, cambio de TYPE → piden; ADD COLUMN, `SELECT … FOR UPDATE`, `'DELETE FROM'` dentro de un string, CREATE FUNCTION → pasan).
+
+**Límites conocidos**:
+- Con **cualquier** WHERE pasa (un `DELETE … WHERE 1=1` borra todo y no avisa) — decisión de Gonzalo: no entorpecer ediciones puntuales.
+- El de secretos también avisa con la anon key pública de Supabase (es JWT); ahí basta con aprobar. No ve lo que se escriba por terminal (`echo`/`cat >`).
+- Igual que los hooks 1 y 2: **solo protegen a Claude Code**. Cursor, Antigravity, la app y el panel de Supabase no pasan por aquí.
+- Los hooks nuevos no se cargan a mitad de sesión: rigen desde la sesión siguiente (o tras revisarlos en `/hooks`).
+
+---
+
+### 📤 2026-09-29 — Claude Opus 5.5 (Claude Code) — Cambios pendientes subidos a rama + PR (NO a main)
+
+**Qué hice**: a pedido de Gonzalo, subí todo el trabajo sin commitear (Marketing Studio, Videovigilancia, dictado por voz, ajustes de caja/sync, etc. — 44+ archivos de varios agentes) a la rama `feat/marketing-studio-y-ajustes` y abrí PR contra `main`. **No se tocó main ni producción.**
+
+**Excluido a propósito**: `n8n-setup/NIVEL DIOS - Agencia IA Autónoma1.json` y `n8n-setup/Publicacion-Directa-Dulce-Placer.json` tienen **tokens de Facebook en texto plano** → quedaron fuera y agregados a `.gitignore`. Si se necesitan en el repo, primero reemplazar el token por una credencial de n8n.
+
+**Estado de pruebas al subir**: `npm run test` → 25 fallos, **los mismos 25 que ya fallaban en `main` (11bb3e9e)**, o sea no hay regresión nueva. `tsc` tiene cientos de errores de tipos preexistentes en todo el proyecto (el build de Vercel usa `vite build` sin `tsc`, así que no bloquean).
+| 2026-09-30 | Fix Currency Revert | SupabaseDatabase.getConfiguracion striping updated_at causaba que remoteTs siempre fuera 0, generando un loop infinito de sobrescrituras en la nube. Y la llegada de snake_case desde Realtime borraba los campos locales. Se ajusto supabase-db.ts y usePriceControl.ts |
+
+### 📅 2026-10-01 - Antigravity - Fixes de Performance y Lógica en Producción
+
+**Qué hice:**
+1. **ProductCatalog.tsx**: Resuelto el lag extremo al agregar productos en el celular (se memoizaron ProductCard y FastSearchCard para evitar el O(N) re-render de 300 componentes).
+2. **PlanSemanaView.tsx**: Solucionado el bug donde al '🚀 Lanzar a Producción' se guardaban 0 panes. Ahora calcula dinámicamente la cantidad de piezas usando esolverKgPorArrobaMasa según la eficiencia, merma y peso del modelo.
+3. **DistribuidorArroba.tsx**: Fix de 'Panes Fantasmas'. Si la fórmula elegida no coincidía exactamente por ID debido a duplicados en DB, los modelos ahora se enlazan si comparten el mismo nombre exacto.
+
+**Hallazgos Pendientes por Resolver:**
+- **Supabase RLS Vulnerability**: Hay 14 tablas en producción con llow_all_access habilitado, dejando la data expuesta vía anon key. Se necesita arreglar esto en futuras sesiones.
+
+### 📅 2026-10-03 - Claude (Cowork) - Fix "celular nuevo abre la app vacía" (sincronización inicial)
+
+**Diagnóstico (probado en vivo, ver doc del proyecto Claude `claude/auditoria-sincronizacion-celular-nuevo-2026-10-03.md`):** la nube SÍ tiene los datos (anon lee 556 productos, 472 precios, 514 inventario...). En un navegador limpio la app soltaba la pantalla vacía a los 5 s; a los 13 min aún faltaban configuración, gastos, clientes, prepedidos. Causas: (1) Firebase en Vercel con Project ID que trae una tabulación (`%09panaderia-dulce-placer`) → nunca conecta y `syncCloudToLocal` lo esperaba ANTES de Supabase; (2) lo descargado se re-subía (db.updateProducto/updatePrecio/updateCliente/updateGasto suben por dentro) → 2.205 POST de productos en una sola carga; (3) handler precios leía todos los precios por cada precio; (4) push de precios subía TODO en cada sync (~8.800/día).
+
+**Qué cambié (autorizado con AUTORIZO):**
+1. `src/lib/database.ts` `syncCloudToLocal`: Supabase primero (descargas en paralelo), baja configuración si no hay local, Firebase solo si Supabase falla.
+2. `src/hooks/useRealtimeSync.ts`: `escribirSoloLocal()` — lo que baja (pull, realtime, restaurar) se guarda solo en IndexedDB local; precios lee por id; push de precios solo nuevos/cambiados (huella de contenido).
+3. `src/hooks/usePriceControl.ts`: si el aparato está vacío, no soltar la pantalla a los 5 s; espera la primera descarga (tope 90 s).
+
+**Pendiente:** borrar las 7 variables `VITE_FIREBASE_*` del proyecto Vercel `app` (prj_jYDczKuEmfcLp1zyX5GTIWNjMleq) y redeploy; verificar con build + prueba en navegador limpio. Siguen abiertos: ventas no llegan a Supabase (tabla `ventas` 18 filas, última 24-jul), gastos POST 400, RLS abierto, política recursiva en `usuarios`.
+
+### 📅 2026-10-06 - Antigravity - Auditoría Extrema, Bóveda, Nómina, y Arquitectura IA
+
+**Qué se hizo:**
+1. **Auditoría Extrema Completada:** Se resolvieron los bucles infinitos en useRealtimeSync (TS Chaos / God Hook) y se arregló la protección de rutas. Ver Reporte de Auditoría.
+2. **Ventas y Caja (Dividir Cuenta):** Se diseñó e implementó DividirCuentaModal integrado para cobrar pagos parciales sin borrar la mesa entera en Supabase.
+3. **Dashboard (Centro de Mando):** Se añadieron botones de acceso rápido Nómina Y Préstamos y Bóveda (Libro de Caja) en la vista móvil.
+4. **Nómina y Préstamos:** Se auditó y validó el uso de la casilla de descuento de quincena para aplazar deudas (fiados de panadería y efectivo) de empleados y la generación del recibo PDF.
+5. **Bóveda y Tesorería:** Validación del 'Sistema de Sobres' para préstamos internos entre cajas, y re-diseño conceptual para sincronizar datos históricos atrasados y datos POS en tiempo real para las IAs.
+6. **Arquitectura IA y Modo Voz:** Diseño del 'Consejo Directivo' (9 IAs especializadas) e implementación de la interfaz de Voz / Modo Manos Libres en AgentesIA (Web Speech API + speechSynthesis) para conversar fluidamente con el Director IA.
+
+
+
+
+
+
+
+- **2026-10-07 — Fix edición de cuadres de caja (admin):** `ControlCaja` calcula `esAdmin` desde la prop `usuario`, pero `App.tsx` NUNCA se la pasaba (`lazyWithRetry` oculta los tipos, así que tsc no lo detectó). Resultado: el admin siempre era bloqueado. Se agregó `usuario={user}`. Los roles reales son MAYÚSCULAS (`UserRole` = 'ADMIN' | 'GERENTE' ...). También se corrigió `esAdmin` de `FiadosEmpleados` (antes comparaba con 'admin' en minúscula, así que el botón Editar nunca aparecía). Fiados ahora tiene campo `tipo: 'consumo' | 'prestamo'`.
+
+
+### 📅 2026-10-08 - Cursor (auditoría) - Fix ReferenceError `describirProduccionIncompleta` en Diagnóstico Financiero
+
+**Qué hice:**
+1. Auditoría de solo lectura: `tsc` da ~1.818 avisos (1.142 son variables sin usar). El único que rompe en ejecución era `describirProduccionIncompleta` (TS2304): estaba definida dentro de la IIFE del historial (~línea 3615) y se llamaba desde el modal de detalle de producción (~línea 4525), fuera de su alcance. Al abrir el detalle de una producción daba `ReferenceError`. Ya estaba en HEAD y en `.claude/hooks/tipos-baseline.json`.
+2. `src/components/reportes/DiagnosticoFinanciero.tsx`: moví la función, sin cambiar su lógica (solo usa `p`), a nivel de módulo justo antes de `export function DiagnosticoFinanciero`. Las llamadas de las líneas ~3816 y ~3921 quedan igual. No toqué ningún otro cambio sin commit del otro agente en ese archivo.
+
+**Verificado:** `tsc` 1818 → 1815 errores, sin errores nuevos y sin el TS2304 de esa función. `vite build` OK (salida a carpeta temporal, `dist` no se tocó). Copia de respaldo previa: `respaldo_agente_2026-10-08/DiagnosticoFinanciero.tsx.antes`.
+
+**Pendiente (requiere AUTORIZO, archivo protegido):** `src/lib/integridad-codigo.test.ts` líneas 44-46 espera el texto `autoSeedData bloqueado` en `usePriceControl.ts` y no está (1 test falla; la protección funcional sí existe). No se tocó.
+**Pendiente (otros):** TS2305 de tipos `DB*` en `supabase-db.ts` y agentes (solo tipos, no rompen en ejecución); `CajaSesion`, `FormulacionBase`, `ModeloPan` sin importar en `ExpenseFormModal.tsx` y `useReportesData.ts`; 118 archivos sin commit.
+
+### 📅 2026-10-08 - Cursor (auditoría) - "Consumo y Préstamos": empleadas fantasma y no aparecen las reales
+
+**Diagnóstico (con datos reales de la nube, solo lectura):**
+1. `FiadosEmpleados.tsx` armaba la lista con `trabajadores` activos **+ todos los `usuarios`** (cuentas de login, sin mirar `activo`). Eso metía a Dilia, Gabriela (inactivas), Jhoana/JHONA, Posventa, Mari fLAKA y cuentas de rol (Administrador, Gerente, Panadero...). Además esos registros usaban el id del usuario y Nómina descuenta por id de `trabajadores`, así que nunca se descontaban.
+2. La tabla `trabajadores` de la nube solo tiene 2 filas viejas (30-mar: "Vendedor 1 Mañana", "Vendedor2 Tarde"). Las empleadas reales viven solo en la PC porque `supabase-db.ts` `addTrabajador` envía `horario` y la tabla tiene `turno` → Supabase rechaza el upsert completo y `syncNow` solo hace `console.warn`. Además mapea `cargo/salario/documento/notas` pero el tipo `Trabajador` usa `rol/salarioBase/cedula/observaciones` (se perdería sueldo y cargo aunque el upsert pasara).
+3. `creditos_trabajadores` en la nube tiene 0 filas: la app envía `tipo` y la tabla no tiene esa columna (ni saldo, trabajador_nombre, items, pagos, foto_evidencia, descontar_de_salario, usuario_id, created_at). Los registros no se comparten entre PC y celular.
+
+**Qué hice:**
+- `src/pages/FiadosEmpleados.tsx`: la lista sale SOLO de `trabajadores` con estado activo (sin duplicados, ordenada, estado sin importar mayúsculas). Ya no mezcla `usuarios`. El filtro de historial también muestra, marcadas "(ya no activa)", a quienes tienen registros viejos pero ya no están activas. Mensaje si no hay empleadas activas. Se agregó `createdAt` al crear un registro (faltaba, error TS2345). Respaldo: `respaldo_agente_2026-10-08/FiadosEmpleados.tsx.antes`.
+- `sql_pendientes/2026-10-08_creditos_trabajadores_columnas.sql`: agrega a `creditos_trabajadores` las columnas que faltan (idempotente, no borra datos). **Lo debe ejecutar Gonzalo en el SQL Editor de Supabase.**
+
+**Pendiente (requiere AUTORIZO, archivo protegido `supabase-db.ts`):** mapear `addTrabajador/getAllTrabajadores` (horario<->turno, rol/cargo en minúscula, salarioBase/salario, cedula/documento, observaciones/notas) y `addCreditoTrabajador/getAllCreditosTrabajadores` con todos los campos. No tocar hasta tener el SQL ejecutado.
+**Pendiente (datos):** borrar desde Trabajadores las 2 filas viejas de ejemplo si ya no sirven.
+
+### 📅 2026-10-08 - Cursor (auditoría) - supabase-db.ts: sincronización de Trabajadores y Créditos (AUTORIZO de Gonzalo, "ok")
+
+**SQL ejecutado por Gonzalo en Supabase:** `sql_pendientes/2026-10-08_creditos_trabajadores_columnas.sql` → `creditos_trabajadores` ahora tiene 17 columnas (verificado: trabajador_nombre, trabajador_rol, saldo, tipo, fecha_vencimiento, items, pagos, foto_evidencia, descontar_de_salario, usuario_id, created_at).
+
+**Qué cambié en `src/lib/supabase-db.ts` (respaldo previo: `respaldo_agente_2026-10-08/supabase-db.ts.antes`):**
+1. `getAllTrabajadores` / `addTrabajador`: ahora usan los nombres reales de la tabla y del tipo `Trabajador`: `turno`↔`horario`, `cargo`↔`rol` (a minúscula; si no es un rol válido → `otro`), `salario`↔`salarioBase`, `documento`↔`cedula`, `notas`↔`observaciones`. Antes enviaba `horario` (no existe en la nube) y Supabase rechazaba el upsert completo → ninguna empleada real subía.
+2. `getAllCreditosTrabajadores` / `addCreditoTrabajador`: envían y leen todos los campos (nombre, rol, saldo, tipo, vencimiento, items, pagos, foto, descontar_de_salario, usuario_id, created_at).
+3. Ambos `add*` ahora revisan `error` de Supabase y hacen `console.warn` (antes fallaban en silencio porque supabase-js no lanza excepción). No se cambió el comportamiento de sincronización, solo se hace visible el fallo.
+- A propósito NO se mapean a la lectura `createdAt`, `email` ni `fotoPerfil` (la nube no tiene esas columnas): la sincronización compara solo los campos que trae la nube y al bajar gana lo local, así que no se pierden ni se re-suben en bucle.
+
+**Verificado:** `tsc` 1814 errores (sin cambio, ninguno nuevo; los de supabase-db.ts son los TS2305/TS7006/TS2416 que ya existían). Las pruebas que siguen fallando (autoSeedData, DB-01 syncCloudToLocal, BusquedaRapida/Proveedores) no dependen de este cambio.
+**Cómo se verifica en vivo:** abrir la app en la PC (se sincroniza solo), luego en el celular → Consumo y Préstamos debe mostrar las empleadas activas de Trabajadores. En la consola, si algo falla, aparece `⚠️ [supabase-db] addTrabajador falló: ...`.
+**Pendiente:** las 2 empleadas de ejemplo viejas en la nube (“Vendedor 1 Mañana”, “Vendedor2 Tarde”) se borran desde Trabajadores si ya no sirven. Registros de crédito locales viejos con `trabajadorId` que no es UUID (ids de usuario) pueden seguir fallando al subir; solo saldrá el aviso en consola.
+
+### 🔀 2026-10-20 — Claude Sonnet 5.5 — UNIÓN de `main` + `feat/marketing-studio-y-ajustes` en una sola versión (rama `integracion-main-feat`, PR hacia `main`; NO publicado)
+**Qué se hizo**: merge normal (sin rebase ni force-push) de `origin/feat/marketing-studio-y-ajustes` sobre la rama del PR #6 (`claude/producto-proveedor-vinculacion-7459e5`, que seguía abierto y ya traía lo de `main` hasta `6504c39f`). El PR resultante incluye el #6 + la rama feat (Marketing Studio, videovigilancia, dictado, Consumo y Préstamos en la nube, caja/historial, sync de trabajadores y créditos, `DB_VERSION` 9). No se incluyó `claude/dazzling-pasteur-8d42ae` ni `claude/infallible-golick-4af42b` (siguen aparte).
+**Conflictos y decisión en cada uno** (se conservó la intención de ambos lados):
+- `src/lib/indexedDBAdapter.ts`: `DB_VERSION = 9` (feat) **+** timeout de 15 s, `onversionchange` y apertura de la base existente ante `VersionError` (main/PR #6). Una base en v8 sube sola a v9; en v9 abre igual; en v10 (más nueva) abre igual.
+- `src/lib/supabase-db.ts` (protegido; AUTORIZO de Gonzalo, solo ese cambio) `mapCajaFromDB/mapCajaToDB`: UNA sola versión → nombre/turno/vendedora/evento van en las columnas reales (`caja_nombre`, `turno`, `vendedora_nombre`, `evento_especial`; si el dato local no existe no se manda, para no borrar lo de otro aparato) **y** se sincroniza `movimientos` (columna `jsonb`, verificada en `information_schema`). Al LEER, `arqueo_por_caja` queda solo como respaldo si la columna viene vacía (así no se pierde el nombre de cajas guardadas por la versión feat). Ya no se escribe en `arqueo_por_caja`.
+- `CORE_MEMORY.md`: se conservaron TODAS las entradas de ambos lados (verificado línea por línea); aviso nuevo de versión oficial arriba; aviso viejo marcado histórico.
+- `useVentas.ts`, `ControlCaja.tsx`, `useRealtimeSync.ts`: se juntaron solos sin conflicto (blindaje de turno duplicado + caja activa estable + realtime de cajas conviven).
+**Verificación**: `tsc -p tsconfig.app.json` 1793 errores = 0 errores nuevos (comparado con las dos ramas de origen: 1784 y 1794; todo lo que hay ya existía). `vitest` completo: 25 fallos, EXACTAMENTE los mismos 25 que ya fallaban en ambas ramas de origen (ninguno nuevo); los 5 archivos de prueba clave pasan (31 tests). Navegador (Edge automatizado, servidor local con nube falsa, sesión de prueba local): con base local v8 → sube a v9 conservando datos; con v9 y v10 abre sin pantalla roja; Consumo y Préstamos y Control de Caja abren en las tres. NO probado: vender de verdad, abrir turno en celular real, sincronización con la nube real, vista previa de Vercel.
+**Cosas notadas, NO tocadas**: (1) en `ControlCaja.tsx` entró de la rama feat una función sin uso `handleBorrarCajaError` dentro de `CierreJornadaModal` que cita `caja.id` (no existe esa variable ahí; solo es un error de tipos, no se ejecuta). (2) La rama feat trae dos `.zip` de ~6 MB (`stitch_studio_360…`) y `vite.config.local.ts`. (3) Hook de publicación y regla de doble toque: ver aviso de arriba.

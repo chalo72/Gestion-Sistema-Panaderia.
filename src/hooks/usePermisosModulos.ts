@@ -23,6 +23,7 @@ export const MODULOS_CONFIGURABLES: ModuloInfo[] = [
   { id: 'videovigilancia',  label: 'Videovigilancia',       seccion: 'General' },
   { id: 'cctv',             label: 'Auditoría Digital (CCTV)', seccion: 'General' },
   { id: 'whatsapp-hub',     label: 'Comandos WhatsApp & IA',   seccion: 'General' },
+  { id: 'marketing-studio', label: 'Marketing Studio IA',    seccion: 'General' },
   { id: 'ventas',           label: 'Ventas / POS',           seccion: 'Ventas' },
   { id: 'historial-ventas', label: 'Historial de Ventas',   seccion: 'Ventas' },
   { id: 'caja',             label: 'Control de Caja',        seccion: 'Ventas' },
@@ -60,7 +61,7 @@ export const ROLES_CONFIGURABLES = [
   { id: 'AUXILIAR',           label: 'Auxiliar',           color: 'bg-slate-500' },
 ];
 
-const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub','inventario'];
+const VER_VENDEDOR   = ['dashboard','ventas','historial-ventas','caja','creditos','clientes','productos','asistencia','whatsapp-hub','inventario','marketing-studio','modo-ayudante'];
 const VER_COMPRADOR  = ['dashboard','proveedores','prepedidos','recepciones','inventario','productos','precios','alertas','asistencia'];
 const VER_CONTROL_FINANCIERO = [
   'dashboard',
@@ -116,6 +117,7 @@ const PATCH_VENDEDOR_INVENTARIO = 'dp_patch_vendedor_inventario_20260915';
 const PATCH_MODO_AYUDANTE = 'dp_patch_modo_ayudante_20260917';
 /** Parche: Panadero gana acceso a Captura Rápida (Atrasados) para registrar producciones atrasadas */
 const PATCH_PANADERO_MODO_AYUDANTE = 'dp_patch_panadero_modo_ayudante_20260918';
+const PATCH_VENDEDOR_MODO_AYUDANTE = 'dp_patch_vendedor_modo_ayudante_20260919';
 
 // ─── Persistencia ────────────────────────────────────────────────────────────
 
@@ -239,6 +241,18 @@ export function cargarPermisos(): PermisosModulos {
           },
         };
         localStorage.setItem(PATCH_PANADERO_MODO_AYUDANTE, '1');
+        changed = true;
+      }
+
+      if (!localStorage.getItem(PATCH_VENDEDOR_MODO_AYUDANTE)) {
+        parsed = {
+          ...parsed,
+          VENDEDOR: {
+            ...(parsed.VENDEDOR || DEFAULT_PERMISOS.VENDEDOR),
+            'modo-ayudante': { ver: true, eliminar: false },
+          },
+        };
+        localStorage.setItem(PATCH_VENDEDOR_MODO_AYUDANTE, '1');
         changed = true;
       }
 
