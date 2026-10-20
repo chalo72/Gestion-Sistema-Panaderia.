@@ -12,7 +12,9 @@ import {
   BarChart3,
   Sparkles,
   ShieldCheck,
-  LayoutList as LayoutListIcon
+  LayoutList as LayoutListIcon,
+  ClipboardList,
+  PackageCheck
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { GlassCard } from '@/components/dashboard/GlassCard';
@@ -27,6 +29,7 @@ import { useCan } from '@/contexts/AuthContext';
 import { getVentasDiarias } from '@/lib/finanzas-personales';
 
 import { MobileDashboardView } from '@/components/dashboard/MobileDashboardView';
+import { hoyLocal } from '@/lib/fecha-local';
 
 // Fallback preventivo (Hoisted safe)
 const LayoutList = LayoutListIcon || Package;
@@ -70,8 +73,11 @@ interface DashboardProps {
   onViewConsumo?: () => void;
   onViewGastos?: () => void;
   onGastoExpress?: () => void;
+  onViewNomina?: () => void;
+  onViewBoveda?: () => void;
   onViewHistorial?: () => void;
   onViewReportes?: () => void;
+  onViewMayoristas?: () => void;
   getProveedorById: (id: string) => Proveedor | undefined;
   nombre?: string;
   getProductoById: (id: string) => Producto | undefined;
@@ -105,10 +111,13 @@ export default function Dashboard(props: DashboardProps) {
     onViewCaja,
     onViewConsumo,
     onGastoExpress,
+    onViewNomina,
+    onViewBoveda,
     onViewProduccion,
     onViewGastos,
     onViewHistorial,
     onViewReportes,
+    onViewMayoristas,
     getProductoById,
     getProveedorById,
     formatCurrency,
@@ -139,7 +148,7 @@ export default function Dashboard(props: DashboardProps) {
       return { ingresosHoyReal: Number(estadisticas.ingresosHoy || 0), ingresosEsManual: false };
     }
     try {
-      const hoyStr = new Date().toISOString().split('T')[0];
+      const hoyStr = hoyLocal();
       const manual = getVentasDiarias().find(v => v.fecha === hoyStr);
       return { ingresosHoyReal: Number(manual?.total || 0), ingresosEsManual: !!manual };
     } catch {
@@ -260,6 +269,10 @@ export default function Dashboard(props: DashboardProps) {
         onViewReportes={onViewReportes}
         onViewConsumo={onViewConsumo}
         onGastoExpress={onGastoExpress}
+          onViewGastos={onViewGastos}
+        onViewNomina={onViewNomina}
+        onViewBoveda={onViewBoveda}
+        onViewMayoristas={canVerFinanzas ? onViewMayoristas : undefined}
         productos={productos}
         proveedores={proveedores}
         precios={precios}
@@ -272,11 +285,7 @@ export default function Dashboard(props: DashboardProps) {
       {/* ═══ VISTA ESCRITORIO (Solo en pantallas >= 768px: 100% INTACTA) ═══ */}
       <div className="hidden md:block space-y-5 sm:space-y-8 pb-12">
         {/* Header Stitch Style */}
-        <DashboardHeader
-          onViewVentas={onViewVentas}
-          onViewProductos={onViewProductos}
-          onViewRecepciones={onViewRecepciones}
-        />
+        <DashboardHeader onViewVentas={onViewVentas} onViewProductos={onViewProductos} onViewRecepciones={onViewRecepciones} onViewNomina={onViewNomina} onViewBoveda={onViewBoveda} onViewCaja={onViewCaja} onViewGastos={onViewGastos} onViewPrePedidos={onViewPrePedidos} onViewMayoristas={canVerFinanzas ? onViewMayoristas : undefined} />
 
       <OnboardingChecklist 
         estadisticas={estadisticas} 
@@ -461,11 +470,42 @@ export default function Dashboard(props: DashboardProps) {
               <ShieldCheck className="w-4 h-4 text-emerald-500" />
               Accesos Tácticos
             </h4>
+
+            {/* ⚡ Accesos estrella: Preventa & Recibir */}
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              <button
+                onClick={onViewPrePedidos}
+                className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-2xl bg-gradient-to-br from-violet-600 to-violet-800 hover:from-violet-500 hover:to-violet-700 text-white transition-all shadow-lg hover:shadow-violet-500/30 hover:scale-[1.03] active:scale-95"
+              >
+                <ClipboardList className="w-5 h-5" />
+                <span className="text-[11px] font-black uppercase tracking-tight">Preventa</span>
+              </button>
+              <button
+                onClick={onViewRecepciones}
+                className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 text-white transition-all shadow-lg hover:shadow-emerald-500/30 hover:scale-[1.03] active:scale-95"
+              >
+                <PackageCheck className="w-5 h-5" />
+                <span className="text-[11px] font-black uppercase tracking-tight">Recibir</span>
+              </button>
+            </div>
+
+            {/* Acceso directo a Bóveda — prominente */}
+            {onViewBoveda && (
+              <button
+                onClick={onViewBoveda}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-indigo-700/60 to-violet-700/60 hover:from-indigo-600/80 hover:to-violet-600/80 text-white border border-indigo-500/30 transition-all text-xs font-black uppercase tracking-tighter mb-2 active:scale-95"
+              >
+                <PiggyBank className="w-4 h-4 text-indigo-300" />
+                <span>Bóveda y Tesorería</span>
+                <span className="ml-auto text-[10px] font-bold text-indigo-300">Centro de dinero</span>
+              </button>
+            )}
+
             <div className="space-y-2">
               {[
                 { label: 'Inventario', icon: Warehouse, onClick: onViewInventario },
                 { label: 'Proveedores', icon: Truck, onClick: onViewProveedores },
-                { label: 'Carga Masiva', icon: LayoutList, onClick: onViewCargaMasiva || (() => {}) },
+                { label: 'Carga Masiva', icon: LayoutListIcon, onClick: onViewCargaMasiva || (() => {}) },
               ].map((item, idx) => (
                 <button
                   key={idx}
@@ -484,3 +524,6 @@ export default function Dashboard(props: DashboardProps) {
     </>
   );
 }
+
+
+

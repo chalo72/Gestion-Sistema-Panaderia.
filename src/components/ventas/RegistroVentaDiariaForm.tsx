@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Save, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VentaDiaria } from '@/types';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 
 interface RegistroVentaDiariaFormProps {
     formVenta: Partial<VentaDiaria>;
@@ -48,7 +49,7 @@ export function RegistroVentaDiariaForm({
             <div className="flex gap-2 mb-4 overflow-x-auto pb-2 scrollbar-hide">
                 <button
                     onClick={() => {
-                        const hoy = new Date().toISOString().split('T')[0];
+                        const hoy = hoyLocal();
                         setFormVenta(p => ({ ...p, fecha: hoy }));
                     }}
                     className="text-[10px] font-black uppercase text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/40 hover:bg-emerald-200 dark:hover:bg-emerald-900/70 px-2.5 py-1.5 rounded-lg shrink-0"
@@ -57,7 +58,7 @@ export function RegistroVentaDiariaForm({
                 </button>
                 <button
                     onClick={() => {
-                        const ayer = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+                        const ayer = ymdLocal(new Date(Date.now() - 86400000));
                         setFormVenta(p => ({ ...p, fecha: ayer }));
                     }}
                     className="text-[10px] font-black uppercase text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 hover:bg-amber-200 dark:hover:bg-amber-900/70 px-2.5 py-1.5 rounded-lg shrink-0"

@@ -7,6 +7,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/database';
+import { dbNube } from '@/lib/nube-kv';
+import { EquipoTurnoSelector, cargarCandidatas, type CandidataTurno } from '@/components/ventas/EquipoTurnoModal';
+import {
+    equipoVigente, fechaHoy, guardarEquipo, leerEquipoLocal, nombreEquipo, turnoPorHora,
+} from '@/lib/equipo-turno';
 
 // ─── Cajas por defecto ────────────────────────────────────────────────────────
 const CAJAS_DEFAULT = [
@@ -109,13 +114,41 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
     const [turno,           setTurno]           = useState<'Mañana' | 'Tarde' | 'Noche'>('Mañana');
     const [evento,          setEvento]          = useState<string>('Ninguno');
     const [montoGlobal,     setMontoGlobal]     = useState<number>(0);
-    const [usarMontoGlobal, setUsarMontoGlobal] = useState<boolean>(true);
+    const [usarMontoGlobal, setUsarMontoGlobal] = useState<boolean>(false);
     const [loading,         setLoading]         = useState(false);
     const [progreso,        setProgreso]        = useState<number>(0);
     const [expandida,       setExpandida]       = useState<string | null>(null);
 
     // Lista de trabajadoras activas (cargada desde DB al abrir)
     const [trabajadoras, setTrabajadoras] = useState<string[]>([]);
+
+    // ── Equipo del turno: quién llegó hoy (el usuario del sistema NO cambia) ──
+    const [candidatas, setCandidatas] = useState<CandidataTurno[]>([]);
+    const [equipoSel,  setEquipoSel]  = useState<string[]>([]);
+    const [conjunta,   setConjunta]   = useState(false);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        const guardado = equipoVigente(leerEquipoLocal());
+        const turnoInicial = guardado?.turno || turnoPorHora();
+        setTurno(turnoInicial);
+        setEquipoSel(guardado?.integrantes.map(i => i.id) || []);
+        setConjunta(guardado ? guardado.modo === 'conjunta' : turnoInicial === 'Tarde');
+        cargarCandidatas().then(setCandidatas);
+    }, [isOpen]);
+
+    const cambiarTurno = (t: 'Mañana' | 'Tarde' | 'Noche') => {
+        setTurno(t);
+        const guardado = equipoVigente(leerEquipoLocal());
+        if (guardado && guardado.turno === t) {
+            setEquipoSel(guardado.integrantes.map(i => i.id));
+            setConjunta(guardado.modo === 'conjunta');
+        } else {
+            // Tarde = juntas; Mañana = individual; Noche = se respeta lo que ya estaba marcado
+            // (antes, elegir Noche apagaba "juntas" y quedaba "Daniela, Shirley ").
+            setConjunta(prev => t === 'Mañana' ? false : t === 'Tarde' ? true : prev);
+        }
+    };
 
     useEffect(() => {
         if (!isOpen) return;
@@ -293,8 +326,23 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
     // ── Iniciar jornada ──
     const handleIniciarJornada = async () => {
         if (cajasIncluidas.length === 0) return;
+        const integrantes = candidatas.filter(c => equipoSel.includes(c.id)).map(c => ({ id: c.id, nombre: c.nombre }));
+        if (integrantes.length === 0 && candidatas.length > 0) {
+            if (!window.confirm('No marcaste qué vendedora llegó en este turno. Las ventas saldrán sin nombre de vendedora.\n\n¿Abrir la jornada de todas formas?')) return;
+        }
+        let nombreVendedoras: string | undefined;
+        if (integrantes.length > 0) {
+            const modoConjunta = conjunta && integrantes.length >= 2;
+            guardarEquipo({
+                fecha: fechaHoy(), turno, modo: modoConjunta ? 'conjunta' : 'individual',
+                integrantes, actualizadoEn: Date.now(),
+            }, dbNube);
+            nombreVendedoras = modoConjunta ? nombreEquipo(integrantes.map(i => i.nombre)) : integrantes.map(i => (i.nombre || '').trim()).filter(Boolean).join(', ');
+        }
         setLoading(true);
         setProgreso(0);
+        const abiertasOk: string[] = [];
+        const fallidas: string[] = [];
         for (let i = 0; i < cajasIncluidas.length; i++) {
             const caja = cajasIncluidas[i];
             const cfg  = configs[caja.nombre] || configDefault();
@@ -303,15 +351,30 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
                 localStorage.setItem('dp_caja_extras', JSON.stringify({
                     cajaNombre:      caja.nombre,
                     turno,
-                    vendedoraNombre: cfg.vendedoras.length > 0 ? cfg.vendedoras.join(', ') : undefined,
+                    vendedoraNombre: cfg.vendedoras.length > 0 ? cfg.vendedoras.join(', ') : nombreVendedoras,
                     eventoEspecial:  evento === 'Ninguno' ? undefined : evento
                 }));
             } catch { /* ignorar */ }
-            await onAbrir(monto);
+            // Blindaje 2026-10-08: antes, si UNA caja fallaba, el for se cortaba y las demas
+            // cajas del turno nunca se abrian (quedaba solo Caja Principal). Ahora se
+            // intenta cada caja y se avisa cuales fallaron.
+            try {
+                await onAbrir(monto);
+                abiertasOk.push(caja.nombre);
+            } catch (err) {
+                console.error('Error abriendo caja', caja.nombre, err);
+                fallidas.push(caja.nombre);
+            }
             setProgreso(i + 1);
         }
         setLoading(false);
         setProgreso(0);
+        if (fallidas.length > 0) {
+            alert(`⚠️ No se pudieron abrir: ${fallidas.join(', ')}.\nSí se abrieron: ${abiertasOk.join(', ') || 'ninguna'}.\nVuelve a abrir esta ventana y selecciona solo las que faltan.`);
+            // Dejar marcadas solo las que fallaron para reintentar rápido.
+            setConfigs(prev => Object.fromEntries(cajasLista.map(c => [c.nombre, { ...(prev[c.nombre] || configDefault()), incluida: fallidas.includes(c.nombre) }])));
+            return;
+        }
         setMontoGlobal(0);
         setConfigs(Object.fromEntries(cajasLista.map(c => [c.nombre, configDefault()])));
         onClose();
@@ -490,7 +553,7 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
                             <label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">Turno de trabajo</label>
                             <div className="grid grid-cols-3 gap-2">
                                 {TURNOS.map(t => (
-                                    <button key={t.id} onClick={() => setTurno(t.id)}
+                                    <button key={t.id} onClick={() => cambiarTurno(t.id)}
                                         className={cn(
                                             "h-14 rounded-xl border-2 font-black text-sm uppercase transition-all flex flex-col items-center justify-center gap-0.5",
                                             turno === t.id ? t.color + ' shadow-sm' : "border-slate-100 dark:border-slate-800 text-slate-400 hover:border-slate-200"
@@ -500,6 +563,23 @@ export function AperturaCajaModal({ isOpen, onClose, onAbrir, cajasAbiertasNombr
                                     </button>
                                 ))}
                             </div>
+                        </div>
+
+                        {/* ¿Quién llegó hoy? — todas las ventas del turno saldrán a su nombre */}
+                        <div className="space-y-2 mt-4" data-equipo-turno>
+                            <label className="text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">
+                                ¿Quién llegó en este turno?
+                            </label>
+                            <EquipoTurnoSelector
+                                candidatas={candidatas}
+                                seleccion={equipoSel}
+                                onChange={setEquipoSel}
+                                conjunta={conjunta}
+                                onConjunta={setConjunta}
+                            />
+                            <p className="text-[10px] text-slate-400 font-medium">
+                                No hace falta cambiar de usuario: las ventas, mesas y ventas rápidas salen con el nombre que marques aquí.
+                            </p>
                         </div>
 
                         {/* Eventos Especiales */}

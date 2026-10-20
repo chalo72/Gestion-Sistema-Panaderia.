@@ -138,9 +138,15 @@ export const CATEGORIAS_BITACORA: { id: string; label: string }[] = [
 ];
 
 /** Prompt para analizar un micro-video (10s) de la Bitácora Visual. */
-export const promptAnalisisClipOdysseus = (nombreCamara: string): string => {
+export const promptAnalisisClipOdysseus = (nombreCamara: string, contextoSistema?: string): string => {
   return [
     `Cámara: ${nombreCamara}. Panadería Dulce Placer.`,
+    ...(contextoSistema
+      ? [
+          `El sistema de caja acaba de registrar: ${contextoSistema}.`,
+          'Verifica si lo que se ve coincide (ej.: si se registró una devolución o una salida de caja, ¿se ve entregar dinero o producto? Si se registró una venta, ¿se ve cobrar y entregar?). Si NO coincide o no se ve nada, dilo en la descripción.',
+        ]
+      : []),
     'Analiza el video/imagen adjunto. Busca ESPECÍFICAMENTE:',
     '1. Robo (alguien se lleva producto o dinero sin pagar).',
     '2. Un trabajador comiéndose un producto sin registrarlo como crédito/consumo.',

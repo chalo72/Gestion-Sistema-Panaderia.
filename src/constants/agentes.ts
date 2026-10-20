@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 
 import type { AgenteId } from '@/types/agente-id';
+import { encabezadosConClave } from '@/lib/clave-negocio';
 export type { AgenteId };
 
 /** Carga database en caliente — evita ciclo con lazy(Reportes). */
@@ -81,6 +82,7 @@ export const AGENTES_CONFIG: Record<AgenteId, { nombre: string; cargo: string; e
   'odysseus':   { nombre: 'ODYSSEUS',       cargo: 'Centinela CCTV',  emoji: '👁️', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20', icon: Shield, shadow: 'shadow-emerald-500/40', misionPanaderia: 'Vigilancia extrema de cámaras y detección de anomalías.', plantillas: ['Reporte de Anomalías CCTV', 'Perfilamiento de Sospechosos'] },
 
   // === AGENTES IA ESPECIALIZADOS ===
+  'vigia-ventas': { nombre: 'VIGÍA DE VENTAS', cargo: 'Cuadres y bajones', emoji: '👀', color: 'text-sky-800', bg: 'bg-sky-100 border-sky-800', icon: TrendingUp, shadow: 'shadow-sky-500/40', misionPanaderia: 'Mira los cuadres de caja y dice si un bajón de ventas es normal o si algo está pasando en una caja.', plantillas: ['¿El bajón de hoy es normal?', 'Comparar este día con el mismo día de otras semanas'] },
   'vigia-app':  { nombre: 'VIGÍA-APP',       cargo: 'Monitor Sistema', emoji: '🔭', color: 'text-[#818cf8]', bg: 'bg-indigo-500/10 border-indigo-500/20', icon: Target, shadow: 'shadow-indigo-500/40', misionPanaderia: 'Monitoreo de movimientos del usuario en todos los módulos de la app en tiempo real.', plantillas: ['Reporte de Módulos Más Usados', 'Análisis de Comportamiento de Navegación'] },
   'arqui-tech': { nombre: 'ARQUI-TECH',     cargo: 'Inspector SW',    emoji: '🛠️', color: 'text-purple-400', bg: 'bg-purple-500/10 border-purple-500/20', icon: Wrench, shadow: 'shadow-purple-500/40', misionPanaderia: 'Auditoría de ingeniería: código, UI, cálculos, módulos, formularios, sinergia y recomendaciones de escalado.', plantillas: ['Informe de Salud del Sistema', 'Recomendaciones de Mejora UX', 'Diagnóstico de Cálculos Financieros'] },
 };
@@ -100,7 +102,7 @@ export async function consultarAgente(
 
   const res = await fetch('/api/agente', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: encabezadosConClave({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       tipo,
       mensaje,

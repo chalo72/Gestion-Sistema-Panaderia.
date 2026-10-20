@@ -1,5 +1,6 @@
-import { useState, useEffect, lazy, Suspense } from 'react';
-import { startAuditoriaSession } from '@/lib/auditoria-rrweb';
+import { useState, useEffect, lazy, Suspense, useCallback, useMemo } from 'react';
+import { estacionActiva } from '@/lib/alertas-vigilancia';
+import { startAuditoriaSession, setAuditoriaUsuario, registrarAccionAuditoria } from '@/lib/auditoria-rrweb';
 import { usePermisosRealtime } from '@/hooks/usePermisosRealtime';
 import { useUsuariosRealtime } from '@/hooks/useUsuariosRealtime';
 import {
@@ -30,6 +31,7 @@ import { OfflineMonitor } from '@/components/common/OfflineMonitor';
 import { BottomNavBar } from '@/components/layout/BottomNavBar';
 import type { ViewType, Gasto } from '@/types';
 import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
+import { VoiceOrchestrator } from '@/components/agentes/VoiceOrchestrator';
 
 // Carga inmediata — pantallas críticas del flujo de entrada
 import Dashboard from '@/pages/Dashboard';
@@ -63,9 +65,29 @@ const MarketingStudio    = lazy(() => import('@/pages/MarketingStudio'));
 const PedidosTortas      = lazy(() => import('@/pages/PedidosTortas'));
 const ControlMerma       = lazy(() => import('@/pages/ControlMerma'));
 
+
+// Utilidad para proteger la carga perezosa (Lazy Load) contra fallos de caché PWA
+const lazyWithRetry = (importFn: () => Promise<any>, name: string) => {
+  return lazy(() =>
+    importFn()
+      .then((m) => {
+        const Comp = m.default ?? m[name];
+        if (!Comp) throw new Error(name + ": export no disponible (caché PWA).");
+        return { default: Comp };
+      })
+      .catch(async (err) => {
+        console.warn("[" + name + "] Reintento de carga tras fallo:", err);
+        const m = await importFn();
+        const Comp = m.default ?? m[name];
+        if (!Comp) throw err;
+        return { default: Comp };
+      })
+  );
+};
+
 // Carga Inmediata — Módulos principales del negocio (Navegación instantánea a costo de un inicio un poco más pesado)
 const Productos = lazy(() => import('@/pages/Productos'));
-const Ventas = lazy(() => import('@/pages/Ventas').then(m => ({ default: m.Ventas })));
+const Ventas = lazyWithRetry(() => import('@/pages/Ventas'), 'Ventas');
 const Inventario = lazy(() =>
   import('@/pages/Inventario')
     .then((m) => {
@@ -84,9 +106,9 @@ const Inventario = lazy(() =>
       return { default: Comp };
     })
 );
-const Produccion = lazy(() => import('@/pages/Produccion').then(m => ({ default: m.Produccion })));
+const Produccion = lazyWithRetry(() => import('@/pages/Produccion'), 'Produccion');
 const Recetas = lazy(() => import('@/pages/Recetas'));
-const ControlCaja = lazy(() => import('@/pages/ControlCaja').then(m => ({ default: m.ControlCaja })));
+const ControlCaja = lazyWithRetry(() => import('@/pages/ControlCaja'), 'ControlCaja');
 const CreditosClientes = lazy(() => import('@/pages/CreditosClientes'));
 const Oficina = lazy(() => import('@/pages/Oficina'));
 const Gastos = lazy(() => import('@/pages/Gastos'));
@@ -117,7 +139,12 @@ const App = () => {
   const [isGastoExpressOpen, setIsGastoExpressOpen] = useState(false);
   const [gastoExpressData, setGastoExpressData] = useState<Partial<Gasto>>({});
   const { theme, setTheme } = useTheme();
-  const { usuario: user, logout, isLoading: isAuthLoading } = useAuth();
+  const { usuario: user, logout, isLoading: isAuthLoading, usuarios } = useAuth();
+
+  // La cinta anota quién está usando la app
+  useEffect(() => {
+    setAuditoriaUsuario(user ? { id: user.id, nombre: user.nombre, rol: (user as any).rol } : null);
+  }, [user]);
   const { check, isAdmin, role } = useCan();
   const { puedeVer } = usePermisosModulos();
   const { 
@@ -239,9 +266,21 @@ const App = () => {
   useUsuariosRealtime();
 
   const [currentView, setCurrentView] = useState<ViewType>('dashboard');
+  useEffect(() => { registrarAccionAuditoria(`Vista: ${currentView}`, true); }, [currentView]);
+
+  // Modo estación: este PC deja Videovigilancia montada siempre (vigila y graba aunque cambies de módulo)
+  const [estacionVig, setEstacionVig] = useState<boolean>(() => estacionActiva());
+  useEffect(() => {
+    const f = () => setEstacionVig(estacionActiva());
+    window.addEventListener('dp-estacion', f);
+    return () => window.removeEventListener('dp-estacion', f);
+  }, []);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [cajaActionTrigger, setCajaActionTrigger] = useState<{ tipo: 'entrada' | 'salida' | 'cierre'; ts: number } | null>(null);
+
+  const handleToggleCollapse = useCallback(() => setIsSidebarCollapsed(prev => !prev), []);
+  const handleOpenMenu = useCallback(() => setIsMobileMenuOpen(true), []);
 
 
 
@@ -354,7 +393,15 @@ const App = () => {
             onViewRecetas={() => setCurrentView('recetas')}
             onViewConsumo={() => setCurrentView('fiados-empleados')}
             onGastoExpress={() => setIsGastoExpressOpen(true)}
-            getProveedorById={getProveedorById}
+            onViewNomina={() => setCurrentView('nomina')}
+            onViewBoveda={() => setCurrentView('boveda')}
+              onViewCaja={() => setCurrentView('caja')}
+              onViewProduccion={() => setCurrentView('produccion')}
+              onViewGastos={() => setCurrentView('gastos')}
+              onViewHistorial={() => setCurrentView('historial-ventas')}
+              onViewReportes={() => setCurrentView('reportes')}
+              onViewMayoristas={() => setCurrentView('mayoristas')}
+              getProveedorById={getProveedorById}
             getProductoById={getProductoById}
             formatCurrency={formatCurrency}
             nombre={user?.nombre}
@@ -456,6 +503,11 @@ const App = () => {
             getPreciosByProducto={getPreciosByProducto}
             getProveedorById={getProveedorById}
             formatCurrency={formatCurrency}
+            modelosPan={modelosPan}
+            formulaciones={formulaciones}
+            onUpdateModeloPan={updateModeloPan}
+            sesionesCaja={sesionesCaja}
+            gastos={gastos}
           />
         );
       case 'ventas':
@@ -487,6 +539,8 @@ const App = () => {
             onDeletePedidoActivo={onDeletePedidoActivo}
             onUpdateProducto={updateProducto}
             onAddProducto={addProducto}
+            proveedores={proveedores}
+            onAddOrUpdatePrecio={addOrUpdatePrecio}
             onRegistrarCambioPrecioVenta={registrarCambioPrecioVenta}
             onAjustarStock={onAjustarStock}
             cajaActionTrigger={cajaActionTrigger}
@@ -501,10 +555,11 @@ const App = () => {
             cajaActiva={cajaActiva}
             ventas={ventas}
             onAbrirCaja={(monto) => abrirCaja(user?.id || '', Number(monto))}
-            onCerrarCaja={(monto, ventasManual, cajaId) => cerrarCaja(monto, user?.nombre, ventasManual, undefined, cajaId)}
+            onCerrarCaja={(monto, ventasManual, cajaId, nota) => cerrarCaja(monto, user?.nombre, ventasManual, nota, cajaId)}
             onViewHistorial={() => setCurrentView('historial-ventas')}
             onRegistrarMovimiento={registrarMovimientoCaja}
             formatCurrency={formatCurrency}
+            usuario={user}
           />
         );
       case 'inventario':
@@ -628,13 +683,14 @@ const App = () => {
           <Nomina
             trabajadores={trabajadores}
             asistencia={asistencia}
+            onAddAsistencia={addRegistroAsistencia}
             creditosTrabajadores={creditosTrabajadores as any}
             nominas={nominas}
             onAddNomina={addNomina}
             onUpdateNomina={updateNomina}
             onAddGasto={addGasto}
             onAddCreditoTrabajador={addCreditoTrabajador as any}
-            onUpdateCreditoTrabajador={updateCreditoTrabajador as any}
+            onUpdateCreditoTrabajador={(c: any) => updateCreditoTrabajador(c.id, c)}
             onDeleteCreditoTrabajador={deleteCreditoTrabajador}
             formatCurrency={formatCurrency}
             onBack={() => setCurrentView('trabajadores')}
@@ -690,6 +746,7 @@ const App = () => {
             formulaciones={formulaciones}
             modelosPan={modelosPan}
             onNavigateTo={(view: any) => setCurrentView(view)}
+            trabajadores={trabajadores}
             cajaActiva={cajaActiva}
             onAddRecepcion={onAddRecepcion}
             onConfirmarRecepcion={async (recepcion) => {
@@ -801,6 +858,7 @@ const App = () => {
       case 'prepedidos':
         return (
           <PrePedidos 
+            ventas={ventas}
             prepedidos={prepedidos}
             proveedores={proveedores}
             productos={productos}
@@ -837,6 +895,10 @@ const App = () => {
             categorias={configuracion.categorias}
             cajasAbiertas={sesionesCaja.filter(c => c.estado === 'abierta')}
             onAddRecepcion={onAddRecepcion}
+            onUpdateRecepcion={onUpdateRecepcion}
+            onAjustarStock={onAjustarStock}
+            gastos={gastos}
+            onUpdateGasto={updateGasto}
             onConfirmarRecepcion={async (recepcion) => {
               const pedidoVinculado = prepedidos.find(p => p.id === recepcion.prePedidoId);
               await onConfirmarRecepcion(recepcion, pedidoVinculado);
@@ -887,9 +949,11 @@ const App = () => {
       case 'agentes-ia':
         return <AgentesIA />;
       case 'videovigilancia':
-        return <Videovigilancia />;
+        // En modo estación la vigilancia vive aparte (siempre montada) para no apagarse al cambiar de módulo
+        if (estacionVig) return null;
+        return <Videovigilancia ventas={ventas as any} sesionesCaja={sesionesCaja as any} onIrAuditoria={() => setCurrentView('cctv' as ViewType)} />;
       case 'cctv':
-        return <CCTVDigital />;
+        return <CCTVDigital ventas={ventas as any} sesionesCaja={sesionesCaja as any} gastos={gastos as any} movimientos={movimientos as any} productos={productos as any} inventario={inventario as any} />;
       case 'clientes':
         return <Clientes
           clientesExternos={clientes}
@@ -901,16 +965,26 @@ const App = () => {
         return <Comunicaciones />;
       case 'expedientes':
         return <Expedientes />;
-      case 'fiados-empleados':
-        return <FiadosEmpleados trabajadores={trabajadores} onAddGasto={addGasto} />;
+        case 'fiados-empleados':
+          return <FiadosEmpleados trabajadores={trabajadores} usuarios={usuarios} creditos={creditosTrabajadores} onAddCredito={addCreditoTrabajador} onUpdateCredito={updateCreditoTrabajador} onDeleteCredito={deleteCreditoTrabajador} esAdmin={String(user?.rol || '').toUpperCase() === 'ADMIN'} />; 
       case 'monetizacion-influencer':
         return <MonetizacionInfluencer />;
       case 'marketing-studio':
         return <MarketingStudio />;
       case 'pedidos-tortas':
-        return <PedidosTortas />;
+        return <PedidosTortas productos={productos as any} clientes={clientes as any} formatCurrency={formatCurrency} usuarioNombre={user?.nombre} usuarioId={user?.id} registrarVenta={registrarVenta as any} cajaActiva={cajaActiva} />;
       case 'control-merma':
-        return <ControlMerma />;
+        return (
+          <ControlMerma
+            productos={productos}
+            inventario={inventario}
+            movimientos={movimientos}
+            categorias={configuracion.categorias}
+            onAjustarStock={onAjustarStock}
+            formatCurrency={formatCurrency}
+            usuarioNombre={user?.nombre}
+          />
+        );
       case 'seguridad':
         return <Seguridad userRole={user?.rol} ventas={ventas} />;
       case 'login':
@@ -933,6 +1007,8 @@ const App = () => {
             onViewRecetas={() => setCurrentView('recetas')}
             onViewConsumo={() => setCurrentView('fiados-empleados')}
             onGastoExpress={() => setIsGastoExpressOpen(true)}
+            onViewNomina={() => setCurrentView('nomina')}
+            onViewBoveda={() => setCurrentView('boveda')}
             onViewCaja={() => setCurrentView('caja')}
             onViewProduccion={() => setCurrentView('produccion')}
             onViewGastos={() => setCurrentView('gastos')}
@@ -975,7 +1051,7 @@ const App = () => {
           getProveedorById={getProveedorById}
           formatCurrency={formatCurrency}
           isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          onToggleCollapse={handleToggleCollapse}
           isMobileMenuOpen={isMobileMenuOpen}
           onMobileMenuOpenChange={setIsMobileMenuOpen}
         />
@@ -987,7 +1063,7 @@ const App = () => {
           currentView={currentView}
           onViewChange={setCurrentView}
           alertasNoLeidas={alertas.filter(a => !a.leida).length}
-          onOpenMenu={() => setIsMobileMenuOpen(true)}
+          onOpenMenu={handleOpenMenu}
         />
       )}
 
@@ -1127,6 +1203,22 @@ const App = () => {
               </PageTransition>
             </Suspense>
           </ErrorBoundary>
+
+          {user && estacionVig && (
+            <div
+              className={(currentView as string) === 'videovigilancia' ? '' : 'fixed top-0 w-[1280px] h-[800px] opacity-0 pointer-events-none overflow-hidden'}
+              style={(currentView as string) === 'videovigilancia' ? undefined : { left: '-10000px' }}
+              aria-hidden={(currentView as string) !== 'videovigilancia'}
+            >
+              <ErrorBoundary moduleName="videovigilancia-estacion">
+                <Suspense fallback={null}>
+                  <Videovigilancia ventas={ventas as any} sesionesCaja={sesionesCaja as any} onIrAuditoria={() => setCurrentView('cctv' as ViewType)} />
+                </Suspense>
+              </ErrorBoundary>
+            </div>
+          )}
+
+          {user && <VoiceOrchestrator onNavigate={setCurrentView} nombreUsuario={user.nombre} />}
         </div>
 
         {/* Footer Táctico — oculto en POS para máximo espacio */}
@@ -1184,3 +1276,14 @@ const App = () => {
 };
 
 export default App;
+
+
+
+
+
+
+
+
+
+
+

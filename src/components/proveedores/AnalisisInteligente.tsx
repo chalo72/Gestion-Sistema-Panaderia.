@@ -8,6 +8,7 @@ import {
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import type { Producto, PrecioProveedor } from '@/types';
+import { ymdLocal } from '@/lib/fecha-local';
 
 // ── Reglas de negocio para panadería ──
 const REGLAS = {
@@ -251,7 +252,7 @@ export function AnalisisInteligente({
       // Sugerir próxima visita en X días
       const d = new Date();
       d.setDate(d.getDate() + (schedule?.frecuenciaDias ?? 7));
-      setTempFecha(d.toISOString().slice(0, 10));
+      setTempFecha(ymdLocal(d));
     }
     setEditandoSchedule(true);
   }, [schedule]);
@@ -275,7 +276,7 @@ export function AnalisisInteligente({
       ? new Date(schedule.proximaVisita + 'T00:00:00')
       : new Date();
     base.setDate(base.getDate() + schedule.frecuenciaDias);
-    const data = { ...schedule, proximaVisita: base.toISOString().slice(0, 10) };
+    const data = { ...schedule, proximaVisita: ymdLocal(base) };
     saveSchedule(proveedorId, data);
     setSchedule(data);
   }, [schedule, proveedorId]);

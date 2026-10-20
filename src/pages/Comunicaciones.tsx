@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import type { UserRole, RegistroAsistencia } from '@/types';
 import { db } from '@/lib/database';
+import { hoyLocal } from '@/lib/fecha-local';
 
 // ─── Tipos ──────────────────────────────────────────────────────────────────
 
@@ -84,7 +85,7 @@ const TAREAS_DEFAULT: TareaCheck[] = [
 
 // ─── Helpers de persistencia ─────────────────────────────────────────────────
 
-const HOY = () => new Date().toISOString().split('T')[0];
+const HOY = () => hoyLocal();
 
 // Mappers Supabase ↔ Anuncio
 const mapFromDB = (r: any): Anuncio => ({
@@ -133,7 +134,7 @@ export default function Comunicaciones() {
   const [asistencias, setAsistencias] = useState<RegistroAsistencia[]>([]);
 
   const rol = (usuario?.rol as UserRole) || 'AUXILIAR';
-  const esAdmin = rol === 'ADMIN' || rol === 'GERENTE';
+  const esAdmin = (rol === 'ADMIN' || rol === 'admin' || rol === 'superadmin' || rol === 'GERENTE' || rol === 'gerente');
 
   // Refresca checklist al inicio de cada día + carga anuncios desde Supabase
   useEffect(() => {
@@ -680,3 +681,4 @@ export default function Comunicaciones() {
     </div>
   );
 }
+

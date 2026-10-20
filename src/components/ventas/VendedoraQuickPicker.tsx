@@ -11,6 +11,8 @@ export interface VendedoraOption {
   id: string;
   nombre: string;
   rol?: string;
+  /** Responsables juntas (ej. "María y Jessica"): se muestra el nombre completo */
+  equipo?: boolean;
 }
 
 interface VendedoraQuickPickerProps {
@@ -67,7 +69,7 @@ export function VendedoraQuickPicker({
           const isActiva = v.id === activaId;
           const color = getColor(v.nombre);
           const initials = getInitials(v.nombre);
-          const firstName = v.nombre.split(' ')[0];
+          const firstName = v.equipo ? v.nombre : v.nombre.split(' ')[0];
 
           return (
             <button
@@ -91,7 +93,7 @@ export function VendedoraQuickPicker({
               )}>
                 {initials}
               </span>
-              <span className="truncate max-w-[80px]">{firstName}</span>
+              <span className={cn('truncate', v.equipo ? 'max-w-[180px]' : 'max-w-[80px]')}>{firstName}</span>
               {isActiva && (
                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0 animate-pulse" />
               )}
@@ -104,7 +106,7 @@ export function VendedoraQuickPicker({
       {activaId && (
         <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest w-fit bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800">
           <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-          {activaNombre?.split(' ')[0]} — asignada a {tabLabel || 'esta venta'}
+          {vendedoras.find(v => v.id === activaId)?.equipo ? activaNombre : activaNombre?.split(' ')[0]} — asignada a {tabLabel || 'esta venta'}
         </div>
       )}
     </div>

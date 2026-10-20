@@ -5,6 +5,16 @@ export default async function handler(req: Request) {
     return new Response('Method not allowed', { status: 405 });
   }
 
+  // 2026-09-30 (AUTORIZO Gonzalo) — Clave del negocio. Si DP_CLAVE_NEGOCIO está
+  // configurada en Vercel, solo aceptan llamadas que traigan esa clave (se escribe
+  // una vez por aparato en Configuración). Si no está configurada, funciona como antes.
+  const claveEsperada = process.env.DP_CLAVE_NEGOCIO;
+  if (claveEsperada && req.headers.get('x-dp-clave') !== claveEsperada) {
+    return new Response(JSON.stringify({
+      error: 'Falta la clave del negocio en este aparato. Pídela al administrador y escríbela en Configuración → Clave del negocio.',
+    }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
+
   try {
     const formData = await req.formData();
     const file = formData.get('file') as Blob;

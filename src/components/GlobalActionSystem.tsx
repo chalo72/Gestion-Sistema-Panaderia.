@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import { ExpenseFormModal } from '@/components/gastos/ExpenseFormModal';
 import { PlanProduccionModal } from '@/components/produccion/PlanProduccionModal';
+import { hoyLocal } from '@/lib/fecha-local';
 
 import type {
     Producto,
@@ -82,7 +83,7 @@ export function GlobalActionSystem(props: GlobalActionSystemProps) {
         descripcion: '',
         monto: 0,
         categoria: 'Otros',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         metodoPago: 'efectivo'
     });
 
@@ -136,7 +137,7 @@ export function GlobalActionSystem(props: GlobalActionSystemProps) {
             setActiveModal(null);
             setExpenseFormData({
                 descripcion: '', monto: 0, categoria: 'Otros',
-                fecha: new Date().toISOString().split('T')[0], metodoPago: 'efectivo'
+                fecha: hoyLocal(), metodoPago: 'efectivo'
             });
             toast.success('Gasto registrado globalmente');
         } catch (err) {

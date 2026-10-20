@@ -16,6 +16,9 @@ import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/utils';
 import type { Trabajador, CreditoTrabajador } from '@/types';
 
+// Pesos enteros: en celular el teclado escribe "7.000" y un input type="number" lo lee como 7.
+const soloDigitos = (s: string) => s.replace(/\D/g, '');
+const conMiles = (digitos: string) => digitos.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
 interface FiadosEmpleadosProps {
   trabajadores?: Trabajador[];
@@ -195,10 +198,11 @@ export default function FiadosEmpleados({ trabajadores = [], creditos = [], onAd
               <div className="space-y-2">
                 <Label className="text-xs font-bold text-slate-500 uppercase">Monto ($ COP)</Label>
                 <Input 
-                  type="number" 
-                  placeholder="Ej: 25000" 
-                  value={nuevoCreditoMonto}
-                  onChange={e => setNuevoCreditoMonto(e.target.value)}
+                  type="text" 
+                  inputMode="numeric"
+                  placeholder="Ej: 25.000" 
+                  value={conMiles(nuevoCreditoMonto)}
+                  onChange={e => setNuevoCreditoMonto(soloDigitos(e.target.value))}
                 />
               </div>
 
@@ -276,7 +280,7 @@ export default function FiadosEmpleados({ trabajadores = [], creditos = [], onAd
                             <option value="prestamo">Préstamo</option>
                           </select>
                           <Input className="h-9 text-xs flex-1" value={editDesc} onChange={e => setEditDesc(e.target.value)} placeholder="Descripción" />
-                          <Input className="h-9 text-xs w-24" type="number" value={editMonto} onChange={e => setEditMonto(e.target.value)} placeholder="Monto" />
+                          <Input className="h-9 text-xs w-24" type="text" inputMode="numeric" value={conMiles(editMonto)} onChange={e => setEditMonto(soloDigitos(e.target.value))} placeholder="Monto" />
                         </div>
                         <div className="flex gap-2 justify-end">
                           <Button size="sm" variant="outline" onClick={() => setEditandoCreditoId(null)}>Cancelar</Button>
@@ -304,7 +308,7 @@ export default function FiadosEmpleados({ trabajadores = [], creditos = [], onAd
                                 <button onClick={() => {
                                   setEditandoCreditoId(c.id);
                                   setEditDesc(c.descripcion);
-                                  setEditMonto(c.monto.toString());
+                                  setEditMonto(String(Math.round(c.monto)));
                                   setEditTipo(c.tipo || 'consumo');
                                 }} className="text-[10px] text-blue-500 hover:underline font-bold">Editar</button>
                               )}

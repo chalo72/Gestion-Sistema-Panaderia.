@@ -27,6 +27,7 @@ import type {
 } from '@/types';
 import { ARROBA_KG } from '@/types';
 import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
+import { ymdLocal } from '@/lib/fecha-local';
 
 // ─── Config de categorías ────────────────────────────────
 export const CATEGORIAS_CONFIG: Record<CategoriaProduccion, { label: string; emoji: string; color: string; bg: string; badge: string }> = {
@@ -218,17 +219,17 @@ function VistaPanadero({
 
   const hoy = new Date();
   const diaHoy = hoy.getDay();
-  const fechaHoy = hoy.toISOString().split('T')[0];
+  const fechaHoy = ymdLocal(hoy);
   const itemsHoy = plan.dias[diaHoy] ?? [];
 
   // Detección y registro de día perdido (producción = 0 con plan activo)
   const ayer = new Date(hoy);
   ayer.setDate(ayer.getDate() - 1);
   const diaAyer = ayer.getDay();
-  const fechaAyer = ayer.toISOString().split('T')[0];
+  const fechaAyer = ymdLocal(ayer);
   const itemsAyer = plan.dias[diaAyer] ?? [];
   const ordenesAyer = produccion.filter(o =>
-    new Date(o.fechaInicio).toISOString().split('T')[0] === fechaAyer
+    ymdLocal(new Date(o.fechaInicio)) === fechaAyer
   );
   const diaPerdidoAyer = diasPerdidos.find(d => d.fecha === fechaAyer);
   const hayDiaPerdidoAyer = itemsAyer.length > 0 && ordenesAyer.length === 0 && !diaPerdidoAyer;

@@ -8,6 +8,9 @@ import {
   formatearFechaSnapshot, type ConfigSnapshot,
 } from '@/lib/config-backup';
 import { exportToExcel } from '@/lib/export-utils';
+import { leerClaveNegocio, guardarClaveNegocio } from '@/lib/clave-negocio';
+import { buscarProductosBasura, borrarProductosBasura, type ProductoBasura } from '@/lib/limpieza-productos';
+import { useAuth } from '@/contexts/AuthContext';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +22,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { type Configuracion, type MonedaCode, MONEDAS } from '@/types';
 import { ARROBA_KG } from '@/types';
+import { hoyLocal } from '@/lib/fecha-local';
 
 interface ConfiguracionProps {
   configuracion: Configuracion;
@@ -124,6 +128,16 @@ function Configuracion(props: ConfiguracionProps) {
   const [whatsappApiKey, setWhatsappApiKey] = useState('');
   const [showWaKey, setShowWaKey] = useState(false);
   const [n8nWebhookUrl, setN8nWebhookUrl] = useState('');
+  // Clave del negocio (2026-09-30): se guarda solo en ESTE aparato, nunca en la nube ni en el código.
+  const [claveNegocio, setClaveNegocio] = useState('');
+  const [tieneClaveNegocio, setTieneClaveNegocio] = useState(() => !!leerClaveNegocio());
+  const [showClaveNegocio, setShowClaveNegocio] = useState(false);
+  // Limpieza de productos basura (2026-09-30): solo ADMIN, siempre con lista aprobada.
+  const { usuario } = useAuth();
+  const esAdmin = usuario?.rol === 'ADMIN';
+  const [basura, setBasura] = useState<ProductoBasura[] | null>(null);
+  const [basuraMarcada, setBasuraMarcada] = useState<Set<string>>(new Set());
+  const [basuraOcupado, setBasuraOcupado] = useState<'buscando' | 'borrando' | null>(null);
 
   useEffect(() => {
     if (configuracion) {
@@ -230,7 +244,7 @@ function Configuracion(props: ConfiguracionProps) {
       const url   = URL.createObjectURL(blob);
       const a     = document.createElement('a');
       a.href      = url;
-      a.download  = `dulce-placer-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.download  = `dulce-placer-backup-${hoyLocal()}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -705,6 +719,169 @@ function Configuracion(props: ConfiguracionProps) {
               )}
             </CardContent>
           </Card>
+
+          {/* Clave del negocio (2026-09-30) — protege publicar en redes y la IA */}
+          <Card className="border-none shadow-xl bg-gradient-to-br from-emerald-50/40 to-card dark:from-emerald-950/10 dark:to-card backdrop-blur-sm overflow-hidden relative">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-emerald-600" />
+                Clave del negocio
+              </CardTitle>
+              <CardDescription>
+                Protege la publicación en Facebook/Instagram y la IA para que nadie de afuera las use.
+                Escríbela una sola vez en cada celular o PC de confianza. Se guarda solo en este aparato.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    type={showClaveNegocio ? 'text' : 'password'}
+                    value={claveNegocio}
+                    onChange={e => setClaveNegocio(e.target.value)}
+                    placeholder={tieneClaveNegocio ? '•••••••• (ya guardada en este aparato)' : 'Escribe la clave del negocio'}
+                    className="h-11 rounded-xl pr-10"
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowClaveNegocio(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                    aria-label={showClaveNegocio ? 'Ocultar clave' : 'Mostrar clave'}
+                  >
+                    {showClaveNegocio ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <Button
+                  type="button"
+                  className="h-11 rounded-xl"
+                  disabled={!claveNegocio.trim()}
+                  onClick={() => {
+                    guardarClaveNegocio(claveNegocio);
+                    setTieneClaveNegocio(!!leerClaveNegocio());
+                    setClaveNegocio('');
+                    toast.success('Clave del negocio guardada en este aparato');
+                  }}
+                >
+                  Guardar
+                </Button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <p className={cn('text-[11px] font-bold', tieneClaveNegocio ? 'text-emerald-600' : 'text-amber-600')}>
+                  {tieneClaveNegocio ? '✅ Este aparato ya tiene la clave' : '⚠️ Este aparato todavía no tiene la clave'}
+                </p>
+                {tieneClaveNegocio && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground"
+                    onClick={() => {
+                      guardarClaveNegocio('');
+                      setTieneClaveNegocio(false);
+                      toast.info('Clave quitada de este aparato');
+                    }}
+                  >
+                    Quitar de este aparato
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Limpieza de productos basura (2026-09-30) — solo ADMIN, con aprobación */}
+          {esAdmin && (
+          <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm overflow-hidden relative">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trash2 className="w-5 h-5 text-rose-500" />
+                Limpieza de productos basura
+              </CardTitle>
+              <CardDescription>
+                Busca productos rotos (sin nombre, "undefined", texto raro de escaneos, categoría "general"…) en este aparato y en la nube.
+                Primero te muestra la lista; solo se borra lo que tú marques.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 rounded-xl"
+                disabled={basuraOcupado !== null}
+                onClick={async () => {
+                  setBasuraOcupado('buscando');
+                  try {
+                    const lista = await buscarProductosBasura();
+                    setBasura(lista);
+                    setBasuraMarcada(new Set(lista.map(p => p.id)));
+                    if (lista.length === 0) toast.success('No hay productos basura. Todo limpio.');
+                  } catch {
+                    toast.error('No se pudo revisar. Intenta de nuevo.');
+                  } finally {
+                    setBasuraOcupado(null);
+                  }
+                }}
+              >
+                {basuraOcupado === 'buscando' ? 'Buscando…' : 'Buscar productos basura'}
+              </Button>
+
+              {basura && basura.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Encontrados: {basura.length} · Marcados para borrar: {basuraMarcada.size}
+                  </p>
+                  <div className="max-h-64 overflow-y-auto rounded-xl border divide-y">
+                    {basura.map(p => (
+                      <label key={p.id} className="flex items-start gap-3 px-3 py-2 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          className="mt-0.5"
+                          checked={basuraMarcada.has(p.id)}
+                          onChange={e => {
+                            setBasuraMarcada(prev => {
+                              const n = new Set(prev);
+                              if (e.target.checked) n.add(p.id); else n.delete(p.id);
+                              return n;
+                            });
+                          }}
+                        />
+                        <span className="flex-1 min-w-0">
+                          <span className="font-bold break-words">{p.nombre || '(sin nombre)'}</span>
+                          <span className="block text-muted-foreground">
+                            Categoría: {p.categoria || '—'} · Unidad: {p.unidad || '—'} · Está en: {p.dondeEsta}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="h-10 rounded-xl"
+                    disabled={basuraMarcada.size === 0 || basuraOcupado !== null}
+                    onClick={async () => {
+                      const n = basuraMarcada.size;
+                      if (!window.confirm(`¿Borrar ${n} producto(s) marcados? Se borran en este aparato y en la nube (con sus precios). No se puede deshacer desde aquí.`)) return;
+                      setBasuraOcupado('borrando');
+                      try {
+                        const r = await borrarProductosBasura([...basuraMarcada]);
+                        toast.success(`Borrados: ${r.borrados}${r.fallidos ? ` · Fallaron: ${r.fallidos}` : ''}`);
+                        setBasura(null);
+                        setBasuraMarcada(new Set());
+                      } catch {
+                        toast.error('Hubo un problema al borrar. Revisa y vuelve a buscar.');
+                      } finally {
+                        setBasuraOcupado(null);
+                      }
+                    }}
+                  >
+                    {basuraOcupado === 'borrando' ? 'Borrando…' : `Borrar ${basuraMarcada.size} marcados`}
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          )}
 
           {/* Sincronización en la Nube */}
           <Card className="border-none shadow-xl bg-card/50 backdrop-blur-sm relative overflow-hidden">

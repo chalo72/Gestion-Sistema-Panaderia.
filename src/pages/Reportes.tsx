@@ -90,6 +90,7 @@ interface ReportesProps {
     onAddRecepcion?: (data: any) => Promise<any>;
     onConfirmarRecepcion?: (data: any) => Promise<void>;
     addGasto?: (gasto: any) => Promise<void>;
+    trabajadores?: { id: string; nombre: string; salarioBase: number; estado: string }[];
 }
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f59e0b', '#10b981', '#0ea5e9'];
@@ -109,6 +110,7 @@ import {
 } from '@/lib/presupuesto-catalogo';
 import { guardarHintOrdenDesdePresupuesto } from '@/lib/whatsapp-alerts';
 import { useCan } from '@/contexts/AuthContext';
+import { hoyLocal } from '@/lib/fecha-local';
 
 export default function Reportes(props: ReportesProps) {
     const reportesData = useReportesData(props);
@@ -224,9 +226,10 @@ export default function Reportes(props: ReportesProps) {
     // Control de Ingreso Rapido a Inventario
     const [recepcionModal, setRecepcionModal] = useState<any | null>(null);
     const [recepcionForm, setRecepcionForm] = useState({
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         metodoPago: 'efectivo',
-        cajaOrigenId: ''
+        cajaOrigenId: '',
+        factura: ''
     });
 
     const handleConfirmarRecepcionDirecta = async () => {
@@ -309,7 +312,7 @@ export default function Reportes(props: ReportesProps) {
                 cantidad: Number(presLinea.cantidad) || 0,
                 montoReal: Number(presLinea.montoReal) || 0,
             }],
-            fechaCompra: new Date().toISOString().slice(0, 10),
+            fechaCompra: hoyLocal(),
         } : l);
         savePresCompras(updated);
         setPresLinea({ producto: '', cantidad: '', montoReal: '', precioUnitario: 0 });
@@ -360,7 +363,7 @@ export default function Reportes(props: ReportesProps) {
                                 items: v.items?.length ?? 0,
                             })),
                             getExportFilename('reporte-ventas'),
-                            { fecha: 'Fecha', total: 'Total', metodo: 'Método Pago', items: 'Productos' }
+                            [ { key: 'fecha', label: 'Fecha' }, { key: 'total', label: 'Total' }, { key: 'metodo', label: 'Método Pago' }, { key: 'items', label: 'Productos' } ]
                         )}
                     >
                         CSV Ventas
@@ -377,7 +380,7 @@ export default function Reportes(props: ReportesProps) {
                                 metodo: g.metodoPago,
                             })),
                             getExportFilename('reporte-gastos'),
-                            { fecha: 'Fecha', descripcion: 'Descripción', categoria: 'Categoría', monto: 'Monto', metodo: 'Método' }
+                            [ { key: 'fecha', label: 'Fecha' }, { key: 'descripcion', label: 'Descripción' }, { key: 'categoria', label: 'Categoría' }, { key: 'monto', label: 'Monto' }, { key: 'metodo', label: 'Método' } ]
                         )}
                     >
                         CSV Gastos
@@ -394,7 +397,7 @@ export default function Reportes(props: ReportesProps) {
                                 participacion: totalVentasProductos > 0 ? ((p.ingresos / totalVentasProductos) * 100).toFixed(1) + '%' : '0%'
                             })),
                             getExportFilename('rentabilidad-productos'),
-                            { ranking: '#', producto: 'Producto', ingresos: 'Ingresos', unidades: 'Unidades', participacion: 'Participación' }
+                            [ { key: 'ranking', label: '#' }, { key: 'producto', label: 'Producto' }, { key: 'ingresos', label: 'Ingresos' }, { key: 'unidades', label: 'Unidades' }, { key: 'participacion', label: 'Participación' } ]
                         )}
                     >
                         CSV Rentabilidad
@@ -717,6 +720,7 @@ export default function Reportes(props: ReportesProps) {
                     precios: props.precios ?? [],
                     cajaActiva: props.cajaActiva,
                     sesionesCaja: props.sesionesCaja ?? [],
+                    trabajadores: props.trabajadores ?? [],
                 }} />
 
                 {/* ══════════════════════════════════════════════════
@@ -1802,7 +1806,6 @@ export default function Reportes(props: ReportesProps) {
                                                             <div key={v.id} className="flex justify-between items-center text-sm border-b border-white/5 pb-2 last:border-0 last:pb-0">
                                                                 <div>
                                                                     <span className="font-bold">{v.turno || 'Turno'}</span>
-                                                                    {v.hora && <span className="text-[10px] text-muted-foreground ml-2">({v.hora})</span>}
                                                                 </div>
                                                                 <span className="font-black text-amber-400">+{formatCurrency(v.total)}</span>
                                                             </div>

@@ -24,7 +24,7 @@ interface ProductCatalogProps {
     onEditProduct?: (id: string, updates: Partial<Producto>) => Promise<void>;
     onPrecioVentaCorregido?: (productoId: string, precioAnterior: number, precioNuevo: number) => void;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
-    onOpenAdHoc?: () => void;
+    onOpenAdHoc?: (nombreSugerido?: string) => void;
     cart?: { producto: { id: string }; cantidad: number }[];
 }
 
@@ -211,7 +211,7 @@ export function ProductCatalog({
                     {/* Botón producto ad-hoc */}
                     {onOpenAdHoc && (
                         <button
-                            onClick={onOpenAdHoc}
+                            onClick={() => onOpenAdHoc()}
                             title="Agregar producto no listado"
                             className="shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-violet-100 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-all active:scale-90"
                         >
@@ -306,7 +306,7 @@ export function ProductCatalog({
                             <p className="text-sm font-bold text-slate-400">No se encontró "{searchTerm}"</p>
                             {onOpenAdHoc && (
                                 <button
-                                    onClick={onOpenAdHoc}
+                                    onClick={() => onOpenAdHoc(searchTerm)}
                                     className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-black shadow-sm active:scale-95 transition-all"
                                 >
                                     <Plus className="w-4 h-4" /> Agregar "{searchTerm}" al catálogo

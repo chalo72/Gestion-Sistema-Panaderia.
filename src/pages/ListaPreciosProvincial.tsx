@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Producto, Categoria } from '@/types';
+import { hoyLocal } from '@/lib/fecha-local';
 
 interface ListaPreciosProvincialProps {
     productos?: Producto[];
@@ -150,7 +151,7 @@ export default function ListaPreciosProvincial({
         ].map(r => r.join(',')).join('\n');
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([filas], { type: 'text/csv' }));
-        a.download = `lista-precios-${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `lista-precios-${hoyLocal()}.csv`;
         a.click();
         toast.success('Lista exportada como CSV');
     };

@@ -27,8 +27,10 @@ import { CierreCajaModal } from '@/components/ventas/CierreCajaModal';
 import { VigilianciaIA } from '@/components/vigilancia/VigilianciaIA';
 import { PrestamosCajaModal } from '@/components/ventas/PrestamosCajaModal';
 import { ReporteZ } from '@/components/ventas/ReporteZ';
+import { HistorialCajasDia } from '@/components/caja/HistorialCajasDia';
 import { enviarReporteZWhatsApp } from '@/lib/whatsapp-reporting';
 import type { CajaSesion, Venta, Categoria, Producto, PrestamoEntreCajas } from '@/types';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 
 const BILLETES = [
     { valor: 100000, label: '$100.000', color: 'bg-purple-100 border-purple-200 text-purple-700' },
@@ -980,6 +982,7 @@ export function ControlCaja({
     const [cajaSeleccionadaId,   setCajaSeleccionadaId]   = useState<string>('');
     const [sesionesLocales,      setSesionesLocales]      = useState<CajaSesion[]>(sesiones || []);
     const [showHistorialMovil,   setShowHistorialMovil]   = useState(false);
+    const [verTodoHistorial, setVerTodoHistorial] = useState(false); // 2026-10-09: historial por día primero
 
     // Modal de Ver y Editar Cuadre de Caja
     const [cuadreModal, setCuadreModal] = useState<{
@@ -1011,19 +1014,32 @@ export function ControlCaja({
     }, [sesiones]);
 
     useEffect(() => {
+        let vivo = true;
         const refrescarSesiones = async () => {
             try {
-                const todas = await db.getAllSesionesCaja();
-                if (todas && todas.length > 0) {
-                    setSesionesLocales(todas as CajaSesion[]);
+                const locales = await db.getAllSesionesCaja();
+                const map = new Map<string, CajaSesion>();
+                try {
+                    const { supabaseDB } = await import('@/lib/supabase-sync-bridge');
+                    const nube = await supabaseDB.getAllSesionesCaja();
+                    for (const s of (nube || [])) if (s?.id) map.set(s.id, s as CajaSesion);
+                } catch (err) {
+                    console.warn('[ControlCaja] Historial de nube no disponible:', err);
                 }
+                // Lo de este aparato gana si el mismo cuadre existe en los dos lados.
+                for (const s of (locales || [])) if (s?.id) map.set(s.id, s as CajaSesion);
+                if (vivo && map.size > 0) setSesionesLocales([...map.values()]);
             } catch (err) {
                 console.warn('[ControlCaja] Error al refrescar sesiones:', err);
             }
         };
 
+        refrescarSesiones();
         window.addEventListener('dp_sesiones_caja_changed', refrescarSesiones);
-        return () => window.removeEventListener('dp_sesiones_caja_changed', refrescarSesiones);
+        return () => {
+            vivo = false;
+            window.removeEventListener('dp_sesiones_caja_changed', refrescarSesiones);
+        };
     }, []);
 
     const handleAbrirCuadreModal = (sesion: CajaSesion, isEdit: boolean = false) => {
@@ -1174,6 +1190,7 @@ export function ControlCaja({
             await db.updateSesionCaja({ ...caja, estado: 'cerrada', fechaCierre: new Date().toISOString(), montoCierre: 0 } as any);
             // Quitar inmediatamente de la vista sin recargar
             setCierresLocales(prev => new Set([...prev, caja.id]));
+            window.dispatchEvent(new Event('dp_sesiones_caja_changed')); // 🩹 2026-10-09: avisar a toda la app
             toast.success(`🗑️ Caja "${getNombreCaja(caja)}" quitada`);
         } catch { toast.error('Error al quitar caja'); }
     };
@@ -1212,8 +1229,8 @@ export function ControlCaja({
     }, [arqueo]);
 
     const ventasHoy = useMemo(() => {
-        const hoy = new Date().toISOString().split('T')[0];
-        return ventas.filter(v => v.fecha?.startsWith(hoy));
+        const hoy = hoyLocal();
+        return ventas.filter(v => ymdLocal(v.fecha) === hoy);
     }, [ventas]);
 
     const totalVentasHoy = useMemo(() =>
@@ -1306,6 +1323,7 @@ export function ControlCaja({
             }
 
             setCierresLocales(prev => new Set([...prev, cajaId]));
+            window.dispatchEvent(new Event('dp_sesiones_caja_changed')); // 🩹 2026-10-09: avisar a toda la app
             setShowEntregaModal(false);
             setCajaEntregando(null);
             toast.success(`✅ Entrega de ${caja.cajaNombre || 'Caja'} registrada en Bóveda — ${caja.vendedoraNombre || 'Vendedora'}`);
@@ -1381,6 +1399,7 @@ export function ControlCaja({
         }
 
         setShowCierreJornada(false);
+        window.dispatchEvent(new Event('dp_sesiones_caja_changed')); // 🩹 2026-10-09: avisar a toda la app
 
         if (alertas > 0) {
             toast.warning(`⚠️ Jornada cerrada y dinero en Bóveda — ${cerradas} cajas · ${alertas} con faltante detectado`);
@@ -1679,6 +1698,12 @@ export function ControlCaja({
 
                         {showHistorialMovil && (
                             <div className="space-y-2 mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                <HistorialCajasDia sesiones={sesionesLocales.length > 0 ? sesionesLocales : sesiones} nombre={getNombreCaja} responsable={getVendedora}
+                                    onVer={s => handleAbrirCuadreModal(s, false)} onEditar={s => handleAbrirCuadreModal(s, true)} />
+                                <button type="button" onClick={() => setVerTodoHistorial(v => !v)} className="text-xs font-black text-slate-500 underline px-1" data-ver-todo>
+                                    {verTodoHistorial ? 'Ocultar la auditoría de todos los días' : 'Ver auditoría de todos los días (lista completa)'}
+                                </button>
+                                {verTodoHistorial && (<>
                                 <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500 px-1">
                                     Cuadres y Cierres Anteriores ({filtradoSesiones.length})
                                 </h4>
@@ -1763,6 +1788,7 @@ export function ControlCaja({
                                         );
                                     })
                                 )}
+                                </>)}
                             </div>
                         )}
                     </>
@@ -1790,6 +1816,12 @@ export function ControlCaja({
                         </div>
                         {showHistorialMovil && (
                             <div className="space-y-2 px-3 text-left">
+                                <HistorialCajasDia sesiones={sesionesLocales.length > 0 ? sesionesLocales : sesiones} nombre={getNombreCaja} responsable={getVendedora}
+                                    onVer={s => handleAbrirCuadreModal(s, false)} onEditar={s => handleAbrirCuadreModal(s, true)} />
+                                <button type="button" onClick={() => setVerTodoHistorial(v => !v)} className="text-xs font-black text-slate-500 underline px-1" data-ver-todo>
+                                    {verTodoHistorial ? 'Ocultar la auditoría de todos los días' : 'Ver auditoría de todos los días (lista completa)'}
+                                </button>
+                                {verTodoHistorial && (<>
                                 <h4 className="text-[11px] font-black uppercase tracking-wider text-slate-500 px-1">
                                     Cuadres y Cierres Anteriores ({filtradoSesiones.length})
                                 </h4>
@@ -1826,6 +1858,7 @@ export function ControlCaja({
                                         </div>
                                     );
                                 })}
+                                </>)}
                             </div>
                         )}
                     </div>
@@ -2676,6 +2709,13 @@ export function ControlCaja({
 
                 {/* ── TAB: HISTORIAL ── */}
                 <TabsContent value="historial" className="mt-4">
+                    <div className="space-y-4">
+                        <HistorialCajasDia sesiones={sesionesLocales.length > 0 ? sesionesLocales : sesiones} nombre={getNombreCaja} responsable={getVendedora}
+                            onVer={s => handleAbrirCuadreModal(s, false)} onEditar={s => handleAbrirCuadreModal(s, true)} />
+                        <button type="button" onClick={() => setVerTodoHistorial(v => !v)} className="text-xs font-black text-slate-500 underline px-1" data-ver-todo>
+                            {verTodoHistorial ? 'Ocultar la auditoría de todos los días' : 'Ver auditoría de todos los días (lista completa)'}
+                        </button>
+                        {verTodoHistorial && (<>
                     <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
                         <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
                             <h3 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-widest flex items-center gap-2">
@@ -2795,6 +2835,8 @@ export function ControlCaja({
                                 </tbody>
                             </table>
                         </div>
+                    </div>
+                    </>)}
                     </div>
                 </TabsContent>
 

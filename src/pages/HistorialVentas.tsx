@@ -85,6 +85,16 @@ export default function HistorialVentas({
     const [fechaDesde, setFechaDesde] = useState('');
     const [fechaHasta, setFechaHasta] = useState('');
     const [methodFilter, setMethodFilter] = useState<MetodoPago | 'all'>('all');
+    const [vendedoraFilter, setVendedoraFilter] = useState<string>('all'); // 'all' | '__sin__' | nombre
+    const vendedorasEnVentas = useMemo(() => {
+        const cuenta = new Map<string, number>();
+        let sin = 0;
+        ventas.forEach(v => {
+            const n = (v.vendedoraNombre || '').trim();
+            if (n) cuenta.set(n, (cuenta.get(n) || 0) + 1); else sin++;
+        });
+        return { nombres: [...cuenta.entries()].sort((a, b) => b[1] - a[1]), sin };
+    }, [ventas]);
     const [currentPage, setCurrentPage] = useState(1);
     const [showChart, setShowChart] = useState(true);
     const [viewMode, setViewMode] = useState<'transacciones' | 'productos'>('transacciones');
@@ -158,7 +168,11 @@ export default function HistorialVentas({
 
                 const matchesMethod = methodFilter === 'all' || v.metodoPago === methodFilter;
 
-                return matchesSearch && matchesDate && matchesMethod;
+                const nomV = (v.vendedoraNombre || '').trim();
+                const matchesVendedora = vendedoraFilter === 'all'
+                    || (vendedoraFilter === '__sin__' ? !nomV : nomV === vendedoraFilter);
+
+                return matchesSearch && matchesDate && matchesMethod && matchesVendedora;
             })
             .sort((a, b) => {
                 let comparison = 0;
@@ -180,7 +194,7 @@ export default function HistorialVentas({
                 }
                 return sortConfig.direction === 'asc' ? comparison : -comparison;
             });
-    }, [ventas, searchTerm, fechaDesde, fechaHasta, methodFilter, sortConfig]);
+    }, [ventas, searchTerm, fechaDesde, fechaHasta, methodFilter, vendedoraFilter, sortConfig]);
 
     // Paginación
     const totalPages = Math.ceil(filteredVentas.length / ITEMS_PER_PAGE);
@@ -192,7 +206,7 @@ export default function HistorialVentas({
     // Reset página cuando cambian filtros
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, fechaDesde, fechaHasta, methodFilter]);
+    }, [searchTerm, fechaDesde, fechaHasta, methodFilter, vendedoraFilter]);
 
     // KPIs calculados
     const kpis = useMemo(() => {
@@ -521,9 +535,10 @@ export default function HistorialVentas({
         setCurrentPage(1);
     };
 
-    const hayFiltrosActivos = searchTerm || fechaDesde || fechaHasta || methodFilter !== 'all';
+    const hayFiltrosActivos = searchTerm || fechaDesde || fechaHasta || methodFilter !== 'all' || vendedoraFilter !== 'all';
 
     const limpiarFiltros = () => {
+        setVendedoraFilter('all');
         setSearchTerm('');
         setFechaDesde('');
         setFechaHasta('');
@@ -1226,6 +1241,33 @@ export default function HistorialVentas({
                     </select>
                 </div>
             </div>
+
+            {/* ══ FILTRO POR VENDEDORA ══ */}
+            {(vendedorasEnVentas.nombres.length > 0) && (
+                <div className="flex items-center gap-2 flex-wrap" data-filtro-vendedora>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vendedora:</span>
+                    {[
+                        { id: 'all', label: 'Todas' },
+                        ...vendedorasEnVentas.nombres.map(([n, c]) => ({ id: n, label: `${n} (${c})` })),
+                        ...(vendedorasEnVentas.sin > 0 ? [{ id: '__sin__', label: `Sin vendedora (${vendedorasEnVentas.sin})` }] : []),
+                    ].map(o => (
+                        <button
+                            key={o.id}
+                            type="button"
+                            data-vendedora-chip={o.id}
+                            onClick={() => setVendedoraFilter(o.id)}
+                            className={cn(
+                                'h-8 px-3 rounded-full text-xs font-black border-2 transition-all active:scale-95',
+                                vendedoraFilter === o.id
+                                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20'
+                                    : 'border-slate-200 text-slate-500 dark:border-slate-700 hover:border-slate-300',
+                            )}
+                        >
+                            {o.label}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {/* ══ RESUMEN FILTRO ACTIVO ══ */}
             {methodFilter !== 'all' && (

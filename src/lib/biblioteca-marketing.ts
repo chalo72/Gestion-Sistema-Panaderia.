@@ -19,6 +19,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import { ymdLocal } from '@/lib/fecha-local';
 
 const DEPOSITO = 'marketing';
 
@@ -84,7 +85,7 @@ function extensionDe(mime: string): string {
 /** Nombre único, ordenado por fecha, para que la carpeta quede legible. */
 function nombreUnico(marca: string, tipo: TipoMedio, ext: string): string {
   const hoy = new Date();
-  const dia = hoy.toISOString().slice(0, 10);
+  const dia = ymdLocal(hoy);
   const sello = hoy.getTime().toString(36);
   const azar = Math.random().toString(36).slice(2, 7);
   return `${marca}/${dia}/${tipo}-${sello}-${azar}.${ext}`;

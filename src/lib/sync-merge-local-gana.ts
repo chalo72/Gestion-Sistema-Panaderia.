@@ -15,16 +15,39 @@ const isEmptyValue = (v: unknown): boolean =>
 export const timestampDeDoc = (doc: unknown): number => {
   if (!doc || typeof doc !== 'object') return 0;
   const d = doc as Record<string, unknown>;
-  const raw =
-    d.updatedAt ??
-    d.fechaActualizacion ??
-    d.ultimoCambio ??
-    d.updated_at ??
-    d.createdAt ??
-    d.created_at ??
-    0;
-  const t = new Date(String(raw || 0)).getTime();
-  return Number.isFinite(t) ? t : 0;
+  const aMs = (v: unknown): number => {
+    if (v === undefined || v === null || v === '') return 0;
+    const t = new Date(String(v)).getTime();
+    return Number.isFinite(t) ? t : 0;
+  };
+  // La hora MÁS RECIENTE entre los campos de cambio: un registro puede traer un updatedAt
+  // viejo (bajado de la nube) y un actualizadoEn nuevo (cierre de caja hecho aquí).
+  const cambio = Math.max(
+    aMs(d.updatedAt),
+    aMs(d.fechaActualizacion),
+    aMs(d.ultimoCambio),
+    aMs(d.updated_at),
+    aMs(d.actualizadoEn), // sesiones de caja (hora de la última modificación)
+  );
+  if (cambio > 0) return cambio;
+  return aMs(d.createdAt) || aMs(d.created_at);
+};
+
+/** Campos que fija el cierre de una caja; una copia "abierta" nunca debe borrarlos. */
+const CAMPOS_CIERRE_CAJA = ['estado', 'fechaCierre', 'montoCierre', 'observaciones', 'ventasManualIngresadas'] as const;
+
+/** ¿La nube intenta reabrir una caja que este aparato ya cerró? (no existe "reabrir caja") */
+export const esCajaRevivida = (local: unknown, cloud: unknown): boolean =>
+  (local as { estado?: string } | undefined)?.estado === 'cerrada' &&
+  (cloud as { estado?: string } | undefined)?.estado === 'abierta';
+
+const conservarCierreCaja = <T extends { id: string }>(local: T, merged: T): T => {
+  const l = local as Record<string, unknown>;
+  const o = { ...(merged as Record<string, unknown>) };
+  for (const k of CAMPOS_CIERRE_CAJA) {
+    if (!isEmptyValue(l[k])) o[k] = l[k];
+  }
+  return o as T;
 };
 
 /**
@@ -143,6 +166,12 @@ export const mergeHydrateItem = <T extends { id: string }>(
   cloud: T
 ): T => {
   if (!local) return { ...cloud, id: cloud.id };
+
+  if (collection === 'sesiones_caja') {
+    // Cerrar es definitivo: gana el cierre, venga de aquí o de la nube.
+    if (esCajaRevivida(local, cloud)) return conservarCierreCaja(local, mergeCloudMasNueva(local, cloud));
+    if (esCajaRevivida(cloud, local)) return conservarCierreCaja(cloud, mergeCloudMasNueva(local, cloud));
+  }
 
   const remoteTs = timestampDeDoc(cloud);
   const localTs = timestampDeDoc(local);

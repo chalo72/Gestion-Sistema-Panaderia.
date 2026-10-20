@@ -18,6 +18,7 @@
  */
 
 import { buscarFuente } from '@/lib/motor-arte';
+import { hoyLocal } from '@/lib/fecha-local';
 
 export type FormatoMovimiento = 'vertical' | 'cuadrado' | 'horizontal';
 
@@ -359,7 +360,7 @@ export async function generarVideoMovimiento(
 export function descargarVideoMovimiento(r: ResultadoMovimiento, nombreBase = 'dulce-placer') {
   const a = document.createElement('a');
   a.href = r.url;
-  a.download = `${nombreBase}-${new Date().toISOString().slice(0, 10)}.${r.extension}`;
+  a.download = `${nombreBase}-${hoyLocal()}.${r.extension}`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

@@ -488,7 +488,7 @@ export const VistaPreviaCampana: React.FC<VistaPreviaProps> = ({
               <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/10 to-black/40" />
               <div className="absolute inset-x-0 bottom-0 p-3">
                 <p className="dp-subir text-white font-black text-[15px] leading-tight drop-shadow-lg">
-                  {ganchoVideo || 'Gancho del video'}
+                  {frasesParaVideo()[0] || 'Gancho del video'}
                 </p>
                 <p className="text-white/70 text-[10px] mt-1.5">@dulceplacer1729</p>
               </div>

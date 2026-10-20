@@ -182,6 +182,16 @@ export default async function handler(req: Request) {
     return new Response('Método no permitido', { status: 405 });
   }
 
+  // 2026-09-30 (AUTORIZO Gonzalo) — Clave del negocio. Si DP_CLAVE_NEGOCIO está
+  // configurada en Vercel, solo aceptan llamadas que traigan esa clave (se escribe
+  // una vez por aparato en Configuración). Si no está configurada, funciona como antes.
+  const claveEsperada = process.env.DP_CLAVE_NEGOCIO;
+  if (claveEsperada && req.headers.get('x-dp-clave') !== claveEsperada) {
+    return new Response(JSON.stringify({
+      error: 'Falta la clave del negocio en este aparato. Pídela al administrador y escríbela en Configuración → Clave del negocio.',
+    }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
+
   const PAGE_ID = process.env.FB_PAGE_ID;
   const TOKEN = process.env.FB_PAGE_TOKEN;
   const IG_ID = process.env.IG_USER_ID;

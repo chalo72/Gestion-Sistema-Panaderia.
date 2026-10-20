@@ -27,6 +27,9 @@ export const CREDENCIALES_PRUEBA: Record<string, string> = {};
 export const CATEGORIAS_DEFAULT: Categoria[] = [
   // === PRODUCTOS ELABORADOS (para venta POS) ===
   { id: 'cat-pan', nombre: 'Panes', color: '#d97706', icono: '🍞', tipo: 'venta' },
+  { id: 'cat-pan-sal', nombre: 'Pan de sal', color: '#d97706', icono: '🥖', tipo: 'venta' },
+  { id: 'cat-pan-dulce', nombre: 'Pan de dulce', color: '#ec4899', icono: '🍞', tipo: 'venta' },
+  { id: 'cat-croissant', nombre: 'Croissant', color: '#eab308', icono: '🥐', tipo: 'venta' },
   { id: 'cat-past', nombre: 'Pastelería', color: '#ec4899', icono: '🎂', tipo: 'venta' },
   { id: 'cat-repo', nombre: 'Repostería', color: '#f43f5e', icono: '🧁', tipo: 'venta' },
   { id: 'cat-dulc', nombre: 'Dulces', color: '#f59e0b', icono: '🍬', tipo: 'venta' },

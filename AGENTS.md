@@ -10,6 +10,9 @@ Este proyecto se trabaja alternando entre varios agentes de IA en sesiones disti
 - **🚨 Esto incluye ANTES de tocar Vercel de cualquier forma** — no solo antes de desplegar o editar código. También antes de leer o escribir variables de entorno, dominios o deployments vía dashboard O vía API/MCP. `CORE_MEMORY.md` tiene, en las primeras líneas, cuál es el Project ID de Vercel correcto (`app` / `prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`) y cuál es un proyecto huérfano/trampa que NUNCA hay que tocar (`panaderia-dulce-placer`). Nunca busques el proyecto de Vercel por nombre parecido al del negocio.
 - **Después de completar algo significativo**, agrega una entrada en `CORE_MEMORY.md` (sección "Decisiones Clave" o "Estado Actual y Pendientes") con fecha, qué se hizo y por qué. Si no queda escrito ahí, el siguiente agente no lo sabrá.
 - No asumas que el estado del proyecto es el que recuerdas de tu propia conversación o memoria interna — esa memoria es privada de cada herramienta y no la ven las demás. Solo lo que está en archivos del repo es visible para todos los agentes.
+- **USO Y MANTENIMIENTO DE GRAPHIFY (OBLIGATORIO):** Para ahorrar tokens y evitar alucinaciones, este proyecto está mapeado con Graphify.
+  - **ANTES de analizar o cambiar código complejo:** Tienes prohibido leer archivos a ciegas. Usa siempre `/graphify query "tu pregunta"` para consultar el grafo o lee el `graphify-out/GRAPH_REPORT.md` para entender la arquitectura.
+  - **DESPUÉS de modificar archivos, crear nuevos o eliminar:** Tienes la obligación de ejecutar `/graphify --update` para que el mapa quede actualizado para el siguiente agente.
 
 ## Guía técnica del proyecto
 

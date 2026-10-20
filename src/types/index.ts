@@ -611,6 +611,7 @@ export interface RegistroAsistencia {
   fecha: string;       // YYYY-MM-DD
   hora: string;        // HH:MM
   createdAt: string;   // ISO
+  origen?: 'manual' | 'salida-automatica'; // marcado desde Nómina (no por la trabajadora en el kiosko)
 }
 
 // ============================================
@@ -680,6 +681,8 @@ export interface ConfigSeguridad {
   apiKeyCloud: string;
   ollamaUrl: string;
   modeloOllamaTexto: string;
+  /** Retiros de caja desde este monto generan alerta (además de quedar registrados). */
+  alertaRetiroDesde?: number;
 }
 
 export interface ExpedienteDeudor {
@@ -924,6 +927,10 @@ export interface RecepcionItem {
   cantidadRecibida: number;
   precioEsperado: number;
   precioFacturado: number;
+  /** Descuento de este producto, en porcentaje. Vacío = no tiene. */
+  descuentoPorcentaje?: number;
+  /** IVA de este producto, en porcentaje. Vacío = el de la factura, o cero. */
+  ivaPorcentaje?: number;
   embalajeOk: boolean;
   productoOk: boolean;
   cantidadOk: boolean;
@@ -950,6 +957,14 @@ export interface Recepcion {
   /** Cómo se pagó / se pagará la factura (alimenta el gasto en egresos) */
   metodoPago?: MetodoPago;
   cajaId?: string;
+  /** La factura del proveedor trae IVA encima del subtotal. */
+  incluyeIva?: boolean;
+  porcentajeIva?: number;
+  descuentoFactura?: number;
+  /** Número escrito al final de la factura de papel. Sirve para comparar. */
+  totalImpreso?: number;
+  subtotalLineas?: number;
+  ivaFactura?: number;
 }
 
 // ============================================
@@ -1032,6 +1047,10 @@ export interface CajaSesion {
   ventasManualIngresadas?: boolean;
   /** Notas del cierre (motivo de cierre con mesas abiertas, incidencias, etc.) */
   observaciones?: string;
+  /** Última vez que se guardó esta sesión (ISO). Se pone al guardar en el aparato y la nube
+   * la reescribe con su propio reloj (trigger de la tabla `caja`). La sincronización la usa
+   * para no resucitar cajas viejas: solo gana la versión más nueva. */
+  actualizadoEn?: string;
 }
 // ============================================
 // PRÉSTAMOS ENTRE CAJAS
@@ -1147,6 +1166,13 @@ export interface CompromisoFijo {
   activo: boolean;
   esPropietario?: boolean; // true = pago de salario al dueño
   persona?: string; // "Yo" | "Esposa" | nombre
+  notas?: string;          // Descripción extendida / observaciones (para ficha detalle)
+  esDeNomina?: boolean;    // true = ya se gestiona en módulo Nómina, ocultar de la lista principal
+  /** Días de holgura alrededor de diaDeCobro. El cobro no cae siempre el mismo día. */
+  ventanaDias?: number;
+  /** Ciclos ya pagados: "2026-10" (mensual) o "2026-10-q1" / "2026-10-q2". */
+  ciclosPagados?: string[];
+  historialPagos?: { fecha: string; monto: number; nota?: string }[];
 }
 
 export interface PresupuestoMinimo {
@@ -1179,6 +1205,8 @@ export interface PagoCredito {
   fecha: string;
   metodoPago: MetodoPago;
   nota?: string;
+  /** false = esta quincena se decidió no cobrar la cuota. */
+  cobrada?: boolean;
 }
 
 // ============================================================
@@ -1238,9 +1266,12 @@ export interface CreditoTrabajador {
   fecha: string;
   fechaVencimiento?: string;
   estado: 'activo' | 'pagado' | 'descontado';
+  tipo?: 'consumo' | 'prestamo';
   items: ItemCredito[];       // Productos tomados
   fotoEvidencia?: string;     // base64 — foto de evidencia obligatoria
   descontarDeSalario: boolean;// Si se descuenta del próximo pago
+  /** Cuota que se propone descontar cada quincena. El saldo no se cobra de un solo golpe. */
+  cuota?: number;
   pagos: PagoCredito[];
   usuarioId: string;
   createdAt: string;
@@ -1276,6 +1307,13 @@ export interface NominaDescuento {
   concepto: string;
   monto: number;
   creditoId?: string;
+  saldoRestante?: number;   // lo que sigue debiendo después de este descuento
+}
+
+export interface NominaPendiente {
+  creditoId?: string;
+  concepto: string;
+  saldo: number;            // lo que NO se cobró y pasa a la próxima quincena
 }
 
 export interface NominaItem {
@@ -1288,6 +1326,28 @@ export interface NominaItem {
   descuentos: NominaDescuento[];
   totalDescuentos: number;
   valorNeto: number;
+  pendientes?: NominaPendiente[];  // deudas que quedaron sin cobrar en esta quincena
+  valorBase?: number;              // sueldo de la quincena antes de días extra / días que no vino
+  valorDia?: number;               // lo que se paga por un día (por defecto salario ÷ 30)
+  diasMenos?: number;              // días que NO vino (se restan)
+  diasExtra?: number;              // días de más / doble turno / reemplazos (se suman)
+  diasVinoManual?: string[];       // fechas que se marcaron "sí vino" aunque no presionó "Llegué"
+  gastoId?: string;                // gasto creado al pagar a esta trabajadora
+  fechaPago?: string;              // día en que se le guardó el pago individual
+  origenesPago?: NominaOrigenPago[]; // de qué caja o bóveda salió la plata, cuando se pagó a esta persona sola
+}
+
+export interface NominaOrigenPago {
+  tipo: 'caja' | 'boveda';
+  id?: string;
+  nombre: string;
+  monto: number;
+}
+
+export interface NominaFondosPago {
+  fecha: string;
+  nombres: string[];
+  partes: NominaOrigenPago[];
 }
 
 export type NominaPeriodo = 'primera' | 'segunda';
@@ -1308,6 +1368,7 @@ export interface NominaQuincenal {
   totalNeto: number;
   gastoId?: string;
   observaciones?: string;
+  fondosPagos?: NominaFondosPago[]; // cada vez que se guardó un pago, de dónde salió la plata
   createdAt: string;
 }
 

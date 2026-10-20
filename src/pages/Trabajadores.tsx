@@ -19,6 +19,7 @@ import {
 import { toast } from 'sonner';
 import { escapeHtml } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { hoyLocal } from '@/lib/fecha-local';
 import type {
     Trabajador, TrabajadorRol, TrabajadorEstado,
     CreditoTrabajador, MetodoPago, Usuario, UserRole
@@ -85,7 +86,7 @@ const FORM_VACIO: Omit<Trabajador, 'id' | 'createdAt'> = {
     email: '',
     rol: 'panadero',
     salarioBase: 0,
-    fechaIngreso: new Date().toISOString().split('T')[0],
+    fechaIngreso: hoyLocal(),
     estado: 'activo',
     horario: '',
     observaciones: '',
@@ -148,7 +149,7 @@ export default function Trabajadores({
     const [creditoForm, setCreditoForm] = useState({
         trabajadorId: '',
         descripcion: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         descontarDeSalario: true,
         monto: '',
     });
@@ -159,7 +160,7 @@ export default function Trabajadores({
     // Formulario pago
     const [formPago, setFormPago] = useState({
         monto: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         metodoPago: 'efectivo' as MetodoPago,
         nota: '',
     });
@@ -202,7 +203,7 @@ export default function Trabajadores({
     const trabajadoresFiltrados = useMemo(() => {
         return trabajadores.filter(t => {
             const matchSearch = t.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                t.rol.toLowerCase().includes(searchTerm.toLowerCase());
+                (t.rol || t.cargo || '').toLowerCase().includes(searchTerm.toLowerCase());
             const matchEstado = filtroEstado === 'todos' || t.estado === filtroEstado;
             return matchSearch && matchEstado;
         }).sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -312,7 +313,7 @@ export default function Trabajadores({
     };
 
     const resetCreditoForm = () => {
-        setCreditoForm({ trabajadorId: '', descripcion: '', fecha: new Date().toISOString().split('T')[0], descontarDeSalario: true, monto: '' });
+        setCreditoForm({ trabajadorId: '', descripcion: '', fecha: hoyLocal(), descontarDeSalario: true, monto: '' });
         setCreditoFoto(undefined);
     };
 
@@ -384,7 +385,7 @@ export default function Trabajadores({
             });
             setShowPagoModal(false);
             setSelectedCreditoTrabajador(null);
-            setFormPago({ monto: '', fecha: new Date().toISOString().split('T')[0], metodoPago: 'efectivo', nota: '' });
+            setFormPago({ monto: '', fecha: hoyLocal(), metodoPago: 'efectivo', nota: '' });
             toast.success(`Pago de ${formatCurrency(monto)} registrado`);
         } catch {
             toast.error('Error al registrar el pago');
@@ -414,7 +415,7 @@ export default function Trabajadores({
                 .filter(c => c.trabajadorId === t.id && c.estado === 'activo')
                 .reduce((s, c) => s + c.saldo, 0);
             const aPagar = Math.max(0, t.salarioBase - totalDescuentos);
-            const rolLabel = ROL_LABEL[t.rol] ?? t.rol;
+            const rolLabel = ROL_LABEL[t.rol || t.cargo] ?? t.rol;
             return { t, rolLabel, totalAdelantos, totalDescuentos, saldoPendiente, aPagar };
         });
 
@@ -664,8 +665,8 @@ export default function Trabajadores({
                                                             {t.estado}
                                                         </Badge>
                                                     </div>
-                                                    <Badge className={`${ROL_COLOR[t.rol]} text-[9px] font-bold uppercase tracking-widest border-none mt-1`}>
-                                                        {ROL_LABEL[t.rol]}
+                                                    <Badge className={`${ROL_COLOR[t.rol || t.cargo]} text-[9px] font-bold uppercase tracking-widest border-none mt-1`}>
+                                                        {ROL_LABEL[t.rol || t.cargo]}
                                                     </Badge>
                                                     <div className="mt-2 space-y-0.5">
                                                         {t.telefono && <p className="text-xs text-muted-foreground">📞 {t.telefono}</p>}
@@ -1125,7 +1126,7 @@ export default function Trabajadores({
                                 <SelectContent>
                                     {trabajadores.filter(t => t.estado === 'activo').map(t => (
                                         <SelectItem key={t.id} value={t.id}>
-                                            {t.nombre} — {ROL_LABEL[t.rol]}
+                                            {t.nombre} — {ROL_LABEL[t.rol || t.cargo]}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
@@ -1388,3 +1389,4 @@ export default function Trabajadores({
         </div>
     );
 }
+

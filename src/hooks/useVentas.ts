@@ -6,6 +6,7 @@ import { generateUUID } from '@/lib/safe-utils';
 import { useState, useCallback, useEffect } from 'react';
 import { db } from '@/lib/database';
 import { SupabaseDatabase } from '@/lib/supabase-db';
+import { supabase } from '@/lib/supabase';
 import type {
   Venta,
   CajaSesion,
@@ -14,8 +15,9 @@ import type {
   MovimientoCaja
 } from '@/types';
 import { toast } from 'sonner';
-import { procesarCuadreTurno } from '@/lib/security-agent';
+import { procesarCuadreTurno, vigilarMovimientoCaja } from '@/lib/security-agent';
 import { upsertCajaEnVentaDiaria } from '@/lib/finanzas-personales';
+import { hoyLocal } from '@/lib/fecha-local';
 
 const _supaDB = new SupabaseDatabase();
 
@@ -55,7 +57,27 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     // esa sesion existente en vez de crear una nueva.
     const nombreNuevaCajaNorm = String(extras.cajaNombre || '').trim().toLowerCase();
     if (nombreNuevaCajaNorm) {
-      const yaAbierta = sesionesCaja.find(s => s.estado === 'abierta' && String(s.cajaNombre || '').trim().toLowerCase() === nombreNuevaCajaNorm);
+      // 🩹 2026-10-09 (AUTORIZO Gonzalo): antes se miraba la lista en memoria de este hook,
+      // que NO se enteraba de los cierres hechos en Control de Caja (Entrega de Turno /
+      // Cierre de Jornada). En la tarde y la noche avisaba "ya tiene un turno abierto desde
+      // las 08:52" de cajas YA cerradas, y "Cancelar" las volvía a cerrar y depositaba otra
+      // vez en Bóveda ($100.000 de más cada vez). Ahora se lee el estado real guardado.
+      let sesionesReales: CajaSesion[] = sesionesCaja;
+      try {
+        const frescas = await db.getAllSesionesCaja();
+        if (Array.isArray(frescas) && frescas.length > 0) sesionesReales = frescas as CajaSesion[];
+      } catch { /* sin lectura: se usa la lista en memoria */ }
+      let yaAbierta = sesionesReales.find(s => s.estado === 'abierta' && String(s.cajaNombre || '').trim().toLowerCase() === nombreNuevaCajaNorm);
+      // 🩹 2026-10-09 noche (AUTORIZO Gonzalo "dale"): si la entrega se hizo en OTRO aparato y este
+      // aún no sincronizó, la copia local la sigue viendo abierta. Antes de avisar (y de que
+      // "Cancelar" la vuelva a cerrar pisando lo contado y depositando otra vez en Bóveda),
+      // se pregunta a la nube. Si allá ya está cerrada, no se avisa ni se toca.
+      if (yaAbierta) {
+        try {
+          const { data: enNube } = await supabase.from('caja').select('estado').eq('id', yaAbierta.id).maybeSingle();
+          if (enNube && enNube.estado && enNube.estado !== 'abierta') yaAbierta = undefined;
+        } catch { /* sin conexión: se sigue con el dato local */ }
+      }
       if (yaAbierta) {
         // Pedido de Gonzalo 2026-09-20: que el aviso de turno duplicado sea una decision real,
         // no solo un bloqueo. Aceptar = seguir usando el turno ya abierto (comportamiento previo).
@@ -131,7 +153,15 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
   const cerrarCaja = useCallback(async (montoCierre: number, nombreUsuario?: string, ventasManual?: number, nota?: string, cajaId?: string) => {
     const targetId = cajaId || cajaActiva?.id;
     const target = !targetId ? undefined : (cajaActiva?.id === targetId ? cajaActiva : sesionesCaja.find(s => s.id === targetId));
-    if (!target) return undefined;
+    // 2026-10-02 (AUTORIZO Gonzalo): antes devolvia undefined EN SILENCIO y el modal de
+    // cierre se cerraba igual, asi que la vendedora creia que habia guardado y no se
+    // habia guardado nada. Ahora truena con un mensaje que dice exactamente que paso.
+    if (!target) {
+      const detalle = !targetId
+        ? 'no llego el identificador de la caja'
+        : 'esa caja ya no aparece como abierta en este dispositivo';
+      throw new Error('No se pudo cerrar la caja: ' + detalle + '. NO se guardo nada. Recarga la lista de cajas y reintenta.');
+    }
     const hayVentaManual = Number.isFinite(ventasManual) && (ventasManual as number) > 0;
     const sesion: CajaSesion = {
       ...target,
@@ -152,16 +182,27 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     if (cajaActiva?.id === sesion.id) setCajaActiva(undefined);
     // Generar cuadre de seguridad automáticamente
     try {
+      // Separar lo que de verdad entró en billetes de lo pagado por Nequi/transferencia/tarjeta.
+      // totalVentasEfectivo suma todo lo que no es crédito, y eso daba faltantes falsos.
+      const ventasCaja = ventas.filter(v => v.cajaId === target.id);
+      const sumar = (pred: (m: string) => boolean) => ventasCaja
+        .filter(v => pred(v.metodoPago)).reduce((acc, v) => acc + (Number(v.total) || 0), 0);
+      const usarDetalle = !hayVentaManual && ventasCaja.length > 0;
+      const movs = target.movimientos || [];
+      const entradas = movs.filter(m => m.tipo === 'entrada').reduce((a, m) => a + (Number(m.monto) || 0), 0);
+      const salidas = movs.filter(m => m.tipo === 'salida').reduce((a, m) => a + (Number(m.monto) || 0), 0);
       procesarCuadreTurno({
         usuarioId: target.usuarioId || 'desconocido',
-        usuarioNombre: nombreUsuario || target.usuarioId || 'Vendedora',
+        usuarioNombre: nombreUsuario || target.vendedoraNombre || target.usuarioId || 'Vendedora',
         fechaApertura: target.fechaApertura,
         montoApertura: target.montoApertura || 0,
         montoDeclarado: montoCierre,
-        ventasEfectivo: target.totalVentasEfectivo || 0,
-        ventasNequi: (target as any).totalVentasNequi || 0,
-        ventasTransferencia: (target as any).totalVentasTransferencia || 0,
-        ventasCredito: target.totalCreditos || 0,
+        ventasEfectivo: usarDetalle ? sumar(m => m === 'efectivo') : (sesion.totalVentasEfectivo || 0),
+        ventasNequi: usarDetalle ? sumar(m => m === 'nequi' || m === 'daviplata') : ((target as any).totalVentasNequi || 0),
+        ventasTransferencia: usarDetalle ? sumar(m => m === 'transferencia' || m === 'tarjeta') : ((target as any).totalVentasTransferencia || 0),
+        ventasCredito: usarDetalle ? sumar(m => m === 'credito') : (target.totalCreditos || 0),
+        entradas,
+        salidas,
       });
       if (cajaActiva?.id === sesion.id) localStorage.removeItem('dp_caja_apertura_ts');
     } catch (e) {
@@ -171,7 +212,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     // para no tener que anotarlo dos veces en pantallas distintas.
     if (hayVentaManual) {
       try {
-        const fechaHoy = new Date().toISOString().split('T')[0];
+        const fechaHoy = hoyLocal();
         upsertCajaEnVentaDiaria(fechaHoy, sesion.cajaNombre || 'Caja', ventasManual as number);
       } catch (e) {
         console.warn('[Caja] No se pudo sincronizar con Ventas del Día:', e);
@@ -179,7 +220,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     }
     toast.success('Caja cerrada correctamente');
     return sesion;
-  }, [cajaActiva, sesionesCaja]);
+  }, [cajaActiva, sesionesCaja, ventas]);
 
   const registrarMovimientoCaja = useCallback(async (movimiento: Omit<MovimientoCaja, 'id' | 'fecha' | 'cajaId' | 'usuarioId'> | number, tipo?: 'entrada' | 'salida', motivo?: string, _usuarioId?: string, cajaId?: string) => {
     const targetCajaId = cajaId || cajaActiva?.id;
@@ -224,6 +265,21 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
       }
     }
 
+    // Bitácora anti-robo: todo movimiento queda registrado; retiros grandes o sin motivo alertan
+    try {
+      const sesionMov = cajaActiva?.id === targetCajaId ? cajaActiva : sesionesCaja.find(s => s.id === targetCajaId);
+      vigilarMovimientoCaja({
+        tipo: data.tipo,
+        monto: Number(data.monto) || 0,
+        motivo: data.motivo,
+        usuarioId: nuevoMovimiento.usuarioId,
+        usuarioNombre: sesionMov?.vendedoraNombre || nuevoMovimiento.usuarioId,
+        cajaNombre: sesionMov?.cajaNombre,
+      });
+    } catch (e) {
+      console.warn('[Security] Error al vigilar movimiento:', e);
+    }
+
     toast.success('Movimiento registrado');
   }, [cajaActiva, sesionesCaja]);
 
@@ -251,6 +307,8 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
 
     const venta: Venta = {
       ...data,
+      // Amarrar la venta a su caja: sin esto el cuadre no puede separar efectivo de Nequi
+      cajaId: data.cajaId || cajaActiva.id,
       total,
       id: generateUUID(),
       fecha: new Date().toISOString(),
@@ -263,6 +321,8 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
 
     // 2. Descontar del inventario
     for (const item of venta.items) {
+      // Líneas de servicio (ej. cobro de pedido de torta) no son productos del inventario
+      if (String(item.productoId).startsWith('servicio:')) continue;
       await onAjustarStock(
         item.productoId,
         item.cantidad,
@@ -336,6 +396,25 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     setPedidosActivos(prev => prev.filter(p => p.id !== id));
   }, []);
 
+  // 🩹 2026-10-09: cuando Control de Caja cierra/entrega una caja en ESTE aparato, refrescar
+  // la lista de este hook (antes quedaba vieja y seguía viendo esas cajas "abiertas").
+  useEffect(() => {
+    const refrescar = () => {
+      db.getAllSesionesCaja().then(lista => {
+        const sesiones = lista as CajaSesion[];
+        setSesionesCaja(sesiones);
+        setCajaActiva(prev => {
+          if (!prev) return prev;
+          const actual = sesiones.find(s => s.id === prev.id);
+          if (!actual) return prev;
+          return actual.estado === 'abierta' ? actual : undefined;
+        });
+      }).catch(() => {});
+    };
+    window.addEventListener('dp_sesiones_caja_changed', refrescar);
+    return () => window.removeEventListener('dp_sesiones_caja_changed', refrescar);
+  }, []);
+
   // Sync bidireccional: actualiza React state cuando otro dispositivo hace cambios
   useEffect(() => {
     const handle = async (e: Event) => {
@@ -347,11 +426,18 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
         } else {
           db.getAllVentas().then(setVentas).catch(() => {});
         }
-      } else if (table === 'caja') {
-        db.getAllSesionesCaja().then(sesiones => {
-          setSesionesCaja(sesiones as any);
-          const activa = (sesiones as any[]).find((s: any) => s.estado === 'abierta');
-          setCajaActiva(activa);
+      } else if (table === 'caja' || table === 'sesiones_caja') {
+        // useRealtimeSync avisa con 'sesiones_caja'. Si otro aparato cerró la caja de este,
+        // se suelta; no se cambia a la caja abierta de otro aparato.
+        db.getAllSesionesCaja().then(lista => {
+          const sesiones = lista as CajaSesion[];
+          setSesionesCaja(sesiones);
+          setCajaActiva(prev => {
+            if (!prev) return prev;
+            const actual = sesiones.find(s => s.id === prev.id);
+            if (!actual) return prev;
+            return actual.estado === 'abierta' ? actual : undefined;
+          });
         }).catch(() => {});
       } else if (table === 'mesas') {
         if (eventType === 'DELETE') {

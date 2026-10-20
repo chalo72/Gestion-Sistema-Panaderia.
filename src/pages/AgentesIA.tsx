@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  BrainCircuit, Mic, Zap, Shield, Eye, Cpu,
+  BrainCircuit, Mic, Zap, Volume2, Shield, Eye, Cpu,
   Loader2, CheckCircle2, AlertTriangle, Activity,
   TrendingUp, Package, DollarSign, X, GitMerge, Trash2, Target, Utensils, ShoppingCart, MessageCircle, Truck, Users, Building, ClipboardList, Server,
   Sparkles, Scale, Crown
@@ -117,6 +117,7 @@ const ESCUADRON_ELITE: { id: AgenteId; descripcion: string; casa: string }[] = [
 
 export default function AgentesIA() {
   const [comando, setComando] = useState('');
+  const [modoManosLibres, setModoManosLibres] = useState(false);
   const [sesiones, setSesiones] = useState<SesionIA[]>(() => {
     try {
       const saved = localStorage.getItem('nexus_chat_history');
@@ -130,6 +131,29 @@ export default function AgentesIA() {
   useEffect(() => {
     localStorage.setItem('nexus_chat_history', JSON.stringify(sesiones));
   }, [sesiones]);
+
+  // Modo Manos Libres: Hablar la última respuesta de la IA
+  useEffect(() => {
+    if (!modoManosLibres || sesiones.length === 0) return;
+    const ultimaSesion = sesiones[sesiones.length - 1];
+    
+    // Si la sesión acaba de completarse y tiene análisis, lo leemos
+    if (ultimaSesion.completado && ultimaSesion.analisisGerente) {
+      window.speechSynthesis.cancel(); // Detener cualquier habla anterior
+      const utterance = new SpeechSynthesisUtterance(ultimaSesion.analisisGerente);
+      utterance.lang = 'es-ES';
+      utterance.rate = 1.05; // Un poco más rápido y dinámico
+      
+      utterance.onend = () => {
+        // Al terminar de hablar, volvemos a escuchar si sigue el modo activo
+        if (modoManosLibres && !isRecording) {
+          toggleRecording();
+        }
+      };
+      
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [sesiones, modoManosLibres]);
 
   useEffect(() => {
     const handleStart = (e: any) => {
@@ -994,9 +1018,7 @@ export default function AgentesIA() {
                   className="bg-transparent border-none text-base text-white placeholder:text-slate-600 focus-visible:ring-0 resize-none min-h-[52px] font-medium py-3 px-4 leading-snug"
                   disabled={ejecutando || isRecording}
                 />
-                <div className="flex gap-2 shrink-0 pr-1 pb-1">
-                  <Button
-                    onClick={toggleRecording}
+                <div className="flex gap-2 shrink-0 pr-1 pb-1"><Button onClick={() => setModoManosLibres(!modoManosLibres)} variant="outline" title={modoManosLibres ? "Desactivar Manos Libres" : "Activar Modo Conversacional"} className={cn("h-[52px] w-[52px] rounded-xl border transition-all", modoManosLibres ? "bg-emerald-500/20 border-emerald-500 text-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.3)]" : "bg-slate-900 border-white/10 text-slate-400 hover:text-white hover:bg-slate-800")}><Volume2 className="w-5 h-5" /></Button><Button onClick={toggleRecording}
                     variant="outline"
                     className={cn('h-[52px] w-[52px] rounded-xl border transition-all',
                       isRecording ? 'bg-red-500/20 border-red-500 text-red-400 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.3)]' : 'bg-slate-900 border-white/10 text-slate-400 hover:text-white hover:bg-slate-800'
@@ -1077,3 +1099,5 @@ export default function AgentesIA() {
     </div>
   );
 }
+
+

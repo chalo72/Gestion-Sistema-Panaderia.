@@ -31,7 +31,29 @@ import { db } from '@/lib/database';
 import { consultarAgente } from '@/constants/agentes';
 import { generateUUID } from '@/lib/safe-utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { leerEquipoLocal, nombreResponsable } from '@/lib/equipo-turno';
 import { OjoIA } from '@/components/videovigilancia/OjoIA';
+import { resumenOperativoDia, ventasCercanas } from '@/lib/auditoria-profunda';
+import {
+  detectarEventos,
+  estadoVistoVacio,
+  cargarModoClips,
+  guardarModoClips,
+  siguienteModoClips,
+  ETIQUETA_MODO,
+  type EstadoVisto,
+  type ModoClips,
+} from '@/lib/disparadores-video';
+import {
+  cargarConfigAlertas,
+  guardarConfigAlertas,
+  estacionActiva,
+  setEstacionActiva,
+  esCategoriaCritica,
+  notificarAlertaVigilancia,
+  mantenerPantallaEncendida,
+  type ConfigAlertas,
+} from '@/lib/alertas-vigilancia';
 import {
   cargarReglasOdysseus,
   guardarReglasOdysseus,
@@ -51,6 +73,8 @@ import {
   buscarClipsBitacora,
   urlFirmadaClip,
   clipsDelDia,
+  clipsRecientes,
+  archivarClipEnCarpetas,
   type ClipBitacora,
   type CategoriaBitacora,
 } from '@/lib/bitacora-visual';
@@ -99,6 +123,15 @@ const INTERVALO_GRABACION_MS = 60_000;
 const esUrlHttpLocal = (url: string) =>
   /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url);
 
+/**
+ * 2026-10-09 (AUTORIZO Gonzalo): las cámaras del local son de OTRO origen (http://192.168…), y el navegador
+ * NO deja grabar una imagen de otro origen ("lienzo contaminado") → la Bitácora nunca guardó un clip.
+ * Cuando la app corre en el PC (ABRIR_DULCE_PLACER_LOCAL), la imagen se pide por /__camara (mismo origen).
+ */
+const puedeUsarPuenteCamara = (url: string) =>
+  typeof window !== 'undefined' && window.location.protocol === 'http:' && esUrlHttpLocal(url) && !/^http:\/\/(localhost|127\.0\.0\.1)/i.test(url);
+const urlPuenteCamara = (url: string) => `/__camara?u=${encodeURIComponent(url)}`;
+
 /** Cache-buster para forzar refresco de snapshots estáticos. */
 const conBuster = (url: string) => {
   if (!url || url.startsWith('data:')) return url;
@@ -106,7 +139,14 @@ const conBuster = (url: string) => {
   return `${url}${sep}_t=${Date.now()}`;
 };
 
-export function Videovigilancia() {
+interface VideovigilanciaProps {
+  /** Para cruzar el video con lo que se vendió (Auditoría Digital). */
+  ventas?: any[];
+  sesionesCaja?: any[];
+  onIrAuditoria?: () => void;
+}
+
+export function Videovigilancia({ ventas = [], sesionesCaja = [], onIrAuditoria }: VideovigilanciaProps = {}) {
   const { role } = useAuth();
   const puedeGestionar = role === 'ADMIN' || role === 'GERENTE';
 
@@ -138,10 +178,19 @@ export function Videovigilancia() {
   const [busquedaTexto, setBusquedaTexto] = useState('');
   const [buscandoClips, setBuscandoClips] = useState(false);
   const [resultadosBusqueda, setResultadosBusqueda] = useState<ClipBitacora[]>([]);
+  const [videoNube, setVideoNube] = useState<{ url: string; titulo: string } | null>(null);
+  const [cargandoNube, setCargandoNube] = useState(false);
   const [generandoInforme, setGenerandoInforme] = useState(false);
   const [informeDia, setInformeDia] = useState<string | null>(null);
   const [mostrarInforme, setMostrarInforme] = useState(false);
   const reglasRef = useRef(reglasOdysseus);
+  const [estacion, setEstacion] = useState<boolean>(() => estacionActiva());
+  const [alertasOpen, setAlertasOpen] = useState(false);
+  const [cfgAlertas, setCfgAlertas] = useState<ConfigAlertas>(() => cargarConfigAlertas());
+  const autoArranqueRef = useRef(false);
+  const [modoClips, setModoClips] = useState<ModoClips>(() => cargarModoClips());
+  const modoClipsRef = useRef<ModoClips>(modoClips);
+  const vistoRef = useRef<EstadoVisto>(estadoVistoVacio());
 
   const canvasRefs = useRef<Record<string, HTMLCanvasElement | null>>({});
   const videoRefs = useRef<Record<string, HTMLImageElement | null>>({});
@@ -542,6 +591,7 @@ export function Videovigilancia() {
             revisado: false,
           });
           toast.error(`ODYSSEUS: alerta en ${camara.nombre}`);
+          void notificarAlertaVigilancia({ clave: `scan-${camara.id}`, titulo: `Alerta en ${camara.nombre}`, detalle: texto, critica: true });
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error de IA';
@@ -602,7 +652,7 @@ export function Videovigilancia() {
 
   /** Graba un micro-video de una cámara (canvas.captureStream + MediaRecorder), lo sube y lo manda a analizar. */
   const grabarClipCamara = useCallback(
-    async (camara: Camara) => {
+    async (camara: Camara, motivo?: string) => {
       if (camara.esDemo || grabandoCamaraIds.current.has(camara.id)) return;
       const img = videoRefs.current[camara.id];
       const canvas = canvasRefs.current[camara.id];
@@ -621,6 +671,22 @@ export function Videovigilancia() {
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
+        // Fuente de la grabación: por el puente (mismo origen) si se puede; si no, la imagen visible.
+        let fuente: HTMLImageElement = img;
+        const porPuente = puedeUsarPuenteCamara(camara.url);
+        if (porPuente) {
+          const im = new Image();
+          im.crossOrigin = 'anonymous';
+          const cargo = await new Promise<boolean>((ok) => {
+            const t = setTimeout(() => ok(false), 6000);
+            im.onload = () => { clearTimeout(t); ok(true); };
+            im.onerror = () => { clearTimeout(t); ok(false); };
+            im.src = urlPuenteCamara(camara.tipo === 'snapshot' ? conBuster(camara.url) : camara.url);
+          });
+          if (cargo) fuente = im;
+          else agregarLog(`[Bitácora · ${camara.nombre}] El puente de cámara no respondió; se intenta con la imagen directa.`);
+        }
+
         const stream = canvas.captureStream(5);
         const mimeType =
           ['video/webm;codecs=vp8', 'video/webm'].find((m) =>
@@ -634,22 +700,29 @@ export function Videovigilancia() {
 
         const dibujar = async () => {
           if (camara.tipo === 'snapshot') {
-            refrescarSnapshot(camara.id);
+            if (fuente !== img) fuente.src = urlPuenteCamara(conBuster(camara.url));
+            else refrescarSnapshot(camara.id);
             await new Promise((r) => setTimeout(r, 300));
           }
           try {
-            if (img.complete && img.naturalWidth > 0 && img.getAttribute('data-error') !== 'true') {
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            if (fuente.complete && fuente.naturalWidth > 0 && fuente.getAttribute('data-error') !== 'true') {
+              ctx.drawImage(fuente, 0, 0, canvas.width, canvas.height);
             }
           } catch {
             /* CORS bloqueó ese frame puntual: se ignora y se sigue con el siguiente */
           }
         };
 
+        await dibujar();
+        // Si el lienzo quedó "contaminado", el navegador no deja grabar: avisar en vez de fallar callado.
+        try { ctx.getImageData(0, 0, 1, 1); } catch {
+          agregarLog(`[Bitácora · ${camara.nombre}] El navegador no deja grabar esta cámara (imagen de otro origen). Abre la app con ABRIR_DULCE_PLACER_LOCAL en el PC de las cámaras.`, true);
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         dibujoInterval = setInterval(() => {
           void dibujar();
         }, 500);
-        await dibujar();
 
         const clipListo = new Promise<Blob>((resolve, reject) => {
           recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
@@ -664,7 +737,10 @@ export function Videovigilancia() {
         if (dibujoInterval) clearInterval(dibujoInterval);
         dibujoInterval = null;
 
-        if (blob.size < 500) return; // Prácticamente vacío: no había imagen real que grabar
+        if (blob.size < 500) { // Prácticamente vacío: no había imagen real que grabar
+          agregarLog(`[Bitácora · ${camara.nombre}] Clip vacío (la cámara no mandó imagen); no se guardó.`);
+          return;
+        }
 
         const ruta = await subirClipBitacora(blob, camara.id);
         const registro = await guardarClipBitacora({
@@ -673,6 +749,11 @@ export function Videovigilancia() {
           url_clip: ruta,
           duracion_segundos: 10,
         });
+        const equipo = (() => { try { return nombreResponsable(leerEquipoLocal()); } catch { return ''; } })();
+        const quienes = equipo.split(/\s+y\s+|,\s*/).map((x) => x.trim()).filter(Boolean);
+        const trabajadores = quienes.length ? quienes : ['sin-turno'];
+        let descripcion = motivo || 'Ronda de cámara';
+        let clasificacion: ClipBitacora['clasificacion'] = null;
 
         try {
           const base64 = await new Promise<string>((resolve, reject) => {
@@ -682,26 +763,51 @@ export function Videovigilancia() {
             reader.readAsDataURL(blob);
           });
 
-          const mensaje = promptAnalisisClipOdysseus(camara.nombre);
+          const mensaje = promptAnalisisClipOdysseus(camara.nombre, motivo);
           const res = await consultarAgente('odysseus', mensaje, () => {}, base64);
-          const { clasificacion, categorias, descripcion, alerta } = parsearRespuestaClipOdysseus(
-            (res || '').trim()
-          );
+          const parseado = parsearRespuestaClipOdysseus((res || '').trim());
+          const { categorias, alerta } = parseado;
+          clasificacion = parseado.clasificacion;
+          descripcion = motivo ? `[${motivo}] ${parseado.descripcion}` : parseado.descripcion;
           await marcarClipAnalizado(registro.id, {
             descripcion_ia: descripcion,
             clasificacion,
             categorias_detectadas: categorias as CategoriaBitacora[],
             alerta,
+            trabajador: trabajadores.filter((p) => p !== 'sin-turno').join(' y ') || null,
           });
 
           if (alerta) {
             agregarLog(`[Bitácora · ${camara.nombre}] ${descripcion}`, true);
             toast.error(`Bitácora: posible ${categorias.join(', ') || 'anomalía'} en ${camara.nombre}`);
+            void notificarAlertaVigilancia({
+              clave: `clip-${camara.id}-${categorias.join('+') || 'malo'}`,
+              titulo: `Posible ${categorias.join(', ') || 'anomalía'} en ${camara.nombre}`,
+              detalle: descripcion,
+              critica: esCategoriaCritica(categorias) || clasificacion === 'malo',
+            });
           }
         } catch (err) {
           // El clip ya quedó guardado; solo falló el análisis (se puede reintentar luego).
           console.error('Bitácora visual: error analizando el clip:', err);
         }
+
+        const cuandoClip = new Date(registro.capturado_en);
+        const ficha = {
+          contexto: motivo || 'ronda',
+          descripcion,
+          clasificacion: clasificacion || 'sin-clasificar',
+          cuando: cuandoClip,
+        };
+        for (const persona of trabajadores) {
+          void archivarClipEnCarpetas(blob, { ...ficha, trabajador: persona, donde: 'trabajador' })
+            .catch((err) => console.error('Bitácora visual: no se copió a la carpeta del trabajador', err));
+        }
+        void archivarClipEnCarpetas(blob, {
+          ...ficha,
+          trabajador: trabajadores.filter((p) => p !== 'sin-turno').join('-') || 'sin-turno',
+          donde: 'situacion',
+        }).catch((err) => console.error('Bitácora visual: no se copió a la carpeta de la situación', err));
       } catch (err) {
         console.error('Bitácora visual: error grabando el clip:', err);
       } finally {
@@ -714,6 +820,7 @@ export function Videovigilancia() {
 
   const cicloGrabacion = useCallback(() => {
     if (!grabacionRef.current) return;
+    if (modoClipsRef.current === 'eventos') return; // en "solo eventos" no se graba a ciegas
     const activas = camarasRef.current.filter((c) => c.activa && !c.esDemo && !c.deletedAt);
     activas.forEach((c) => {
       void grabarClipCamara(c);
@@ -746,6 +853,74 @@ export function Videovigilancia() {
     grabacionIntervalRef.current = setInterval(cicloGrabacion, INTERVALO_GRABACION_MS);
   };
 
+  // Clips por evento: cuando en caja pasa algo (venta, anulación, movimiento), graba un clip en ese instante.
+  useEffect(() => {
+    const eventos = detectarEventos(vistoRef.current, ventas, sesionesCaja);
+    if (eventos.length === 0 || !grabacionRef.current || modoClipsRef.current === 'continuo') return;
+    const activas = camarasRef.current.filter((c) => c.activa && !c.esDemo && !c.deletedAt);
+    if (activas.length === 0) return;
+    // Máximo 3 eventos por tanda (los sensibles primero) para no saturar con clips
+    const elegidos = [...eventos].sort((a, b) => Number(b.sensible) - Number(a.sensible)).slice(0, 3);
+    elegidos.forEach((ev, i) => {
+      activas.forEach((c) => {
+        setTimeout(() => { void grabarClipCamara(c, ev.motivo); }, i * (DURACION_CLIP_MS + 500));
+      });
+    });
+    agregarLog(`Clip por evento: ${elegidos.map((e) => e.motivo).join(' · ')}`, elegidos.some((e) => e.sensible));
+  }, [ventas, sesionesCaja, grabarClipCamara, agregarLog]);
+
+  const cambiarModoClips = () => {
+    const n = siguienteModoClips(modoClips);
+    setModoClips(n);
+    modoClipsRef.current = n;
+    guardarModoClips(n);
+    toast.message(`Clips: ${ETIQUETA_MODO[n]}`);
+  };
+
+  // Modo estación: este PC vigila y graba solo apenas abre la app (sin tocar botones) y no deja apagar la pantalla.
+  useEffect(() => {
+    if (!estacion || !puedeGestionar || autoArranqueRef.current) return;
+    const reales = camaras.filter((c) => !c.esDemo && c.activa && !c.deletedAt);
+    if (reales.length === 0) return;
+    autoArranqueRef.current = true;
+    if (!odysseusRef.current) toggleOdysseus();
+    if (!grabacionRef.current) toggleGrabacion();
+    agregarLog('Modo estación: vigilancia y grabación iniciadas automáticamente.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estacion, puedeGestionar, camaras]);
+
+  useEffect(() => {
+    if (!estacion) return;
+    let liberar: () => void = () => {};
+    let cancelado = false;
+    void mantenerPantallaEncendida().then((f) => { if (cancelado) f(); else liberar = f; });
+    return () => { cancelado = true; liberar(); };
+  }, [estacion]);
+
+  const cambiarEstacion = () => {
+    const nuevo = !estacion;
+    setEstacionActiva(nuevo);
+    setEstacion(nuevo);
+    autoArranqueRef.current = false;
+    toast.success(nuevo
+      ? 'Modo estación activado: este PC vigila solo, aunque cambies de módulo. Déjalo encendido con la app abierta.'
+      : 'Modo estación desactivado.');
+  };
+
+  const guardarAlertas = (c: ConfigAlertas) => {
+    setCfgAlertas(c);
+    guardarConfigAlertas(c);
+  };
+
+  const probarAlerta = async () => {
+    guardarConfigAlertas(cfgAlertas);
+    const r = await notificarAlertaVigilancia(
+      { clave: `prueba-${Date.now()}`, titulo: 'Prueba de alerta', detalle: 'Si ves esto, las alertas funcionan.', critica: true },
+      cfgAlertas
+    );
+    toast.message(`Prueba enviada · navegador: ${r.navegador ? 'sí' : 'no'} · WhatsApp: ${r.whatsapp ? 'enviado (revisa tu celular)' : 'sin configurar'}`);
+  };
+
   const ejecutarBusquedaBitacora = async () => {
     const q = busquedaTexto.trim();
     if (!q) return;
@@ -765,10 +940,31 @@ export function Videovigilancia() {
   const abrirClipBitacora = async (clip: ClipBitacora) => {
     const url = await urlFirmadaClip(clip.url_clip);
     if (!url) {
-      toast.error('No se pudo generar el enlace del clip');
+      toast.error('No se pudo abrir el video de la nube');
       return;
     }
-    window.open(url, '_blank', 'noopener,noreferrer');
+    const quien = clip.trabajador_id || 'Sin trabajador marcado';
+    const situacion = clip.clasificacion || 'sin situación';
+    setVideoNube({
+      url,
+      titulo: `${quien} · ${situacion} · ${clip.camara_nombre || clip.camara_id}`,
+    });
+  };
+
+  const verGrabacionesNube = async () => {
+    setCargandoNube(true);
+    try {
+      const lista = await clipsRecientes(40);
+      setResultadosBusqueda(lista);
+      if (lista.length === 0) {
+        toast.message('Todavía no hay grabaciones en la nube. Se guardan cuando el PC de las cámaras está grabando.');
+      }
+    } catch (err) {
+      toast.error('No se pudieron leer las grabaciones de la nube');
+      console.error(err);
+    } finally {
+      setCargandoNube(false);
+    }
   };
 
   const generarInformeDelDia = async () => {
@@ -792,7 +988,7 @@ export function Videovigilancia() {
           return `${hora} · ${c.camara_nombre || c.camara_id}${cats}: ${c.descripcion_ia}`;
         })
         .join('\n');
-      const mensaje = promptInformeDiarioOdysseus(resumen);
+      const mensaje = `${promptInformeDiarioOdysseus(resumen)}\n\n${resumenOperativoDia(ventas, sesionesCaja)}`;
       const res = await consultarAgente('odysseus', mensaje, () => {});
       setInformeDia((res || '').trim() || 'ODYSSEUS no respondió.');
       setMostrarInforme(true);
@@ -912,6 +1108,45 @@ export function Videovigilancia() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+            <Button
+              onClick={cambiarModoClips}
+              disabled={!puedeGestionar}
+              variant="outline"
+              className="border-white/10 bg-white/5 hover:bg-white/10 h-10 px-4 rounded-xl text-white font-bold disabled:opacity-40"
+              title="Cuándo grabar clips: cada minuto, cuando pasa algo en caja, o ambos"
+            >
+              <Film className="w-4 h-4 mr-2" /> Clips: {ETIQUETA_MODO[modoClips]}
+            </Button>
+            <Button
+              onClick={() => setAlertasOpen(true)}
+              variant="outline"
+              className="border-white/10 bg-white/5 hover:bg-white/10 h-10 px-4 rounded-xl text-white font-bold"
+              title="Avisos al celular cuando la IA detecte algo grave"
+            >
+              <MessageCircle className="w-4 h-4 mr-2" /> Alertas
+            </Button>
+            <Button
+              onClick={cambiarEstacion}
+              disabled={!puedeGestionar}
+              variant="outline"
+              className={cn(
+                'h-10 px-4 rounded-xl font-bold disabled:opacity-40',
+                estacion ? 'border-emerald-500/60 bg-emerald-500/20 text-emerald-300' : 'border-white/10 bg-white/5 text-white'
+              )}
+              title="Este PC vigila y graba solo, aunque cambies de módulo"
+            >
+              <Cpu className="w-4 h-4 mr-2" /> Estación {estacion ? 'ON' : 'OFF'}
+            </Button>
+            {onIrAuditoria && (
+              <Button
+                onClick={onIrAuditoria}
+                variant="outline"
+                className="border-white/10 bg-white/5 hover:bg-white/10 h-10 px-4 rounded-xl text-white font-bold"
+                title="Cruza lo que graban las cámaras con ventas, cajas y gastos"
+              >
+                <ShieldAlert className="w-4 h-4 mr-2" /> Auditoría Digital
+              </Button>
+            )}
             <Button
               onClick={() => setShowOjoIA(true)}
               disabled={!puedeGestionar}
@@ -1059,6 +1294,13 @@ export function Videovigilancia() {
                     onError={(e) => {
                       const img = e.target as HTMLImageElement;
                       img.setAttribute('data-error', 'true');
+                      // Reintento solo: si el puente/Tailscale aún no estaba listo (p. ej. tras
+                      // reiniciar el PC) la imagen se recupera sin tener que recargar la página.
+                      if (!cam.esDemo) {
+                        window.setTimeout(() => {
+                          if (img.isConnected && img.getAttribute('data-error') === 'true') img.src = conBuster(cam.url);
+                        }, 10000);
+                      }
                     }}
                     onLoad={(e) => {
                       (e.target as HTMLImageElement).removeAttribute('data-error');
@@ -1213,7 +1455,7 @@ export function Videovigilancia() {
           </div>
 
           {/* D: Bitácora Visual — buscar en clips guardados + informe del día */}
-          <div className="shrink-0 p-4 border-b border-white/5 space-y-2 bg-sky-500/5 max-h-[26%] overflow-y-auto">
+          <div className={cn('shrink-0 p-4 border-b border-white/5 space-y-2 bg-sky-500/5 overflow-y-auto', videoNube ? 'max-h-[70%]' : 'max-h-[40%]')}>
             <p className="text-[9px] font-black uppercase tracking-widest text-sky-300 flex items-center gap-1.5">
               <Search className="w-3.5 h-3.5" />
               Buscar en la Bitácora Visual
@@ -1239,6 +1481,23 @@ export function Videovigilancia() {
               </Button>
             </div>
 
+            {videoNube && (
+              <div className="space-y-1 rounded-lg bg-black p-2">
+                <p className="text-[11px] font-black text-white">{videoNube.titulo}</p>
+                <video src={videoNube.url} controls autoPlay className="w-full rounded-md bg-black max-h-48" />
+              </div>
+            )}
+
+            <Button
+              type="button"
+              disabled={cargandoNube}
+              onClick={() => void verGrabacionesNube()}
+              className="w-full h-9 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-[10px] font-black uppercase tracking-widest gap-1.5"
+            >
+              <Film className="w-3.5 h-3.5" />
+              {cargandoNube ? 'Cargando nube…' : 'Ver grabaciones en la nube'}
+            </Button>
+
             {resultadosBusqueda.length > 0 && (
               <div className="space-y-1.5 pt-1">
                 {resultadosBusqueda.map((clip) => (
@@ -1248,13 +1507,24 @@ export function Videovigilancia() {
                     onClick={() => void abrirClipBitacora(clip)}
                     className="w-full text-left p-2 rounded-lg bg-black/30 hover:bg-black/50 border border-white/5 transition-colors"
                   >
+                    <p className="text-[11px] font-black text-white">
+                      {clip.trabajador_id || 'Sin trabajador'} · {clip.clasificacion || 'sin situación'}
+                    </p>
                     <p className="text-[9px] font-black uppercase tracking-widest text-sky-300">
                       {new Date(clip.capturado_en).toLocaleString('es-CO', { hour12: false })} ·{' '}
                       {clip.camara_nombre || clip.camara_id}
                     </p>
-                    <p className="text-[11px] text-slate-300 mt-0.5 line-clamp-2">
+                    <p className="text-[11px] text-white mt-0.5 line-clamp-2">
                       {clip.descripcion_ia || 'Sin analizar todavía'}
                     </p>
+                    {ventas.length > 0 && (
+                      <p className="text-[9px] text-slate-500 mt-0.5">
+                        {(() => {
+                          const n = ventasCercanas(clip.capturado_en, ventas).length;
+                          return n ? `${n} venta(s) registradas en ese momento` : 'Sin ventas registradas en ese momento';
+                        })()}
+                      </p>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1697,6 +1967,47 @@ export function Videovigilancia() {
         </div>
       )}
       
+      {alertasOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-black text-white uppercase tracking-tighter">Alertas al celular</h3>
+              <button type="button" onClick={() => setAlertasOpen(false)} className="text-slate-500 hover:text-white"><X className="w-5 h-5" /></button>
+            </div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Tu WhatsApp (con indicativo, ej. 573001234567)
+              <input
+                value={cfgAlertas.whatsapp}
+                onChange={(e) => guardarAlertas({ ...cfgAlertas, whatsapp: e.target.value })}
+                className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white normal-case tracking-normal"
+              />
+            </label>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              Clave CallMeBot
+              <input
+                value={cfgAlertas.apikey}
+                onChange={(e) => guardarAlertas({ ...cfgAlertas, apikey: e.target.value })}
+                className="mt-1 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2 text-sm text-white normal-case tracking-normal"
+              />
+            </label>
+            <p className="text-[10px] text-slate-400 leading-relaxed">
+              Una sola vez: desde tu WhatsApp escribe <b>I allow callmebot to send me messages</b> al <b>+34 644 51 95 23</b>. Te responde con la clave. Es gratis y no confirma la entrega.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-slate-200">
+              <input type="checkbox" checked={cfgAlertas.navegador} onChange={(e) => guardarAlertas({ ...cfgAlertas, navegador: e.target.checked })} className="accent-emerald-500" />
+              Notificación y sonido en este aparato
+            </label>
+            <label className="flex items-center gap-2 text-xs text-slate-200">
+              <input type="checkbox" checked={cfgAlertas.soloCriticas} onChange={(e) => guardarAlertas({ ...cfgAlertas, soloCriticas: e.target.checked })} className="accent-emerald-500" />
+              Avisar solo lo grave (robo, devolución simulada, regalo, consumo sin registrar)
+            </label>
+            <Button onClick={() => void probarAlerta()} className="w-full h-11 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-black font-black uppercase tracking-widest">
+              Enviar prueba
+            </Button>
+          </div>
+        </div>
+      )}
+
       {mostrarInforme && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <div className="bg-slate-900 border border-white/10 rounded-3xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto animate-ag-scale-in">

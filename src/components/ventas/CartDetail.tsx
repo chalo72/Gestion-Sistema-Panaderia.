@@ -27,6 +27,7 @@ interface CartDetailProps {
     setDescuento?: (v: number) => void;
     rolUsuario?: string;
     onGoToCatalog?: () => void;
+    onDividirCuenta?: () => void;
 }
 
 export function CartDetail({
@@ -35,7 +36,7 @@ export function CartDetail({
     clientesNombres = [],
     activeTabLabel, activeTabTipo, onLiberarMesa, onTraspasarMesa,
     descuento = 0, setDescuento, rolUsuario,
-    onGoToCatalog,
+    onGoToCatalog, onDividirCuenta,
 }: CartDetailProps) {
 
     const [billeteRecibido, setBilleteRecibido] = useState('');
@@ -281,6 +282,16 @@ export function CartDetail({
                     </div>
 
                     {/* Botones de Acción */}
+                    {isMesa && cart.length > 0 && onDividirCuenta && (
+                        <div className="mb-2">
+                            <Button
+                                onClick={onDividirCuenta}
+                                className="w-full h-10 rounded-xl font-black uppercase text-xs tracking-widest transition-all active:scale-95 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800"
+                            >
+                                ✂️ Dividir Cuenta
+                            </Button>
+                        </div>
+                    )}
                     <div className="grid grid-cols-[1.1fr_2fr] gap-2.5">
                         <Button
                             variant="outline"

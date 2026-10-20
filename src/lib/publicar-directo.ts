@@ -6,6 +6,8 @@
  * sin pasar por N8N. Funciona desde cualquier celular, sin PC prendido.
  */
 
+import { encabezadosConClave } from '@/lib/clave-negocio';
+
 export type RedDirecta = 'FACEBOOK' | 'INSTAGRAM' | 'AMBAS';
 
 export interface ResultadoRed {
@@ -49,7 +51,7 @@ export async function publicarDirecto(params: {
 
   const res = await fetch('/api/publicar', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: encabezadosConClave({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ red: params.red, texto: params.texto, imagen: imagenLista }),
   });
 

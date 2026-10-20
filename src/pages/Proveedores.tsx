@@ -65,6 +65,7 @@ import {
 } from 'recharts';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { hoyLocal } from '@/lib/fecha-local';
 
 /* ── Tipos para la vista ── */
 type TipoEmbalaje =
@@ -585,7 +586,7 @@ export function Proveedores({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `proveedores_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `proveedores_${hoyLocal()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
     toast.success(`${filtrados.length} proveedores exportados`);
@@ -604,6 +605,46 @@ export function Proveedores({
       return;
     }
     if (!data.nombre.trim()) { toast.error('El nombre es obligatorio'); return; }
+
+    // ── NIVEL 1: Validar márgenes y precios ANTES de guardar nada ─────────
+    // 🩹 2026-10-09: se movió aquí. Antes se validaba DESPUÉS de actualizar el proveedor y
+    // borrar precios, y al bloquear quedaba todo guardado a medias.
+    if (items.length > 0) {
+      // Construir mapa de precios anteriores para detectar cambios extremos
+      const preciosAnteriores: Record<string, number> = {};
+      if (editingProveedor) {
+        getPreciosByProveedor(editingProveedor.id).forEach(p => {
+          const prod = getProductoById(p.productoId);
+          if (prod) preciosAnteriores[prod.nombre] = p.precioCosto;
+        });
+      }
+
+      const { bloquear, erroresBloqueantes, advertencias } = validarCatalogo(items, preciosAnteriores);
+
+      if (bloquear) {
+        // 🩹 2026-10-09: antes bloqueaba sin opción. Ahora pregunta: si los números son
+        // correctos (algunos dulces sí dejan mucha ganancia) se puede guardar igual.
+        const seguir = window.confirm(
+          `⚠️ Ganancia muy alta en:\n\n${erroresBloqueantes.slice(0, 6).join('\n\n')}\n\n` +
+          `Revisa la cantidad por paquete, el costo y la unidad (und / kg).\n\n` +
+          `¿Los números están bien y quieres GUARDAR IGUAL?`
+        );
+        if (!seguir) {
+          toast.error('No se guardó nada. Corrige los precios y vuelve a guardar.', { duration: 6000 });
+          // Lanzar para que el formulario NO se cierre ni borre el catálogo
+          throw new Error('VALIDATION_BLOCK');
+        }
+      }
+
+      if (advertencias.length > 0) {
+        // Advertencia suave: muestra pero permite continuar
+        toast.warning(
+          `⚠️ Precio inusual detectado:\n${advertencias.slice(0, 2).join('\n')}`,
+          { duration: 6000 }
+        );
+      }
+    }
+
     try {
       let provId: string;
       if (editingProveedor) {
@@ -635,37 +676,6 @@ export function Proveedores({
               await onDeleteProducto(precio.productoId);
             }
           }
-        }
-      }
-
-      // ── NIVEL 1: Validar márgenes y precios antes de guardar ──────────────
-      if (items.length > 0) {
-        // Construir mapa de precios anteriores para detectar cambios extremos
-        const preciosAnteriores: Record<string, number> = {};
-        if (editingProveedor) {
-          getPreciosByProveedor(editingProveedor.id).forEach(p => {
-            const prod = getProductoById(p.productoId);
-            if (prod) preciosAnteriores[prod.nombre] = p.precioCosto;
-          });
-        }
-
-        const { bloquear, erroresBloqueantes, advertencias } = validarCatalogo(items, preciosAnteriores);
-
-        if (bloquear) {
-          toast.error(
-            `⛔ No se puede guardar — corrige estos problemas:\n${erroresBloqueantes.slice(0, 4).join('\n')}`,
-            { duration: 10000 }
-          );
-          // Lanzar para que el formulario NO se cierre ni borre el catálogo
-          throw new Error('VALIDATION_BLOCK');
-        }
-
-        if (advertencias.length > 0) {
-          // Advertencia suave: muestra pero permite continuar
-          toast.warning(
-            `⚠️ Precio inusual detectado:\n${advertencias.slice(0, 2).join('\n')}`,
-            { duration: 6000 }
-          );
         }
       }
 

@@ -449,3 +449,164 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Verificado:** `tsc` 1814 errores (sin cambio, ninguno nuevo; los de supabase-db.ts son los TS2305/TS7006/TS2416 que ya existían). Las pruebas que siguen fallando (autoSeedData, DB-01 syncCloudToLocal, BusquedaRapida/Proveedores) no dependen de este cambio.
 **Cómo se verifica en vivo:** abrir la app en la PC (se sincroniza solo), luego en el celular → Consumo y Préstamos debe mostrar las empleadas activas de Trabajadores. En la consola, si algo falla, aparece `⚠️ [supabase-db] addTrabajador falló: ...`.
 **Pendiente:** las 2 empleadas de ejemplo viejas en la nube (“Vendedor 1 Mañana”, “Vendedor2 Tarde”) se borran desde Trabajadores si ya no sirven. Registros de crédito locales viejos con `trabajadorId` que no es UUID (ids de usuario) pueden seguir fallando al subir; solo saldrá el aviso en consola.
+
+### 📅 2026-10-08 - Cursor (auditoría) - Aclaración de despliegue (corrige una suposición mía)
+- `git push` NO publica la app. Producción (`app-eight-sigma-13.vercel.app`, proyecto Vercel `app`) se publica con `PUBLICAR_A_PRODUCCION.bat` (raíz), que corre `npx vercel --prod` y sube **la carpeta tal como está en el disco** (incluye cambios sin commit). Los cambios de hoy están en la RAÍZ `src/` (la correcta), commit `13ee607` en `feat/marketing-studio-y-ajustes` (solo respaldo en GitHub).
+- Confirmado por Gonzalo (captura de Trabajadores): las empleadas reales SÍ existen en el módulo Trabajadores de la PC (ANDREA, Andrea Cadena, Daniela, Erika, Freyle, Gonzalo Vibanco, Samir, Santiago, Shirley). No habían subido a la nube por el bug de columnas de `supabase-db.ts` (ya corregido en el código, pendiente de publicar). Los 2 "Vendedor..." con $0 son filas viejas de ejemplo de la nube.
+- Pendiente: publicar con el .bat para que el error `getAllPrestamosCaja` y la sincronización queden corregidos en la app real.
+
+### 📅 2026-10-08 - Cursor - PUBLICADO a producción v1.1.1174 (proyecto `app`, desde la RAÍZ)
+- Publicado con `npx vercel --prod --yes` desde la raíz → alias `https://app-eight-sigma-13.vercel.app` (verificado: `version.json` pasó de 1.1.1173 a 1.1.1174, buildDate 2026-10-08). Incluye todo lo que había en la carpeta (también lo del otro agente sin commit) + los arreglos de hoy: `getAllPrestamosCaja` (Caja), lista de empleadas en Consumo y Préstamos, sync de trabajadores y créditos (`supabase-db.ts`), `describirProduccionIncompleta` (Diagnóstico).
+- Se creó `.vercelignore` (excluye `app/`, `.claude/`, `mcp-server/`, respaldos, scripts sueltos, `key.txt`, `.env*`, etc.) para no subir secretos ni carpetas pesadas. No excluye nada que use el build (src, public, api, scripts, configs).
+- **Si `vercel --prod` se queda en "Retrieving project…":** es porque la CLI ejecuta `git status -s` y se traba cuando hay procesos `git.exe`/`vercel` colgados de intentos anteriores. Cerrar esos procesos (`git.exe`, `node` de vercel) y reintentar; `git status -s` debe tardar ~5 s. `vercel build` local falla en esta sesión con `spawn cmd.exe ENOENT` (no usarlo; se publica con build remoto).
+- Aviso de build no bloqueante ya existente: `api/nequi-radar.ts` no encuentra `@vercel/node` (TS2307).
+- **Pendiente para verificar con Gonzalo:** abrir la app en la PC (Ctrl+Shift+R), esperar ~1 min y comprobar en el celular que Consumo y Préstamos lista las empleadas de Trabajadores; entrar a Caja sin el cartel `getAllPrestamosCaja`.
+
+### 2026-10-08 · Nómina: cobro de préstamos/consumos más claro (src/pages/Nomina.tsx)
+- Cada deuda en Nómina > Liquidar muestra: "Cobrar todo", "No cobrar hoy (dejar para después)" y "cobrar solo una parte ($)". Un cuadro de color dice cuánto se descuenta y cuánto queda para la próxima quincena.
+- Nuevo helper `montoACobrar` (parciales[id] manda; si no, saldo cuando descontarDeSalario=true, si no 0). Ahora TODAS las deudas activas con saldo aparecen en el cálculo (antes las de descontarDeSalario=false no se podían cobrar nunca).
+- Solo se guardan descuentos con monto > 0; lo no cobrado queda en saldo y sigue activo.
+- Confirmar pago lista lo que queda pendiente para la próxima quincena. Etiqueta del modal de préstamo: "Proponer el descuento en cada nómina".
+- tsc 1814 (igual a baseline), vite build OK. Sin tocar la lógica de pago ni de BD. Pendiente: publicar.
+
+### 2026-10-08 (tarde) · Nómina: guardar pago, historial y acumulado de deudas (src/pages/Nomina.tsx + types)
+- Liquidar: barra fija abajo con "Resumen total de la quincena" (Sueldos / Se descuenta / TOTAL A PAGAR) y botón grande GUARDAR PAGO. Modal "Guardar pago de nómina". Si ya está pagada: botón "Ver en Historial".
+- Al guardar: cada deuda descontada recibe un abono en `pagos` (metodoPago 'descuento_nomina', nota con la quincena); el saldo baja; lo no cobrado sigue activo.
+- NominaItem.pendientes (opcional, nuevo en types) y NominaDescuento.saldoRestante guardan lo que quedó sin cobrar. Historial y "Ver detalle" lo muestran ("Quedó pendiente").
+- Nueva pestaña "Deudas": total que deben las empleadas activas, por deuda: original / ya descontado / saldo + lista de abonos.
+- Backups: respaldo_agente_2026-10-08/Nomina.tsx.antes y types-index.ts.antes. tsc 1814 (baseline). Publicado en producción.
+
+### 2026-10-08 (tarde 2) · Nómina: PAGO INDIVIDUAL por trabajadora (src/pages/Nomina.tsx + types)
+- Al tocar una trabajadora, la barra fija muestra SU resumen (Sueldo / Descuento / TOTAL A PAGAR) y el botón "GUARDAR PAGO DE <NOMBRE>". Sin seleccionar, muestra lo pendiente y el botón secundario "Pagar a todas las pendientes".
+- Dentro de la tarjeta: "Cuenta de <NOMBRE>" con sueldo, cada descuento, lo que sigue debiendo y total a pagarle.
+- Modelo: una NominaQuincenal por periodo; los pagos individuales se acumulan en items (con gastoId/fechaPago). estado='borrador' (mostrado "Pagos parciales") hasta que todas las activas estén pagadas -> 'pagada'. Un gasto 'nomina' por trabajadora.
+- Las ya pagadas quedan congeladas (PAGADA, solo lectura); las demás se siguen calculando en vivo.
+- types: NominaItem.gastoId/fechaPago/pendientes, NominaPendiente, NominaDescuento.saldoRestante (todos opcionales).
+- Test nuevo: src/pages/Nomina.pago-individual.test.tsx (pasa). tsc 1814 baseline. Publicado.
+
+### 2026-10-08 (tarde 3) · Nómina: días que no vino / días de más (src/pages/Nomina.tsx + types)
+- En la tarjeta de cada trabajadora: "Valor de cada día" (sueldo mensual ÷ 30, editable), "Días que NO vino (se restan)" y "Días de MÁS (doble turno, reemplazo)" (acepta 0.5). Sueldo a recibir = base - días menos x valor + días extra x valor + ajuste manual.
+- En modo "descuento por asistencia" los días que no vino manuales se desactivan (ya se restan solos) para no duplicar.
+- NominaItem guarda valorBase, valorDia, diasMenos, diasExtra; se muestran en Cuenta, trabajadora pagada, detalle de historial y PDF. Se limpian al pagar y al cambiar de quincena.
+- Test: Nomina.pago-individual.test.tsx (2 casos, pasan). tsc 1814 baseline. Publicado.
+
+### 2026-10-08 (noche) · Nómina ↔ Control de turno (src/pages/Nomina.tsx, src/lib/horario-trabajo.ts, App.tsx 1 línea, types)
+- Nuevo src/lib/horario-trabajo.ts: lee el horario de Trabajadores ("Lun-Vie 7am-3pm") -> días que le tocan + hora de entrada/salida (si no se entiende, no inventa).
+- Nómina: calendario "Asistencia de la quincena" por trabajadora (verde = marcó Llegué, violeta = marcado a mano "sí vino", rojo = sin marcar, gris = descanso/futuro). Tocar un día lo marca/desmarca "sí vino" (en memoria hasta guardar el pago).
+- Pago por asistencia: solo cuentan los días que le tocan por horario (antes: todos los días de la quincena). Días fuera de horario: botón "Sumar como días de más".
+- Salida olvidada (llegó, no marcó Me voy, día pasado): se asume su hora normal de salida; horas se calculan con eso. Botón "Anotar ahora en Control de turno" y se anotan solos al guardar el pago (registros con origen 'manual' / 'salida-automatica', via onAddAsistencia = addRegistroAsistencia).
+- Si el horario no se puede leer: inputs Entra/Sale (guardados en localStorage nomina_horas_habituales).
+- App.tsx: solo se agregó onAddAsistencia={addRegistroAsistencia} a <Nomina>. OJO: App.tsx tiene cambios sin commit de otro agente (lazyWithRetry, VoiceOrchestrator…) que también quedaron en el deploy.
+- Pendiente conocido (no tocado): Asistencia.tsx usa toISOString() para la fecha (UTC) -> pasadas las 7 pm hora Colombia el registro queda con fecha de mañana; y la nube guarda solo timestamp de creación (hora al bajar de la nube sale en UTC).
+- Tests: horario-trabajo.test.ts, Nomina.asistencia.test.tsx (pasan). tsc 1814 (baseline). Publicado.
+
+### 2026-10-08 (noche) - Control de Mermas real (src/pages/ControlMerma.tsx, src/lib/merma.ts, App.tsx solo el case 'control-merma')
+- Antes era un mock (texto libre, datos falsos, no guardaba). Ahora elige el producto REAL por categoria (Pan de sal, Pan de dulce... salen de las categorias de los productos del Catalogo; hay interruptor Productos/Insumos), con buscador y atajos "Los que mas se danan".
+- Registrar = onAjustarStock(productoId, cantidad, 'salida', "Merma · causa · nota: .. · por usuario · #token"): descuenta inventario y crea el movimiento (se ve tambien en Inventario y sincroniza por la tabla movimientos). No hay tabla nueva.
+- Historial por periodo (Hoy/7/30/Todo), filtros causa/busqueda, Anular (devuelve stock con movimiento 'Anulacion merma · #token'; requiere GESTIONAR_INVENTARIO). Analisis por causa/producto/categoria + consejo segun la causa principal. Dinero perdido = costoBase (o precioCompra) x unidades; si no hay costo avisa.
+- Tambien cuenta las mermas viejas de Produccion ("Merma: motivo").
+- Limite: el cloud no guarda 'usuario' del movimiento, por eso el nombre va dentro del motivo. Los movimientos no se refrescan en vivo entre dispositivos (hay que recargar).
+- Respaldo: respaldo_agente_2026-10-08/ControlMerma.tsx.antes. Tests: merma.test.ts, ControlMerma.test.tsx (6 pasan). tsc sin errores en archivos de merma.
+
+### 2026-10-08 (noche) - Panes divididos por categoria (seed-data.ts, lib/clasificar-panes.ts, components/productos/OrdenarPanesModal.tsx, pages/Productos.tsx, App.tsx 1 prop)
+- Problema: en POS solo existia la categoria "Panes" para todo. La categoria es el texto Producto.categoria: POS, Inventario, Merma y Catalogo la leen de ahi, asi que dividir en Catalogo sincroniza todo.
+- seed-data.ts: nuevas categorias de venta "Pan de sal", "Pan de dulce", "Croissant" (se agregan solas al abrir la app; Galleteria y Hojaldres ya existian). "Panes" se queda para lo que no encaje.
+- Catalogo: aviso "Ordenar los panes por categoria" (solo si hay productos de venta en "Panes") -> modal con sugerencia por producto: 1) categoriaProduccion del modelo de pan enlazado (Libreta/Recetas: pan_sal, pan_dulce, empacado_*, hojaldrado, galleta, torta), 2) palabras del nombre (croissant, galleta, coco, queso, frances...), 3) si no hay pista no adivina. Nada cambia hasta pulsar "Mover N productos"; crea la categoria si falta.
+- Respaldos: respaldo_agente_2026-10-08/Productos.tsx.antes (seed-data.ts.antes ya incluye el cambio de categorias).
+- Tests: clasificar-panes.test.ts, OrdenarPanesModal.test.tsx (5 pasan). tsc 1810. Suite completa: 28 fallos en tests de codigo-fuente/dictado/login ajenos a estos archivos.
+
+### 2026-10-08 (noche, correccion) - Ordenar panes ahora parte de los MODELOS DE PAN (OrdenarPanesModal.tsx, lib/clasificar-panes.ts, Productos.tsx, App.tsx)
+- Error mio: la primera version listaba productos con categoria 'Panes' del Catalogo; la lista real de panes esta en Recetas Tecnicas > Modelos de pan (35 modelos con masa: Sal Mixta, Dulce, Hojaldre, Batido de Tortas, Vatido Galleta).
+- Ahora la lista sale de modelosPan. Categoria = 1) categoriaProduccion del modelo si esta puesta, 2) masa (formulacion) que usa: Sal->Pan de sal, Dulce->Pan de dulce, Hojaldre->Hojaldres (Croissant si el nombre lo dice), Tortas->Pastelería, Galleta->Galletería, 3) palabras del nombre.
+- Por modelo: ok (ya en su categoria) / mover (producto vinculado por modelo.productoId) / vincular (producto del Catalogo con nombre parecido, ignora pesos tipo 45gr; tambien guarda modelo.productoId) / crear (producto elaborado nuevo con precio, margen y costo del modelo; se vincula al modelo). Productos sueltos en 'Panes' sin modelo aparecen aparte.
+- Nada se aplica hasta pulsar 'Aplicar N cambios'. Vincular el modelo con su producto tambien habilita el puente Libreta->Inventario.
+- Vista previa con los 35 modelos de la boveda: 8 Pan de sal, 15 Pan de dulce, 5 Hojaldres, 4 Galleteria, 4 Pasteleria (+ los que tengan categoriaProduccion).
+- Tests: clasificar-panes.test.ts + OrdenarPanesModal.test.tsx (7 pasan).
+
+| 2026-10-08 noche | Caja: al abrir turno Tarde solo se creó Caja Principal | Supabase mostró que la Tarde del 8-oct solo tenía Principal (los turnos anteriores abrieron las 10). La lista de cajas en la nube estaba completa, así que no era la configuración. Causa probable: el bucle de AperturaCajaModal.handleIniciarJornada no tenía try/catch por caja (una falla cortaba las demás) y Ventas.tsx cerraba el modal tras la primera caja. Fix: try/catch por caja + aviso de cuáles fallaron + modal no se cierra a mitad. Las cajas faltantes se abren con "Agregar Caja" (turno Tarde). Desplegado. |
+
+| 2026-10-08 noche | Mayoristas vs Créditos separados + nuevo módulo Rutas y Despachos | Regla: **Mayoristas VENDE** (precios, márgenes, mini-POS, rutas); **Créditos Clientes COBRA** (saldos, abonos, vencimientos). En Mayoristas.tsx los botones de abono/pago ahora llevan a Créditos (COBROS_SOLO_EN_CREDITOS = true; egistrarAbono quedó bloqueado). Nueva pestaña **Rutas y Despachos** (src/components/mayoristas/RutasReparto.tsx, lógica pura en src/lib/rutas-reparto.ts, 13+2 tests): rutas (zona ciudad/municipio/corregimiento, días, horario, paradas en orden, enlace Maps), despachos (carga → salir a ruta descuenta inventario → por tienda dejó/recogió/hora/cobró/quién recibió → conteo de regreso → liquidar: sobrante bueno vuelve al stock y lo no cobrado crea crédito en Créditos Clientes), análisis por tienda (devolución %, utilidad del negocio, ganancia de la tienda, tendencia, estrategias, carga sugerida por rotación) y control de vendedores (faltantes, descuadre de efectivo). Datos en localStorage dp_rutas_reparto/dp_despachos_reparto + respaldo nube (utas_reparto_rutas/utas_reparto_despachos). PENDIENTE: el efectivo cobrado en ruta NO se registra aún como venta en caja/reportes (solo se muestra lo que el vendedor debe entregar). Desplegado. |
+
+- [2026-10-08] EQUIPO DEL TURNO: un solo usuario; al abrir jornada se marca quién llegó (Mañana: vendedora X; Tarde: María y Jessica como responsables conjuntas). Lib src/lib/equipo-turno.ts (dp_turno_equipo + nube equipo_turno), UI EquipoTurnoModal.tsx, chip en Ventas, ventas/mesas/venta rápida firmadas con vendedoraNombre, filtro por vendedora en HistorialVentas.
+
+- [2026-10-08] PEDIDOS DE TORTAS rehecho: tablero comanda (Por hacer / En preparación / Lista) ordenado por fecha, recordatorios hoy/mañana/atrasadas + avisos del navegador, fotos del modelo (cámara/galería, comprimidas), adicionales desde catálogo Piñatería (categoría con 'Piñatería') + libres, comanda impresa 80mm, envío WhatsApp con foto, repostera asignada, historial de estados. lib src/lib/pedidos-tortas.ts (dp_pedidos_tortas + nube pedidos_tortas). Pendiente: cobrar/registrar en caja al entregar y descontar stock de adicionales.
+
+- [2026-10-09] PEDIDOS DE TORTAS + caja/stock: abono y cobro de entrega se registran en caja abierta (registrarVenta con línea 'servicio:pedido-torta:<id>', sin tocar inventario; useVentas ignora productoId 'servicio:*'); campo registradoCaja evita duplicar; al entregar se descuentan adicionales del catálogo (batchAjustarStock, flag stockDescontado). Modal 'Entregar y cobrar'.
+
+- 2026-10-09 Auditoría Digital (AUTORIZO usuario): grabadora rrweb reescrita (cola de guardado, checkpoints 5 min, resumen por cinta, huella SHA-256 encadenada, nube vía dbNube en vez de Firestore); motor de reglas src/lib/auditoria-profunda.ts (caja, ventas, gastos, inventario, cintas); UI con pestañas Hallazgos/Cintas/Personas/IA; agente 'auditor-digital' en api/agente.ts; venta->cinta; resumen WhatsApp. src/lib/nube-kv.ts: dbNube lee/escribe la nube directo (equipo_turno, pedidos_tortas, rutas ahora sí sincronizan entre aparatos). Desplegado.
+
+- 2026-10-09 Sync Videovigilancia<->Auditoría Digital: clips de bitacora_visual (clipsEnRango) entran a ejecutarAuditoria (reglas video_alerta, video_sin_cobertura; refs tipo 'clip'; clipCercano/ventasCercanas); Auditoría puede abrir el video de una venta/alerta; Videovigilancia recibe ventas/sesionesCaja (informe del día cruzado con ventas, ventas cercanas por clip) y botón a Auditoría Digital.
+
+### 📅 2026-10-09 - Claude (Cowork) - Gastos / Libro de Caja: "¿De dónde sale la plata?" + gastos a la nube (AUTORIZO)
+
+**Problema:** en Modo Turbo Gastos no se podía decir de qué caja/bóveda salía la plata (selector diminuto, no obligatorio, lista vieja de 9 cajas); elegir bóveda NO descontaba el saldo; y los gastos con caja POS no subían a Supabase (`gastos.caja_id` es uuid y se mandaba el nombre "Principal" → 400 ~228/día, último gasto en nube 2026-09-01). Detalle: doc del proyecto Claude `claude/auditoria-modulo-gastos-libro-caja-2026-10-09.md`.
+
+**Cambios:**
+1. `src/components/gastos/TurboExpenseManager.tsx`: bloque grande obligatorio "¿De dónde sale la plata?" (cajas de `dp_cajas_config`, o las de fábrica si no hay; + bóvedas con saldo). Sin elegir no guarda (Smart, plantillas y masivo; edición no lo exige). Aviso si la bóveda no alcanza. Recuerda la última elección (`dp_gasto_origen_ultimo`). Tabla masiva: columna **Proveedor por fila** + "Total a pagar". Plantillas ahora mandan el origen.
+2. `src/pages/Gastos.tsx` `handleQuickSave`: si el origen es bóveda → `addMovimientoBoveda` Egreso (descuenta saldo).
+3. `src/lib/supabase-db.ts` `addGasto`: `caja_id`/`proveedor_id` solo si son uuid; si no, el valor va en `metadata`; revisa `error` y lo lanza (el puente lo encola). `getAllGastos` lee `cajaId/proveedorId` de metadata si la columna viene null.
+
+**Verificado:** `tsc` en los 3 archivos: 0 errores nuevos (39 → 37 preexistentes). Falta: `npx vite build` y publicar. Pendientes: Modo Clásico (QuickEntryBar) sigue sin selector de origen; gasto pagado desde caja POS no se descuenta en ninguna bóveda (revisado: `CierreCajaModal.tsx` y `ControlCaja.tsx` no leen los gastos de este módulo, así que hoy ese gasto no se resta del cuadre de la caja); anular gasto no devuelve plata a la bóveda; auditoría (foto, anular con motivo, duplicados, resumen por origen).
+
+- 2026-10-09 Videovigilancia: modo Estación (localStorage dp_estacion_vigilancia_v1; Videovigilancia siempre montada en App, auto-inicia ODYSSEUS+grabación, wakeLock) y Alertas al celular (src/lib/alertas-vigilancia.ts: CallMeBot WhatsApp + notificación/sonido, anti-spam 5 min). Config solo en localStorage del PC estación.
+- 2026-10-09 (2ª tanda, mismo AUTORIZO): `TurboExpenseManager.tsx` abre directo en **pago masivo**; cada fila permite **elegir el producto** (lista con los productos que vende el proveedor de la fila, según sus precios; si no tiene, todo el catálogo) y pone su último costo → monto = cantidad × costo (si se escribe el monto a mano, se respeta); debajo, **total de cada factura por proveedor** + total a pagar. La tabla ya no se cierra al guardar. `tsc`: 0 errores nuevos.
+- 2026-10-09 (3ª tanda): Turbo Gastos → columna **Precio c/u** editable (total = cantidad × precio; si se edita el total, recalcula el precio); si el precio difiere del catálogo sale aviso "Precios que cambiaron" y al guardar se actualiza el precio del proveedor (procesarAuditoriaPrecios → db.updatePrecio → nube); se recarga el catálogo de la tabla. **Sin límite de filas**: al escribir en la última aparece otra vacía + botón grande "Agregar otro producto"; botones con flex-wrap (en celular se salían de la pantalla). tsc: 0 errores nuevos.
+
+- 2026-10-09 Videovigilancia clips por evento: src/lib/disparadores-video.ts (detectarEventos: venta nueva, venta anulada, movimiento de caja) -> grabarClipCamara(camara, motivo) con contexto al prompt de ODYSSEUS; modo de clips (minuto/ambos/solo eventos) en localStorage dp_modo_clips_v1, default ambos.
+
+## 2026-10-09 — Editar gastos del historial
+- ExpenseFormModal: ventana con scroll (max-h-[90vh] overflow-y-auto), monto editable al editar (recalcula precio c/u), casillas producto/cant/precio mas grandes.
+- ExpenseList: botones editar/borrar visibles siempre en celular.
+- Gastos.tsx handleSave (edicion): con proveedor + producto actualiza precio en catalogo via procesarAuditoriaPrecios(..., crearSiNoExiste=false) (exportada desde TurboExpenseManager).
+- tsc: 0 errores nuevos. Falta build + deploy por Gonzalo.
+
+## 2026-10-09 — Gastos: 4 puntos (TurboExpenseManager)
+- Pagos fijos: botones Arriendo, Luz, Agua, Gas, Internet, Arreglos, Caja Menor, Empaques, Insumos. Ya no hay montos inventados: abre panel con monto real (sugiere el ultimo pagado, localStorage dp_pago_fijo_ultimo), a quien se pago y nota.
+- Modo masivo: selector Por producto | Por total de factura (proveedor, N factura, total, nota; no toca precios del catalogo). Falta: foto del recibo.
+- Aviso de nombres distintos al catalogo (matchProductoEnCatalogo): boton Usar nombre del catalogo o Cambiar el del catalogo (db.updateProducto con confirmacion).
+- tsc: 0 errores nuevos. Finales de linea normalizados a CRLF. Falta build + deploy.
+
+## 2026-10-09 — Proveedores: bloqueo de margen >400%
+- Proveedores.tsx handleSubmit: la validacion de margenes (validarCatalogo) se movio ANTES de actualizar el proveedor y borrar precios (antes dejaba todo guardado a medias al bloquear).
+- El bloqueo duro ahora es window.confirm "GUARDAR IGUAL"; si dice que no, no se guarda nada (VALIDATION_BLOCK).
+- tsc: 0 errores nuevos. Falta build + deploy.
+
+## 2026-10-09 — Gastos: Bancos, Compromisos y origen en pagos fijos
+- TurboExpenseManager: botones Bancos (Pago Banco / Credito) y Compromisos (elige de getCompromisos activos, llena monto y a quien).
+- El panel de pago fijo ahora tiene su propio selector "De donde sale la plata" (mismo estado que el de arriba).
+- tsc: 0 errores nuevos.
+
+## 2026-10-09 — Verificacion de persistencia de datos nuevos
+- Gastos nuevos (pagos fijos, factura por total, bancos/compromisos): llegan a Supabase tabla gastos (verificado 7 gastos del 2026-10-09; bovedaId/origenTipo en metadata).
+- Bovedas y movimientos: configuracion bovedas_lista_data (11) y bovedas_movimientos_data (591).
+- Compromisos fijos (dp_compromisos_fijos) SOLO vivian en el aparato: ahora finanzas-personales.ts los sube a configuracion compromisos_fijos_data y un celular nuevo los trae.
+- Solo en el aparato (a proposito): dp_gasto_origen_ultimo, dp_pago_fijo_ultimo (sugerencias). Ingresos extras siguen solo locales (pendiente).
+
+## 2026-10-09 — Captura Rapida (Atrasados): no repetir dias
+- venta-diaria-rapida-form.tsx: aviso "ya esta registrado" por fecha, tira de ultimos 30 dias (verde=registrado, rojo=falta, tocar = ir), boton "pasar al siguiente dia que falta". Al guardar: mismo dia+turno+mismo total = no guarda y pasa al siguiente; total distinto = confirm reemplazar (como EDICION, no suma doble a boveda); otro turno el mismo dia = confirm.
+- ModoAyudante.tsx: gasto con mismo dia + mismo monto = confirm antes de guardar.
+- Nube: ventas_diarias_data ultima fecha 2026-08-16 (73 registros) al 2026-10-09.
+- tsc: 0 errores nuevos. Falta build + deploy. Libreta/produccion sin control de repetidos aun.
+
+## 2026-10-09 — Libreta/Produccion: no repetir dias
+- useReportesData.ts (guardar produccion, solo registro nuevo): mismo dia + mismas masas y hornadas = no guarda ("ya esta registrada igual"); mismo dia distinto = confirm para agregar. Aplica tambien en Reportes y Panadero (mismo hook).
+- tsc: 0 errores nuevos en ese archivo (47 previos).
+
+## 2026-10-09 — Cajas: aviso falso "turno abierto desde las 08:52" en Tarde/Noche
+- Causa: useVentas.sesionesCaja (memoria) no se enteraba de cierres hechos en ControlCaja (db.updateSesionCaja directo + cierresLocales). abrirCaja veia cajas ya cerradas como abiertas; "Cancelar" las re-cerraba y depositaba otra vez en Boveda.
+- Evidencia: Boveda "Cierre automatico (turno nuevo)" $100.000 x3 (2026-10-08 19:24Z, 2026-10-09 19:31Z y 19:38Z UTC) justo despues de Entregas de Turno. Pendiente: Gonzalo confirma conteo para registrar reversos.
+- Arreglo: abrirCaja lee db.getAllSesionesCaja() antes del aviso; useVentas escucha dp_sesiones_caja_changed; ControlCaja dispara ese evento tras entregar/cerrar jornada/quitar caja.
+- tsc: 0 errores en esos archivos. Falta build + deploy.
+
+
+## 2026-10-20 — Claude (Cowork) — Orden general + inventario de pendientes (NO se tocó código)
+- Trabajo de otros agentes del 15 al 20 de oct NO estaba anotado aquí. Queda en el código (sin commit desde 2026-10-08, rama feat/marketing-studio-y-ajustes):
+  - 15-oct: buscador de productos, sync "local gana" (sync-merge-local-gana.ts), Bóveda, Fiados empleados, finanzas personales, Reportes, vigía de ventas.
+  - 16-oct: cuadre de factura en Recepciones (cuadre-factura.ts), asistente helados, Diagnóstico financiero. (Último build dist: 16-oct 19:32.)
+  - 17-oct: AvisosCompromisos en Dashboard.
+  - 18-oct: Historial de cajas del día, Rutas de reparto mayoristas, Nómina, CCTV/auditoría profunda, GerenteComprasIA, Clientes.
+  - 20-oct: bitácora anti-robo en la nube (seguridad-nube.ts + tabla seguridad_eventos YA creada en Supabase, recibe datos), cuadre de turno descuenta retiros, alerta de retiros grandes/sin motivo, PIN gerente en descuentos grandes, equipo del turno (EquipoTurnoModal), dividir cuenta; Videovigilancia: clips por evento, modo estación, reintento de cámara.
+- Carpeta app/ (copia vieja, NO_DESPLEGAR_DESDE_AQUI): el 18-oct se "editaron" 7 archivos. Revisado: 5 solo cambiaron finales de línea; usePriceControl/useVentas tienen lógica que la carpeta real ya tiene (mejor). No hay nada que rescatar. No usar app/.
+- RIESGO: key.txt (llave sk-…) está en git y subida a GitHub desde el commit 00c52682. Hay que ROTAR esa llave en su proveedor y sacarla de git (git rm --cached key.txt). Se agregó a .gitignore junto con temporales y respaldos.
+- PENDIENTES (verificados contra código/Supabase): reversos de Bóveda por "cierre automático" (confirmar con Gonzalo); gasto pagado desde caja POS no se resta del cierre; anular gasto no devuelve plata a Bóveda; Modo Clásico de gastos sin "de dónde sale la plata"; foto de recibo en factura por total; ingresos extras solo locales; 46 políticas RLS abiertas en Supabase; 2 empleadas de ejemplo en nube; Nómina: cobertura panadero y horas extras de ley; Mayoreo: comisión, preventa ligada a ruta, rol vendedor limitado (AUTORIZO); checklist proveedor La 36 (pasos de Gonzalo en la app); test integridad-codigo espera "autoSeedData bloqueado" en usePriceControl.ts.
+- Falta: commit + build (npm run build) + deploy desde la RAÍZ en el PC de Gonzalo. No se pudo correr tests/tsc desde Cowork (node_modules de Windows).

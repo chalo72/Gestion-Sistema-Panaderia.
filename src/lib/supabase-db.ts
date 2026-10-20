@@ -679,9 +679,21 @@ export class SupabaseDatabase implements IDatabase {
 
     // --- Caja ---
     async getAllSesionesCaja(): Promise<DBCajaSesion[]> {
-        const { data, error } = await supabase.from('caja').select('*');
-        if (error) throw error;
-        return data.map(this.mapCajaFromDB);
+        // PostgREST corta en 1000 filas. Sin páginas, al pasar de eso se pierden días enteros.
+        const page = 1000;
+        const all: any[] = [];
+        for (let from = 0; from < 20000; from += page) {
+            const { data, error } = await supabase
+                .from('caja')
+                .select('*')
+                .order('fecha_apertura', { ascending: true })
+                .range(from, from + page - 1);
+            if (error) throw error;
+            const rows = data || [];
+            all.push(...rows);
+            if (rows.length < page) break;
+        }
+        return all.map(c => this.mapCajaFromDB(c));
     }
 
     async getSesionCajaActiva(): Promise<DBCajaSesion | undefined> {
@@ -806,11 +818,12 @@ export class SupabaseDatabase implements IDatabase {
                 monto: g.monto,
                 categoria: g.categoria,
                 fecha: g.fecha,
-                proveedorId: g.proveedor_id,
+                proveedorId: g.proveedor_id ?? meta.proveedorId,
                 comprobanteUrl: g.comprobante_url,
                 metodoPago: g.metodo_pago,
                 usuarioId: g.usuario_id,
-                cajaId: g.caja_id,
+                // 🩹 2026-10-09: el nombre de la caja POS (no es uuid) viaja en metadata
+                cajaId: g.caja_id ?? meta.cajaId,
                 metadata: meta
             };
         });
@@ -823,22 +836,39 @@ export class SupabaseDatabase implements IDatabase {
             ...rest
         } = gasto;
         
-        await supabase.from('gastos').upsert({
+        // 🩹 FIX 2026-10-09: las columnas caja_id y proveedor_id de Supabase son tipo uuid.
+        // La app guarda en cajaId el NOMBRE de la caja POS ("Principal", "Helados"...), y
+        // Supabase rechazaba TODO el gasto (error 400, ~228/día) → los gastos nunca llegaban
+        // a la nube. Ahora: si no es uuid, va a null y el valor real se guarda en metadata.
+        const esUuid = (v: unknown) =>
+            typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+        const extraMeta: Record<string, unknown> = {};
+        if (cajaId && !esUuid(cajaId)) extraMeta.cajaId = cajaId;
+        if (proveedorId && !esUuid(proveedorId)) extraMeta.proveedorId = proveedorId;
+
+        const { error } = await supabase.from('gastos').upsert({
             id: gasto.id,
             descripcion: gasto.descripcion,
             monto: gasto.monto,
             categoria: gasto.categoria,
             fecha: gasto.fecha,
-            proveedor_id: gasto.proveedorId,
+            proveedor_id: esUuid(proveedorId) ? proveedorId : null,
             comprobante_url: gasto.comprobanteUrl,
             metodo_pago: gasto.metodoPago,
             usuario_id: gasto.usuarioId,
-            caja_id: gasto.cajaId,
+            caja_id: esUuid(cajaId) ? cajaId : null,
             metadata: {
                 ...(metadata || {}),
-                ...rest
+                ...rest,
+                ...extraMeta,
             }
         });
+        // Antes el error se ignoraba en silencio; ahora se lanza para que el puente
+        // lo deje en la cola de reintento y quede registro en la consola.
+        if (error) {
+            console.warn('⚠️ [supabase-db] addGasto falló:', error.message);
+            throw error;
+        }
     }
     async updateGasto(gasto: any): Promise<void> {
         await this.addGasto(gasto);

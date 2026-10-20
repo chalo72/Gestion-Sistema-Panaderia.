@@ -8,7 +8,7 @@ import {
     TrendingUp, TrendingDown, Sparkles, Loader2,
     Camera, Zap, Check, FolderOpen,
     Trash2, ZoomIn, Filter, History,
-    Truck, Receipt, ClipboardCheck, ChevronDown
+    Truck, Receipt, ClipboardCheck, ChevronDown, Pencil
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,10 +18,12 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { db } from '@/lib/database';
-import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor, MetodoPago, CajaSesion } from '@/types';
+import type { Producto, Proveedor, Recepcion, RecepcionItem, PrePedido, FacturaEscaneada, PrecioProveedor, MetodoPago, CajaSesion, Gasto } from '@/types';
 import { procesarImagenFactura, matchProductoEnCatalogo, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import type { Categoria as CategoriaTipo } from '@/types';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
+import { cuadreFactura } from '@/lib/cuadre-factura';
 
 interface RecepcionesProps {
     recepciones: Recepcion[];
@@ -33,6 +35,10 @@ interface RecepcionesProps {
     cajasAbiertas?: CajaSesion[];
     onAddRecepcion: (data: Omit<Recepcion, 'id'>) => Promise<Recepcion>;
     onConfirmarRecepcion: (recepcion: Recepcion) => Promise<void>;
+    onUpdateRecepcion?: (id: string, updates: Partial<Recepcion>) => Promise<void>;
+    onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
+    gastos?: Gasto[];
+    onUpdateGasto?: (id: string, updates: Partial<Gasto>) => Promise<void>;
     onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<void>;
     onUpdateProducto: (id: string, updates: Partial<Producto>) => Promise<void>;
     onAddOrUpdatePrecio?: (data: {
@@ -54,12 +60,13 @@ interface RecepcionesProps {
 export default function Recepciones({
     recepciones, proveedores, productos, precios, prepedidos, categorias,
     cajasAbiertas = [],
-    onAddRecepcion, onConfirmarRecepcion, onAddProducto, onUpdateProducto, onAddOrUpdatePrecio,
+    onAddRecepcion, onConfirmarRecepcion, onUpdateRecepcion, onAjustarStock, gastos, onUpdateGasto, onAddProducto, onUpdateProducto, onAddOrUpdatePrecio,
     getProveedorById, getProductoById, formatCurrency, onUpdatePrePedido
 }: RecepcionesProps) {
     const { check } = useCan();
     const { usuario } = useAuth();
     const [view, setView] = useState<'list' | 'new' | 'details' | 'galeria'>('list');
+    const [editandoId, setEditandoId] = useState<string | null>(null);
     const [selectedRecepcion, setSelectedRecepcion] = useState<Recepcion | null>(null);
     const [busqueda, setBusqueda] = useState('');
     const [proveedorFiltro, setProveedorFiltro] = useState<string>('todos');
@@ -175,15 +182,23 @@ export default function Recepciones({
         observaciones: string;
         metodoPago: MetodoPago;
         cajaId?: string;
+        incluyeIva: boolean;
+        porcentajeIva: number;
+        descuentoFactura: number;
+        totalImpreso: string;
     }>({
         proveedorId: '',
         prePedidoId: undefined,
         numeroFactura: '',
-        fechaFactura: new Date().toISOString().split('T')[0],
+        fechaFactura: hoyLocal(),
         imagenFactura: null,
         items: [],
         observaciones: '',
         metodoPago: 'efectivo',
+        incluyeIva: false,
+        porcentajeIva: 19,
+        descuentoFactura: 0,
+        totalImpreso: '',
     });
 
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -198,6 +213,7 @@ export default function Recepciones({
     const [mostrarDropProducto, setMostrarDropProducto] = useState(false);
     const [categoriaFiltroRecepcion, setCategoriaFiltroRecepcion] = useState('');
     const [mobilePanelRec, setMobilePanelRec] = useState<'productos' | 'ticket'>('productos');
+    const [pantallaFactura, setPantallaFactura] = useState(false);
     const [categoriasExpandidas, setCategoriasExpandidas] = useState<Set<string>>(new Set());
     const [preciosAActualizar, setPreciosAActualizar] = useState<Set<string>>(new Set());
     const [draftRestorado, setDraftRestorado] = useState(false);
@@ -674,7 +690,7 @@ export default function Recepciones({
                 let matchFecha = true;
                 if (filtroFecha === 'hoy') matchFecha = fRec === hoyStr;
                 else if (filtroFecha === 'ayer') matchFecha = fRec === ayerStr;
-                else if (filtroFecha === 'semana') matchFecha = fRec >= semanaAtras.toISOString().slice(0, 10);
+                else if (filtroFecha === 'semana') matchFecha = fRec >= ymdLocal(semanaAtras);
                 else if (filtroFecha === 'mes') matchFecha = fRec.slice(0, 7) === mesActualStr;
 
                 // Filtro estado incidencias
@@ -721,13 +737,18 @@ export default function Recepciones({
             proveedorId: recepcion.proveedorId,
             prePedidoId: undefined,
             numeroFactura: '',
-            fechaFactura: new Date().toISOString().split('T')[0],
+            fechaFactura: hoyLocal(),
             imagenFactura: null,
             items,
             observaciones: '',
             metodoPago: recepcion.metodoPago || 'efectivo',
             cajaId: recepcion.cajaId,
+            incluyeIva: !!recepcion.incluyeIva,
+            porcentajeIva: recepcion.porcentajeIva ?? 19,
+            descuentoFactura: 0,
+            totalImpreso: '',
         });
+        setEditandoId(null);
         setView('new');
         toast.success(`${items.length} productos cargados de la recepción anterior`);
     };
@@ -782,6 +803,50 @@ export default function Recepciones({
         }));
     };
 
+    const formularioVacio = () => ({
+        proveedorId: '',
+        prePedidoId: undefined as string | undefined,
+        numeroFactura: '',
+        fechaFactura: hoyLocal(),
+        imagenFactura: null as string | null,
+        items: [] as RecepcionItem[],
+        observaciones: '',
+        metodoPago: 'efectivo' as MetodoPago,
+        cajaId: undefined as string | undefined,
+        incluyeIva: false,
+        porcentajeIva: 19,
+        descuentoFactura: 0,
+        totalImpreso: '',
+    });
+
+    const armarCuadre = () => cuadreFactura(newRecepcion.items, {
+        incluyeIva: newRecepcion.incluyeIva,
+        porcentajeIva: newRecepcion.porcentajeIva,
+        descuento: newRecepcion.descuentoFactura,
+        totalImpreso: parseFloat(newRecepcion.totalImpreso) || null,
+    });
+
+    const handleEditarRecepcion = (recepcion: Recepcion) => {
+        setEditandoId(recepcion.id);
+        setNewRecepcion({
+            proveedorId: recepcion.proveedorId,
+            prePedidoId: recepcion.prePedidoId,
+            numeroFactura: recepcion.numeroFactura || '',
+            fechaFactura: (recepcion.fechaFactura || '').slice(0, 10) || hoyLocal(),
+            imagenFactura: recepcion.imagenFactura || null,
+            items: recepcion.items.map(i => ({ ...i })),
+            observaciones: recepcion.observaciones || '',
+            metodoPago: recepcion.metodoPago || 'efectivo',
+            cajaId: recepcion.cajaId,
+            incluyeIva: !!recepcion.incluyeIva,
+            porcentajeIva: recepcion.porcentajeIva ?? 19,
+            descuentoFactura: recepcion.descuentoFactura ?? 0,
+            totalImpreso: recepcion.totalImpreso ? String(recepcion.totalImpreso) : '',
+        });
+        setView('new');
+        toast.info('Estás corrigiendo una recepción ya guardada. El inventario solo se mueve por la diferencia.');
+    };
+
     // Guardar Recepción
     const handleSave = async (preciosSet?: Set<string>) => {
         if (!newRecepcion.proveedorId || newRecepcion.items.length === 0) {
@@ -791,7 +856,78 @@ export default function Recepciones({
         const numFactura = newRecepcion.numeroFactura || `F-${Date.now().toString().slice(-6)}`;
 
         try {
-            const total = Math.round(newRecepcion.items.reduce((sum, item) => sum + (item.cantidadRecibida * item.precioFacturado), 0) * 100) / 100;
+            const cuadre = armarCuadre();
+            const total = cuadre.total;
+            const camposDinero = {
+                totalFactura: total,
+                incluyeIva: newRecepcion.incluyeIva,
+                porcentajeIva: newRecepcion.incluyeIva ? newRecepcion.porcentajeIva : 0,
+                descuentoFactura: newRecepcion.descuentoFactura || 0,
+                totalImpreso: parseFloat(newRecepcion.totalImpreso) || undefined,
+                subtotalLineas: cuadre.subtotal,
+                ivaFactura: cuadre.iva,
+            };
+
+            if (editandoId) {
+                if (!onUpdateRecepcion) {
+                    toast.error('No se puede corregir el historial desde esta pantalla');
+                    return;
+                }
+                const anterior = recepciones.find(r => r.id === editandoId);
+                if (anterior && onAjustarStock) {
+                    const antes = new Map<string, number>();
+                    const ahora = new Map<string, number>();
+                    anterior.items.forEach(i => antes.set(i.productoId, (antes.get(i.productoId) || 0) + (Number(i.cantidadRecibida) || 0)));
+                    newRecepcion.items.forEach(i => ahora.set(i.productoId, (ahora.get(i.productoId) || 0) + (Number(i.cantidadRecibida) || 0)));
+                    const ids = new Set([...antes.keys(), ...ahora.keys()]);
+                    for (const productoId of ids) {
+                        const delta = (ahora.get(productoId) || 0) - (antes.get(productoId) || 0);
+                        if (delta === 0) continue;
+                        await onAjustarStock(
+                            productoId,
+                            Math.abs(delta),
+                            delta > 0 ? 'entrada' : 'salida',
+                            `Corrección recepción ${numFactura}`
+                        );
+                    }
+                }
+                await onUpdateRecepcion(editandoId, {
+                    numeroFactura: numFactura,
+                    fechaFactura: new Date(newRecepcion.fechaFactura).toISOString(),
+                    items: newRecepcion.items,
+                    observaciones: newRecepcion.observaciones,
+                    metodoPago: newRecepcion.metodoPago,
+                    cajaId: newRecepcion.cajaId,
+                    imagenFactura: newRecepcion.imagenFactura || undefined,
+                    ...camposDinero,
+                });
+                if (onUpdateGasto && gastos) {
+                    const facturaAnterior = anterior?.numeroFactura;
+                    const gasto = gastos.find(g =>
+                        g.categoria === 'Materia Prima' &&
+                        g.proveedorId === newRecepcion.proveedorId &&
+                        (g.descripcion === `Compra Mercancía: Factura #${facturaAnterior || numFactura}` ||
+                         g.descripcion === `Compra Mercancía: Factura #${numFactura}`)
+                    );
+                    if (gasto) {
+                        const metodoPago = newRecepcion.metodoPago || 'efectivo';
+                        await onUpdateGasto(gasto.id, {
+                            monto: total,
+                            descripcion: `Compra Mercancía: Factura #${numFactura}`,
+                            metodoPago,
+                            estado: metodoPago === 'credito' ? 'pendiente' : (gasto.estado === 'anulado' ? 'anulado' : 'pagado'),
+                            cajaId: newRecepcion.cajaId,
+                        });
+                    }
+                }
+                toast.success('Recepción del historial actualizada');
+                try { localStorage.removeItem('rec_draft_v2'); } catch {}
+                setEditandoId(null);
+                setPantallaFactura(false);
+                setView('list');
+                setNewRecepcion(formularioVacio());
+                return;
+            }
 
             // Generar ID aquí para no depender del retorno de onAddRecepcion (que devuelve void)
             const recepcionId = generateUUID();
@@ -801,8 +937,8 @@ export default function Recepciones({
                 proveedorId: newRecepcion.proveedorId,
                 numeroFactura: numFactura,
                 fechaFactura: new Date(newRecepcion.fechaFactura).toISOString(),
-                totalFactura: total,
                 items: newRecepcion.items,
+                ...camposDinero,
                 estado: 'en_proceso',
                 recibidoPor: usuario?.nombre || usuario?.email || 'Sistema',
                 fechaRecepcion: new Date().toISOString(),
@@ -870,17 +1006,9 @@ export default function Recepciones({
             setView('list');
             setStep(1);
             setPrePedidoSeleccionado('');
-            setNewRecepcion({
-                proveedorId: '',
-                prePedidoId: undefined,
-                numeroFactura: '',
-                fechaFactura: new Date().toISOString().split('T')[0],
-                imagenFactura: null,
-                items: [],
-                observaciones: '',
-                metodoPago: 'efectivo',
-                cajaId: undefined,
-            });
+            setEditandoId(null);
+            setPantallaFactura(false);
+            setNewRecepcion(formularioVacio());
         } catch (error) {
             console.error(error);
             toast.error('Error al guardar la recepción');
@@ -1120,7 +1248,11 @@ export default function Recepciones({
     if (view === 'new') {
         const totalItems = newRecepcion.items.length;
         const totalUnidades = newRecepcion.items.reduce((s, i) => s + i.cantidadRecibida, 0);
-        const totalDinero = newRecepcion.items.reduce((s, i) => s + (i.cantidadRecibida * i.precioFacturado), 0);
+        const cuadre = armarCuadre();
+        const totalDinero = cuadre.total;
+        const plata = (n: number) => new Intl.NumberFormat('es-CO', {
+            style: 'currency', currency: 'COP', minimumFractionDigits: 2, maximumFractionDigits: 2,
+        }).format(Number(n) || 0);
         const proveedorActual = proveedores.find(p => p.id === newRecepcion.proveedorId);
         const prepedidosPendientes = prepedidosConfirmados.filter(p => p.proveedorId === newRecepcion.proveedorId);
         const paleta = ['bg-indigo-600','bg-violet-500','bg-emerald-600','bg-rose-500','bg-amber-500','bg-sky-600','bg-teal-600','bg-pink-500'];
@@ -1386,7 +1518,7 @@ export default function Recepciones({
                             {totalItems > 0 && (
                                 <div className="text-right">
                                     <p className="text-[9px] text-indigo-400 font-bold">{totalItems} prod · {totalUnidades} uds</p>
-                                    <p className="text-sm font-black tabular-nums">{formatCurrency(totalDinero)}</p>
+                                    <p className="text-sm font-black tabular-nums">{plata(totalDinero)}</p>
                                 </div>
                             )}
                         </div>
@@ -1407,6 +1539,7 @@ export default function Recepciones({
                                         const diff = precioAnt > 0 ? ((item.precioFacturado - precioAnt) / precioAnt) * 100 : 0;
                                         const subio = diff > 5;
                                         const bajo = diff < -2;
+                                        const linea = cuadre.lineas.find(l => l.id === item.id);
                                         return (
                                             <div key={item.id} className="px-3 py-2.5 space-y-2">
                                                 <div className="flex items-start gap-2">
@@ -1453,11 +1586,35 @@ export default function Recepciones({
                                                         <Package className="w-3.5 h-3.5" />
                                                     </button>
                                                     <div className="flex-1 text-right">
-                                                        <p className="font-black text-xs text-white tabular-nums">
-                                                            {item.cantidadRecibida * item.precioFacturado > 0 ? formatCurrency(item.cantidadRecibida * item.precioFacturado) : '—'}
+                                                        <p className="font-black text-sm text-white tabular-nums">
+                                                            {linea && linea.total > 0 ? plata(linea.total) : '—'}
                                                         </p>
                                                     </div>
                                                 </div>
+                                                <div className="flex items-center gap-3 pl-6">
+                                                    <label className="text-sm font-black text-white">
+                                                        Dto %
+                                                        <input type="number" min={0} max={100} inputMode="decimal" placeholder="0"
+                                                            value={item.descuentoPorcentaje ?? ''}
+                                                            onChange={e => handleUpdateItem(item.id, { descuentoPorcentaje: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
+                                                            className="ml-1 w-16 h-9 rounded-lg bg-white/10 border border-white/30 text-white text-center font-black outline-none" />
+                                                    </label>
+                                                    <label className="text-sm font-black text-white">
+                                                        IVA %
+                                                        <input type="number" min={0} max={100} inputMode="decimal" placeholder="0"
+                                                            value={item.ivaPorcentaje ?? ''}
+                                                            onChange={e => handleUpdateItem(item.id, { ivaPorcentaje: e.target.value === '' ? undefined : parseFloat(e.target.value) || 0 })}
+                                                            className="ml-1 w-16 h-9 rounded-lg bg-white/10 border border-white/30 text-white text-center font-black outline-none" />
+                                                    </label>
+                                                </div>
+                                                {linea && (linea.dtoPct > 0 || linea.ivaPct > 0) && (
+                                                    <p className="pl-6 text-sm font-bold text-emerald-300 leading-snug">
+                                                        {plata(linea.redondeada)}
+                                                        {linea.dtoPct > 0 ? ` − ${linea.dtoPct}% (${plata(linea.descuento)}) = ${plata(linea.neto)}` : ''}
+                                                        {linea.ivaPct > 0 ? ` + IVA ${linea.ivaPct}% (${plata(linea.iva)})` : ''}
+                                                        {' = '}{plata(linea.total)}
+                                                    </p>
+                                                )}
                                                 {(!item.productoOk || !item.embalajeOk) && (
                                                     <input placeholder="Describe la novedad..."
                                                         value={item.observaciones || ''}
@@ -1473,69 +1630,21 @@ export default function Recepciones({
                             )}
                         </div>
 
-                        {/* Footer ticket */}
+                        {/* Pie: solo el total. La factura va en otra pantalla. */}
                         <div className="bg-[#1a1c2e] border-t border-white/10 p-3 space-y-2 shrink-0">
                             <div className="flex items-end justify-between gap-2">
                                 <div>
-                                    <p className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">{totalItems} productos · {totalUnidades} unidades</p>
-                                    <p className="text-2xl font-black text-white tabular-nums">{formatCurrency(totalDinero)}</p>
+                                    <p className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">{totalItems} productos · {totalUnidades} unidades{editandoId ? ' · editando historial' : ''}</p>
+                                    <p className="text-2xl font-black text-white tabular-nums">{plata(totalDinero)}</p>
                                 </div>
-                                <textarea value={newRecepcion.observaciones}
-                                    onChange={e => setNewRecepcion(p => ({ ...p, observaciones: e.target.value }))}
-                                    placeholder="Notas..." rows={2}
-                                    className="hidden sm:block h-12 px-2 py-1.5 rounded-xl bg-white/10 border border-white/10 text-[10px] text-white placeholder:text-white/30 outline-none resize-none w-28"
-                                />
-                            </div>
-                            <div className="space-y-1">
-                                <label className="text-[9px] font-black uppercase tracking-widest text-indigo-300/80">
-                                    Forma de pago de la factura
-                                </label>
-                                <select
-                                    value={newRecepcion.metodoPago}
-                                    onChange={e => setNewRecepcion(p => ({
-                                        ...p,
-                                        metodoPago: e.target.value as MetodoPago,
-                                    }))}
-                                    className="w-full h-10 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold px-3 outline-none"
-                                >
-                                    <option value="efectivo" className="text-slate-900">Efectivo (pagado)</option>
-                                    <option value="transferencia" className="text-slate-900">Transferencia (pagado)</option>
-                                    <option value="nequi" className="text-slate-900">Nequi (pagado)</option>
-                                    <option value="tarjeta" className="text-slate-900">Tarjeta (pagado)</option>
-                                    <option value="credito" className="text-slate-900">Crédito / fiado (pendiente)</option>
-                                    <option value="otro" className="text-slate-900">Otro</option>
-                                </select>
-                                {newRecepcion.metodoPago === 'credito' && (
-                                    <p className="text-[10px] text-amber-300/90 font-medium">
-                                        El egreso quedará como pendiente (aún no pagado).
-                                    </p>
-                                )}
-                                {newRecepcion.metodoPago === 'efectivo' && (
-                                    <div className="pt-1">
-                                        <label className="text-[9px] font-black uppercase tracking-widest text-indigo-300/80">
-                                            ¿De qué caja salió el dinero?
-                                        </label>
-                                        <select
-                                            value={newRecepcion.cajaId || ''}
-                                            onChange={e => setNewRecepcion(p => ({ ...p, cajaId: e.target.value || undefined }))}
-                                            className="w-full h-10 mt-1 rounded-xl bg-white/10 border border-white/15 text-white text-xs font-bold px-3 outline-none"
-                                        >
-                                            <option value="" className="text-slate-900">Bóveda / Caja Fuerte Principal</option>
-                                            {cajasAbiertas.map(c => (
-                                                <option key={c.id} value={c.id} className="text-slate-900">
-                                                    Caja Activa: {c.cajaNombre} ({c.usuarioNombre})
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                )}
                             </div>
                             <button
+                                type="button"
                                 disabled={newRecepcion.items.length === 0}
-                                onClick={() => handleSave(new Set(cambiosPrecio.map(i => i.productoId)))}
-                                className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-900/50"
+                                onClick={() => setPantallaFactura(true)}
+                                className="w-full h-12 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2 transition-colors"
                             >
-                                <CheckCircle className="w-4 h-4" /> Confirmar y guardar
+                                <Receipt className="w-4 h-4" /> Factura, IVA y pago
                             </button>
                         </div>
                     </div>
@@ -1559,6 +1668,125 @@ export default function Recepciones({
                         )}
                     </button>
                 </div>
+
+                {pantallaFactura && (
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-6" onClick={() => setPantallaFactura(false)}>
+                        <div className="w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-3xl sm:rounded-3xl bg-[#1a1c2e] text-white shadow-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-300">Factura y pago</p>
+                                    <h2 className="text-lg font-black">{proveedorActual?.nombre ?? 'Recepción'}</h2>
+                                    <p className="text-base font-bold text-white">{totalItems} productos · {totalUnidades} unidades · {plata(totalDinero)}</p>
+                                </div>
+                                <button type="button" onClick={() => setPantallaFactura(false)} className="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center">
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <p className="text-base font-bold text-white">Si un producto trae descuento o IVA, escríbelo en ese producto. Ejemplo: Dto 25 e IVA 19. Primero se quita el 25% y el 19% se calcula sobre lo que queda.</p>
+                            <label className="flex items-center gap-2 text-base font-bold text-white">
+                                <input type="checkbox" checked={newRecepcion.incluyeIva}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, incluyeIva: e.target.checked }))}
+                                    className="rounded" />
+                                IVA para los productos donde dejaste el IVA vacío
+                            </label>
+                            {newRecepcion.incluyeIva && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-indigo-200">Porcentaje</span>
+                                    <input type="number" min={0} max={100} value={newRecepcion.porcentajeIva}
+                                        onChange={e => setNewRecepcion(p => ({ ...p, porcentajeIva: parseFloat(e.target.value) || 0 }))}
+                                        className="w-24 h-11 rounded-xl bg-white/10 border border-white/15 text-white text-sm font-bold px-3 outline-none" />
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-sm font-black text-white mb-1">Descuento en pesos al final del papel. El porcentaje de un producto se escribe en el producto.</label>
+                                <input type="number" min={0} placeholder="0 si no hay descuento"
+                                    value={newRecepcion.descuentoFactura || ''}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, descuentoFactura: parseFloat(e.target.value) || 0 }))}
+                                    className="w-full h-11 rounded-xl bg-white/10 border border-white/15 text-white text-sm font-bold px-3 outline-none" />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-widest text-indigo-300 mb-1">Total escrito en la factura de papel</label>
+                                <input type="number" min={0} placeholder="Lo que dice el papel"
+                                    value={newRecepcion.totalImpreso}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, totalImpreso: e.target.value }))}
+                                    className="w-full h-11 rounded-xl bg-white/10 border border-white/15 text-white text-sm font-bold px-3 outline-none" />
+                            </div>
+
+                            <div className="rounded-xl bg-white/5 border border-white/10 p-3 text-sm space-y-1">
+                                <div className="flex justify-between"><span>Productos sin descuento</span><span className="font-black">{plata(cuadre.lineas.reduce((s, l) => s + l.redondeada, 0))}</span></div>
+                                {cuadre.descuentoLineas > 0 && <div className="flex justify-between text-emerald-300"><span>Descuento de productos</span><span>-{plata(cuadre.descuentoLineas)}</span></div>}
+                                <div className="flex justify-between"><span>Base para el IVA</span><span className="font-black">{plata(cuadre.subtotal)}</span></div>
+                                {cuadre.iva > 0 && <div className="flex justify-between text-amber-200"><span>IVA</span><span>{plata(cuadre.iva)}</span></div>}
+                                {cuadre.descuento > 0 && <div className="flex justify-between"><span>Descuento al final</span><span>-{plata(cuadre.descuento)}</span></div>}
+                                <div className="flex justify-between border-t border-white/10 pt-2 text-base"><span>Total de la plataforma</span><span className="font-black">{plata(totalDinero)}</span></div>
+                            </div>
+                            {cuadre.motivos.length > 0 && (
+                                <p className={cn("text-xs leading-snug font-semibold",
+                                    cuadre.diferencia != null && Math.abs(cuadre.diferencia) >= 1 ? "text-amber-200" : "text-emerald-300")}>
+                                    {cuadre.motivos.join(' ')}
+                                    {cuadre.diferencia != null && Math.abs(cuadre.diferencia) >= 1 && (
+                                        <> Diferencia: {formatCurrency(Math.abs(cuadre.diferencia))} {cuadre.diferencia > 0 ? '(el papel es mayor)' : '(la plataforma es mayor)'}.</>
+                                    )}
+                                </p>
+                            )}
+
+                            <div>
+                                <label className="block text-[11px] font-black uppercase tracking-widest text-indigo-300 mb-1">Forma de pago</label>
+                                <select
+                                    value={newRecepcion.metodoPago}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, metodoPago: e.target.value as MetodoPago }))}
+                                    className="w-full h-11 rounded-xl bg-white/10 border border-white/15 text-white text-sm font-bold px-3 outline-none"
+                                >
+                                    <option value="efectivo" className="text-slate-900">Efectivo (pagado)</option>
+                                    <option value="transferencia" className="text-slate-900">Transferencia (pagado)</option>
+                                    <option value="nequi" className="text-slate-900">Nequi (pagado)</option>
+                                    <option value="tarjeta" className="text-slate-900">Tarjeta (pagado)</option>
+                                    <option value="credito" className="text-slate-900">Crédito / fiado (pendiente)</option>
+                                    <option value="otro" className="text-slate-900">Otro</option>
+                                </select>
+                                {newRecepcion.metodoPago === 'credito' && (
+                                    <p className="text-xs text-amber-300 mt-1">El egreso quedará pendiente. Todavía no está pagado.</p>
+                                )}
+                            </div>
+                            {newRecepcion.metodoPago === 'efectivo' && (
+                                <div>
+                                    <label className="block text-[11px] font-black uppercase tracking-widest text-indigo-300 mb-1">¿De qué caja salió el dinero?</label>
+                                    <select
+                                        value={newRecepcion.cajaId || ''}
+                                        onChange={e => setNewRecepcion(p => ({ ...p, cajaId: e.target.value || undefined }))}
+                                        className="w-full h-11 rounded-xl bg-white/10 border border-white/15 text-white text-sm font-bold px-3 outline-none"
+                                    >
+                                        <option value="" className="text-slate-900">Bóveda / Caja Fuerte Principal</option>
+                                        {cajasAbiertas.map(c => (
+                                            <option key={c.id} value={c.id} className="text-slate-900">
+                                                Caja activa: {c.cajaNombre} ({c.usuarioNombre})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            <textarea value={newRecepcion.observaciones}
+                                onChange={e => setNewRecepcion(p => ({ ...p, observaciones: e.target.value }))}
+                                placeholder="Notas de esta factura"
+                                rows={2}
+                                className="w-full rounded-xl bg-white/10 border border-white/15 text-sm text-white placeholder:text-white/30 px-3 py-2 outline-none resize-none"
+                            />
+                            <div className="flex gap-2">
+                                <button type="button" onClick={() => setPantallaFactura(false)}
+                                    className="flex-1 h-12 rounded-xl border border-white/20 font-bold">Volver a los productos</button>
+                                <button
+                                    disabled={newRecepcion.items.length === 0}
+                                    onClick={() => handleSave(new Set(cambiosPrecio.map(i => i.productoId)))}
+                                    className="flex-[1.4] h-12 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white rounded-xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-2"
+                                >
+                                    <CheckCircle className="w-4 h-4" /> {editandoId ? 'Guardar corrección' : 'Confirmar y guardar'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Modales */}
                 {isProductModalOpen && (
@@ -1610,6 +1838,9 @@ export default function Recepciones({
                         <ArrowLeft className="w-4 h-4" /> Volver
                     </Button>
                     <h1 className="text-2xl font-bold">Detalle de Recepción</h1>
+                    <Button variant="outline" className="gap-2" onClick={() => handleEditarRecepcion(selectedRecepcion)}>
+                        <Pencil className="w-4 h-4" /> Corregir
+                    </Button>
                     <Badge variant={selectedRecepcion.estado === 'completada' ? 'default' : 'secondary'}>
                         {selectedRecepcion.estado.toUpperCase().replace('_', ' ')}
                     </Badge>
@@ -1767,6 +1998,12 @@ export default function Recepciones({
                                 <div>
                                     <Label className="text-xs text-muted-foreground">Total</Label>
                                     <p className="font-medium text-primary">{formatCurrency(selectedRecepcion.totalFactura)}</p>
+                                    {selectedRecepcion.incluyeIva && (
+                                        <p className="text-[11px] text-amber-600">Incluye IVA {selectedRecepcion.porcentajeIva ?? 19}% ({formatCurrency(selectedRecepcion.ivaFactura || 0)})</p>
+                                    )}
+                                    {selectedRecepcion.totalImpreso && Math.abs(selectedRecepcion.totalImpreso - selectedRecepcion.totalFactura) >= 1 && (
+                                        <p className="text-[11px] text-rose-600">El papel decía {formatCurrency(selectedRecepcion.totalImpreso)}</p>
+                                    )}
                                 </div>
                             </div>
 
@@ -1882,7 +2119,7 @@ export default function Recepciones({
                             Archivo de Facturas
                         </Button>
                         {check('CREAR_RECEPCIONES') && (
-                            <Button onClick={() => setView('new')} className="gap-2 h-12 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 font-black uppercase text-[11px] tracking-widest">
+                            <Button onClick={() => { setEditandoId(null); setNewRecepcion(formularioVacio()); setView('new'); }} className="gap-2 h-12 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 font-black uppercase text-[11px] tracking-widest">
                                 <Plus className="w-4 h-4" /> Registrar Factura
                             </Button>
                         )}
@@ -2035,6 +2272,10 @@ export default function Recepciones({
                                 {/* Total + estado */}
                                 <div className="flex flex-col items-end gap-1 shrink-0">
                                     <span className="font-black text-sm tabular-nums text-indigo-600 dark:text-indigo-400">{formatCurrency(recepcion.totalFactura)}</span>
+                                    {recepcion.incluyeIva && <span className="text-[9px] font-bold text-amber-600">con IVA</span>}
+                                    {recepcion.totalImpreso != null && Math.abs(recepcion.totalImpreso - recepcion.totalFactura) >= 1 && (
+                                        <span className="text-[9px] font-bold text-rose-600">papel {formatCurrency(recepcion.totalImpreso)}</span>
+                                    )}
                                     <span className={cn(
                                         'text-[9px] font-black uppercase px-2 py-0.5 rounded-full',
                                         hasIssues
@@ -2047,6 +2288,12 @@ export default function Recepciones({
 
                                 {/* Acciones */}
                                 <div className="flex flex-col gap-1 shrink-0">
+                                    <button
+                                        onClick={() => handleEditarRecepcion(recepcion)}
+                                        title="Corregir esta recepción"
+                                        className="w-8 h-8 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 flex items-center justify-center transition-colors">
+                                        <Pencil className="w-3.5 h-3.5" />
+                                    </button>
                                     <button
                                         onClick={() => handleReutilizarRecepcion(recepcion)}
                                         title="Usar como base para nueva recepción"

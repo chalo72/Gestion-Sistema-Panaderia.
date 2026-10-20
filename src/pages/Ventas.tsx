@@ -20,6 +20,10 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { VendedoraQuickPicker, VendedoraMesaModal, type VendedoraOption } from '@/components/ventas/VendedoraQuickPicker';
+import { DividirCuentaModal } from '@/components/ventas/DividirCuentaModal';
+import { EquipoTurnoModal } from '@/components/ventas/EquipoTurnoModal';
+import { dbNube as dbEquipo } from '@/lib/nube-kv';
+import { useEquipoTurno, opcionesVendedoras, nombreResponsable, equipoVigente } from '@/lib/equipo-turno';
 import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog';
 import { Sheet, SheetContent } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -27,7 +31,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { registrarLogActividad, getDeudores, marcarDeudorRecuperado, registrarIncidente } from '@/lib/security-agent';
+import { registrarLogActividad, getDeudores, marcarDeudorRecuperado, registrarIncidente, crearAlerta, analizarVenta, verificarPinGerente, getConfigSeguridad } from '@/lib/security-agent';
 
 import { safeNumber, safeString } from '@/lib/safe-utils';
 import {
@@ -47,6 +51,8 @@ import { CierreCajaModal } from '@/components/ventas/CierreCajaModal';
 import { CajaMovimientosModal } from '@/components/ventas/CajaMovimientosModal';
 import { TraspasoMesaModal } from '@/components/ventas/TraspasoMesaModal';
 import { ChecklistVitrinaModal } from '@/components/ventas/ChecklistVitrinaModal';
+import { encabezadosConClave } from '@/lib/clave-negocio';
+import { hoyLocal } from '@/lib/fecha-local';
 
 import type {
     Producto,
@@ -59,7 +65,8 @@ import type {
     PedidoActivo,
     VentaItem,
     Cliente,
-    OrdenProduccion
+    OrdenProduccion,
+    Proveedor
 } from '@/types';
 
 // Estado del carrito por pestaña
@@ -89,8 +96,12 @@ interface VentasProps {
     onUpdatePedidoActivo: (pedido: PedidoActivo) => Promise<void>;
     onDeletePedidoActivo: (id: string) => Promise<void>;
     onUpdateProducto?: (id: string, updates: Partial<Producto>) => Promise<void>;
-    onAddProducto?: (producto: Omit<Producto, 'id'>) => Promise<void>;
+    onAddProducto?: (producto: Omit<Producto, 'id'>) => Promise<Producto | null | void>;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
+    /** Lista de proveedores, para vincular un producto nuevo (agregado desde el buscador del POS) a su proveedor */
+    proveedores?: Proveedor[];
+    /** Vincula el producto nuevo a un proveedor con costo pendiente (0) para que el admin lo complete después */
+    onAddOrUpdatePrecio?: (data: { productoId: string; proveedorId: string; precioCosto: number; notas?: string }) => Promise<void>;
     /** Registra en Alertas un cambio manual de precio de venta hecho desde el buscador del POS, para auditoría del admin */
     onRegistrarCambioPrecioVenta?: (productoId: string, precioAnterior: number, precioNuevo: number, usuarioNombre: string) => void;
     onAddMesa?: (mesa: Mesa) => Promise<void>;
@@ -129,6 +140,8 @@ export function Ventas(props: VentasProps) {
         onDeletePedidoActivo,
         onUpdateProducto,
         onAddProducto,
+        proveedores,
+        onAddOrUpdatePrecio,
         onRegistrarCambioPrecioVenta,
         onAjustarStock,
         onAddMesa,
@@ -143,12 +156,17 @@ export function Ventas(props: VentasProps) {
     // VENDEDORA ACTIVA — Lista disponible
     // ==========================================
     const { usuarios } = useAuth();
+    // Equipo del turno: quién llegó hoy (se elige al abrir la jornada; un solo usuario del sistema)
+    const equipoRaw = useEquipoTurno(dbEquipo as any);
+    const equipoTurno = useMemo(() => equipoVigente(equipoRaw), [equipoRaw]);
+    const [showEquipoModal, setShowEquipoModal] = useState(false);
     const vendedorasDisponibles = useMemo<VendedoraOption[]>(() => {
+        if (equipoTurno) return opcionesVendedoras(equipoTurno);
         if (!usuarios || usuarios.length === 0) return [];
         return usuarios
             .filter(u => u.activo !== false && u.rol === 'VENDEDOR')
             .map(u => ({ id: u.id, nombre: u.nombre, rol: u.rol }));
-    }, [usuarios]);
+    }, [usuarios, equipoTurno]);
 
     const [viewMode, setViewMode] = useState<'pos' | 'mesas'>('pos');
     const [mobileActiveView, setMobileActiveView] = useState<'catalogo' | 'ticket'>('catalogo');
@@ -159,6 +177,9 @@ export function Ventas(props: VentasProps) {
     const [nequiComprobante, setNequiComprobante] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [showPagoModal, setShowPagoModal] = useState(false);
+    const [showSplitModal, setShowSplitModal] = useState(false);
+    const [splitItemsRemaining, setSplitItemsRemaining] = useState<any[]>([]);
+    const [isSplitPayment, setIsSplitPayment] = useState(false);
     const [dineroRecibido, setDineroRecibido] = useState<number>(0);
     const [tipoTransaccion, setTipoTransaccion] = useState<'efectivo' | 'credito'>('efectivo');
     const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -193,6 +214,8 @@ export function Ventas(props: VentasProps) {
     const [adHocNombre, setAdHocNombre] = useState('');
     const [adHocPrecio, setAdHocPrecio] = useState('');
     const [adHocGuardar, setAdHocGuardar] = useState(false);
+    const [adHocCategoria, setAdHocCategoria] = useState('Otros');
+    const [adHocProveedorId, setAdHocProveedorId] = useState('');
     const [showAperturaModal, setShowAperturaModal] = useState(false);
     const [showCierreModal, setShowCierreModal] = useState(false);
     const [movimientoCaja, setMovimientoCaja] = useState<{ tipo: 'entrada' | 'salida' } | null>(null);
@@ -256,10 +279,15 @@ export function Ventas(props: VentasProps) {
     const vendedoraActiva = useMemo<VendedoraOption | null>(() => {
         const tab = tabCarts[activeTabId];
         if (tab?.vendedoraId && tab?.vendedoraNombre) {
-            return { id: tab.vendedoraId, nombre: tab.vendedoraNombre };
+            // Con equipo de turno: solo vale la selección que pertenece al equipo vigente
+            const enLista = vendedorasDisponibles.find(v => v.id === tab.vendedoraId);
+            if (!equipoTurno) return { id: tab.vendedoraId, nombre: tab.vendedoraNombre };
+            if (enLista) return enLista;
         }
+        // Una sola opción (una vendedora o responsables juntas) → se asigna sola
+        if (equipoTurno && vendedorasDisponibles.length === 1) return vendedorasDisponibles[0];
         return null;
-    }, [tabCarts, activeTabId]);
+    }, [tabCarts, activeTabId, vendedorasDisponibles, equipoTurno]);
 
     const setVendedoraActiva = useCallback((v: VendedoraOption | null) => {
         setTabCarts(prev => {
@@ -327,7 +355,7 @@ export function Ventas(props: VentasProps) {
             try {
                 const res = await fetch('/api/agente', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: encabezadosConClave({ 'Content-Type': 'application/json' }),
                     body: JSON.stringify({
                         tipo: 'hermes',
                         mensaje: `Analiza esta comanda por voz y extrae los productos y cantidades. Devuelve ÚNICAMENTE un array JSON plano de objetos con campos "nombre" (string) y "cantidad" (número). Ejemplo: [{"nombre": "pan de queso", "cantidad": 2}]. Comanda: "${textoDictado}"`,
@@ -485,6 +513,13 @@ export function Ventas(props: VentasProps) {
     };
 
     const removeFromCart = (productoId: string) => {
+        // Quitar productos de una MESA abierta (ya servida) queda en la bitácora anti-robo
+        const tabActual = tabs.find(t => t.id === activeTabId);
+        const item = cart.find(i => i.producto.id === productoId);
+        if (tabActual?.tipo === 'mesa' && item && usuario) {
+            registrarLogActividad(usuario.id, usuario.nombre || 'Vendedor', 'Ventas', 'eliminar_item',
+                `${tabActual.label || 'Mesa'}: quitó ${item.cantidad} x ${item.producto.nombre} (${formatCurrency(safeNumber(item.producto.precioVenta) * item.cantidad)})`);
+        }
         updateActiveCart(prev => prev.filter(item => item.producto.id !== productoId));
     };
 
@@ -605,7 +640,7 @@ export function Ventas(props: VentasProps) {
     // Abre la mesa con una vendedora específica asignada
     const abrirMesaConVendedora = useCallback((mesa: Mesa, vendedora: VendedoraOption | null) => {
         const mesaTabId = `mesa-${mesa.id}`;
-        const nombreVendedora = vendedora?.nombre || vendedoraActiva?.nombre || usuario?.nombre || 'Usuario';
+        const nombreVendedora = vendedora?.nombre || vendedoraActiva?.nombre || (equipoTurno ? nombreResponsable(equipoTurno) : '') || usuario?.nombre || 'Usuario';
         const idVendedora = vendedora?.id || vendedoraActiva?.id || usuario?.id;
 
         const nuevoPedido: PedidoActivo = {
@@ -652,7 +687,7 @@ export function Ventas(props: VentasProps) {
         }).catch(() => {
             toast.error(`Error al abrir la mesa ${mesa.numero}`);
         });
-    }, [tabs, vendedoraActiva, usuario, onAddPedidoActivo, onUpdateMesa]);
+    }, [tabs, vendedoraActiva, equipoTurno, usuario, onAddPedidoActivo, onUpdateMesa]);
 
     const handleSelectMesa = (mesa: Mesa) => {
         if (!cajaActiva) {
@@ -711,6 +746,23 @@ export function Ventas(props: VentasProps) {
         setShowPagoModal(true);
     };
 
+    const handleCobrarParcial = (itemsParaCobrar: any[], itemsRestantes: any[]) => {
+        // 1. Set cart to only items to pay now
+        setTabCarts(prev => {
+            const current = prev[activeTabId] || { cart: [], cliente: '' };
+            return {
+                ...prev,
+                [activeTabId]: { ...current, cart: itemsParaCobrar }
+            };
+        });
+        // 2. Save items remaining and flag
+        setSplitItemsRemaining(itemsRestantes);
+        setIsSplitPayment(true);
+        // 3. Open payment modal
+        setShowSplitModal(false);
+        handleProcessPayment('efectivo', 'efectivo');
+    };
+
     const handleFinalizarVenta = async () => {
         if (cart.length === 0) return;
         // Validación de dinero suficiente (segunda barrera además del disabled)
@@ -736,6 +788,34 @@ export function Ventas(props: VentasProps) {
                     description: `El cliente ${cliente.trim()} tiene deudas vencidas. No se permiten más fiados hasta que ponga su cuenta al día.`
                 });
                 return;
+            }
+        }
+        // Descuento grande: pide PIN de gerente (si está configurado) y siempre avisa al dueño
+        if (descuento > 0 && safeNumber(totalCart) > 0) {
+            const quien = vendedoraActiva?.nombre || usuario?.nombre || 'Vendedor';
+            const revision = analizarVenta({
+                precio: safeNumber(totalCart) - descuento,
+                precioBase: safeNumber(totalCart),
+                vendedora: quien,
+                nombreProducto: 'Venta POS',
+                clienteNombre: cliente.trim() || undefined,
+            });
+            if (revision.requierePin) {
+                const hayPin = !!getConfigSeguridad().pinGerente;
+                if (hayPin) {
+                    const pin = window.prompt(`${revision.razon}\n\nPIN del gerente:`);
+                    if (!pin || !verificarPinGerente(pin)) {
+                        registrarLogActividad(usuario?.id || 'anon', quien, 'Ventas', 'descuento_rechazado',
+                            `Intentó descuento de ${formatCurrency(descuento)} sobre ${formatCurrency(totalCart)} sin PIN válido`);
+                        toast.error('PIN incorrecto: el descuento no se aplicó');
+                        handleSetDescuento(0);
+                        return;
+                    }
+                }
+                crearAlerta('descuento_excesivo', hayPin ? 'info' : 'media',
+                    `🏷️ Descuento grande — ${quien}`,
+                    `${quien} cobró ${formatCurrency(totalCart - descuento)} de una venta de ${formatCurrency(totalCart)} (descuento ${formatCurrency(descuento)}).${hayPin ? ' Autorizado con PIN de gerente.' : ' Sin PIN de gerente configurado.'}`,
+                    quien, { descuento, total: totalCart });
             }
         }
         try {
@@ -764,8 +844,8 @@ export function Ventas(props: VentasProps) {
                 total: totalToPay,
                 metodoPago: tipoTransaccion === 'credito' ? 'credito' as MetodoPago : metodoPago,
                 cliente: cliente.trim() || 'Cliente Anónimo',
-                usuarioId: vendedoraActiva?.id || usuario?.id || 'anon',
-                vendedoraNombre: vendedoraActiva?.nombre || usuario?.nombre || '',
+                usuarioId: equipoTurno ? (usuario?.id || 'anon') : (vendedoraActiva?.id || usuario?.id || 'anon'),
+                vendedoraNombre: vendedoraActiva?.nombre || (equipoTurno ? nombreResponsable(equipoTurno) : usuario?.nombre) || '',
                 tipoTransaccion,
                 dineroRecibido: tipoTransaccion === 'credito' ? totalToPay : safeNumber(dineroRecibido),
                 vueltas: tipoTransaccion === 'credito' ? 0 : Math.max(0, safeNumber(dineroRecibido) - totalToPay),
@@ -790,7 +870,7 @@ export function Ventas(props: VentasProps) {
                     monto: totalToPay,
                     saldo: totalToPay,
                     descripcion: 'Crédito generado automáticamente desde POS',
-                    fecha: new Date().toISOString().split('T')[0],
+                    fecha: hoyLocal(),
                     estado: 'activo',
                     items: cart.map(item => ({
                         productoId: item.producto.id,
@@ -810,16 +890,43 @@ export function Ventas(props: VentasProps) {
             setShowMobileCart(false);
             setMobileActiveView('catalogo'); // volver al catálogo en móvil tras cobrar
 
-            // Si era una mesa, liberarla y cerrar la pestaña
+            // Si era una mesa, liberarla y cerrar la pestaña o actualizarla si es split
             const activeTab = tabs.find(t => t.id === activeTabId);
             if (activeTab?.tipo === 'mesa' && activeTab.mesaId) {
                 const mesa = mesas.find(m => m.id === activeTab.mesaId);
                 if (mesa && mesa.pedidoActivoId) {
-                    await onDeletePedidoActivo(mesa.pedidoActivoId);
-                    await onUpdateMesa({ ...mesa, estado: 'disponible', pedidoActivoId: undefined });
+                    if (isSplitPayment && splitItemsRemaining.length > 0) {
+                        // Actualizar el pedido activo en lugar de eliminarlo
+                        const pedidoOriginal = pedidosActivos.find(p => p.id === mesa.pedidoActivoId);
+                        if (pedidoOriginal) {
+                            await onUpdatePedidoActivo({
+                                ...pedidoOriginal,
+                                items: splitItemsRemaining.map(item => ({
+                                    productoId: item.producto.id,
+                                    cantidad: item.cantidad,
+                                    precioUnitario: safeNumber(item.producto.precioVenta),
+                                    subtotal: Math.round(safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1) * 100) / 100
+                                })),
+                                total: splitItemsRemaining.reduce((sum, item) => sum + (safeNumber(item.producto.precioVenta) * safeNumber(item.cantidad, 1)), 0),
+                                ultimoCambio: new Date().toISOString()
+                            });
+                        }
+                        // Devolver la pestaña al estado restante
+                        setTabCarts(prev => {
+                            const current = prev[activeTabId] || { cart: [], cliente: '' };
+                            return { ...prev, [activeTabId]: { ...current, cart: splitItemsRemaining } };
+                        });
+                        setIsSplitPayment(false);
+                        setSplitItemsRemaining([]);
+                    } else {
+                        // Cobro total normal
+                        await onDeletePedidoActivo(mesa.pedidoActivoId);
+                        await onUpdateMesa({ ...mesa, estado: 'disponible', pedidoActivoId: undefined });
+                        handleCloseTab(activeTabId);
+                        setIsSplitPayment(false);
+                        setSplitItemsRemaining([]);
+                    }
                 }
-                // Cerrar la pestaña de la mesa usando handleCloseTab
-                handleCloseTab(activeTabId);
             } else if (activeTab?.tipo === 'venta-rapida') {
                 // Venta Rápida: limpiar carrito o cerrar si hay más de una
                 const ventasRapidas = tabs.filter(t => t.tipo === 'venta-rapida');
@@ -846,6 +953,15 @@ export function Ventas(props: VentasProps) {
         const mesa = mesas.find(m => m.id === currentTab.mesaId);
         if (!mesa) return;
         try {
+            // Liberar una mesa que tenía consumo SIN cobrar = posible despacho sin facturar
+            const consumo = cart.reduce((s, i) => s + safeNumber(i.producto.precioVenta) * safeNumber(i.cantidad, 1), 0);
+            if (consumo > 0 && usuario) {
+                const detalle = `Mesa ${mesa.numero} liberada sin cobrar ${formatCurrency(consumo)}: ${cart.map(i => `${i.cantidad} x ${i.producto.nombre}`).join(', ')}`;
+                registrarLogActividad(usuario.id, usuario.nombre || 'Vendedor', 'Ventas', 'cancelar_orden', detalle);
+                crearAlerta('venta_eliminada', consumo >= 30000 ? 'alta' : 'media',
+                    `🍽️ Mesa liberada sin cobrar — ${usuario.nombre || 'Vendedor'}`, detalle, usuario.nombre || 'Vendedor',
+                    { mesa: mesa.numero, consumo });
+            }
             if (mesa.pedidoActivoId) {
                 await onDeletePedidoActivo(mesa.pedidoActivoId);
             }
@@ -1010,6 +1126,7 @@ export function Ventas(props: VentasProps) {
                 setDescuento={handleSetDescuento}
                 rolUsuario={usuario?.rol}
                 onGoToCatalog={() => setMobileActiveView('catalogo')}
+                onDividirCuenta={() => setShowSplitModal(true)}
             />
         </>
     );
@@ -1043,6 +1160,20 @@ export function Ventas(props: VentasProps) {
                     onOpenMobileMenu={onOpenMobileMenu}
                 />
                 {/* ── Selector Rápido de Vendedora — solo desktop ── */}
+                {/* ── Equipo del turno (quién llegó hoy) ── */}
+                <div className="flex items-center gap-2 px-4 pb-1.5 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                        type="button"
+                        data-equipo-chip
+                        onClick={() => setShowEquipoModal(true)}
+                        className="h-7 px-3 rounded-full text-[11px] font-black bg-indigo-50 text-indigo-700 dark:bg-indigo-900/20 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 active:scale-95"
+                        title="Cambiar quién está en el turno"
+                    >
+                        {equipoTurno
+                            ? `Turno ${equipoTurno.turno} · ${nombreResponsable(equipoTurno)} ✎`
+                            : '👤 ¿Quién está en el turno? Toca para elegir'}
+                    </button>
+                </div>
                 {vendedorasDisponibles.length >= 1 && (
                     <div className="hidden lg:flex items-center gap-3 px-4 pb-2 pt-1 border-t border-slate-100 dark:border-slate-800">
                         <VendedoraQuickPicker
@@ -1055,6 +1186,8 @@ export function Ventas(props: VentasProps) {
                     </div>
                 )}
             </div>
+
+            <EquipoTurnoModal open={showEquipoModal} onClose={() => setShowEquipoModal(false)} />
 
             {/* ── Selector Táctil Móvil: [🛍️ Catálogo] vs [🧾 Ticket / Cliente] ── */}
             {viewMode === 'pos' && (
@@ -1125,7 +1258,7 @@ export function Ventas(props: VentasProps) {
                                 onEditProduct={onUpdateProducto}
                                 onAjustarStock={onAjustarStock}
                                 onPrecioVentaCorregido={onRegistrarCambioPrecioVenta ? (productoId, antes, despues) => onRegistrarCambioPrecioVenta(productoId, antes, despues, vendedoraActiva?.nombre || usuario?.nombre || 'Usuario') : undefined}
-                                onOpenAdHoc={() => { setAdHocNombre(''); setAdHocPrecio(''); setAdHocGuardar(false); setShowAdHocModal(true); }}
+                                onOpenAdHoc={(nombreSugerido) => { setAdHocNombre(nombreSugerido || ''); setAdHocPrecio(''); setAdHocGuardar(!!nombreSugerido); setAdHocCategoria(categorias.find(c => c.nombre.toLowerCase() === 'otros')?.nombre || categorias[0]?.nombre || 'Otros'); setAdHocProveedorId(''); setShowAdHocModal(true); }}
                                 cart={cart}
                             />
                         </div>
@@ -1420,6 +1553,36 @@ export function Ventas(props: VentasProps) {
                                 className="w-full h-11 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                             />
                         </div>
+                        {adHocGuardar && (
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Categoría</Label>
+                                <select
+                                    value={adHocCategoria}
+                                    onChange={e => setAdHocCategoria(e.target.value)}
+                                    className="w-full h-11 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30"
+                                >
+                                    {categorias.length === 0 && <option value="Otros">Otros</option>}
+                                    {categorias.map(cat => (
+                                        <option key={cat.id} value={cat.nombre}>{cat.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+                        {adHocGuardar && proveedores && proveedores.length > 0 && (
+                            <div className="space-y-1.5">
+                                <Label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Proveedor (opcional)</Label>
+                                <select
+                                    value={adHocProveedorId}
+                                    onChange={e => setAdHocProveedorId(e.target.value)}
+                                    className="w-full h-11 px-4 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-bold outline-none focus:ring-2 focus:ring-violet-500/30"
+                                >
+                                    <option value="">Sin proveedor (se puede asignar después)</option>
+                                    {proveedores.map(prov => (
+                                        <option key={prov.id} value={prov.id}>{prov.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
                         {onAddProducto && (
                             <label className="flex items-center gap-3 cursor-pointer select-none">
                                 <div
@@ -1446,26 +1609,42 @@ export function Ventas(props: VentasProps) {
                                 disabled={!adHocNombre.trim() || !adHocPrecio || parseFloat(adHocPrecio) <= 0}
                                 onClick={() => {
                                     const precio = parseFloat(adHocPrecio);
+                                    const categoriaFinal = adHocGuardar ? (adHocCategoria || 'Otros') : 'Otros';
                                     const productoTemp: Producto = {
                                         id: `adhoc-${Date.now()}`,
                                         nombre: adHocNombre.trim(),
                                         precioVenta: precio,
-                                        categoria: 'Otros',
+                                        categoria: categoriaFinal,
                                         tipo: 'elaborado',
                                         activo: true,
+                                        margenUtilidad: 0,
+                                        createdAt: new Date().toISOString()
                                     } as Producto;
                                     addToCart(productoTemp);
                                     if (adHocGuardar && onAddProducto) {
-                                        toast.promise(
-                                            onAddProducto({
-                                                nombre: productoTemp.nombre,
-                                                precioVenta: precio,
-                                                categoria: 'Otros',
-                                                tipo: 'elaborado',
-                                                activo: true,
-                                            } as Omit<Producto, 'id'>),
-                                            { loading: 'Guardando...', success: 'Guardado en catálogo', error: 'No se pudo guardar' }
-                                        );
+                                        (async () => {
+                                            try {
+                                                const creado = await onAddProducto({
+                                                    nombre: productoTemp.nombre,
+                                                    precioVenta: precio,
+                                                    categoria: categoriaFinal,
+                                                    tipo: 'elaborado',
+                                                    activo: true,
+                                                    margenUtilidad: 0
+                                                } as Omit<Producto, 'id'>);
+                                                toast.success('Guardado en catálogo');
+                                                if (creado && adHocProveedorId && onAddOrUpdatePrecio) {
+                                                    await onAddOrUpdatePrecio({
+                                                        productoId: (creado as Producto).id,
+                                                        proveedorId: adHocProveedorId,
+                                                        precioCosto: 0,
+                                                        notas: 'Agregado desde Ventas por vendedora — costo pendiente de confirmar',
+                                                    });
+                                                }
+                                            } catch {
+                                                toast.error('No se pudo guardar en catálogo');
+                                            }
+                                        })();
                                     }
                                     setShowAdHocModal(false);
                                     toast.success(`${adHocNombre.trim()} agregado al ticket`);
@@ -1510,13 +1689,21 @@ export function Ventas(props: VentasProps) {
                 onClose={() => setShowChecklistVitrina(false)}
             />
 
+            <DividirCuentaModal
+                isOpen={showSplitModal}
+                onClose={() => setShowSplitModal(false)}
+                cartOriginal={cart}
+                onCobrarParcial={handleCobrarParcial}
+            />
+
             {/* Modal de Apertura de Caja */}
             <AperturaCajaModal
                 isOpen={showAperturaModal}
                 onClose={() => setShowAperturaModal(false)}
                 onAbrir={async (montoApertura: number) => {
+                    // No cerrar aquí: el modal se cierra solo al terminar TODAS las cajas
+                    // (antes se cerraba tras la primera y las demás quedaban sin abrir).
                     await onAbrirCaja(montoApertura);
-                    setShowAperturaModal(false);
                 }}
             />
 

@@ -132,6 +132,29 @@ export default function ModoAyudante({
             ...gastoData,
             fecha: gastoData.fecha || hoyStr,
         };
+        // 🩹 2026-10-09: no repetir gastos al poner al día — mismo día + mismo monto = posible repetido
+        const dia = String(dataConFecha.fecha).slice(0, 10);
+        const monto = Math.round(Number(dataConFecha.monto) || 0);
+        const parecidos = (gastos || []).filter(
+            (g) =>
+                String(g.fecha || '').slice(0, 10) === dia &&
+                Math.round(Number(g.monto) || 0) === monto &&
+                (g as any).estado !== 'anulado'
+        );
+        if (parecidos.length > 0) {
+            const lista = parecidos
+                .slice(0, 3)
+                .map((g) => `• ${g.descripcion} — $${monto.toLocaleString('es-CO')}`)
+                .join('\n');
+            const ok = window.confirm(
+                `Ojo: el ${dia} ya hay un gasto por el MISMO monto:\n${lista}\n\n` +
+                `¿Es otro gasto distinto y quieres guardarlo igual?\n(Cancelar = no se guarda, ya estaba registrado)`
+            );
+            if (!ok) {
+                toast.info('No se guardó: ese gasto ya estaba registrado.');
+                return;
+            }
+        }
         await addGasto(dataConFecha);
         toast.success('Gasto guardado.');
     };

@@ -286,14 +286,15 @@ export function usePermisosModulos() {
   }, []);
 
   const puedeVer = (rol: string, moduloId: string): boolean => {
-    if (!rol || rol === 'ADMIN') return true;
+    if (!rol || (rol === 'ADMIN' || rol === 'admin' || rol === 'superadmin')) return true;
     return permisos[rol]?.[moduloId]?.ver ?? true;
   };
 
   const puedeEliminar = (rol: string, moduloId: string): boolean => {
-    if (!rol || rol === 'ADMIN') return true;
+    if (!rol || (rol === 'ADMIN' || rol === 'admin' || rol === 'superadmin')) return true;
     return permisos[rol]?.[moduloId]?.eliminar ?? false;
   };
 
   return { permisos, puedeVer, puedeEliminar };
 }
+

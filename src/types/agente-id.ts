@@ -28,6 +28,7 @@ export type AgenteId =
   | 'auto-claw'
   | 'hermes'
   | 'odysseus'
+  | 'vigia-ventas'
   | 'vigia-app'
   | 'arqui-tech'
   // === TRINIDAD SUPREMA / HABILIDADES SUPREMAS ===

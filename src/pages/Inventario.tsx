@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import type { Producto, InventarioItem, MovimientoInventario, Categoria, PrecioProveedor } from '@/types';
+import { hoyLocal } from '@/lib/fecha-local';
 
 // ─── Tipos internos ──────────────────────────────────────────────────────────
 
@@ -97,7 +98,7 @@ function PreciosStockTab({ productos, inventario, categorias, formatCurrency }: 
             ...filas.map(p => [`"${p.nombre}"`, `"${p.categoria}"`, p.precioVenta, p.stock, `${p.margenUtilidad}%`].join(','))].join('\n');
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-        a.download = `precios-stock-${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `precios-stock-${hoyLocal()}.csv`;
         a.click();
     };
 
@@ -597,7 +598,7 @@ export function Inventario({
             })].join('\n');
         const a = document.createElement('a');
         a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-        a.download = `rondas-inventario-${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `rondas-inventario-${hoyLocal()}.csv`;
         a.click();
     };
 

@@ -40,6 +40,7 @@ import {
 import { cn } from '@/lib/utils';
 import type { FormulacionBase, ModeloPan, Producto, Configuracion, InventarioItem } from '@/types';
 import { ARROBA_KG as ARROBA_KG_DEFAULT } from '@/types';
+import { hoyLocal } from '@/lib/fecha-local';
 
 interface PlanDiarioViewProps {
   productos: Producto[];
@@ -103,7 +104,7 @@ export function PlanDiarioView({
     return [];
   });
   const [isSimuladorOpen, setIsSimuladorOpen] = useState(false);
-  const [fechaPlan, setFechaPlan] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [fechaPlan, setFechaPlan] = useState<string>(() => hoyLocal());
   // Estado local para editar el campo PIQUE (G) sin que React lo sobreescriba mientras se tipea
   const [editingPique, setEditingPique] = useState<Record<string, string>>({});
   // Grupos abiertos del acordeón (por formulacionId)

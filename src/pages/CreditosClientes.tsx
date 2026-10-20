@@ -16,6 +16,7 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import { toast } from 'sonner';
+import { hoyLocal } from '@/lib/fecha-local';
 import type {
     CreditoCliente, CreditoTrabajador, MetodoPago,
     Usuario, Producto, ItemCredito, Trabajador, TrabajadorRol,
@@ -256,13 +257,13 @@ export default function CreditosClientes({
         categoriaCliente: '',
         descripcion: '',
         monto: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         fechaVencimiento: '',
     });
     const [fotoEvidenciaCliente, setFotoEvidenciaCliente] = useState<string | undefined>(undefined);
     const [formPagoCliente, setFormPagoCliente] = useState({
         monto: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         metodoPago: 'efectivo' as MetodoPago,
         nota: '',
     });
@@ -336,13 +337,13 @@ export default function CreditosClientes({
         trabajadorId: '',
         descripcion: '',
         monto: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         descontarDeSalario: true,
     });
     const [fotoEvidenciaTrab, setFotoEvidenciaTrab] = useState<string | undefined>(undefined);
     const [formPagoTrab, setFormPagoTrab] = useState({
         monto: '',
-        fecha: new Date().toISOString().split('T')[0],
+        fecha: hoyLocal(),
         metodoPago: 'efectivo' as MetodoPago,
         nota: '',
     });
@@ -509,7 +510,7 @@ export default function CreditosClientes({
     };
 
     const resetFormCliente = () => {
-        setFormCliente({ clienteNombre: '', clienteTelefono: '', categoriaCliente: '', descripcion: '', monto: '', fecha: new Date().toISOString().split('T')[0], fechaVencimiento: '' });
+        setFormCliente({ clienteNombre: '', clienteTelefono: '', categoriaCliente: '', descripcion: '', monto: '', fecha: hoyLocal(), fechaVencimiento: '' });
         setFotoEvidenciaCliente(undefined);
     };
 
@@ -555,7 +556,7 @@ export default function CreditosClientes({
             });
             setShowPagoClienteModal(false);
             setSelectedCredito(null);
-            setFormPagoCliente({ monto: '', fecha: new Date().toISOString().split('T')[0], metodoPago: 'efectivo', nota: '' });
+            setFormPagoCliente({ monto: '', fecha: hoyLocal(), metodoPago: 'efectivo', nota: '' });
             toast.success(`Pago de ${formatCurrency(monto)} registrado`);
         } catch { toast.error('Error al registrar pago'); }
         finally { setIsSavingCliente(false); }
@@ -566,7 +567,7 @@ export default function CreditosClientes({
         setFormEditCliente({
             estado: c.estado,
             descripcion: c.descripcion,
-            fecha: c.fecha ? c.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
+            fecha: c.fecha ? c.fecha.split('T')[0] : hoyLocal(),
             fechaVencimiento: c.fechaVencimiento || '',
             items: (c.items || []).map(i => ({ ...i })),
             montoManual: c.monto ? c.monto.toString() : '',
@@ -639,7 +640,7 @@ export default function CreditosClientes({
     };
 
     const resetFormTrab = () => {
-        setFormTrab({ trabajadorId: '', descripcion: '', monto: '', fecha: new Date().toISOString().split('T')[0], descontarDeSalario: true });
+        setFormTrab({ trabajadorId: '', descripcion: '', monto: '', fecha: hoyLocal(), descontarDeSalario: true });
         setFotoEvidenciaTrab(undefined);
     };
 
@@ -685,7 +686,7 @@ export default function CreditosClientes({
             });
             setShowPagoTrabModal(false);
             setSelectedCreditoTrab(null);
-            setFormPagoTrab({ monto: '', fecha: new Date().toISOString().split('T')[0], metodoPago: 'efectivo', nota: '' });
+            setFormPagoTrab({ monto: '', fecha: hoyLocal(), metodoPago: 'efectivo', nota: '' });
             toast.success(`Pago de ${formatCurrency(monto)} registrado`);
         } catch { toast.error('Error al registrar pago'); }
         finally { setIsSavingTrab(false); }
@@ -900,7 +901,7 @@ export default function CreditosClientes({
                                                     categoriaCliente: cliente.categoria || '',
                                                     descripcion: '',
                                                     monto: '',
-                                                    fecha: new Date().toISOString().split('T')[0],
+                                                    fecha: hoyLocal(),
                                                     fechaVencimiento: ''
                                                 });
                                                 setFotoEvidenciaCliente(undefined);
@@ -2248,7 +2249,7 @@ export default function CreditosClientes({
                                                 setFormEditCliente({
                                                     estado: c.estado,
                                                     descripcion: c.descripcion,
-                                                    fecha: c.fecha ? c.fecha.split('T')[0] : new Date().toISOString().split('T')[0],
+                                                    fecha: c.fecha ? c.fecha.split('T')[0] : hoyLocal(),
                                                     fechaVencimiento: c.fechaVencimiento || '',
                                                     items: (c.items || []).map(i => ({ ...i })),
                                                     montoManual: c.monto ? c.monto.toString() : '',

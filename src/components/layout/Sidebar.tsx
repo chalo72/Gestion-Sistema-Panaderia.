@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -88,7 +89,7 @@ interface MenuGroup {
   items: MenuItem[];
 }
 
-export function Sidebar({
+export const Sidebar = React.memo(function Sidebar({
   currentView,
   onViewChange,
   alertasNoLeidas,
@@ -627,5 +628,4 @@ export function Sidebar({
       {renderSidebarContent()}
     </aside>
   );
-}
-
+});

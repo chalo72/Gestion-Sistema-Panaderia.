@@ -1,5 +1,6 @@
 import { generateUUID } from '@/lib/safe-utils';
 import { useState, useMemo, useEffect } from 'react';
+import { GerenteComprasIA } from '@/components/prepedidos/GerenteComprasIA';
 import {
   leerYLimpiarHintNavegacion,
   leerYLimpiarHintOrdenPresupuesto,
@@ -67,6 +68,7 @@ const debounceUpdate = (id: string, fn: Function, ms: number) => {
 };
 
 interface PrePedidosProps {
+  ventas?: any[];
   prepedidos: PrePedido[];
   productos: Producto[];
   proveedores: Proveedor[];
@@ -99,6 +101,7 @@ interface PrePedidosProps {
 }
 
 export default function PrePedidos({
+  ventas,
   prepedidos,
   productos,
   proveedores,
@@ -782,9 +785,17 @@ export default function PrePedidos({
       
       {/* ✅ PANEL PRINCIPAL (IZQUIERDA) ✅ */}
       <div className={cn(
-        "flex-1 flex-col h-full bg-white dark:bg-slate-900 z-10 relative min-w-0",
+        "flex-1 flex-col h-full bg-white dark:bg-slate-900 z-10 relative min-w-0 min-h-0 overflow-hidden",
         mobileView === 'catalogo' ? 'flex' : 'hidden lg:flex'
       )}>
+        <div className="shrink-0 px-2 pt-2 sm:px-3 sm:pt-2">
+          <GerenteComprasIA
+            ventas={ventas}
+            prepedidos={prepedidos}
+            formatCurrency={formatCurrency}
+            compactDefault={Boolean(activeProveedorId && showProveedorPanel)}
+          />
+        </div>
 
         {verDetallePedido ? (
           <div className="flex-1 flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-hidden min-h-0">
@@ -936,7 +947,7 @@ export default function PrePedidos({
              </div>
           </div>
         ) : activeProveedorId && showProveedorPanel ? (
-          <div className="flex-1 overflow-auto bg-slate-50 dark:bg-slate-950 min-h-0">
+          <div className="flex-1 overflow-hidden bg-slate-50 dark:bg-slate-950 min-h-0 flex flex-col">
             <ProveedorCatalogoTactico
               proveedores={proveedores}
               productos={productos}
@@ -1044,62 +1055,58 @@ export default function PrePedidos({
       )}>
           
           {/* TABS DEL PANEL DERECHO */}
-          <div className="flex items-center bg-[#1a1c2e] p-2 gap-2 shrink-0 z-30 relative">
+          <div className="flex items-center bg-[#1a1c2e] p-1.5 gap-1.5 shrink-0 z-30 relative">
             <button
               onClick={() => setMobileView('catalogo')}
-              className="lg:hidden w-11 h-11 flex items-center justify-center rounded-xl bg-white/5 text-slate-400 hover:text-white hover:bg-white/10 active:scale-95 transition-all shrink-0"
+              className="lg:hidden w-9 h-9 flex items-center justify-center rounded-lg bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 active:scale-95 transition-all shrink-0"
               title="Volver al catálogo"
             >
-              <ArrowLeft className="w-5 h-5" />
+              <ArrowLeft className="w-4 h-4" />
             </button>
             <button
               onClick={() => setPanelView('ticket')}
-              className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all
-                ${panelView === 'ticket' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+              className={`flex-1 py-2 px-3 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all
+                ${panelView === 'ticket' ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}
             >
-              📝 Pedido
+              Pedido
             </button>
             <button
               onClick={() => setPanelView('cuenta')}
-              className={`flex-1 py-3 px-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all
-                ${panelView === 'cuenta' ? 'bg-indigo-500 text-white shadow-lg' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+              className={`flex-1 py-2 px-3 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all
+                ${panelView === 'cuenta' ? 'bg-indigo-500 text-white shadow-md' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}
             >
-              💰 Cuenta Prov.
+              Cuenta Prov.
             </button>
           </div>
 
           {panelView === 'ticket' ? (
             <>
-              {/* HEADER DEL TICKET ESTILO "VENTA RÁPIDA" */}
-              <div className="bg-[#1a1c2e] p-5 text-white shadow-lg z-20 flex flex-col gap-4 border-t border-white/5">
-                 <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                      <ShoppingCart className="w-6 h-6 text-indigo-300" />
+              {/* HEADER DEL TICKET (compacto) */}
+              <div className="bg-[#1a1c2e] px-3 py-2.5 text-white shadow-md z-20 flex flex-col gap-2 border-t border-white/5 shrink-0">
+                 <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30 shrink-0">
+                      <ShoppingCart className="w-4 h-4 text-indigo-300" />
                     </div>
-                    <div>
-                      <h3 className="font-black text-sm uppercase tracking-widest text-indigo-100">Nuevo Pedido</h3>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-black text-xs uppercase tracking-wider text-indigo-100 truncate">
+                        {activeDraft?.nombre || 'Nuevo Pedido'}
+                      </h3>
+                      <p className="text-[10px] text-slate-300 font-bold uppercase tracking-wider truncate">
                          {activeProveedorId ? getProveedorById(activeProveedorId)?.nombre : 'Selecciona proveedor'}
                       </p>
                     </div>
                  </div>
-                 {activeDraft && (
-                   <div className="bg-white/5 rounded-xl px-4 py-2.5 border border-white/10 flex items-center gap-2">
-                     <Store className="w-4 h-4 text-indigo-400" />
-                     <span className="text-xs font-black text-slate-200 truncate flex-1 uppercase tracking-wider">{activeDraft.nombre}</span>
-                   </div>
-                 )}
               </div>
 
           {/* LISTADO DE ITEMS DEL TICKET */}
           <div className="flex-1 overflow-hidden relative bg-white dark:bg-slate-900 min-h-0">
-            <ScrollArea className="h-full p-4 lg:p-6 min-h-0">
+            <ScrollArea className="h-full p-3 min-h-0">
               {!activeDraft || activeDraft.items.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center opacity-20 pt-32">
-                  <ShoppingCart className="w-32 h-32 mb-6 text-slate-400" />
+                <div className="h-full flex flex-col items-center justify-center opacity-20 pt-20">
+                  <ShoppingCart className="w-20 h-20 mb-4 text-slate-400" />
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {activeDraft?.items.map((item) => {
                     const prod = getProductoById(item.productoId);
                     return (
@@ -1153,21 +1160,21 @@ export default function PrePedidos({
             </ScrollArea>
           </div>
 
-          {/* FOOTER DEL TICKET */}
-          <div className="p-5 lg:p-6 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] z-20">
+          {/* FOOTER DEL TICKET (compacto) */}
+          <div className="p-3 bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 shadow-[0_-8px_24px_rgba(0,0,0,0.03)] z-20 shrink-0">
             {activeDraft && (
-              <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 space-y-1.5">
+              <div className="mb-2.5 rounded-lg border border-amber-500/40 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-2 space-y-1">
                 <div className="flex items-center justify-between gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">
-                    Tope presupuesto (ajustable)
+                  <label className="text-[9px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
+                    Tope presupuesto
                   </label>
                   {Number(activeDraft.presupuestoMaximo) > 0 && (
                     <span
                       className={cn(
                         'text-[10px] font-black tabular-nums',
                         (activeDraft.total || 0) > activeDraft.presupuestoMaximo
-                          ? 'text-rose-500'
-                          : 'text-emerald-600'
+                          ? 'text-rose-600'
+                          : 'text-emerald-700 dark:text-emerald-400'
                       )}
                     >
                       {(activeDraft.total || 0) > activeDraft.presupuestoMaximo
@@ -1187,23 +1194,19 @@ export default function PrePedidos({
                       presupuestoMaximo: Number.isFinite(val) && val >= 0 ? val : 0,
                     });
                   }}
-                  className="h-9 text-sm font-bold rounded-lg border-amber-500/40"
+                  className="h-8 text-sm font-bold rounded-md border-amber-500/50 text-slate-900 dark:text-slate-100 bg-white dark:bg-slate-900"
                   placeholder="Ej: 500000"
                 />
-                <p className="text-[9px] text-muted-foreground font-medium">
-                  Viene del presupuesto; cámbialo si te conviene. El presupuesto original se edita en Reportes.
-                </p>
               </div>
             )}
-            <div className="flex justify-between items-center mb-5">
-              <span className="text-xs font-black uppercase tracking-widest text-slate-400">Total</span>
-              <span className="text-3xl font-black text-[#1a1c2e] dark:text-white tabular-nums tracking-tighter">
+            <div className="flex justify-between items-center mb-2.5">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Total</span>
+              <span className="text-2xl font-black text-[#1a1c2e] dark:text-white tabular-nums tracking-tighter">
                 {formatCurrency(activeDraft?.total || 0)}
               </span>
             </div>
 
-            <div className="flex gap-2">
-              {/* Limpiar ticket */}
+            <div className="flex gap-1.5">
               <Button
                 variant="outline"
                 disabled={!activeDraft || activeDraft.items.length === 0}
@@ -1223,9 +1226,9 @@ export default function PrePedidos({
                   });
                 }}
                 title="Limpiar ticket"
-                className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl p-0 shrink-0 text-rose-500 border-slate-200 dark:border-slate-800 hover:bg-rose-50 dark:hover:bg-rose-900/50 hover:border-rose-200 transition-colors"
+                className="w-10 h-10 rounded-xl p-0 shrink-0 text-rose-500 border-slate-200 dark:border-slate-800 hover:bg-rose-50 dark:hover:bg-rose-900/50 hover:border-rose-200 transition-colors"
               >
-                <Trash2 className="w-5 h-5" />
+                <Trash2 className="w-4 h-4" />
               </Button>
               <Button
                 variant="outline"
@@ -1236,18 +1239,18 @@ export default function PrePedidos({
                   setShowProveedorPanel(false);
                 }}
                 title="Guardar para después"
-                className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl p-0 shrink-0 text-indigo-600 border-slate-200 dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 hover:border-indigo-200 transition-colors"
+                className="w-10 h-10 rounded-xl p-0 shrink-0 text-indigo-600 border-slate-200 dark:border-slate-800 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 hover:border-indigo-200 transition-colors"
               >
-                <Save className="w-5 h-5" />
+                <Save className="w-4 h-4" />
               </Button>
               <Button
                 variant="outline"
                 disabled={!activeDraft || activeDraft.items.length === 0}
                 onClick={handleShareWhatsApp}
                 title="Enviar cotización por WhatsApp"
-                className="w-11 h-11 sm:w-14 sm:h-14 rounded-2xl p-0 shrink-0 text-emerald-600 border-slate-200 dark:border-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 hover:border-emerald-200 transition-colors"
+                className="w-10 h-10 rounded-xl p-0 shrink-0 text-emerald-600 border-slate-200 dark:border-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 hover:border-emerald-200 transition-colors"
               >
-                <Share2 className="w-5 h-5" />
+                <Share2 className="w-4 h-4" />
               </Button>
               <Button
                 disabled={!activeDraft || activeDraft.items.length === 0}
@@ -1257,9 +1260,9 @@ export default function PrePedidos({
                     toast.success('Pedido confirmado ✓');
                   }
                 }}
-                className="flex-1 h-14 bg-emerald-500 hover:bg-emerald-600 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform"
+                className="flex-1 h-10 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-wider shadow-md shadow-emerald-500/20 active:scale-95 transition-transform"
               >
-                Confirmar <Check className="w-5 h-5 ml-2" />
+                Confirmar <Check className="w-4 h-4 ml-1.5" />
               </Button>
             </div>
           </div>
@@ -1492,3 +1495,9 @@ export default function PrePedidos({
     </div>
   );
 }
+
+
+
+
+
+

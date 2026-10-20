@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { formatCurrency } from '@/lib/utils';
 import { TrendingUp, PieChart as PieIcon, BarChart3, Clock, Star, Crown } from 'lucide-react';
 import { MotorPredictivo } from './MotorPredictivo';
+import { ymdLocal } from '@/lib/fecha-local';
 
 const COLORS = ['#6366f1', '#ec4899', '#14b8a6', '#f59e0b', '#8b5cf6', '#ef4444', '#10b981'];
 
@@ -19,7 +20,7 @@ export function DashboardGraficos({ gastos = [], ventasDiarias = [], ventasPOS =
             for (let i = days - 1; i >= 0; i--) {
                 const d = new Date(today);
                 d.setDate(d.getDate() - i);
-                const str = d.toISOString().slice(0, 10);
+                const str = ymdLocal(d);
                 map.set(str, { 
                     fecha: str, 
                     label: `${d.getDate()}/${d.getMonth()+1}`, 
@@ -92,7 +93,7 @@ export function DashboardGraficos({ gastos = [], ventasDiarias = [], ventasPOS =
         else if (rango === '30d') limitDate.setDate(limitDate.getDate() - 30);
         else limitDate.setMonth(limitDate.getMonth() - 12);
         
-        const limitStr = limitDate.toISOString().slice(0, 10);
+        const limitStr = ymdLocal(limitDate);
 
         gastos.forEach(g => {
             if (g.esIngreso) return;
@@ -119,7 +120,7 @@ export function DashboardGraficos({ gastos = [], ventasDiarias = [], ventasPOS =
         else if (rango === '30d') limitDate.setDate(limitDate.getDate() - 30);
         else limitDate.setMonth(limitDate.getMonth() - 12);
         
-        const limitStr = limitDate.toISOString().slice(0, 10);
+        const limitStr = ymdLocal(limitDate);
 
         ventasPOS.forEach(v => {
             const dateStr = (v.fecha || '').slice(0, 10);
@@ -149,7 +150,7 @@ export function DashboardGraficos({ gastos = [], ventasDiarias = [], ventasPOS =
         else if (rango === '30d') limitDate.setDate(limitDate.getDate() - 30);
         else limitDate.setMonth(limitDate.getMonth() - 12);
         
-        const limitStr = limitDate.toISOString().slice(0, 10);
+        const limitStr = ymdLocal(limitDate);
 
         ventasPOS.forEach(v => {
             const dateStr = (v.fecha || '').slice(0, 10);

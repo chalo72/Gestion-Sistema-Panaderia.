@@ -140,3 +140,15 @@ groq.txt
 # Flujos n8n exportados con tokens de Facebook en texto plano — NO subir
 n8n-setup/NIVEL DIOS - Agencia IA Autónoma1.json
 n8n-setup/Publicacion-Directa-Dulce-Placer.json
+
+key.txt
+
+# 2026-10-20 Claude (Cowork): no subir temporales ni respaldos
+_tmp_*.mjs
+temp_old_*.txt
+useRealtimeSync_backup.txt
+__pycache__/
+.respaldos-*/
+_respaldo_*/
+respaldo_agente_*/
+_instalar_protecciones_*/

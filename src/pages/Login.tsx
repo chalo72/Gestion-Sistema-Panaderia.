@@ -5,6 +5,8 @@ import { CloudDownload, ChevronLeft, Check } from 'lucide-react';
 import { pullUsersFromCloud, mergeUsersToLocalStorage } from '@/lib/user-cloud-sync';
 import type { Usuario } from '@/types';
 import { cn } from '@/lib/utils';
+import { esAccesoVendedoras, accesoVendedorasFijo, fijarAccesoVendedoras, perfilesVendedoras, turnoDePerfil } from '@/lib/acceso-vendedoras';
+import { turnoPorHora } from '@/lib/equipo-turno';
 import { toast } from 'sonner';
 import {
   esUsuarioLoginOficial,
@@ -27,7 +29,13 @@ export function Login({ onLoginSuccess }: LoginProps) {
   const { login, usuarios } = useAuth();
   
   // Solo perfiles oficiales del Director (Admin, Gerente, Panadero, 3 turnos)
-  const activeUsers = ordenarUsuariosLogin(usuarios.filter(esUsuarioLoginOficial));
+  const todosLosPerfiles = ordenarUsuariosLogin(usuarios.filter(esUsuarioLoginOficial));
+  // Acceso directo de vendedoras: enlace /?acceso=vendedoras o aparato fijado como "caja"
+  const [modoVendedoras, setModoVendedoras] = useState<boolean>(() =>
+    esAccesoVendedoras(typeof window !== 'undefined' ? window.location.search : '', accesoVendedorasFijo()));
+  const [fijo, setFijo] = useState<boolean>(() => accesoVendedorasFijo());
+  const activeUsers = modoVendedoras ? perfilesVendedoras(todosLosPerfiles) : todosLosPerfiles;
+  const turnoActual = turnoPorHora();
 
   // Al montar: traer usuarios del cloud
   useEffect(() => {
@@ -152,7 +160,29 @@ export function Login({ onLoginSuccess }: LoginProps) {
           {/* ESTADO 1: SELECTOR DE USUARIOS */}
           {!selectedUser ? (
             <div className="animate-in fade-in zoom-in-95 duration-300">
-              <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest text-center mb-6">¿Quién eres?</h2>
+              <h2 className="text-sm font-black text-slate-400 uppercase tracking-widest text-center mb-4">
+                {modoVendedoras ? 'Acceso vendedoras' : '¿Quién eres?'}
+              </h2>
+              <div className="flex justify-center gap-2 mb-5 flex-wrap">
+                <button
+                  type="button"
+                  data-acceso-vendedoras
+                  onClick={() => setModoVendedoras(v => !v)}
+                  className="px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest border border-[#ff007f]/60 bg-[#ff007f]/15 text-white hover:bg-[#ff007f]/30 transition-colors"
+                >
+                  {modoVendedoras ? 'Ver todos los perfiles' : '🛒 Acceso vendedoras'}
+                </button>
+                {modoVendedoras && (
+                  <button
+                    type="button"
+                    data-fijar-vendedoras
+                    onClick={() => { const n = !fijo; fijarAccesoVendedoras(n); setFijo(n); }}
+                    className="px-4 py-2 rounded-full text-[11px] font-black uppercase tracking-widest border border-white/15 bg-white/5 text-slate-300 hover:bg-white/10 transition-colors"
+                  >
+                    {fijo ? '📌 Fijado en este aparato (quitar)' : '📌 Fijar en este aparato'}
+                  </button>
+                )}
+              </div>
               
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-[50vh] overflow-y-auto pr-2 custom-scrollbar">
                 {activeUsers.map(user => (
@@ -167,6 +197,9 @@ export function Login({ onLoginSuccess }: LoginProps) {
                     <div className="text-center">
                       <p className="text-white font-bold text-sm leading-tight">{user.nombre}</p>
                       <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mt-0.5">{etiquetaRolLogin(user.rol)}</p>
+                      {modoVendedoras && turnoDePerfil(user) === turnoActual && (
+                        <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-emerald-300">● Turno actual</p>
+                      )}
                     </div>
                   </div>
                 ))}

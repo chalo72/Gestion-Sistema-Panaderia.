@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { Gasto, Proveedor } from '@/types';
 import { normalizarCategoriaGasto } from '@/lib/gasto-categoria-inferencia';
+import { ymdLocal } from '@/lib/fecha-local';
 import {
   agruparGastosPorDiaYProveedor,
   idGastoAccion,
@@ -112,7 +113,7 @@ export function ExpenseList({
             const fechaG = (g.fecha || '').slice(0, 10);
             if (filtroFecha === 'hoy') return fechaG === hoyStr;
             if (filtroFecha === 'ayer') return fechaG === ayerStr;
-            if (filtroFecha === 'semana') return fechaG >= semanaAtras.toISOString().slice(0, 10);
+            if (filtroFecha === 'semana') return fechaG >= ymdLocal(semanaAtras);
             if (filtroFecha === 'mes') return (g.fecha || '').slice(0, 7) === mesActualStr;
             return true;
         });
@@ -358,7 +359,7 @@ export function ExpenseList({
                                                 </p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); onEditGasto({ ...gasto, id: accionId }); }}
                                                 className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-all"

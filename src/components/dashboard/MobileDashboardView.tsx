@@ -16,13 +16,14 @@ import {
   BarChart3,
   Bell,
   ArrowUpRight,
-  Zap,
+  Zap, Users, Warehouse, Receipt, Store,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { AlertaPrecio, Producto, Proveedor, PrecioProveedor } from '@/types';
 import { FindingsFeed } from '@/components/agentes/FindingsFeed';
+import { AvisosCompromisos } from '@/components/dashboard/AvisosCompromisos';
 import { BusquedaRapida } from '@/components/layout/BusquedaRapida';
 
 interface MobileDashboardViewProps {
@@ -67,6 +68,10 @@ interface MobileDashboardViewProps {
   onViewReportes?: () => void;
   onViewConsumo?: () => void;
   onGastoExpress?: () => void;
+  onViewGastos?: () => void;
+  onViewNomina?: () => void;
+  onViewBoveda?: () => void;
+  onViewMayoristas?: () => void;
   productos: Producto[];
   proveedores: Proveedor[];
   precios: PrecioProveedor[];
@@ -98,6 +103,10 @@ export function MobileDashboardView({
   onViewReportes,
   onViewConsumo,
   onGastoExpress,
+  onViewGastos,
+  onViewNomina,
+  onViewBoveda,
+  onViewMayoristas,
   productos,
   proveedores,
   precios,
@@ -177,6 +186,8 @@ export function MobileDashboardView({
         getProveedorById={getProveedorById}
         formatCurrency={formatCurrency}
       />
+
+      <AvisosCompromisos formatCurrency={formatCurrency} onIr={onViewReportes} />
 
       {/* ── TARJETA HERO: SALDO / INGRESOS DE HOY ── */}
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-600 via-orange-600 to-amber-700 text-white p-5 shadow-xl shadow-orange-600/20">
@@ -301,6 +312,20 @@ export function MobileDashboardView({
             </span>
           </button>
 
+          {onViewMayoristas && (
+            <button
+              onClick={onViewMayoristas}
+              className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-amber-50 dark:hover:bg-amber-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center shrink-0">
+                <Store className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
+                Al por mayor<br/><span className="text-[10px] text-slate-400 font-bold">Venta mayorista</span>
+              </span>
+            </button>
+          )}
+
           {/* Consumo Interno / Fiados */}
           {onViewConsumo && (
             <button
@@ -316,6 +341,23 @@ export function MobileDashboardView({
             </button>
           )}
 
+                    {/* Gastos / Egresos */}
+          {onViewGastos && (
+            <button
+              onClick={onViewGastos}
+              className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-red-50 dark:hover:bg-red-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-rose-500 to-red-500 text-white flex items-center justify-center shrink-0"
+              >
+                <Receipt className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight"
+              >
+                Gastos<br/><span className="text-[10px] text-slate-400 font-bold">Salidas / Vales</span>
+              </span>
+            </button>
+          )}
+
           {/* Gasto Express */}
           {onGastoExpress && (
             <button
@@ -327,6 +369,36 @@ export function MobileDashboardView({
               </div>
               <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
                 Gasto<br/><span className="text-[10px] text-slate-400 font-bold">Express (Turbo)</span>
+              </span>
+            </button>
+          )}
+
+          {/* Nómina y Préstamos */}
+          {onViewNomina && (
+            <button
+              onClick={onViewNomina}
+              className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-emerald-50 dark:hover:bg-emerald-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-500 text-white flex items-center justify-center shrink-0">
+                <Users className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
+                Nómina<br/><span className="text-[10px] text-slate-400 font-bold">Y Préstamos</span>
+              </span>
+            </button>
+          )}
+
+          {/* Bóveda / Libro de Caja */}
+          {onViewBoveda && (
+            <button
+              onClick={onViewBoveda}
+              className="flex items-center gap-3 p-3 rounded-2xl active:scale-95 transition-all group hover:bg-blue-50 dark:hover:bg-blue-950/20 bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800"
+            >
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-blue-500 to-indigo-500 text-white flex items-center justify-center shrink-0">
+                <Warehouse className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-black text-slate-800 dark:text-slate-200 tracking-tight text-left leading-tight">
+                Bóveda<br/><span className="text-[10px] text-slate-400 font-bold">Libro de Caja</span>
               </span>
             </button>
           )}
@@ -490,3 +562,5 @@ export function MobileDashboardView({
     </div>
   );
 }
+
+

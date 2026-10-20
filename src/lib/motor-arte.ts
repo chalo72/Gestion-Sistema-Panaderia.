@@ -1,3 +1,4 @@
+import { hoyLocal } from '@/lib/fecha-local';
 /**
  * MOTOR DE ARTE — Dulce Placer
  * Creado 2026-09-19. Ampliado el mismo día con colores y diseños.
@@ -236,7 +237,7 @@ export async function generarArte(opts: OpcionesArte): Promise<string> {
 export function descargarArte(dataUrl: string, nombreBase = 'dulce-placer-arte') {
   const a = document.createElement('a');
   a.href = dataUrl;
-  a.download = `${nombreBase}-${new Date().toISOString().slice(0, 10)}.jpg`;
+  a.download = `${nombreBase}-${hoyLocal()}.jpg`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

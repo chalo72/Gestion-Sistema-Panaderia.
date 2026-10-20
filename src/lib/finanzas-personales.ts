@@ -12,12 +12,52 @@ const KEY_VENTAS_DIARIAS = 'dp_ventas_diarias';
 export function getCompromisos(): CompromisoFijo[] {
   try {
     const raw = localStorage.getItem(KEY_COMPROMISOS);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) {
+      // 🩹 2026-10-09: celular nuevo → traer la copia de la nube (antes solo vivían en este aparato)
+      traerCompromisosDeLaNube().catch(() => {});
+      return [];
+    }
+    const lista = JSON.parse(raw);
+    // Subir una vez por sesión los compromisos que ya existían solo en este aparato
+    if (!compromisosSubidosEstaSesion && Array.isArray(lista) && lista.length > 0) {
+      compromisosSubidosEstaSesion = true;
+      pushCompromisosToCloud(lista).catch(() => {});
+    }
+    return lista;
   } catch { return []; }
 }
 
 export function saveCompromisos(list: CompromisoFijo[]): void {
   localStorage.setItem(KEY_COMPROMISOS, JSON.stringify(list));
+  // 🩹 2026-10-09: copia en Supabase (tabla configuracion, id 'compromisos_fijos_data')
+  pushCompromisosToCloud(list).catch(() => {});
+}
+
+async function pushCompromisosToCloud(list: CompromisoFijo[]): Promise<void> {
+  try {
+    const { db } = await import('@/lib/database');
+    await db.saveBackup('compromisos_fijos_data', list);
+  } catch (err) {
+    console.warn('⚠️ [Finanzas] Error enviando compromisos a la nube:', err);
+  }
+}
+
+let trayendoCompromisos = false;
+let compromisosSubidosEstaSesion = false;
+async function traerCompromisosDeLaNube(): Promise<void> {
+  if (trayendoCompromisos) return;
+  trayendoCompromisos = true;
+  try {
+    const { db } = await import('@/lib/database');
+    const cloud = await db.getBackup('compromisos_fijos_data');
+    if (Array.isArray(cloud) && cloud.length > 0 && !localStorage.getItem(KEY_COMPROMISOS)) {
+      localStorage.setItem(KEY_COMPROMISOS, JSON.stringify(cloud));
+    }
+  } catch (err) {
+    console.warn('⚠️ [Finanzas] No se pudieron traer compromisos de la nube:', err);
+  } finally {
+    trayendoCompromisos = false;
+  }
 }
 
 export function addCompromiso(data: Omit<CompromisoFijo, 'id'>): CompromisoFijo {
@@ -32,6 +72,110 @@ export function updateCompromiso(id: string, data: Partial<CompromisoFijo>): voi
 
 export function deleteCompromiso(id: string): void {
   saveCompromisos(getCompromisos().filter(c => c.id !== id));
+}
+
+const sinTilde = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/** Personas que ya se pagan en el módulo Nómina y no deben duplicarse aquí. */
+const YA_EN_NOMINA: string[][] = [
+  ['andrea', 'cadena'],
+  ['gonzalo', 'panadero'],
+];
+
+export function esCompromisoYaEnNomina(c: Pick<CompromisoFijo, 'nombre' | 'persona' | 'esDeNomina'>): boolean {
+  if (c.esDeNomina) return true;
+  const t = sinTilde(`${c.nombre || ''} ${c.persona || ''}`);
+  return YA_EN_NOMINA.some(partes => partes.every(p => t.includes(p)));
+}
+
+/** Marca en disco los compromisos que ya viven en Nómina, para que no se sumen dos veces. */
+export function apartarCompromisosDeNomina(): CompromisoFijo[] {
+  const lista = getCompromisos();
+  let cambio = false;
+  const next = lista.map(c => {
+    if (c.esDeNomina) return c;
+    if (esCompromisoYaEnNomina(c)) { cambio = true; return { ...c, esDeNomina: true }; }
+    return c;
+  });
+  if (cambio) saveCompromisos(next);
+  return cambio ? next : lista;
+}
+
+function ultimoDiaMes(year: number, monthIndex: number): number {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+/** Días del mes en los que “más o menos” toca pagar este compromiso. */
+export function diasObjetivoCompromiso(c: CompromisoFijo, year: number, monthIndex: number): number[] {
+  const ultimo = ultimoDiaMes(year, monthIndex);
+  const dia = Math.min(ultimo, Math.max(1, Number(c.diaDeCobro) || 1));
+  const freq = c.frecuencia || 'mensual';
+  if (freq === 'quincenal') {
+    const segundo = Math.min(ultimo, dia <= 15 ? dia + 15 : 15);
+    return Array.from(new Set([dia, segundo])).sort((a, b) => a - b);
+  }
+  if (freq === 'solo_q1') return [Math.min(15, dia)];
+  if (freq === 'solo_q2') return [Math.min(ultimo, Math.max(16, dia))];
+  return [dia];
+}
+
+export function claveCicloCompromiso(c: CompromisoFijo, fecha: Date, diaObjetivo: number): string {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  if ((c.frecuencia || 'mensual') === 'mensual') return `${y}-${m}`;
+  return `${y}-${m}-${diaObjetivo <= 15 ? 'q1' : 'q2'}`;
+}
+
+export interface AvisoCompromiso {
+  compromiso: CompromisoFijo;
+  estado: 'hoy' | 'ventana' | 'vencido';
+  diaObjetivo: number;
+  mensaje: string;
+}
+
+/** Compromisos fijos cuya fecha aproximada ya llegó o está a pocos días. */
+export function avisosCompromisos(lista: CompromisoFijo[], hoy: Date = new Date()): AvisoCompromiso[] {
+  const hoyDia = hoy.getDate();
+  const avisos: AvisoCompromiso[] = [];
+  for (const c of lista) {
+    if (!c.activo || esCompromisoYaEnNomina(c)) continue;
+    const ventana = Math.max(0, Number(c.ventanaDias ?? 2));
+    const pagados = new Set(c.ciclosPagados || []);
+    for (const dia of diasObjetivoCompromiso(c, hoy.getFullYear(), hoy.getMonth())) {
+      const clave = claveCicloCompromiso(c, hoy, dia);
+      if (pagados.has(clave)) continue;
+      const diff = hoyDia - dia;
+      if (diff === 0) {
+        avisos.push({ compromiso: c, estado: 'hoy', diaObjetivo: dia, mensaje: `Hoy toca pagar ${c.nombre} (alrededor del día ${dia}).` });
+      } else if (Math.abs(diff) <= ventana) {
+        avisos.push({ compromiso: c, estado: 'ventana', diaObjetivo: dia, mensaje: `${c.nombre} se paga alrededor del día ${dia}. Hoy estás a ${Math.abs(diff)} día(s).` });
+      } else if (diff > ventana && diff <= 10) {
+        avisos.push({ compromiso: c, estado: 'vencido', diaObjetivo: dia, mensaje: `${c.nombre} pasó el día ${dia} y aún no está marcado como pagado.` });
+      }
+    }
+  }
+  const orden = { vencido: 0, hoy: 1, ventana: 2 };
+  return avisos.sort((a, b) => orden[a.estado] - orden[b.estado]);
+}
+
+export function marcarCompromisoPagado(id: string, nota?: string): CompromisoFijo[] {
+  const hoy = new Date();
+  const next = getCompromisos().map(c => {
+    if (c.id !== id) return c;
+    const dias = diasObjetivoCompromiso(c, hoy.getFullYear(), hoy.getMonth());
+    const dia = dias.reduce((mejor, d) => Math.abs(hoy.getDate() - d) < Math.abs(hoy.getDate() - mejor) ? d : mejor, dias[0]);
+    const clave = claveCicloCompromiso(c, hoy, dia);
+    const historial = [...(c.historialPagos || []), { fecha: toLocalYMD(hoy), monto: c.monto, nota }].slice(-24);
+    return { ...c, ciclosPagados: Array.from(new Set([...(c.ciclosPagados || []), clave])), historialPagos: historial };
+  });
+  saveCompromisos(next);
+  return next;
+}
+
+/** Monto de un compromiso expresado en un mes (quincenal cuenta dos veces). */
+export function compromisoAMensual(c: CompromisoFijo): number {
+  const m = Number(c.monto) || 0;
+  return c.frecuencia === 'quincenal' ? m * 2 : m;
 }
 
 // ── Ventas Diarias (registro manual mientras arranca el POS) ──
@@ -244,7 +388,7 @@ export function calcularProyeccionQuincena(params: {
 
   // Compromisos activos que caen en este periodo
   const compromisosQuincena = params.compromisos
-    .filter(c => c.activo)
+    .filter(c => c.activo && !esCompromisoYaEnNomina(c))
     .filter(c => {
       if (quincenaFiltro === 'mes') return true;
       if (c.frecuencia === 'quincenal') return true;
@@ -388,11 +532,13 @@ export function generarConsejo(params: {
 
 // ── Registro de Producción Diaria ────────────────────────────
 export interface HornadaDia {
-  tipoPan: string;       // Ej: "Pan dulce", "Hojaldrado"
+  id?: string;           // Identificador estable de la fila (para no duplicar la Orden de Producción que se crea sola)
+  tipoPan: string;       // Ej: "Pan dulce", "Hojaldrado" — siempre elegido de la lista de Modelos de Pan
   bandejas: number;      // Nº de bandejas
   panesPorBandeja: number;
   totalPanes: number;    // calculado: bandejas * panesPorBandeja
   masaId?: string;       // ID de la masa origen
+  ordenCreada?: boolean; // true cuando ya se creó/completó su Orden de Producción (puente Libreta → Inventario)
 }
 
 export interface MasaPreparadaDia {
@@ -465,8 +611,10 @@ export function saveProducciones(list: RegistroProduccion[]): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('dp_producciones_changed'));
   }
-  // Respaldo en la nube en segundo plano (no bloqueante)
-  pushProduccionesToCloud(normalizados).catch(() => {});
+  // Respaldo en la nube fusionando con los datos existentes (evita sobrescribir lo de otros dispositivos)
+  setTimeout(() => {
+    sincronizarProduccionesConNube().catch(() => {});
+  }, 500);
 }
 
 export function addProduccion(data: Omit<RegistroProduccion, 'id'>): RegistroProduccion {

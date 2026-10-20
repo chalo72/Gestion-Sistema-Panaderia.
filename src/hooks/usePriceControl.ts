@@ -36,6 +36,7 @@ import {
 } from '@/lib/seed-data';
 
 import { MONEDAS } from '@/types';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 
 const defaultConfig: Configuracion = {
   margenUtilidadDefault: 30,
@@ -108,32 +109,75 @@ export function usePriceControl() {
         else if (table === 'precios') setPrecios(p => p.filter(x => x.id !== id));
         else if (table === 'prepedidos') setPrepedidos(p => p.filter(x => x.id !== id));
         else if (table === 'recetas') setRecetas(p => p.filter(x => x.id !== id));
+        else if (table === 'clientes') setClientes(p => p.filter(x => x.id !== id));
+        else if (table === 'nominas') db.getAllNominas().then(setNominas).catch(() => {});
+        else if (table === 'trabajadores') db.getAllTrabajadores().then(finanzas.setTrabajadores as any).catch(() => {});
+        else if (table === 'creditos_trabajadores') db.getAllCreditosTrabajadores().then(finanzas.setCreditosTrabajadores as any).catch(() => {});
+        else if (table === 'asistencia') db.getAllAsistencia().then(setAsistencia).catch(() => {});
+        else if (table === 'gastos') db.getAllGastos().then(finanzas.setGastos).catch(() => {});
       } else {
         if (table === 'proveedores') db.getAllProveedores().then(p => setProveedores(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {});
         else if (table === 'productos') { db.getAllProductos().then(p => setProductos(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {}); db.getAllPrecios().then(setPrecios).catch(() => {}); }
         else if (table === 'precios') { db.getAllPrecios().then(setPrecios).catch(() => {}); db.getAllProductos().then(p => setProductos(p.sort((a, b) => a.nombre.localeCompare(b.nombre)))).catch(() => {}); }
         else if (table === 'prepedidos') db.getAllPrePedidos().then(setPrepedidos).catch(() => {});
         else if (table === 'recetas') db.getAllRecetas().then(setRecetas).catch(() => {});
+        else if (table === 'clientes') db.getAllClientes().then(setClientes).catch(() => {});
+        else if (table === 'nominas') db.getAllNominas().then(setNominas).catch(() => {});
+        else if (table === 'trabajadores') db.getAllTrabajadores().then(finanzas.setTrabajadores as any).catch(() => {});
+        else if (table === 'creditos_trabajadores') db.getAllCreditosTrabajadores().then(finanzas.setCreditosTrabajadores as any).catch(() => {});
+        else if (table === 'asistencia') db.getAllAsistencia().then(setAsistencia).catch(() => {});
+        else if (table === 'gastos') db.getAllGastos().then(finanzas.setGastos).catch(() => {});
+        else if (table === 'configuracion') db.getConfiguracion().then(c => {
+          if (c) {
+            // Apply data with mapping for snake_case
+            setConfiguracion(prev => ({
+              ...prev, ...c,
+              nombreNegocio: c.nombreNegocio ?? (c as any).nombre_negocio ?? prev.nombreNegocio,
+              direccionNegocio: c.direccionNegocio ?? (c as any).direccion_negocio ?? prev.direccionNegocio,
+              telefonoNegocio: c.telefonoNegocio ?? (c as any).telefono_negocio ?? prev.telefonoNegocio,
+              emailNegocio: c.emailNegocio ?? (c as any).email_negocio ?? prev.emailNegocio,
+              margenUtilidadDefault: c.margenUtilidadDefault ?? (c as any).margen_utilidad_default ?? prev.margenUtilidadDefault,
+              impuestoPorcentaje: c.impuestoPorcentaje ?? (c as any).impuesto_porcentaje ?? prev.impuestoPorcentaje,
+              umbralAlerta: c.umbralAlerta ?? (c as any).umbral_alerta ?? prev.umbralAlerta,
+              ajusteAutomatico: c.ajusteAutomatico ?? (c as any).ajuste_automatico ?? prev.ajusteAutomatico,
+              notificarSubidas: c.notificarSubidas ?? (c as any).notificar_subidas ?? prev.notificarSubidas,
+              mostrarUtilidadEnLista: c.mostrarUtilidadEnLista ?? (c as any).mostrar_utilidad_en_lista ?? prev.mostrarUtilidadEnLista,
+            }));
+          }
+        }).catch(() => {});
       }
     };
     window.addEventListener('nexus-realtime-change', handle);
     return () => window.removeEventListener('nexus-realtime-change', handle);
   }, []);
 
+  // 🩹 FIX 2026-10-03 (celular nuevo vacío): si el aparato no tiene datos guardados,
+  // NO soltar la pantalla a los 5 s (quedaba vacía mientras la descarga seguía por detrás).
+  // Se mantiene la pantalla "Sincronizando Dulce Placer" hasta que termine la primera
+  // descarga, con un tope de 90 s para que nunca quede trabada.
+  const dispositivoVacioRef = useRef(false);
+
   // Inicializar base de datos y cargar datos
   useEffect(() => {
     const initDB = async () => {
       const safetyTimeout = setTimeout(() => {
-        if (!loaded) {
+        if (!loaded && !dispositivoVacioRef.current) {
           console.warn('⚠️ [Nexus-Shield] Carga lenta detectada. Forzando inicio...');
           setLoaded(true);
         }
       }, 5000);
+      const safetyTimeoutVacio = setTimeout(() => {
+        if (dispositivoVacioRef.current) {
+          console.warn('⚠️ [Nexus-Shield] Primera descarga muy lenta (90 s). Abriendo la app; los datos seguirán llegando.');
+          setLoaded(true);
+        }
+      }, 90000);
 
       try {
         await db.init();
         await loadCriticalData();
         clearTimeout(safetyTimeout);
+        clearTimeout(safetyTimeoutVacio);
         
         // Cargar secundarios inmediatamente después de desbloquear la UI
         loadSecondaryDataInBackground();
@@ -159,12 +203,23 @@ export function usePriceControl() {
       ]);
 
       const hasLocalData = productosDB.length > 0;
+      dispositivoVacioRef.current = !hasLocalData;
       
       // Función auxiliar para procesar y aplicar datos al estado
       const applyData = async (config: any, prods: Producto[], provs: Proveedor[], prcs: PrecioProveedor[]) => {
         let finalConfig = config ? {
           ...defaultConfig,
           ...config,
+          nombreNegocio: config.nombreNegocio ?? config.nombre_negocio ?? defaultConfig.nombreNegocio,
+          direccionNegocio: config.direccionNegocio ?? config.direccion_negocio ?? defaultConfig.direccionNegocio,
+          telefonoNegocio: config.telefonoNegocio ?? config.telefono_negocio ?? defaultConfig.telefonoNegocio,
+          emailNegocio: config.emailNegocio ?? config.email_negocio ?? defaultConfig.emailNegocio,
+          margenUtilidadDefault: config.margenUtilidadDefault ?? config.margen_utilidad_default ?? defaultConfig.margenUtilidadDefault,
+          impuestoPorcentaje: config.impuestoPorcentaje ?? config.impuesto_porcentaje ?? defaultConfig.impuestoPorcentaje,
+          umbralAlerta: config.umbralAlerta ?? config.umbral_alerta ?? defaultConfig.umbralAlerta,
+          ajusteAutomatico: config.ajusteAutomatico ?? config.ajuste_automatico ?? defaultConfig.ajusteAutomatico,
+          notificarSubidas: config.notificarSubidas ?? config.notificar_subidas ?? defaultConfig.notificarSubidas,
+          mostrarUtilidadEnLista: config.mostrarUtilidadEnLista ?? config.mostrar_utilidad_en_lista ?? defaultConfig.mostrarUtilidadEnLista,
           categorias: config.categorias || defaultConfig.categorias,
           unidades: config.unidades || config.metadata?.unidades || defaultConfig.unidades,
           destinos: config.destinos || config.metadata?.destinos || (defaultConfig as any).destinos,
@@ -577,7 +632,7 @@ export function usePriceControl() {
   }, [configuracion]);
 
   const updateConfiguracion = useCallback(async (updates: Partial<Configuracion>) => {
-    const newConfig = { ...configuracion, ...updates };
+    const newConfig = { ...configuracion, ...updates, updated_at: new Date().toISOString() };
     await db.saveConfiguracion({ ...newConfig, id: 'main' });
     setConfiguracion(newConfig);
   }, [configuracion]);
@@ -1384,12 +1439,12 @@ export function usePriceControl() {
       itemsEnRiesgo: prediccionAgotamiento,
       totalRecetas: recetas.length,
       // Estadísticas de Ventas
-      ventasHoy: ventasHook.ventas.filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0])).length,
+      ventasHoy: ventasHook.ventas.filter(v => ymdLocal(v.fecha) === hoyLocal()).length,
       ingresosHoy: ventasHook.ventas
-        .filter(v => v.fecha && v.fecha.startsWith(new Date().toISOString().split('T')[0]))
+        .filter(v => ymdLocal(v.fecha) === hoyLocal())
         .reduce((sum, v) => sum + safeNumber(v.total), 0),
       gastosHoy: finanzas.gastos
-        .filter(g => g.fecha && g.fecha.startsWith(new Date().toISOString().split('T')[0]))
+        .filter(g => ymdLocal(g.fecha) === hoyLocal())
         .reduce((sum, g) => sum + safeNumber(g.monto), 0),
       ticketPromedio: ventasHook.ventas.length > 0
         ? ventasHook.ventas.reduce((sum, v) => sum + safeNumber(v.total), 0) / ventasHook.ventas.length

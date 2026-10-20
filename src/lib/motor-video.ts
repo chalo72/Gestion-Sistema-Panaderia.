@@ -1,3 +1,4 @@
+import { hoyLocal } from '@/lib/fecha-local';
 /**
  * MOTOR DE VIDEO — Dulce Placer
  * Creado 2026-09-19.
@@ -269,7 +270,7 @@ export async function generarVideoCorto(opts: OpcionesVideo): Promise<ResultadoV
 /** Descarga el video generado con un nombre claro. */
 export function descargarVideo(resultado: ResultadoVideo, nombreBase = 'dulce-placer') {
   const a = document.createElement('a');
-  const fecha = new Date().toISOString().slice(0, 10);
+  const fecha = hoyLocal();
   a.href = resultado.url;
   a.download = `${nombreBase}-${fecha}.${resultado.extension}`;
   document.body.appendChild(a);

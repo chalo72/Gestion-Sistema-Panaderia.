@@ -44,6 +44,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { hoyLocal } from '@/lib/fecha-local';
 import {
     descargarPdfReceta,
     descargarPdfCatalogoRecetas,
@@ -138,7 +139,7 @@ const Recetas: React.FC<RecetasProps> = ({
     const { addAuditoria } = useAuditorias();
     const [isGeneratingIA, setIsGeneratingIA] = useState(false);
     const [isHistorialAuditoriasOpen, setIsHistorialAuditoriasOpen] = useState(false);
-    const [fechaAuditoria, setFechaAuditoria] = useState(() => new Date().toISOString().split('T')[0]);
+    const [fechaAuditoria, setFechaAuditoria] = useState(() => hoyLocal());
 
     // ── Config de categorías (tipo: 'venta' | 'insumo') ──────────────────
     const [catTipoMap, setCatTipoMap] = useState<Map<string, string>>(new Map());
@@ -2535,9 +2536,10 @@ Dictamina si este rendimiento es óptimo o si hay sospecha de mermas ocultas/rob
                     </div>
                 </DialogContent>
             </Dialog>
-            <HistorialAuditoriasModal 
-                open={isHistorialAuditoriasOpen} 
-                onClose={() => setIsHistorialAuditoriasOpen(false)} 
+            <HistorialAuditoriasModal
+                isOpen={isHistorialAuditoriasOpen}
+                onClose={() => setIsHistorialAuditoriasOpen(false)}
+                modelos={modelosPan}
             />
         </Tabs>
     );

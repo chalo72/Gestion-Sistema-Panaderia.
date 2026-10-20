@@ -76,6 +76,27 @@ describe('busqueda-productos — espurgue inteligente', () => {
     expect(buscarProductosVenta(catalogo, 'bono').map((p) => p.id)).toEqual(['2']);
   });
 
+  it('filtra por NOMBRE: no trae toda la categoría ni subcadenas a mitad de palabra', () => {
+    const catalogo = [
+      base({ id: 'p1', nombre: 'Pan Francés', categoria: 'Panadería' }),
+      base({ id: 'p2', nombre: 'Croissant', categoria: 'Panadería' }),
+      base({ id: 'p3', nombre: 'Empanada de Pollo', categoria: 'Fritos' }),
+      base({ id: 'p4', nombre: 'Torta de Pan', categoria: 'Tortas' }),
+      base({ id: 'p5', nombre: 'Gelatina Fresa', categoria: 'Postres' }),
+      base({ id: 'p6', nombre: 'Gaseosa Fresa', categoria: 'Bebidas' }),
+      base({ id: 'p7', nombre: 'Gelatina Boggy', categoria: 'Postres' }),
+    ];
+    const pan = buscarProductosVenta(catalogo, 'pan').map((p) => p.id);
+    expect(pan[0]).toBe('p1');
+    expect(pan).toContain('p4');
+    expect(pan).not.toContain('p2');
+    expect(pan).not.toContain('p3');
+
+    expect(buscarProductosVenta(catalogo, 'gelatina fresa').map((p) => p.id)).toEqual(['p5']);
+    expect(buscarProductosVenta(catalogo, 'postres').map((p) => p.id).sort()).toEqual(['p5', 'p7']);
+    expect(buscarProductosVenta(catalogo, 'panes').map((p) => p.id)).toContain('p1');
+  });
+
   it('deduplica por nombre normalizado', () => {
     const dups = [
       base({ id: '1', nombre: 'Pan Bono', precioVenta: 1000 }),

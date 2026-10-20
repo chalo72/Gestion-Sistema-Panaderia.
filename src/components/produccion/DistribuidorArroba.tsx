@@ -430,15 +430,20 @@ export function DistribuidorArroba({ productos, formulaciones, modelos, ventas, 
 
                       <div className="overflow-y-auto overscroll-contain flex-1 max-h-60 custom-scrollbar pr-0.5">
                         {(() => {
-                          const query = breadSearch.trim().toLowerCase();
-                          const filtradosHijos = modelosHijos.filter(m => cortes[m.id] === undefined && (query === '' || m.nombre.toLowerCase().includes(query)));
-                          const otrosModelos = (modelos || []).filter(m => m.activo !== false && m.formulacionId !== formId && cortes[m.id] === undefined && (query === '' || m.nombre.toLowerCase().includes(query)));
+                          const queryParts = breadSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                          const matchesQuery = (nombre: string) => {
+                            if (queryParts.length === 0) return true;
+                            const n = (nombre || '').toLowerCase();
+                            return queryParts.every(part => n.includes(part));
+                          };
+                          const filtradosHijos = modelosHijos.filter(m => cortes[m.id] === undefined && matchesQuery(m.nombre));
+                          const otrosModelos = (modelos || []).filter(m => m.activo !== false && m.formulacionId !== formId && cortes[m.id] === undefined && matchesQuery(m.nombre));
                           const totalDisponibles = filtradosHijos.length + otrosModelos.length;
 
                           if (totalDisponibles === 0) {
                             return (
                               <div className="px-3 py-6 text-xs text-center text-slate-500 font-medium">
-                                {query !== '' ? 'No se encontraron panes con ese nombre' : 'Todos los panes ya están agregados'}
+                                {breadSearch.trim() !== '' ? 'No se encontraron panes con ese nombre' : 'Todos los panes ya están agregados'}
                               </div>
                             );
                           }

@@ -117,6 +117,46 @@
     overflow-x: hidden;
   }
 
+  /*
+   * Modal Nuevo despacho: el color del body (#f1f5f9) se hereda en select/option/input
+   * nativos y deja los nombres casi invisibles sobre fondo blanco del diálogo.
+   */
+  .nuevo-despacho-modal,
+  .nuevo-despacho-modal label,
+  .nuevo-despacho-modal p,
+  .nuevo-despacho-modal span {
+    color: #0f172a;
+  }
+  .nuevo-despacho-modal select,
+  .nuevo-despacho-modal option,
+  .nuevo-despacho-modal input,
+  .nuevo-despacho-modal textarea {
+    color: #0f172a !important;
+    background-color: #ffffff !important;
+    color-scheme: light;
+  }
+  .nuevo-despacho-modal input::placeholder {
+    color: #64748b !important;
+    opacity: 1;
+  }
+  .dark .nuevo-despacho-modal,
+  .dark .nuevo-despacho-modal label,
+  .dark .nuevo-despacho-modal p,
+  .dark .nuevo-despacho-modal span {
+    color: #f1f5f9;
+  }
+  .dark .nuevo-despacho-modal select,
+  .dark .nuevo-despacho-modal option,
+  .dark .nuevo-despacho-modal input,
+  .dark .nuevo-despacho-modal textarea {
+    color: #f1f5f9 !important;
+    background-color: #0f172a !important;
+    color-scheme: dark;
+  }
+  .dark .nuevo-despacho-modal input::placeholder {
+    color: #94a3b8 !important;
+  }
+
   /* Custom Scrollbar (Antigravity Zero-G) 🚀 */
   ::-webkit-scrollbar {
     width: 6px;
@@ -939,4 +979,78 @@
 .overflow-y-auto::-webkit-scrollbar-track {
   background: #e2e8f0 !important;
   border-radius: 10px;
+}
+
+/* OPTIMIZACION DE RENDIMIENTO MOVIL (ANTIGRAVITY) */
+@media (max-width: 768px) {
+  /* El desenfoque de fondo y decorativo colapsa las GPU de mviles gama media/baja */
+  .blur-3xl, .blur-2xl, .blur-xl {
+    filter: none !important;
+    opacity: 0.1 !important;
+  }
+  .backdrop-blur, .backdrop-blur-sm, .backdrop-blur-md, .backdrop-blur-lg, .backdrop-blur-xl, .backdrop-blur-2xl, .backdrop-blur-3xl {
+    backdrop-filter: none !important;
+  }
+  
+  /* Fallback para fondos glass transparentes que ahora seran solidos */
+  .bg-white\/50, .bg-white\/60, .bg-white\/70, .bg-white\/80, .bg-white\/90 {
+    background-color: rgba(255, 255, 255, 0.95) !important;
+  }
+  .bg-slate-900\/50, .bg-slate-900\/60, .bg-slate-900\/70, .bg-slate-900\/80, .bg-slate-900\/90 {
+    background-color: rgba(15, 23, 42, 0.95) !important;
+  }
+}
+
+/* ───────────────────────────────────────────────────────────────────────────────
+   OPTIMIZACION POR CAPACIDAD DEL APARATO  (2026-10-04, autorizado por Gonzalo)
+
+   El bloque de arriba (@media max-width:768px) ya apaga el desenfoque, y cubre
+   197 de los 198 backdrop-blur del proyecto. Pero se dispara por ANCHO DE
+   PANTALLA, y eso deja tres huecos reales:
+     - celular lento ACOSTADO (~850px): el desenfoque vuelve y la lentitud con el
+     - tablet Android barata (800px+): nunca recibe la optimizacion
+     - iPhone bueno en vertical (393px): pierde el efecto sin necesidad
+
+   Este bloque hace lo mismo pero mirando el APARATO, no el ancho. Se activa
+   cuando src/lib/aparato-lento.ts pone data-aparato="lento" en el <html>
+   (memoria < 4 GB, menos de 4 nucleos, ahorro de datos, conexion 2G/3G, o el
+   usuario pidio menos animacion).
+
+   Si el navegador no sabe decir nada del aparato, el atributo queda en "normal"
+   y este bloque NO aplica: en la duda, nada cambia.
+   ─────────────────────────────────────────────────────────────────────────────── */
+html[data-aparato="lento"] .blur-3xl,
+html[data-aparato="lento"] .blur-2xl,
+html[data-aparato="lento"] .blur-xl {
+  filter: none !important;
+  opacity: 0.1 !important;
+}
+
+html[data-aparato="lento"] .backdrop-blur,
+html[data-aparato="lento"] .backdrop-blur-sm,
+html[data-aparato="lento"] .backdrop-blur-md,
+html[data-aparato="lento"] .backdrop-blur-lg,
+html[data-aparato="lento"] .backdrop-blur-xl,
+html[data-aparato="lento"] .backdrop-blur-2xl,
+html[data-aparato="lento"] .backdrop-blur-3xl,
+html[data-aparato="lento"] [class*="backdrop-blur-["] {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Los fondos semitransparentes quedaban lavados sin el desenfoque: se vuelven solidos. */
+html[data-aparato="lento"] .bg-white\/50,
+html[data-aparato="lento"] .bg-white\/60,
+html[data-aparato="lento"] .bg-white\/70,
+html[data-aparato="lento"] .bg-white\/80,
+html[data-aparato="lento"] .bg-white\/90 {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+html[data-aparato="lento"] .bg-slate-900\/50,
+html[data-aparato="lento"] .bg-slate-900\/60,
+html[data-aparato="lento"] .bg-slate-900\/70,
+html[data-aparato="lento"] .bg-slate-900\/80,
+html[data-aparato="lento"] .bg-slate-900\/90 {
+  background-color: rgba(15, 23, 42, 0.95) !important;
 }

@@ -14,9 +14,11 @@ import { GastoDiarioForm } from '@/components/gastos/gasto-diario-form';
 import { ExpenseList } from '@/components/gastos/ExpenseList';
 import { TurboExpenseManager } from '@/components/gastos/TurboExpenseManager';
 import type { GastoCategoria, MetodoPago } from '@/types';
-import { normalizarFechaYYYYMMDD, getProducciones, deleteProduccion } from '@/lib/finanzas-personales';
+import { normalizarFechaYYYYMMDD, getProducciones, deleteProduccion, esCompromisoYaEnNomina, compromisoAMensual, claveCicloCompromiso, diasObjetivoCompromiso } from '@/lib/finanzas-personales';
 import { useAuth } from '@/contexts/AuthContext';
 import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
+import { vigilarCuadres, compararEscalera } from '@/lib/vigia-ventas';
 import {
     Dialog,
     DialogContent,
@@ -633,7 +635,10 @@ const CAJAS_KEY_MAP: Record<string, string> = {
     principal: 'Principal',
     helados: 'Helados',
     helado: 'Helados',
-    mecato: 'Mecato',
+    mercato: 'Mercato',
+    mercado: 'Mercato',
+    mecato: 'Mekato',
+    mekato: 'Mekato',
     michelada: 'Michelada',
     bebidas: 'Michelada',
     tinto: 'Tinto',
@@ -720,6 +725,59 @@ const formatearFechaFicha = (fecha: string) =>
         month: 'long',
     });
 
+/** Plata vendida en un cuadre. Si el turno trae ventas, se usa ese número.
+ *  Si no, y la caja ya cerró, se estima con cierre − base − entradas + salidas. */
+const plataDeCuadre = (s: any): { monto: number; estimado: boolean } => {
+    const anotado = Number(s?.totalVentas) || 0;
+    if (anotado > 0) return { monto: anotado, estimado: false };
+    if (s?.estado !== 'cerrada' || s?.montoCierre == null) return { monto: 0, estimado: false };
+    const movs = Array.isArray(s.movimientos) ? s.movimientos : [];
+    const entradas = movs.filter((m: any) => m.tipo === 'entrada').reduce((a: number, m: any) => a + (Number(m.monto) || 0), 0);
+    const salidas = movs.filter((m: any) => m.tipo === 'salida').reduce((a: number, m: any) => a + (Number(m.monto) || 0), 0);
+    const delta = Math.round((Number(s.montoCierre) || 0) - (Number(s.montoApertura) || 0) - entradas + salidas);
+    if (delta <= 0) return { monto: 0, estimado: false };
+    return { monto: delta, estimado: true };
+};
+
+const partirCompromisoEnQuincenas = (c: any): { q1: number; q2: number } => {
+    const monto = Number(c?.monto) || 0;
+    if (c?.frecuencia === 'quincenal') return { q1: monto, q2: monto };
+    if (c?.frecuencia === 'solo_q1') return { q1: monto, q2: 0 };
+    if (c?.frecuencia === 'solo_q2') return { q1: 0, q2: monto };
+    const dia = Number(c?.diaDeCobro) || 1;
+    return dia <= 15 ? { q1: monto, q2: 0 } : { q1: 0, q2: monto };
+};
+
+const partirTopeProveedor = (item: any, temporadaBaja: boolean): { mensual: number; q1: number; q2: number } => {
+    const base = temporadaBaja && item?.montoBaja != null ? Number(item.montoBaja) || 0 : Number(item?.monto) || 0;
+    if (item?.frecuencia === 'Semanal') return { mensual: base * 4, q1: base * 2, q2: base * 2 };
+    if (item?.frecuencia === 'Quincenal') return { mensual: base * 2, q1: base, q2: base };
+    return { mensual: base, q1: base / 2, q2: base / 2 };
+};
+
+const textoPlano = (s: string) =>
+    (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+/** Cada caja paga sus facturas. La principal y la preventa comparten gaseosas, lácteos y dulces. */
+const bolsilloPorTexto = (texto: string): { id: string; etiqueta: string } | null => {
+    const n = textoPlano(texto);
+    if (!n.trim()) return null;
+    if (/helado/.test(n)) return { id: 'helados', etiqueta: 'Caja de helados' };
+    if (/mercato|mercado|verdura|plaza/.test(n)) return { id: 'mercado', etiqueta: 'Caja Mercato' };
+    if (/tinto|\bcafe\b/.test(n)) return { id: 'tintos', etiqueta: 'Caja de tintos' };
+    if (/preventa|gaseosa|coca|postobon|pepsi|lacteo|leche|yogur|alpina|dulce|confite|pan |harina|prueba/.test(n))
+        return { id: 'principal', etiqueta: 'Caja principal y preventa' };
+    if (/frito|empanada/.test(n)) return { id: 'fritos', etiqueta: 'Caja de fritos' };
+    if (/michelada|cerveza/.test(n)) return { id: 'micheladas', etiqueta: 'Caja de micheladas' };
+    if (/pinateria|pinata/.test(n)) return { id: 'pinateria', etiqueta: 'Caja de piñatería' };
+    if (/mekato|mecato/.test(n)) return { id: 'mecatos', etiqueta: 'Caja Mekato' };
+    if (/juego/.test(n)) return { id: 'juegos', etiqueta: 'Caja de juegos' };
+    if (/torta especial/.test(n)) return { id: 'tortas-especiales', etiqueta: 'Caja de tortas especiales' };
+    if (/torta/.test(n)) return { id: 'tortas', etiqueta: 'Caja de tortas' };
+    if (/principal|vitrina|pan caliente/.test(n)) return { id: 'principal', etiqueta: 'Caja principal y preventa' };
+    return null;
+};
+
 const describirProduccionIncompleta = (p: any): string[] => {
     const problemas: string[] = [];
     const masasChk = Array.isArray(p?.masas) ? p.masas : [];
@@ -770,8 +828,243 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
     const [activeRecentTab, setActiveRecentTab] = useState<string | null>(null);
     const [ventasCardExpanded, setVentasCardExpanded] = useState(false);
     const [compromisosCardExpanded, setCompromisosCardExpanded] = useState(false);
+    const [fichaCompromisoId, setFichaCompromisoId] = useState<string | null>(null);
+    const [fichaPanorama, setFichaPanorama] = useState<null | 'fijos' | 'nomina' | 'proveedores' | 'ventas' | 'vigia' | 'cajas' | 'quincenas' | 'balance'>(null);
+    const [panoramaAbierto, setPanoramaAbierto] = useState(false);
+    const [cajaPanoramaId, setCajaPanoramaId] = useState<string | null>(null);
+    const [panoramaIA, setPanoramaIA] = useState('');
+    const [pidiendoPanorama, setPidiendoPanorama] = useState(false);
+    const [vigiaIA, setVigiaIA] = useState('');
+    const [pidiendoVigia, setPidiendoVigia] = useState(false);
     /** Si true, muestra cierres fuera de la quincena/mes filtrado. */
     const [verTodasVentasDiarias, setVerTodasVentasDiarias] = useState(false);
+
+    const panoramaNegocio = useMemo(() => {
+        const mes = hoyLocal().slice(0, 7);
+        const diaHoy = Number(hoyLocal().slice(8, 10));
+        const quincenaDe = (fecha: string): 1 | 2 => (Number(fecha.slice(8, 10)) <= 15 ? 1 : 2);
+
+        const fijosLista = (Array.isArray(compromisos) ? compromisos : []).filter((c: any) => c.activo && !esCompromisoYaEnNomina(c));
+        const fijosDetalle = fijosLista.map((c: any) => {
+            const partes = partirCompromisoEnQuincenas(c);
+            return {
+                id: c.id,
+                nombre: c.nombre || 'Sin nombre',
+                categoria: c.categoria || '',
+                frecuencia: c.frecuencia || 'mensual',
+                dia: Number(c.diaDeCobro) || 0,
+                monto: Number(c.monto) || 0,
+                mensual: compromisoAMensual(c),
+                q1: partes.q1,
+                q2: partes.q2,
+            };
+        });
+        const totalFijos = fijosDetalle.reduce((s, c) => s + c.mensual, 0);
+
+        const trabajadores = Array.isArray(data.trabajadores) ? data.trabajadores : [];
+        const activos = trabajadores.filter((t: any) => String(t.estado || '').toLowerCase() === 'activo');
+        const nominaDetalle = activos.map((t: any) => {
+            const mesSalario = Number(t.salarioBase) || 0;
+            return { id: t.id, nombre: t.nombre || 'Sin nombre', mes: mesSalario, quincena: mesSalario / 2 };
+        });
+        const nomina = nominaDetalle.reduce((s, t) => s + t.mes, 0);
+
+        const proveedoresDetalle = (Array.isArray(presupuestosMinimos) ? presupuestosMinimos : []).map((item: any) => {
+            const partes = partirTopeProveedor(item, !!temporadaBaja);
+            const bolsillo = bolsilloPorTexto(`${item.proveedor || ''} ${item.nota || ''}`)
+                || { id: 'sin-caja', etiqueta: 'Sin caja asignada' };
+            return {
+                id: item.id,
+                nombre: item.proveedor || 'Proveedor',
+                frecuencia: item.frecuencia || 'Mensual',
+                monto: temporadaBaja && item.montoBaja != null ? Number(item.montoBaja) || 0 : Number(item.monto) || 0,
+                bolsilloId: bolsillo.id,
+                bolsilloEtiqueta: bolsillo.etiqueta,
+                ...partes,
+            };
+        });
+        const compras = proveedoresDetalle.reduce((s, p) => s + p.mensual, 0);
+
+        const ventasCaja = new Map<string, { etiqueta: string; q1: number; q2: number }>();
+        const sumarVentaCaja = (nombre: string, monto: number, q: 1 | 2) => {
+            if (monto <= 0) return;
+            const bolsillo = bolsilloPorTexto(nombre) || { id: `caja:${textoPlano(nombre) || 'otra'}`, etiqueta: nombre || 'Caja' };
+            const cur = ventasCaja.get(bolsillo.id) || { etiqueta: bolsillo.etiqueta, q1: 0, q2: 0 };
+            cur.etiqueta = bolsillo.etiqueta;
+            if (q === 1) cur.q1 += monto;
+            else cur.q2 += monto;
+            ventasCaja.set(bolsillo.id, cur);
+        };
+        const fechasConCuadre = new Set<string>();
+
+        const porDia = new Map<string, { pos: number; manual: number; cuadre: number; estimado: boolean; cajas: string[] }>();
+        const asegurar = (fecha: string) => {
+            if (!porDia.has(fecha)) porDia.set(fecha, { pos: 0, manual: 0, cuadre: 0, estimado: false, cajas: [] });
+            return porDia.get(fecha)!;
+        };
+        (Array.isArray(ventas) ? ventas : []).forEach((v: any) => {
+            const fecha = ymdLocal(v.fecha);
+            if (!fecha.startsWith(mes)) return;
+            asegurar(fecha).pos += Number(v.total) || 0;
+        });
+        (Array.isArray(ventasDiarias) ? ventasDiarias : []).forEach((v: any) => {
+            const fecha = ymdLocal(v.fecha);
+            if (!fecha.startsWith(mes)) return;
+            asegurar(fecha).manual += desgloseVentaDiaria(v).totalGeneral;
+        });
+        (Array.isArray(sesionesCaja) ? sesionesCaja : []).forEach((s: any) => {
+            const fecha = ymdLocal(s.fechaApertura);
+            if (!fecha.startsWith(mes)) return;
+            const plata = plataDeCuadre(s);
+            if (plata.monto <= 0) return;
+            const dia = asegurar(fecha);
+            dia.cuadre += plata.monto;
+            if (plata.estimado) dia.estimado = true;
+            const nombre = s.cajaNombre || s.vendedoraNombre || 'Caja';
+            if (!dia.cajas.includes(nombre)) dia.cajas.push(nombre);
+            fechasConCuadre.add(fecha);
+            sumarVentaCaja(nombre, plata.monto, quincenaDe(fecha));
+        });
+        (Array.isArray(ventasDiarias) ? ventasDiarias : []).forEach((v: any) => {
+            const fecha = ymdLocal(v.fecha);
+            if (!fecha.startsWith(mes) || fechasConCuadre.has(fecha)) return;
+            const q = quincenaDe(fecha);
+            Object.entries(normalizarCajasVenta(v.cajas)).forEach(([nombre, monto]) => {
+                if (nombre === 'Gastos/Salidas') return;
+                sumarVentaCaja(nombre, Number(monto) || 0, q);
+            });
+        });
+
+        const diasVenta = Array.from(porDia.entries())
+            .map(([fecha, d]) => {
+                let monto = 0;
+                let origen = '';
+                if (d.pos > 0) {
+                    monto = d.pos;
+                    origen = 'Tickets de venta';
+                } else if (d.cuadre > 0) {
+                    monto = d.cuadre;
+                    origen = d.estimado ? 'Cuadre: cierre menos la base' : 'Ventas anotadas en el cuadre';
+                } else if (d.manual > 0) {
+                    monto = d.manual;
+                    origen = 'Ventas del día';
+                }
+                return { fecha, monto, origen, cajas: d.cajas, quincena: quincenaDe(fecha) as 1 | 2 };
+            })
+            .filter(d => d.monto > 0)
+            .sort((a, b) => a.fecha.localeCompare(b.fecha));
+        const ventasQ1 = diasVenta.filter(d => d.quincena === 1).reduce((s, d) => s + d.monto, 0);
+        const ventasQ2 = diasVenta.filter(d => d.quincena === 2).reduce((s, d) => s + d.monto, 0);
+        const ventasMes = ventasQ1 + ventasQ2;
+
+        const gastosMes = (Array.isArray(gastos) ? gastos : []).filter((g: any) => {
+            if (g.estado === 'anulado') return false;
+            return ymdLocal(g.fecha).startsWith(mes);
+        }).map((g: any) => ({
+            id: g.id,
+            fecha: ymdLocal(g.fecha),
+            descripcion: g.descripcion || g.categoria || 'Gasto',
+            categoria: g.categoria || '',
+            monto: Number(g.monto) || 0,
+            proveedorId: g.proveedorId,
+            quincena: quincenaDe(ymdLocal(g.fecha)) as 1 | 2,
+        }));
+        const gastosQ1 = gastosMes.filter(g => g.quincena === 1);
+        const gastosQ2 = gastosMes.filter(g => g.quincena === 2);
+        const pagadoProveedores = gastosMes.filter(g => g.categoria === 'Materia Prima' || !!g.proveedorId);
+
+        const fijosQ1 = fijosDetalle.reduce((s, c) => s + c.q1, 0);
+        const fijosQ2 = fijosDetalle.reduce((s, c) => s + c.q2, 0);
+        const nominaQ = nomina / 2;
+        const topeQ1 = proveedoresDetalle.reduce((s, p) => s + p.q1, 0);
+        const topeQ2 = proveedoresDetalle.reduce((s, p) => s + p.q2, 0);
+        const compromisoQ1 = fijosQ1 + nominaQ + topeQ1;
+        const compromisoQ2 = fijosQ2 + nominaQ + topeQ2;
+        const ordenCaja = ['principal', 'helados', 'mercado', 'tintos', 'fritos', 'micheladas', 'tortas', 'tortas-especiales', 'mecatos', 'juegos', 'pinateria', 'sin-caja'];
+        const idsCaja = new Set<string>([...ventasCaja.keys(), ...proveedoresDetalle.map((p: any) => p.bolsilloId)]);
+        const filasCaja = Array.from(idsCaja).map(id => {
+            const venta = ventasCaja.get(id);
+            const lista = proveedoresDetalle.filter((p: any) => p.bolsilloId === id);
+            return {
+                id,
+                etiqueta: venta?.etiqueta || lista[0]?.bolsilloEtiqueta || 'Caja',
+                ventasQ1: venta?.q1 || 0,
+                ventasQ2: venta?.q2 || 0,
+                topeQ1: lista.reduce((s: number, p: any) => s + p.q1, 0),
+                topeQ2: lista.reduce((s: number, p: any) => s + p.q2, 0),
+                proveedores: lista.map((p: any) => ({ id: p.id, nombre: p.nombre, q1: p.q1, q2: p.q2 })),
+            };
+        }).filter(f => f.ventasQ1 + f.ventasQ2 + f.topeQ1 + f.topeQ2 > 0)
+            .sort((a, b) => {
+                const ia = ordenCaja.indexOf(a.id);
+                const ib = ordenCaja.indexOf(b.id);
+                return (ia < 0 ? 50 : ia) - (ib < 0 ? 50 : ib);
+            });
+        const total = totalFijos + nomina + compras;
+        return {
+            mes, diaHoy,
+            totalFijos, nomina, compras, ventasMes, ventasQ1, ventasQ2, total,
+            cubre: total > 0 ? (ventasMes / total) * 100 : 0,
+            sobra: ventasMes - total,
+            compromisoQ1, compromisoQ2,
+            cubreQ1: compromisoQ1 > 0 ? (ventasQ1 / compromisoQ1) * 100 : 0,
+            cubreQ2: compromisoQ2 > 0 ? (ventasQ2 / compromisoQ2) * 100 : 0,
+            sobraQ1: ventasQ1 - compromisoQ1,
+            sobraQ2: ventasQ2 - compromisoQ2,
+            nombresNomina: nominaDetalle.map(t => t.nombre),
+            nombresFijos: fijosDetalle.map(c => c.nombre),
+            fijosDetalle, nominaDetalle, proveedoresDetalle, diasVenta,
+            gastosQ1, gastosQ2, pagadoProveedores,
+            fijosQ1, fijosQ2, nominaQ, topeQ1, topeQ2, filasCaja,
+            gastadoQ1: gastosQ1.reduce((s, g) => s + g.monto, 0),
+            gastadoQ2: gastosQ2.reduce((s, g) => s + g.monto, 0),
+            facturasQ1: pagadoProveedores.filter(g => g.quincena === 1).reduce((s, g) => s + g.monto, 0),
+            facturasQ2: pagadoProveedores.filter(g => g.quincena === 2).reduce((s, g) => s + g.monto, 0),
+        };
+    }, [compromisos, data.trabajadores, presupuestosMinimos, temporadaBaja, ventas, ventasDiarias, sesionesCaja, gastos]);
+
+    const vigiaVentas = useMemo(() => vigilarCuadres(sesionesCaja), [sesionesCaja]);
+    const comparativaCajas = useMemo(() => compararEscalera(sesionesCaja), [sesionesCaja]);
+
+    const pedirPanoramaIA = async () => {
+        setPidiendoPanorama(true);
+        setPanoramaIA('');
+        try {
+            const { consultarAgente } = await import('@/constants/agentes');
+            const p = panoramaNegocio;
+            const prompt = `Eres el contable de Panadería Dulce Placer. Compara ventas contra compromisos, sin mezclar los grupos.
+Ventas 1ª quincena (cuadres de caja, días 1 a 15): ${p.ventasQ1}.
+Ventas 2ª quincena (días 16 al fin): ${p.ventasQ2}.
+Ventas del mes (suma de las dos): ${p.ventasMes}.
+Fijos del local al mes (lo anotado, no un extracto bancario): ${p.totalFijos}. En la 1ª: ${p.fijosQ1}. En la 2ª: ${p.fijosQ2}. Nombres: ${p.nombresFijos.join(', ') || 'ninguno'}.
+Nómina del mes = suma de salarios base de activas, sin restar faltas ni créditos: ${p.nomina}. Cada quincena toca la mitad: ${p.nominaQ}. Personas: ${p.nombresNomina.join(', ') || 'ninguna'}.
+Tope de proveedores de la 1ª quincena (2 semanas si es semanal, no el mes × 4): ${p.topeQ1}. De la 2ª: ${p.topeQ2}. El mes junto sería ${p.compras}, pero no se cobra entero en una quincena.
+Compromisos de la 1ª quincena (fijos + media nómina + tope de 2 semanas): ${p.compromisoQ1}. Ventas de la 1ª cubren el ${p.cubreQ1.toFixed(0)}%. Sobra o falta en la 1ª: ${p.sobraQ1}.
+Compromisos de la 2ª: ${p.compromisoQ2}. Ventas de la 2ª cubren el ${p.cubreQ2.toFixed(0)}%. Sobra o falta en la 2ª: ${p.sobraQ2}.
+Egresos ya registrados en la 1ª: ${p.gastadoQ1}. En la 2ª: ${p.gastadoQ2}. Hoy es día ${p.diaHoy}. Si el día es 15 o menos, la caja de la noche de hoy puede no estar cerrada y esas ventas todavía no entran.
+Responde en español claro, con viñetas: 1) cómo va SOLO la quincena en curso, sin decir que faltan los compromisos del mes entero, 2) de dónde sale el tope de cada proveedor, 3) una decisión para esta quincena. No inventes cifras distintas a las que te di.`;
+            await consultarAgente('contable', prompt, (chunk: string) => setPanoramaIA(prev => prev + chunk));
+        } catch (e) {
+            console.error(e);
+            toast.error('No se pudo consultar a la IA contable');
+        } finally {
+            setPidiendoPanorama(false);
+        }
+    };
+
+    const pedirVigia = async () => {
+        setPidiendoVigia(true);
+        setVigiaIA('');
+        try {
+            const { consultarAgente } = await import('@/constants/agentes');
+            await consultarAgente('vigia-ventas', vigiaVentas.textoParaAgente, (chunk: string) => setVigiaIA(prev => prev + chunk));
+        } catch (e) {
+            console.error(e);
+            toast.error('No se pudo consultar al vigía de ventas');
+        } finally {
+            setPidiendoVigia(false);
+        }
+    };
 
     /**
      * Sincronía Ventas del Día ↔ Control de Caja: busca los cierres REALES de caja
@@ -782,15 +1075,20 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
      */
     const cajaRealDelDia = useMemo(() => {
         if (!formVenta?.fecha || !Array.isArray(sesionesCaja)) return null;
+        // 🩹 2026-10-12 (AUTORIZO Gonzalo): antes (1) sumaba "ventas del POS", que siempre son $0
+        // porque las ventas no se registran una por una → la caja real nunca aparecía; (2) tomaba la
+        // fecha en hora UTC (los cierres después de las 7 pm caían al día siguiente); (3) el turno
+        // "Tarde-Noche" no coincidía con las cajas nuevas "Tarde"/"Noche". Ahora: fecha local de
+        // apertura, turno por la hora en que abrió (antes de 12 = Mañana) y monto = cierre − base.
         const cerradas = sesionesCaja.filter((s: any) => {
-            if (s.estado !== 'cerrada') return false;
-            const fechaSesion = (s.fechaCierre || s.fechaApertura || '').slice(0, 10);
-            if (fechaSesion !== formVenta.fecha) return false;
+            if (s.estado !== 'cerrada' || !s.fechaApertura) return false;
+            if (ymdLocal(s.fechaApertura) !== formVenta.fecha) return false;
             if (!formVenta.turno || formVenta.turno === 'Día Completo') return true;
-            return !s.turno || s.turno === formVenta.turno;
+            const esManana = new Date(s.fechaApertura).getHours() < 12;
+            return formVenta.turno === 'Mañana' ? esManana : !esManana;
         });
         if (cerradas.length === 0) return null;
-        const totalCaja = cerradas.reduce((s: number, c: any) => s + (Number(c.totalVentasEfectivo ?? c.totalVentas) || 0), 0);
+        const totalCaja = cerradas.reduce((s: number, c: any) => s + Math.max(0, (Number(c.montoCierre) || 0) - (Number(c.montoApertura) || 0)), 0);
         const totalCredito = cerradas.reduce((s: number, c: any) => s + (Number(c.totalCreditos) || 0), 0);
         const nombres = Array.from(new Set(cerradas.map((c: any) => c.cajaNombre).filter(Boolean)));
         return { numCajas: cerradas.length, totalCaja, totalCredito, nombres };
@@ -1172,7 +1470,7 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                 cantidad: Number(newLinea.cantidad) || 0,
                 montoReal: Number(newLinea.montoReal) || 0,
             }],
-            fechaCompra: new Date().toISOString().slice(0, 10),
+            fechaCompra: hoyLocal(),
         } : l);
         saveCompras(updated);
         setNewLinea({ producto: '', cantidad: '', montoReal: '' });
@@ -1529,6 +1827,10 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
 
                     {vista === null && (
                     <>
+                    <button type="button" onClick={() => setVista('comparar')} className="w-full rounded-3xl border-4 border-slate-950 bg-sky-100 p-5 text-left">
+                        <p className="text-2xl font-black text-slate-950">Comparar cajas</p>
+                        <p className="text-lg font-bold text-slate-950">Hoy, ayer y anteayer. Mañana, tarde y noche. Quincenas, días bajos y bajones.</p>
+                    </button>
                     {/* ── ESTADO FINANCIERO DEL NEGOCIO (P&L) ── */}
                     <Card className="rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/10 to-blue-950/5 shadow-xl overflow-hidden relative">
                         <div className="absolute top-0 right-0 p-4 opacity-10">
@@ -2099,6 +2401,77 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                     </>
                     )}
 
+                    {vista === 'comparar' && (
+                    <div className="space-y-4">
+                        <button type="button" onClick={() => setVista(null)} className="text-lg font-black text-slate-950">← Volver</button>
+                        <h2 className="text-3xl font-black text-slate-950">Comparar cajas</h2>
+                        <p className="text-lg text-slate-950">Lo vendido en cada cuadre. Si la caja de hoy sigue abierta, la noche todavía no entra.</p>
+                        {comparativaCajas.recientes.every(d => d.total <= 0) && (
+                            <p className="text-lg font-bold text-slate-950">Todavía no hay cuadres con ventas para comparar.</p>
+                        )}
+                        {comparativaCajas.recientes.map(d => (
+                            <div key={d.fecha} className="rounded-2xl border-2 border-slate-950 p-4 space-y-2">
+                                <p className="text-2xl font-black text-slate-950">{d.etiqueta} · {d.nombreDia}</p>
+                                <p className="text-xl font-black text-slate-950">{formatCurrency(d.total)}{d.abierta ? ' · falta un cierre' : ''}</p>
+                                {d.turnos.length === 0 && <p className="text-base text-slate-950">Sin cuadre en este día.</p>}
+                                {d.turnos.map(t => (
+                                    <div key={t.turno}>
+                                        <p className="text-lg font-black text-slate-950">{t.turno}: {formatCurrency(t.monto)}</p>
+                                        <p className="text-base text-slate-950">{t.cajas.map(c => `${c.nombre} ${formatCurrency(c.monto)}`).join(' · ') || 'Sin cajas'}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        ))}
+                        {comparativaCajas.porCaja.length > 0 && (
+                            <div className="rounded-2xl border-2 border-slate-950 p-4 space-y-2">
+                                <p className="text-2xl font-black text-slate-950">Cada caja, estos tres días</p>
+                                {comparativaCajas.porCaja.map(c => (
+                                    <p key={c.nombre} className="text-lg text-slate-950">
+                                        <span className="font-black">{c.nombre}.</span> Hoy {formatCurrency(c.hoy)} · Ayer {formatCurrency(c.ayer)} · Anteayer {formatCurrency(c.anteayer)}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+                        {comparativaCajas.quincenas.length > 0 && (
+                            <div className="rounded-2xl border-2 border-slate-950 p-4 space-y-2">
+                                <p className="text-2xl font-black text-slate-950">Quincenas</p>
+                                {comparativaCajas.quincenas.map(q => (
+                                    <p key={q.clave} className="text-lg text-slate-950">
+                                        <span className="font-black">{q.etiqueta}:</span> {formatCurrency(q.total)} en {q.dias} días. Promedio {formatCurrency(q.promedio)} al día.
+                                    </p>
+                                ))}
+                            </div>
+                        )}
+                        {comparativaCajas.diasBajos.length > 0 && (
+                            <div className="rounded-2xl border-2 border-rose-800 bg-rose-50 p-4 space-y-2">
+                                <p className="text-2xl font-black text-rose-900">Días más bajos</p>
+                                {comparativaCajas.diasBajos.map(d => (
+                                    <p key={d.fecha} className="text-lg text-slate-950">{d.nombreDia} {d.fecha.slice(8)}: {formatCurrency(d.monto)}</p>
+                                ))}
+                            </div>
+                        )}
+                        {comparativaCajas.turnosBajos.length > 0 && (
+                            <div className="rounded-2xl border-2 border-amber-800 bg-amber-50 p-4 space-y-2">
+                                <p className="text-2xl font-black text-amber-950">Turnos más bajos</p>
+                                {comparativaCajas.turnoTipico[0] && (
+                                    <p className="text-lg text-slate-950">El turno que suele vender menos es {comparativaCajas.turnoTipico[0].turno}, cerca de {formatCurrency(comparativaCajas.turnoTipico[0].mediana)}.</p>
+                                )}
+                                {comparativaCajas.turnosBajos.map(t => (
+                                    <p key={`${t.fecha}-${t.turno}`} className="text-lg text-slate-950">{t.nombreDia} {t.fecha.slice(8)} · {t.turno}: {formatCurrency(t.monto)}</p>
+                                ))}
+                            </div>
+                        )}
+                        {comparativaCajas.bajones.length > 0 && (
+                            <div className="rounded-2xl border-2 border-rose-800 p-4 space-y-2">
+                                <p className="text-2xl font-black text-rose-900">Bajones irregulares</p>
+                                {comparativaCajas.bajones.map(b => (
+                                    <p key={b} className="text-lg text-slate-950">{b}</p>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                    )}
+
                     {vista === 'compromiso' && (
                     <>
                     <button type="button" onClick={() => setVista(null)} className="text-[11px] font-black uppercase tracking-widest text-rose-500 hover:text-rose-600 flex items-center gap-1 mb-2">
@@ -2130,7 +2503,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                 className="h-5 text-[9px] font-black text-rose-500 hover:text-rose-700 px-1"
                                                 onClick={() => setFormCompromiso({
                                                     nombre: '', monto: '', categoria: 'Otros' as GastoCategoria,
-                                                    diaDeCobro: '', esPropietario: false, persona: ''
+                                                    diaDeCobro: '', esPropietario: false, persona: '',
+                                                    frecuencia: 'mensual', ventanaDias: '2', notas: ''
                                                 })}
                                             >
                                                 Cancelar
@@ -2152,13 +2526,17 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                             <option value="quincenal">Ambas quincenas (Ej. Nómina)</option>
                                             <option value="solo_q1">1ra Quincena (Días 1-15, Ej. Luz)</option>
                                             <option value="solo_q2">2da Quincena (Días 16-31, Ej. Agua)</option>
-                                            <option value="mensual">Mensual (Día exacto inamovible)</option>
+                                            <option value="mensual">Mensual (alrededor de un día)</option>
                                         </select>
-                                        <Input placeholder="Día (1-31)" type="number" value={formCompromiso.diaDeCobro}
+                                        <Input placeholder="Día aprox. (1-31)" type="number" value={formCompromiso.diaDeCobro}
                                             onChange={e => setFormCompromiso(p => ({ ...p, diaDeCobro: e.target.value }))}
                                             className="h-9 text-xs rounded-xl"
-                                            disabled={formCompromiso.frecuencia !== 'mensual'} 
-                                            title="Solo aplica para pagos mensuales en un día exacto" />
+                                            title="Día más o menos en que toca pagar. Puede correrse unos días." />
+                                        <Input placeholder="± días" type="number" min={0} max={7}
+                                            value={formCompromiso.ventanaDias ?? '2'}
+                                            onChange={e => setFormCompromiso((p: any) => ({ ...p, ventanaDias: e.target.value }))}
+                                            className="h-9 text-xs rounded-xl"
+                                            title="Holgura: cuántos días antes o después puede caer el pago" />
                                         <select value={formCompromiso.categoria}
                                             onChange={e => setFormCompromiso(p => ({ ...p, categoria: e.target.value as GastoCategoria }))}
                                             className="h-9 text-xs rounded-xl border border-input bg-background px-2">
@@ -2178,38 +2556,54 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                             onChange={e => setFormCompromiso(p => ({ ...p, persona: e.target.value }))}
                                             className="h-9 text-sm rounded-xl" />
                                     )}
+                                    <Input placeholder="Notas (ej. llega entre el 8 y el 12)" value={formCompromiso.notas ?? ''}
+                                        onChange={e => setFormCompromiso((p: any) => ({ ...p, notas: e.target.value }))}
+                                        className="h-9 text-sm rounded-xl" />
                                     <Button onClick={handleAddCompromiso} size="sm" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs h-9">
                                         <Plus className="w-4 h-4 mr-1" /> {(formCompromiso as any).id ? 'Actualizar compromiso' : 'Agregar compromiso'}
                                     </Button>
                                 </div>
 
-                                {/* Lista de compromisos */}
-                                {compromisos.length === 0 && (
-                                    <p className="text-center text-xs text-muted-foreground py-4">Sin compromisos registrados aún</p>
+                                {/* Lista de compromisos — los que ya van en Nómina no se muestran aquí */}
+                                {compromisos.filter((c: any) => !esCompromisoYaEnNomina(c)).length === 0 && (
+                                    <p className="text-center text-xs text-muted-foreground py-4">Sin compromisos fijos del local. Los pagos de nómina se llevan en el módulo Nómina.</p>
                                 )}
-                                {compromisos.map(c => (
+                                {compromisos.filter((c: any) => !esCompromisoYaEnNomina(c)).map((c: any) => {
+                                    const abierta = fichaCompromisoId === c.id;
+                                    const hoy = new Date();
+                                    const dias = diasObjetivoCompromiso(c, hoy.getFullYear(), hoy.getMonth());
+                                    const diaCerca = dias.reduce((mejor: number, d: number) => Math.abs(hoy.getDate() - d) < Math.abs(hoy.getDate() - mejor) ? d : mejor, dias[0] || 1);
+                                    const clave = claveCicloCompromiso(c, hoy, diaCerca);
+                                    const pagado = (c.ciclosPagados || []).includes(clave);
+                                    return (
                                     <div key={c.id} className={cn(
-                                        "flex items-center gap-3 rounded-2xl p-3 border transition-all",
-                                        c.activo ? "bg-card/40 border-white/5" : "bg-slate-500/5 border-white/3 opacity-50"
+                                        "rounded-2xl border transition-all",
+                                        c.activo ? "bg-card/40 border-white/5" : "bg-slate-500/5 border-white/3 opacity-50",
+                                        abierta && "ring-2 ring-indigo-400"
                                     )}>
+                                        <div className="flex items-center gap-3 p-3">
                                         <button onClick={() => handleToggleCompromiso(c.id)} className="shrink-0">
                                             {c.activo
                                                 ? <CheckCircle2 className="w-4 h-4 text-emerald-500" />
                                                 : <XCircle className="w-4 h-4 text-slate-400" />}
                                         </button>
-                                        <div className="flex-1 min-w-0">
+                                        <button type="button" onClick={() => setFichaCompromisoId(abierta ? null : c.id)} className="flex-1 min-w-0 text-left">
                                             <div className="flex items-center gap-1.5">
                                                 {c.esPropietario && <User className="w-3 h-3 text-amber-500 shrink-0" />}
                                                 <p className="text-sm font-bold truncate">{c.nombre}</p>
                                                 {c.persona && <span className="text-[10px] text-amber-500 font-black">({c.persona})</span>}
+                                                {pagado && <span className="text-[9px] font-black text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded-full">PAGADO</span>}
                                             </div>
                                             <p className="text-[10px] text-muted-foreground">
+                                                Alrededor del día {c.diaDeCobro || '—'} (±{c.ventanaDias ?? 2} días)
+                                                {' · '}
                                                 {c.frecuencia === 'quincenal' ? 'Ambas quincenas' : 
-                                                 c.frecuencia === 'solo_q1' ? '1ra Quincena (Días 1-15)' :
-                                                 c.frecuencia === 'solo_q2' ? '2da Quincena (Días 16-31)' :
-                                                 `Mensual (Día ${c.diaDeCobro})`} · {c.categoria}
+                                                 c.frecuencia === 'solo_q1' ? '1ra quincena' :
+                                                 c.frecuencia === 'solo_q2' ? '2da quincena' : 'Mensual'}
+                                                {' · '}{c.categoria}
+                                                {' · '}Toca para ver la ficha
                                             </p>
-                                        </div>
+                                        </button>
                                         <p className="text-sm font-black text-rose-400 shrink-0">{formatCurrency(c.monto)}</p>
                                         <div className="flex items-center gap-2">
                                             <button 
@@ -2223,6 +2617,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                         esPropietario: !!c.esPropietario,
                                                         persona: c.persona || '',
                                                         frecuencia: c.frecuencia || 'mensual',
+                                                        ventanaDias: String(c.ventanaDias ?? 2),
+                                                        notas: c.notas || '',
                                                     } as any);
                                                     toast.info("Compromiso cargado en el formulario para editar.");
                                                 }}
@@ -2234,8 +2630,322 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
                                                 <Trash2 className="w-3.5 h-3.5" />
                                             </button>
                                         </div>
+                                        </div>
+                                        {abierta && (
+                                            <div className="px-3 pb-3 space-y-2 border-t border-white/5 pt-2 text-xs">
+                                                <p className="font-black uppercase tracking-widest text-[10px] text-indigo-500">Ficha de {c.nombre}</p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    <div><span className="text-muted-foreground">Monto</span><p className="font-black">{formatCurrency(c.monto)}</p></div>
+                                                    <div><span className="text-muted-foreground">Categoría</span><p className="font-black">{c.categoria}</p></div>
+                                                    <div><span className="text-muted-foreground">Día aproximado</span><p className="font-black">Día {c.diaDeCobro} ± {c.ventanaDias ?? 2}</p></div>
+                                                    <div><span className="text-muted-foreground">Este ciclo</span><p className="font-black">{pagado ? 'Ya pagado' : 'Pendiente'}</p></div>
+                                                </div>
+                                                {c.notas && <p className="text-slate-500">{c.notas}</p>}
+                                                {(c.historialPagos || []).length > 0 && (
+                                                    <div className="space-y-0.5">
+                                                        <p className="font-bold text-slate-500">Pagos anotados</p>
+                                                        {(c.historialPagos || []).slice(-4).reverse().map((h: any, i: number) => (
+                                                            <p key={i} className="text-[11px]">{h.fecha} · {formatCurrency(h.monto)}</p>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                {!pagado && (
+                                                    <Button type="button" size="sm" className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs h-8"
+                                                        onClick={() => data.handleMarcarCompromisoPagado?.(c.id)}>
+                                                        Marcar pagado este ciclo
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
-                                ))}
+                                    );
+                                })}
+                            </CardContent>
+                            )}
+                        </Card>
+
+                        <Card className="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                            <button type="button" onClick={() => setPanoramaAbierto(v => !v)} className="w-full text-left px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-50">
+                                <div className="min-w-0">
+                                    <p className="text-xl font-black text-slate-950">Realidad de esta quincena</p>
+                                    <p className={cn("text-2xl font-black", (panoramaNegocio.diaHoy <= 15 ? panoramaNegocio.ventasQ1 - panoramaNegocio.gastadoQ1 : panoramaNegocio.ventasQ2 - panoramaNegocio.gastadoQ2) >= 0 ? "text-emerald-800" : "text-rose-700")}>
+                                        Queda {formatCurrency(panoramaNegocio.diaHoy <= 15 ? panoramaNegocio.ventasQ1 - panoramaNegocio.gastadoQ1 : panoramaNegocio.ventasQ2 - panoramaNegocio.gastadoQ2)}
+                                    </p>
+                                    <p className="text-base font-bold text-slate-950">
+                                        Entró {formatCurrency(panoramaNegocio.diaHoy <= 15 ? panoramaNegocio.ventasQ1 : panoramaNegocio.ventasQ2)}
+                                        {' · '}Salió {formatCurrency(panoramaNegocio.diaHoy <= 15 ? panoramaNegocio.gastadoQ1 : panoramaNegocio.gastadoQ2)}
+                                    </p>
+                                </div>
+                                <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center shrink-0 text-slate-950">
+                                    {panoramaAbierto ? <ChevronUp className="w-6 h-6" /> : <ChevronDown className="w-6 h-6" />}
+                                </div>
+                            </button>
+                            {panoramaAbierto && (
+                            <CardContent className="space-y-3 border-t border-slate-200 pt-4">
+                                {(() => {
+                                    const q1 = panoramaNegocio.diaHoy <= 15;
+                                    const entro = q1 ? panoramaNegocio.ventasQ1 : panoramaNegocio.ventasQ2;
+                                    const facturas = q1 ? panoramaNegocio.facturasQ1 : panoramaNegocio.facturasQ2;
+                                    const salio = q1 ? panoramaNegocio.gastadoQ1 : panoramaNegocio.gastadoQ2;
+                                    const otros = Math.max(0, salio - facturas);
+                                    const queda = entro - salio;
+                                    return (
+                                        <div className="rounded-2xl border-2 border-slate-950 p-4 space-y-2">
+                                            <p className="text-lg font-black text-slate-950">Esta es la realidad registrada</p>
+                                            <p className="text-base text-slate-950">Entró en los cuadres: <span className="font-black">{formatCurrency(entro)}</span></p>
+                                            <p className="text-base text-slate-950">Salió en facturas de proveedor: <span className="font-black">{formatCurrency(facturas)}</span></p>
+                                            <p className="text-base text-slate-950">Salió en otros egresos: <span className="font-black">{formatCurrency(otros)}</span></p>
+                                            <p className={cn("text-2xl font-black", queda >= 0 ? "text-emerald-800" : "text-rose-700")}>
+                                                {queda >= 0 ? 'Queda' : 'Falta'} {formatCurrency(Math.abs(queda))}
+                                            </p>
+                                            <p className="text-base font-bold text-slate-950">
+                                                Fijos anotados {formatCurrency(q1 ? panoramaNegocio.fijosQ1 : panoramaNegocio.fijosQ2)} y nómina {formatCurrency(panoramaNegocio.nominaQ)} no se restan aquí. Solo se restan cuando queden guardados como egreso.
+                                            </p>
+                                            <p className="text-base font-bold text-slate-950">El tope de proveedores no se resta. Es un máximo, no plata que ya salió. Falta el cierre de esta noche si la caja sigue abierta.</p>
+                                        </div>
+                                    );
+                                })()}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-base">
+                                    <button type="button" onClick={() => setFichaPanorama(fichaPanorama === 'fijos' ? null : 'fijos')} className={cn("rounded-2xl bg-violet-100 p-4 text-left", fichaPanorama === 'fijos' && "ring-2 ring-violet-700")}>
+                                        <p className="text-sm font-black uppercase text-violet-900">Fijos de esta quincena</p>
+                                        <p className="text-2xl font-black text-slate-950">{formatCurrency(panoramaNegocio.diaHoy <= 15 ? panoramaNegocio.fijosQ1 : panoramaNegocio.fijosQ2)}</p>
+                                        <p className="text-base font-bold text-slate-900">Toca para ver cada uno</p>
+                                    </button>
+                                    <button type="button" onClick={() => setFichaPanorama(fichaPanorama === 'nomina' ? null : 'nomina')} className={cn("rounded-2xl bg-emerald-100 p-4 text-left", fichaPanorama === 'nomina' && "ring-2 ring-emerald-700")}>
+                                        <p className="text-sm font-black uppercase text-emerald-900">Nómina de esta quincena</p>
+                                        <p className="text-2xl font-black text-emerald-950">{formatCurrency(panoramaNegocio.nominaQ)}</p>
+                                        <p className="text-base font-bold text-slate-900">Toca para ver cada salario</p>
+                                    </button>
+                                    <button type="button" onClick={() => setFichaPanorama(fichaPanorama === 'proveedores' ? null : 'proveedores')} className={cn("rounded-2xl bg-amber-100 p-4 text-left", fichaPanorama === 'proveedores' && "ring-2 ring-amber-700")}>
+                                        <p className="text-sm font-black uppercase text-amber-950">Proveedores de esta quincena</p>
+                                        <p className="text-2xl font-black text-slate-950">{formatCurrency(panoramaNegocio.diaHoy <= 15 ? panoramaNegocio.topeQ1 : panoramaNegocio.topeQ2)}</p>
+                                        <p className="text-base font-bold text-slate-900">Tope. Toca para ver cada uno</p>
+                                    </button>
+                                    <button type="button" onClick={() => setFichaPanorama(fichaPanorama === 'ventas' ? null : 'ventas')} className={cn("rounded-2xl bg-sky-100 border-2 border-sky-800 p-4 text-left", fichaPanorama === 'ventas' && "ring-2 ring-sky-800")}>
+                                        <p className="text-sm font-black uppercase text-sky-950">{panoramaNegocio.diaHoy <= 15 ? 'Ventas 1ª quincena' : 'Ventas 2ª quincena'}</p>
+                                        <p className="text-2xl font-black text-slate-950">{formatCurrency(panoramaNegocio.diaHoy <= 15 ? panoramaNegocio.ventasQ1 : panoramaNegocio.ventasQ2)}</p>
+                                        <p className="text-base font-bold text-slate-900">Toca para ver día por día</p>
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    {([
+                                        ['vigia', 'Vigía'],
+                                        ['cajas', 'Por caja'],
+                                        ['quincenas', 'Quincenas'],
+                                        ['balance', 'Balance'],
+                                    ] as const).map(([id, label]) => (
+                                        <button key={id} type="button" onClick={() => setFichaPanorama(fichaPanorama === id ? null : id)} className={cn("rounded-xl border-2 border-slate-900 px-3 py-3 text-base font-black text-slate-950", fichaPanorama === id ? "bg-slate-950 text-white" : "bg-white")}>
+                                            {label}
+                                        </button>
+                                    ))}
+                                </div>
+                                {fichaPanorama === 'vigia' && (
+                                <div className={cn(
+                                    "rounded-2xl border-2 p-4 space-y-3",
+                                    vigiaVentas.nivel === 'bajon' ? "border-rose-700 bg-rose-50" : vigiaVentas.nivel === 'ojo' ? "border-amber-800 bg-amber-50" : "border-emerald-800 bg-emerald-50"
+                                )}>
+                                    <p className="text-xl font-black text-slate-950">Vigía de cuadres y ventas</p>
+                                    <p className={cn("text-2xl font-black", vigiaVentas.nivel === 'bajon' ? "text-rose-800" : vigiaVentas.nivel === 'ojo' ? "text-amber-950" : "text-emerald-900")}>{vigiaVentas.titulo}</p>
+                                    <p className="text-lg text-slate-950">{vigiaVentas.detalle}</p>
+                                    {vigiaVentas.cajas.length > 0 && (
+                                        <div className="space-y-1">
+                                            {vigiaVentas.cajas.map(c => (
+                                                <p key={c.nombre} className="text-base text-slate-950">
+                                                    <span className="font-black">{c.nombre}:</span> {formatCurrency(c.monto)}
+                                                    {c.muestras >= 2 ? ` · otros ${vigiaVentas.nombreDia}: ${formatCurrency(c.referencia)}` : ''}
+                                                </p>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <Button type="button" onClick={pedirVigia} disabled={pidiendoVigia} className="w-full rounded-xl bg-slate-950 hover:bg-slate-800 text-white font-black text-base h-12">
+                                        {pidiendoVigia ? 'El vigía está mirando…' : 'Preguntarle al vigía si es normal'}
+                                    </Button>
+                                    {vigiaIA && (
+                                        <div className="text-base text-slate-950 whitespace-pre-wrap leading-relaxed rounded-2xl bg-white border border-slate-900 p-4">{vigiaIA}</div>
+                                    )}
+                                </div>
+                                )}
+                                {fichaPanorama === 'cajas' && (
+                                <div className="rounded-2xl border-2 border-slate-950 p-4 space-y-2">
+                                    <p className="text-lg font-black text-slate-950">Toca una caja para ver sus facturas</p>
+                                    {panoramaNegocio.filasCaja.map((fila: any) => {
+                                        const qActiva = panoramaNegocio.diaHoy <= 15;
+                                        const ventasFila = qActiva ? fila.ventasQ1 : fila.ventasQ2;
+                                        const facturas = qActiva ? fila.topeQ1 : fila.topeQ2;
+                                        const extra = fila.id === 'principal' ? (qActiva ? panoramaNegocio.fijosQ1 : panoramaNegocio.fijosQ2) + panoramaNegocio.nominaQ : 0;
+                                        const sale = ventasFila - facturas - extra;
+                                        const abierta = cajaPanoramaId === fila.id;
+                                        return (
+                                            <button key={fila.id} type="button" onClick={() => setCajaPanoramaId(abierta ? null : fila.id)} className="w-full text-left rounded-xl bg-white border-2 border-slate-300 p-3">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <p className="text-lg font-black text-slate-950">{fila.etiqueta}</p>
+                                                    <p className={cn("text-lg font-black shrink-0", sale >= 0 ? "text-emerald-800" : "text-rose-700")}>{formatCurrency(sale)}</p>
+                                                </div>
+                                                {abierta && (
+                                                    <div className="mt-2 space-y-1">
+                                                        <p className="text-base text-slate-950">Vendió {formatCurrency(ventasFila)} · Facturas {formatCurrency(facturas)}</p>
+                                                        {fila.id === 'principal' && <p className="text-base text-slate-950">Arriendo, servicios y nómina {formatCurrency(extra)}</p>}
+                                                        {fila.proveedores.length > 0 && <p className="text-base text-slate-950">{fila.proveedores.map((p: any) => `${p.nombre} ${formatCurrency(qActiva ? p.q1 : p.q2)}`).join(' · ')}</p>}
+                                                        {fila.id === 'sin-caja' && <p className="text-base font-bold text-amber-950">Estos nombres no se restan a la principal.</p>}
+                                                    </div>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                                )}
+                                {fichaPanorama === 'fijos' && (
+                                    <div className="rounded-2xl border border-violet-300 p-4 space-y-3 text-base max-h-[28rem] overflow-auto">
+                                        <p className="text-lg font-black text-violet-950">Cada fijo, y en qué quincena toca</p>
+                                        <p className="text-base text-slate-950">Este número es lo que tú anotaste en compromisos. No sale del banco. Si es de las dos quincenas, el mes lo cuenta dos veces.</p>
+                                        {panoramaNegocio.fijosDetalle.length === 0 && <p>No hay fijos activos.</p>}
+                                        {panoramaNegocio.fijosDetalle.map(c => (
+                                            <div key={c.id} className="flex justify-between gap-2 border-b border-violet-100 pb-1">
+                                                <div>
+                                                    <p className="font-bold">{c.nombre}</p>
+                                                    <p className="text-sm text-slate-900">{c.categoria} · día {c.dia || '—'} · {c.frecuencia === 'quincenal' ? 'ambas quincenas' : c.frecuencia === 'solo_q1' ? '1ª quincena' : c.frecuencia === 'solo_q2' ? '2ª quincena' : 'mensual'}</p>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <p className="text-lg font-black text-slate-950">{formatCurrency(c.mensual)}<span className="text-sm font-bold text-slate-800"> /mes</span></p>
+                                                    <p className="text-sm text-slate-900">1ª {formatCurrency(c.q1)} · 2ª {formatCurrency(c.q2)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {fichaPanorama === 'nomina' && (
+                                    <div className="rounded-2xl border border-emerald-400 p-4 space-y-3 text-base max-h-[28rem] overflow-auto">
+                                        <p className="text-lg font-black text-emerald-950">Cada salario base</p>
+                                        <p className="text-base text-slate-950">Es el salario del mes de quien está activa. No resta los días que faltó ni los créditos. Cada quincena muestra la mitad.</p>
+                                        {panoramaNegocio.nominaDetalle.length === 0 && <p>No hay trabajadoras activas.</p>}
+                                        {panoramaNegocio.nominaDetalle.map(t => (
+                                            <div key={t.id} className="flex justify-between gap-2 border-b border-emerald-100 pb-1">
+                                                <p className="font-bold">{t.nombre}</p>
+                                                <div className="text-right">
+                                                    <p className="text-lg font-black text-slate-950">{formatCurrency(t.mes)}<span className="text-sm font-bold text-slate-800"> /mes</span></p>
+                                                    <p className="text-sm text-slate-900">{formatCurrency(t.quincena)} por quincena</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {fichaPanorama === 'proveedores' && (
+                                    <div className="rounded-2xl border border-amber-400 p-4 space-y-3 text-base max-h-[32rem] overflow-auto">
+                                        <p className="text-lg font-black text-amber-950">De dónde sale cada proveedor</p>
+                                        <p className="text-base text-slate-950">Es el tope que anotaste en compras mínimas, no la factura pagada. Si pediste un proveedor cada semana, esta quincena cuenta 2 semanas y la otra quincena las otras 2. Por eso un número grande del mes no se cobra entero en estos 15 días.</p>
+                                        {panoramaNegocio.proveedoresDetalle.length === 0 && <p>No hay topes de proveedores.</p>}
+                                        {panoramaNegocio.proveedoresDetalle.map(p => (
+                                            <div key={p.id} className="flex justify-between gap-2 border-b border-amber-100 pb-1">
+                                                <div>
+                                                    <p className="text-lg font-bold text-slate-950">{p.nombre}</p>
+                                                    <p className="text-base text-slate-950">
+                                                        {p.frecuencia === 'Semanal'
+                                                            ? `Anotaste ${formatCurrency(p.monto)} por semana. × 2 semanas = esta quincena.`
+                                                            : p.frecuencia === 'Quincenal'
+                                                                ? `Anotaste ${formatCurrency(p.monto)} por quincena. Cada quincena lleva esa cifra, no el doble.`
+                                                                : `Anotaste ${formatCurrency(p.monto)} al mes. Cada quincena lleva la mitad.`}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right shrink-0">
+                                                    <p className="text-lg font-black text-slate-950">{formatCurrency(panoramaNegocio.diaHoy <= 15 ? p.q1 : p.q2)}<span className="text-sm font-bold text-slate-800"> esta</span></p>
+                                                    <p className="text-sm text-slate-900">1ª {formatCurrency(p.q1)} · 2ª {formatCurrency(p.q2)}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <p className="font-black text-amber-700 pt-1">Ya salió en egresos de proveedor</p>
+                                        {panoramaNegocio.pagadoProveedores.length === 0 && <p>Este mes no hay egresos de materia prima ni con proveedor.</p>}
+                                        {panoramaNegocio.pagadoProveedores.map(g => (
+                                            <div key={g.id} className="flex justify-between gap-2">
+                                                <p>{g.fecha.slice(8)} · {g.descripcion}</p>
+                                                <p className="font-bold shrink-0">{formatCurrency(g.monto)}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {fichaPanorama === 'ventas' && (
+                                    <div className="rounded-2xl border-2 border-slate-900 p-4 space-y-3 text-base max-h-[32rem] overflow-auto">
+                                        <p className="text-lg font-black text-slate-950">Día por día, sacado de los cuadres</p>
+                                        <p className="text-base text-slate-950">Si el cuadre trae las ventas del turno, se usa ese número. Si el turno está en cero y la caja ya cerró, se estima con lo contado al cierre menos la base. No se suma dos veces el mismo día.</p>
+                                        {panoramaNegocio.diasVenta.length === 0 && <p>Este mes no hay cuadres con ventas ni cierres anotados.</p>}
+                                        {panoramaNegocio.diasVenta.map(d => (
+                                            <div key={d.fecha} className="flex justify-between gap-2 border-b border-slate-100 pb-1">
+                                                <div>
+                                                    <p className="font-bold">{formatearFechaFicha(d.fecha)} · {d.quincena === 1 ? '1ª' : '2ª'}</p>
+                                                    <p className="text-sm text-slate-900">{d.origen}{d.cajas.length ? ` · ${d.cajas.join(', ')}` : ''}</p>
+                                                </div>
+                                                <p className="font-black shrink-0">{formatCurrency(d.monto)}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {fichaPanorama === 'quincenas' && (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                    {([1, 2] as const).map(q => {
+                                        const ventasQ = q === 1 ? panoramaNegocio.ventasQ1 : panoramaNegocio.ventasQ2;
+                                        const fijosQ = q === 1 ? panoramaNegocio.fijosQ1 : panoramaNegocio.fijosQ2;
+                                        const topeQ = q === 1 ? panoramaNegocio.topeQ1 : panoramaNegocio.topeQ2;
+                                        const listaGastos = q === 1 ? panoramaNegocio.gastosQ1 : panoramaNegocio.gastosQ2;
+                                        const gastado = q === 1 ? panoramaNegocio.gastadoQ1 : panoramaNegocio.gastadoQ2;
+                                        const futura = q === 2 && panoramaNegocio.diaHoy <= 15;
+                                        return (
+                                            <div key={q} className="rounded-2xl border-2 border-slate-900 p-4 space-y-2 text-base">
+                                                <p className="font-black uppercase text-sm text-indigo-950">{q === 1 ? 'Primera quincena · 1 al 15' : 'Segunda quincena · 16 al fin'}</p>
+                                                {futura && <p className="text-base text-slate-950">Todavía no empieza. Aquí están los pagos que tocan a partir del 16.</p>}
+                                                <p>Ventas: <span className="font-black">{formatCurrency(ventasQ)}</span></p>
+                                                <p>Fijos que tocan: <span className="font-black">{formatCurrency(fijosQ)}</span></p>
+                                                <p>Nómina de la quincena: <span className="font-black">{formatCurrency(panoramaNegocio.nominaQ)}</span></p>
+                                                <p>Tope de proveedores: <span className="font-black">{formatCurrency(topeQ)}</span></p>
+                                                <p>Egresos ya registrados: <span className="font-black">{formatCurrency(gastado)}</span></p>
+                                                <div className="max-h-36 overflow-auto space-y-0.5 pt-1">
+                                                    {listaGastos.length === 0 && <p className="text-base text-slate-900">Sin egresos en estos días.</p>}
+                                                    {listaGastos.map(g => (
+                                                        <div key={g.id} className="flex justify-between gap-2">
+                                                            <span className="truncate">{g.fecha.slice(8)} · {g.descripcion}</span>
+                                                            <span className="font-bold shrink-0">{formatCurrency(g.monto)}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                )}
+                                {fichaPanorama === 'balance' && (
+                                <div className="space-y-3">
+                                <div className="rounded-2xl border-2 border-slate-950 p-4 space-y-3">
+                                    {panoramaNegocio.diaHoy <= 15 ? (
+                                        <>
+                                            <div className="flex justify-between gap-3 text-lg font-black text-slate-950">
+                                                <span>Balance de la 1ª quincena, hasta el último cuadre</span>
+                                                <span className="shrink-0">{formatCurrency(panoramaNegocio.ventasQ1)}</span>
+                                            </div>
+                                            <p className="text-base text-slate-950">Compromisos de estos 15 días: {formatCurrency(panoramaNegocio.compromisoQ1)}. Es fijos de esta quincena + media nómina + proveedores de 2 semanas. La 2ª quincena no entra en esta cuenta.</p>
+                                            <p className={cn("text-xl font-black", panoramaNegocio.sobraQ1 >= 0 ? "text-emerald-800" : "text-rose-700")}>
+                                                Lo vendido cubre el {panoramaNegocio.cubreQ1.toFixed(0)}% de esta quincena. {panoramaNegocio.sobraQ1 >= 0 ? 'Sobran' : 'Faltan'} {formatCurrency(Math.abs(panoramaNegocio.sobraQ1))}.
+                                            </p>
+                                            <p className="text-base font-bold text-amber-950">Falta el cierre de la noche de hoy si la caja sigue abierta. Cuando lo cierres, esa plata se suma aquí y puedes cerrar la quincena. La otra quincena se mira desde el día 16.</p>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="flex justify-between gap-3 text-lg font-black text-slate-950">
+                                                <span>Balance de la 2ª quincena, hasta el último cuadre</span>
+                                                <span className="shrink-0">{formatCurrency(panoramaNegocio.ventasQ2)}</span>
+                                            </div>
+                                            <p className="text-base text-slate-950">Compromisos de esta quincena: {formatCurrency(panoramaNegocio.compromisoQ2)}. La 1ª ya quedó aparte, con {formatCurrency(panoramaNegocio.ventasQ1)} vendidos.</p>
+                                            <p className={cn("text-xl font-black", panoramaNegocio.sobraQ2 >= 0 ? "text-emerald-800" : "text-rose-700")}>
+                                                Lo vendido cubre el {panoramaNegocio.cubreQ2.toFixed(0)}% de esta quincena. {panoramaNegocio.sobraQ2 >= 0 ? 'Sobran' : 'Faltan'} {formatCurrency(Math.abs(panoramaNegocio.sobraQ2))}.
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
+                                <Button type="button" onClick={pedirPanoramaIA} disabled={pidiendoPanorama} className="w-full rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white font-black text-base h-12">
+                                    {pidiendoPanorama ? 'Analizando…' : 'Analizar todo junto con IA'}
+                                </Button>
+                                {panoramaIA && (
+                                    <div className="text-base text-slate-950 whitespace-pre-wrap leading-relaxed rounded-2xl bg-slate-100 p-4">{panoramaIA}</div>
+                                )}
+                                </div>
+                                )}
                             </CardContent>
                             )}
                         </Card>

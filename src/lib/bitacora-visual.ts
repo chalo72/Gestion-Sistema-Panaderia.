@@ -35,6 +35,42 @@ export interface ClipBitacora {
 
 const BUCKET = 'bitacora-visual';
 
+/** Nombre seguro para carpeta o archivo en la nube. */
+export function nombreCarpetaNube(texto: string): string {
+  const limpio = (texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+  return limpio || 'sin-nombre';
+}
+
+/**
+ * Copia el mismo video a dos carpetas de la nube:
+ * trabajadores/{persona}/{fecha}/... y situaciones/{regular|otra}/{fecha}/...
+ * El clip original de la cámara se deja donde estaba.
+ */
+export async function archivarClipEnCarpetas(
+  blob: Blob,
+  datos: { trabajador: string; contexto: string; descripcion: string; clasificacion: string; cuando?: Date; donde?: 'trabajador' | 'situacion' },
+): Promise<string | null> {
+  const cuando = datos.cuando || new Date();
+  const fecha = cuando.toISOString().slice(0, 10);
+  const hora = cuando.toISOString().slice(11, 19).replace(/:/g, '');
+  const quien = nombreCarpetaNube(datos.trabajador || 'sin-turno');
+  const ctx = nombreCarpetaNube(datos.contexto || 'ronda');
+  const desc = nombreCarpetaNube(datos.descripcion || 'sin-descripcion').slice(0, 40);
+  const sit = nombreCarpetaNube(datos.clasificacion || 'sin-clasificar');
+  const tipo = blob.type || 'video/webm';
+  const ruta = datos.donde === 'situacion'
+    ? `situaciones/${sit}/${fecha}/${fecha}_${hora}_${quien}_${ctx}.webm`
+    : `trabajadores/${quien}/${fecha}/${fecha}_${hora}_${ctx}_${desc}.webm`;
+  const subida = await supabase.storage.from(BUCKET).upload(ruta, blob, { contentType: tipo, upsert: false });
+  if (subida.error) return null;
+  return ruta;
+}
+
 /**
  * Sube un clip (Blob webm/mp4) al bucket privado de Storage.
  * Devuelve la RUTA dentro del bucket (no una URL pública: el bucket es privado
@@ -92,19 +128,36 @@ export async function marcarClipAnalizado(
     clasificacion: ClasificacionBitacora | null;
     categorias_detectadas: CategoriaBitacora[];
     alerta: boolean;
+    trabajador?: string | null;
   }
 ): Promise<void> {
-  const { error } = await supabase
-    .from('bitacora_visual')
-    .update({
-      analizado: true,
-      descripcion_ia: resultado.descripcion_ia,
-      clasificacion: resultado.clasificacion,
-      categorias_detectadas: resultado.categorias_detectadas,
-      alerta: resultado.alerta,
-    })
-    .eq('id', id);
+  const patch: Record<string, unknown> = {
+    analizado: true,
+    descripcion_ia: resultado.descripcion_ia,
+    clasificacion: resultado.clasificacion,
+    categorias_detectadas: resultado.categorias_detectadas,
+    alerta: resultado.alerta,
+  };
+  if (resultado.trabajador) patch.trabajador_id = resultado.trabajador;
+  const { error } = await supabase.from('bitacora_visual').update(patch).eq('id', id);
+  if (error && resultado.trabajador) {
+    delete patch.trabajador_id;
+    const retry = await supabase.from('bitacora_visual').update(patch).eq('id', id);
+    if (retry.error) throw retry.error;
+    return;
+  }
   if (error) throw error;
+}
+
+/** Últimas grabaciones guardadas en la nube, para verlas desde cualquier aparato. */
+export async function clipsRecientes(limite = 40): Promise<ClipBitacora[]> {
+  const { data, error } = await supabase
+    .from('bitacora_visual')
+    .select('*')
+    .order('capturado_en', { ascending: false })
+    .limit(limite);
+  if (error) throw error;
+  return (data || []) as ClipBitacora[];
 }
 
 /** Búsqueda por texto libre sobre lo que la IA describió (para "busca tal cosa/momento"). */
@@ -119,6 +172,23 @@ export async function buscarClipsBitacora(texto: string, limite = 40): Promise<C
     .limit(limite);
   if (error) throw error;
   return (data || []) as ClipBitacora[];
+}
+
+/** Clips entre dos fechas (para cruzar con la Auditoría Digital). Devuelve [] si la tabla no existe. */
+export async function clipsEnRango(desdeISO: string, hastaISO: string, limite = 1500): Promise<ClipBitacora[]> {
+  try {
+    const { data, error } = await supabase
+      .from('bitacora_visual')
+      .select('*')
+      .gte('capturado_en', new Date(`${desdeISO}T00:00:00`).toISOString())
+      .lte('capturado_en', new Date(`${hastaISO}T23:59:59`).toISOString())
+      .order('capturado_en', { ascending: false })
+      .limit(limite);
+    if (error) return [];
+    return (data || []) as ClipBitacora[];
+  } catch {
+    return [];
+  }
 }
 
 /** Todos los clips analizados de un día (por defecto hoy), en orden cronológico — para el informe. */

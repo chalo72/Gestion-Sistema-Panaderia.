@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription } from '@/components/ui/dialog';
 import {
-  getAlertas, saveAlertas, getCuadres, getConfigSeguridad, saveConfigSeguridad,
+  getAlertas, ocultarAlertasLeidas, sincronizarSeguridadDesdeNube, getCuadres, getConfigSeguridad, saveConfigSeguridad,
   marcarAlertaLeida, marcarTodasLeidas, generarMensajeAgente,
   CONFIG_SEGURIDAD_DEFAULT, pinGerenteEsInseguro, PIN_FABRICA_INSEGURO,
 } from '@/lib/security-agent';
@@ -64,7 +64,18 @@ export default function Seguridad({ userRole, ventas = [] }: Props) {
     setMensajeAgente(generarMensajeAgente(a, c));
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  // Muestra lo local al instante y luego trae lo de las otras cajas/aparatos (nube)
+  const cargarConNube = useCallback(async () => {
+    cargar();
+    const ok = await sincronizarSeguridadDesdeNube().catch(() => false);
+    if (ok) cargar();
+  }, [cargar]);
+
+  useEffect(() => {
+    cargarConNube();
+    const t = setInterval(cargarConNube, 60000);
+    return () => clearInterval(t);
+  }, [cargarConNube]);
 
   const handleLeer = (id: string) => {
     marcarAlertaLeida(id);
@@ -78,8 +89,7 @@ export default function Seguridad({ userRole, ventas = [] }: Props) {
   };
 
   const handleBorrarLeidas = () => {
-    const nuevas = alertas.filter(a => !a.leida);
-    saveAlertas(nuevas);
+    const nuevas = ocultarAlertasLeidas();
     setAlertas(nuevas);
     toast.success('Alertas leídas eliminadas');
   };
@@ -156,7 +166,7 @@ export default function Seguridad({ userRole, ventas = [] }: Props) {
             <Scan className="w-4 h-4" /> Escanear Billete
           </button>
           
-          <button onClick={cargar} className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 transition-colors">
+          <button onClick={cargarConNube} className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-indigo-600 transition-colors">
             <RefreshCw className="w-4 h-4" />
           </button>
         </div>

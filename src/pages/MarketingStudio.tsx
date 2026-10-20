@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, Sparkles, Image as ImageIcon, Copy, CheckCircle2, Megaphone, Target, TrendingUp, UserCircle, MapPin, Send, Instagram, PlaySquare, FileText, ShoppingBag, Radar, Upload, RefreshCw, MessageCircle, Check, Share2, Facebook, Video, User, Settings2, Sliders, CheckCircle, AlertCircle, Zap, Clock, Store } from 'lucide-react';
+import { Bot, Sparkles, Image as ImageIcon, Copy, CheckCircle2, Megaphone, Target, TrendingUp, UserCircle, MapPin, Send, Instagram, PlaySquare, FileText, ShoppingBag, Radar, Upload, RefreshCw, MessageCircle, Check, Share2, Facebook, Video, User, Settings2, Sliders, CheckCircle, AlertCircle, Zap, Clock, Store, Clapperboard, ExternalLink, Repeat } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -14,6 +14,8 @@ import type { Producto } from '@/types';
 import { VistaPreviaCampana } from '@/components/marketing/VistaPreviaCampana';
 import { BotonMicrofono } from '@/components/marketing/BotonMicrofono';
 import { PublicacionFlash } from '@/components/marketing/PublicacionFlash';
+import { AvatarViduStudio, VIDU_S2_URL } from '@/components/marketing/AvatarViduStudio';
+import { BigMotionStudio, BIGMOTION_APP_URL } from '@/components/marketing/BigMotionStudio';
 import { publicarDirecto } from '@/lib/publicar-directo';
 
 const STRATEGIES = [
@@ -21,6 +23,8 @@ const STRATEGIES = [
   { id: 'antojo', label: '🍰 Antojo Irresistible', desc: 'Enfócate en la textura, el sabor y los sentidos.' },
   { id: 'promocion', label: '💸 Promoción Especial (Mover Inventario)', desc: 'Oferta local urgente para acelerar ventas hoy.' },
   { id: 'avatar-andrea', label: '👱‍♀️ Avatar Andrea (Marca Personal)', desc: 'Guion para que Andrea (o su avatar) enseñe o recomiende algo.' },
+  { id: 'avatar-vidu', label: '🎬 Avatar Vidu S2 (Mostrador en vivo)', desc: 'Tres clips para Vidu: cambia ropa, fondo y producto mientras el vídeo se genera. 720p.' },
+  { id: 'bigmotion-faceless', label: '🔁 BigMotion (Shorts sin cara)', desc: 'Serie automática sin tu cara. Nicho + estilo; BigMotion escribe, arma y puede publicar solo. Auto-post apagado al inicio.' },
   { id: 'local-viral', label: '📍 Local Viral (Dulce Placer)', desc: 'Contenido diseñado para que los vecinos compartan y visiten el local.' }
 ];
 
@@ -231,6 +235,10 @@ export default function MarketingStudio({ productos = [] }: Props) {
 
     if (estrategiaId === 'avatar-andrea') {
       baseContext += `El objetivo es posicionar la marca personal de "Andrea Cadena", dueña y repostera experta de Dulce Placer. `;
+    } else if (estrategiaId === 'avatar-vidu') {
+      baseContext += `El objetivo es un avatar de MOSTRADOR de Dulce Placer para Vidu S2-Avatar (vídeo en tiempo real, 720p). Tono cercano de vitrina, no influencer ni baile. `;
+    } else if (estrategiaId === 'bigmotion-faceless') {
+      baseContext += `El objetivo es una serie de Shorts SIN CARA para BigMotion (hasta 90 s). Panadería/antojo local, no motivación genérica. Auto-post apagado hasta ver el primer vídeo. Canal de prueba, no el YouTube principal. `;
     } else {
       baseContext += `El objetivo es impulsar las ventas locales de la "Panadería Dulce Placer". `;
     }
@@ -264,7 +272,49 @@ export default function MarketingStudio({ productos = [] }: Props) {
       baseContext += `Por favor, INSPÍRATE en estos ángulos virales, adapta su psicología y ganchos (hooks) al producto "${nombreProducto}", pero dándole la identidad de Dulce Placer.\n`;
     }
 
-    const prompt = `${baseContext}
+    const prompt = estrategiaId === 'avatar-vidu'
+      ? `${baseContext}
+
+REGLAS: no inventes precios, ofertas, descuentos ni stock. No prometas domicilio ni horarios que no estén dichos. Cada clip 15-20 segundos, frases cortas para dictar en voz alta.
+
+Genera EXACTAMENTE esta estructura, sin otros bloques:
+
+[VIDU_CLIP_1]
+Título: Buenos días. Texto para dictar a Vidu S2-Avatar (saludo Dulce Placer, invitar a WhatsApp o al local). Fotos: cara + delantal + vitrina.
+
+[VIDU_CLIP_2]
+Título: Producto en la mano. Texto para dictar sobre "${nombreProducto}". A mitad: subir foto del producto (objeto) y decir "toma este producto y muéstralo a la cámara".
+
+[VIDU_CLIP_3]
+Título: Cambio de escena. Mismo personaje, otro rincón. A mitad: subir foto del mostrador y decir "ahora estás detrás del mostrador".
+
+[VIDU_CAMBIOS]
+4 líneas: foto a subir (ropa / fondo / objeto / cara) y la frase exacta para Vidu sin detener la generación.
+
+[AVATAR_PROMPT]
+El Clip 1 listo para pegar, más dirección de arte breve (delantal, mostrador).`
+      : estrategiaId === 'bigmotion-faceless'
+      ? `${baseContext}
+
+REGLAS: no inventes precios, ofertas, descuentos ni stock. Shorts máximo 90 s. Sin cara. No motivación genérica ni crypto.
+
+Genera EXACTAMENTE esta estructura, sin otros bloques:
+
+[BIGMOTION_NICHO]
+Una línea de nicho (panadería artesanal / antojo) o "Custom Topic".
+
+[BIGMOTION_TEMA]
+Párrafo para pegar en Custom Topic de BigMotion: de qué trata la serie, tono, qué nunca decir (precios, stock). Producto de referencia: ${nombreProducto}.
+
+[BIGMOTION_ESTILO]
+4 líneas: visual de comida, sin caras, subtítulos grandes, música suave.
+
+[BIGMOTION_REGLAS]
+5 viñetas: auto-post APAGADO; canal aparte; no se edita el guion post-render; solo Shorts; archivar si sale basura.
+
+[BIGMOTION_PASOS]
+Pasos en app.bigmotion.ai para crear la Series y ver Your Videos antes de conectar el YouTube principal.`
+      : `${baseContext}
 
 Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
 
@@ -307,11 +357,11 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
 
   const parseContent = (content: string) => {
     const sections: Record<string, string> = {};
-    const parts = content.split(/\[(INSTAGRAM|WHATSAPP|TIKTOK_VIRAL|AVATAR_PROMPT)\]/i);
+    const parts = content.split(/\[(INSTAGRAM|WHATSAPP|TIKTOK_VIRAL|AVATAR_PROMPT|VIDU_CLIP_1|VIDU_CLIP_2|VIDU_CLIP_3|VIDU_CAMBIOS|BIGMOTION_NICHO|BIGMOTION_TEMA|BIGMOTION_ESTILO|BIGMOTION_REGLAS|BIGMOTION_PASOS)\]/i);
     let currentKey = 'OTROS';
     parts.forEach(part => {
       const match = part.toUpperCase().trim();
-      if (['INSTAGRAM', 'WHATSAPP', 'TIKTOK_VIRAL', 'AVATAR_PROMPT'].includes(match)) {
+      if (['INSTAGRAM', 'WHATSAPP', 'TIKTOK_VIRAL', 'AVATAR_PROMPT', 'VIDU_CLIP_1', 'VIDU_CLIP_2', 'VIDU_CLIP_3', 'VIDU_CAMBIOS', 'BIGMOTION_NICHO', 'BIGMOTION_TEMA', 'BIGMOTION_ESTILO', 'BIGMOTION_REGLAS', 'BIGMOTION_PASOS'].includes(match)) {
         currentKey = match;
       } else if (part.trim()) {
         sections[currentKey] = (sections[currentKey] || '') + part.trim();
@@ -554,7 +604,7 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
           </CardDescription>
         </CardHeader>
         <CardContent className="p-4 sm:p-6 pt-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* PANADERÍA */}
             <div className="relative">
               <input
@@ -598,6 +648,38 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
                 <p className="text-[11px] text-slate-500">Marca personal de Andrea — mando el guion del avatar, Instagram y WhatsApp</p>
               </label>
             </div>
+
+            {/* AVATAR VIDU S2 */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStrategy('avatar-vidu');
+                document.getElementById('avatar-vidu-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-6 text-center cursor-pointer transition-all hover:border-amber-400 hover:bg-amber-50/50 dark:hover:bg-amber-950/20 border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50"
+            >
+              <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+                <Clapperboard className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+              </div>
+              <p className="text-sm font-black text-slate-800 dark:text-slate-200">🎬 Avatar Vidu S2</p>
+              <p className="text-[11px] text-slate-500">Mostrador en vivo: cambia ropa, fondo y producto mientras el vídeo se genera</p>
+            </button>
+
+            {/* BIGMOTION FACELESS */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStrategy('bigmotion-faceless');
+                document.getElementById('bigmotion-studio')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 p-6 text-center cursor-pointer transition-all hover:border-sky-400 hover:bg-sky-50/50 dark:hover:bg-sky-950/20 border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50"
+            >
+              <div className="w-12 h-12 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center">
+                <Repeat className="w-6 h-6 text-sky-600 dark:text-sky-400" />
+              </div>
+              <p className="text-sm font-black text-slate-800 dark:text-slate-200">🔁 BigMotion</p>
+              <p className="text-[11px] text-slate-500">Shorts sin cara: él escribe, arma y puede publicar solo. Auto-post apagado al inicio</p>
+            </button>
           </div>
 
           {(isQuickSending || isGenerating) && (
@@ -607,6 +689,24 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
           )}
         </CardContent>
       </Card>
+
+      <AvatarViduStudio
+        nombreProducto={productos.find(p => p.id === selectedProductId)?.nombre || 'el producto de panadería que se ve en la foto'}
+        ocasionPrompt={
+          selectedOcasion === 'personalizada'
+            ? anguloLibre
+            : OCASIONES.find(o => o.id === selectedOcasion)?.prompt
+        }
+      />
+
+      <BigMotionStudio
+        nombreProducto={productos.find(p => p.id === selectedProductId)?.nombre || 'el producto de panadería que se ve en la foto'}
+        ocasionPrompt={
+          selectedOcasion === 'personalizada'
+            ? anguloLibre
+            : OCASIONES.find(o => o.id === selectedOcasion)?.prompt
+        }
+      />
 
       {/* VISTA PREVIA DE LA CAMPAÑA — nada se publica sin aprobación (2026-09-19) */}
       {previewAbierta && seccionesPreview && (
@@ -995,6 +1095,60 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
                     </div>
                   )}
 
+                  {/* CLIPS VIDU S2 */}
+                  {(['VIDU_CLIP_1', 'VIDU_CLIP_2', 'VIDU_CLIP_3', 'VIDU_CAMBIOS'] as const).map((clave, i) => (
+                    sections[clave] ? (
+                      <div key={clave} className="space-y-2 animate-in slide-in-from-bottom-2" style={{ animationDelay: `${200 + i * 60}ms` }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-black tracking-widest text-[10px] uppercase">
+                            <Clapperboard className="w-4 h-4" /> {clave === 'VIDU_CAMBIOS' ? 'Cambios a mitad (Vidu)' : `Clip Vidu ${i + 1}`}
+                          </Label>
+                          <Button variant="ghost" size="sm" onClick={() => handleCopy(sections[clave], clave)} className="h-8 text-xs gap-1.5">
+                            {copiedSection === clave ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />} Copiar
+                          </Button>
+                        </div>
+                        <div className="bg-amber-50/60 dark:bg-amber-950/20 p-4 rounded-xl border border-amber-200 dark:border-amber-900/50 whitespace-pre-wrap text-sm text-amber-950 dark:text-amber-200">
+                          {sections[clave]}
+                        </div>
+                      </div>
+                    ) : null
+                  ))}
+
+                  {/* SERIE BIGMOTION */}
+                  {(['BIGMOTION_NICHO', 'BIGMOTION_TEMA', 'BIGMOTION_ESTILO', 'BIGMOTION_REGLAS', 'BIGMOTION_PASOS'] as const).map((clave, i) => (
+                    sections[clave] ? (
+                      <div key={clave} className="space-y-2 animate-in slide-in-from-bottom-2" style={{ animationDelay: `${220 + i * 50}ms` }}>
+                        <div className="flex items-center justify-between gap-2">
+                          <Label className="flex items-center gap-2 text-sky-700 dark:text-sky-400 font-black tracking-widest text-[10px] uppercase">
+                            <Repeat className="w-4 h-4" /> {clave.replace('BIGMOTION_', 'BigMotion · ')}
+                          </Label>
+                          <div className="flex gap-2">
+                            <Button variant="ghost" size="sm" onClick={() => handleCopy(sections[clave], clave)} className="h-8 text-xs gap-1.5">
+                              {copiedSection === clave ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />} Copiar
+                            </Button>
+                            {clave === 'BIGMOTION_TEMA' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  handleCopy(sections[clave], clave);
+                                  window.open(BIGMOTION_APP_URL, '_blank', 'noopener,noreferrer');
+                                  toast.message('Tema copiado. Pégalo en Custom Topic. Auto-post apagado.');
+                                }}
+                                className="h-8 text-xs gap-1.5 border-sky-300"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" /> Abrir BigMotion
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <div className="bg-sky-50/60 dark:bg-sky-950/20 p-4 rounded-xl border border-sky-200 dark:border-sky-900/50 whitespace-pre-wrap text-sm text-sky-950 dark:text-sky-200">
+                          {sections[clave]}
+                        </div>
+                      </div>
+                    ) : null
+                  ))}
+
                   {/* AVATAR ANDREA */}
                   {sections['AVATAR_PROMPT'] && (
                     <div className="space-y-2 animate-in slide-in-from-bottom-2" style={{ animationDelay: '300ms' }}>
@@ -1005,6 +1159,18 @@ Genera un plan de contenidos directo y persuasivo con esta estructura EXACTA:
                         <div className="flex gap-2">
                           <Button variant="ghost" size="sm" onClick={() => handleCopy(sections['AVATAR_PROMPT'], 'av')} className="h-8 text-xs gap-1.5">
                             {copiedSection === 'av' ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />} Copiar
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              handleCopy(sections['AVATAR_PROMPT'], 'av');
+                              window.open(VIDU_S2_URL, '_blank', 'noopener,noreferrer');
+                              toast.message('Guion copiado. Pégalo en Vidu S2-Avatar.');
+                            }}
+                            className="h-8 text-xs gap-1.5 border-amber-300"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" /> Abrir Vidu S2
                           </Button>
                           <Button 
                             variant="default" 
