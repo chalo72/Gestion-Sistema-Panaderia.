@@ -9,6 +9,7 @@ import { initDeviceId } from '@/lib/deviceId';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { contarPendientesOutbox } from '@/lib/sync-outbox';
 import { toast } from 'sonner';
+import AvisosTurnoBanner from '@/components/nomina/AvisosTurnoBanner';
 
 interface CentinelaContextType {
   misionesActivas: DBMisionAgent[];
@@ -104,6 +105,24 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     syncNow().catch(() => {});
   }, [syncConnected, syncNow]);
+
+  // Acceso directo: si la URL trae ?vista=nomina&tab=horario, abre esa pantalla al entrar.
+  // Sirve para el icono del escritorio y para el acceso directo del celular.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const vista = new URLSearchParams(window.location.search).get('vista');
+      if (vista) {
+        const ir = () => {
+          window.dispatchEvent(new CustomEvent('navigateView', { detail: vista }));
+        };
+        ir();
+        // Segunda pasada: si el login o la sincronización reinician la vista, vuelve a entrar.
+        timer = setTimeout(ir, 1500);
+      }
+    } catch { /* sin enlace directo */ }
+    return () => { if (timer) clearTimeout(timer); };
+  }, []);
 
   // Si syncNow encontró datos nuevos (MANUAL), el banner ya los muestra.
   // NO recargamos automáticamente — los datos se ven al navegar entre páginas.
@@ -352,6 +371,7 @@ export const CentinelaProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   return (
     <CentinelaContext.Provider value={{ misionesActivas, hallazgos, ejecutarMisionManual: ejecutarMision, isVigilando }}>
       {children}
+      <AvisosTurnoBanner />
 
       {/* Boton flotante NexusSync — parpadea cuando hay cambios en curso */}
       <button

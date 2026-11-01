@@ -21,6 +21,8 @@ export interface Producto {
   createdAt: string;
   updatedAt?: string; // PROTEGIDO: Corregido para compatibilidad con DBProducto (opcional en DB)
   descuentoMayorista?: number; // Descuento porcentual específico para venta mayorista
+  comisionRepartidor?: number; // % del precio mayorista que gana el repartidor
+  unidadesPaquete?: number;    // Pan de empaque: unidades que trae cada paquete
 }
 
 export interface IngredienteReceta {
@@ -1101,7 +1103,7 @@ export interface PedidoActivo {
 // GASTOS Y FACTURACIÓN
 // ============================================
 
-export type GastoCategoria = 'Servicios' | 'Arriendo' | 'Materia Prima' | 'Nómina' | 'Mantenimiento' | 'Otros';
+export type GastoCategoria = 'Servicios' | 'Arriendo' | 'Materia Prima' | 'Nómina' | 'Mantenimiento' | 'Familia' | 'Otros';
 
 export interface Gasto {
   id: string;
@@ -1116,10 +1118,17 @@ export interface Gasto {
   metodoPago: MetodoPago;
   usuarioId: string;
   cajaId?: string; // Si el gasto salió de una caja abierta
+  /** Quién de la familia/gerencia recibió el retiro (obligatorio si categoria === Familia) */
+  personaFamilia?: string;
   metadata?: {
-    carpeta: string;
-    nombreArchivo: string;
-    etiquetas: string[];
+    carpeta?: string;
+    nombreArchivo?: string;
+    etiquetas?: string[];
+    personaFamilia?: string;
+    origenTipo?: string;
+    bovedaId?: string;
+    cajaNombre?: string;
+    [key: string]: unknown;
   };
   facturaItems?: {
     id: string;
@@ -1332,6 +1341,8 @@ export interface NominaItem {
   diasMenos?: number;              // días que NO vino (se restan)
   diasExtra?: number;              // días de más / doble turno / reemplazos (se suman)
   diasVinoManual?: string[];       // fechas que se marcaron "sí vino" aunque no presionó "Llegué"
+  diasDobleTurno?: string[];       // fechas en que hizo doble turno (ya sumadas en valorBruto)
+  valorDobleTurno?: number;        // lo que se pagó por cada doble turno
   gastoId?: string;                // gasto creado al pagar a esta trabajadora
   fechaPago?: string;              // día en que se le guardó el pago individual
   origenesPago?: NominaOrigenPago[]; // de qué caja o bóveda salió la plata, cuando se pagó a esta persona sola

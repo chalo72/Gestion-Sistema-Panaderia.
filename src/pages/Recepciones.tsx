@@ -1,5 +1,20 @@
 import { generateUUID } from '@/lib/safe-utils';
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, type CSSProperties, type HTMLAttributes, type ReactNode } from 'react';
+import {
+    DndContext,
+    PointerSensor,
+    closestCenter,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useCan, useAuth } from '@/contexts/AuthContext';
 import {
     CheckCircle, X, Plus, Calendar,
@@ -8,7 +23,7 @@ import {
     TrendingUp, TrendingDown, Sparkles, Loader2,
     Camera, Zap, Check, FolderOpen,
     Trash2, ZoomIn, Filter, History,
-    Truck, Receipt, ClipboardCheck, ChevronDown, Pencil
+    Truck, Receipt, ClipboardCheck, ChevronDown, Pencil, GripVertical
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,6 +39,117 @@ import { ProductFormModal } from '@/components/productos/ProductFormModal';
 import type { Categoria as CategoriaTipo } from '@/types';
 import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 import { cuadreFactura } from '@/lib/cuadre-factura';
+import { MarcaPrecioModificado } from '@/components/precios/MarcaPrecioModificado';
+import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
+
+/** "139.990" y "169.980" son pesos colombianos, no decimales. */
+function parsearPesosCol(raw: string): number {
+    const limpio = raw.replace(/[$]/g, '').replace(/\s/g, '');
+    if (!limpio) return 0;
+    const tienePunto = limpio.includes('.');
+    const tieneComa = limpio.includes(',');
+    let numero = limpio;
+    if (tienePunto && tieneComa) {
+        numero = limpio.lastIndexOf(',') > limpio.lastIndexOf('.')
+            ? limpio.replace(/\./g, '').replace(',', '.')
+            : limpio.replace(/,/g, '');
+    } else if (tieneComa) {
+        const partes = limpio.split(',');
+        numero = partes.length === 2 && partes[1]?.length !== 3
+            ? limpio.replace(',', '.')
+            : limpio.replace(/,/g, '');
+    } else if (tienePunto) {
+        const grupos = limpio.split('.');
+        const miles = grupos.length > 2 || (grupos.length === 2 && grupos[1]?.length === 3);
+        if (miles) numero = limpio.replace(/\./g, '');
+    }
+    const n = parseFloat(numero);
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+}
+
+type AsaArrastre = HTMLAttributes<HTMLButtonElement> & {
+    ref: (element: HTMLElement | null) => void;
+};
+
+/** El número del ticket se agarra y se suelta en otro puesto, como en la factura de papel. */
+function FilaOrdenable({ id, children }: { id: string; children: (asa: AsaArrastre) => ReactNode }) {
+    const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id });
+    const style: CSSProperties = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        zIndex: isDragging ? 30 : undefined,
+        background: isDragging ? 'rgba(99,102,241,0.22)' : undefined,
+    };
+    return (
+        <div ref={setNodeRef} style={style}>
+            {children({ ref: setActivatorNodeRef, ...attributes, ...listeners })}
+        </div>
+    );
+}
+
+interface BorradorPestaña {
+    id: string;
+    editandoId: string | null;
+    step: number;
+    form: {
+        proveedorId: string;
+        prePedidoId?: string;
+        numeroFactura: string;
+        fechaFactura: string;
+        imagenFactura: string | null;
+        items: RecepcionItem[];
+        observaciones: string;
+        metodoPago: MetodoPago;
+        cajaId?: string;
+        incluyeIva: boolean;
+        porcentajeIva: number;
+        descuentoFactura: number;
+        totalImpreso: string;
+        /**
+         * Fecha real en que entró la mercancía (día, formato YYYY-MM-DD).
+         * Vacía = se usa la hora actual. Permite registrar o corregir una recepción con fecha vieja.
+         */
+        fechaRecepcion?: string;
+    };
+}
+
+function BarraRecepcionesAbiertas({
+    pestañas,
+    onIr,
+    onCerrar,
+    onNueva,
+}: {
+    pestañas: { id: string; nombre: string; productos: number; activa: boolean }[];
+    onIr: (id: string) => void;
+    onCerrar: (id: string) => void;
+    onNueva: () => void;
+}) {
+    return (
+        <div className="flex items-center gap-2 overflow-x-auto px-3 py-2 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+            {pestañas.map(p => (
+                <div key={p.id} className={cn(
+                    "shrink-0 h-9 pl-3 pr-1 rounded-xl flex items-center gap-1 text-xs font-black",
+                    p.activa ? "bg-indigo-600 text-white" : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200"
+                )}>
+                    <button type="button" onClick={() => onIr(p.id)} className="max-w-[150px] truncate">
+                        {p.nombre}{p.productos > 0 ? ` · ${p.productos}` : ''}
+                    </button>
+                    <button type="button" onClick={() => onCerrar(p.id)} title="Cerrar esta pestaña" className="w-6 h-6 rounded-lg flex items-center justify-center opacity-70 hover:opacity-100">
+                        <X className="w-3 h-3" />
+                    </button>
+                </div>
+            ))}
+            <button type="button" onClick={onNueva} className="shrink-0 h-9 px-3 rounded-xl bg-emerald-600 text-white text-xs font-black flex items-center gap-1">
+                <Plus className="w-3.5 h-3.5" /> Otro proveedor
+            </button>
+        </div>
+    );
+}
+
+function textoPrecio(n: number): string {
+    if (!n) return '';
+    return new Intl.NumberFormat('es-CO', { maximumFractionDigits: 2 }).format(n);
+}
 
 interface RecepcionesProps {
     recepciones: Recepcion[];
@@ -39,7 +165,7 @@ interface RecepcionesProps {
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
     gastos?: Gasto[];
     onUpdateGasto?: (id: string, updates: Partial<Gasto>) => Promise<void>;
-    onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<void>;
+    onAddProducto: (producto: Omit<Producto, 'id'>) => Promise<Producto | null | void>;
     onUpdateProducto: (id: string, updates: Partial<Producto>) => Promise<void>;
     onAddOrUpdatePrecio?: (data: {
         id?: string;
@@ -55,16 +181,18 @@ interface RecepcionesProps {
     getProductoById: (id: string) => Producto | undefined;
     formatCurrency: (value: number) => string;
     onUpdatePrePedido?: (id: string, updates: Partial<PrePedido>) => Promise<void>;
+    onAddCategoria?: (nombre: string, color: string, tipo: 'venta' | 'insumo') => Promise<CategoriaTipo>;
 }
 
 export default function Recepciones({
     recepciones, proveedores, productos, precios, prepedidos, categorias,
     cajasAbiertas = [],
     onAddRecepcion, onConfirmarRecepcion, onUpdateRecepcion, onAjustarStock, gastos, onUpdateGasto, onAddProducto, onUpdateProducto, onAddOrUpdatePrecio,
-    getProveedorById, getProductoById, formatCurrency, onUpdatePrePedido
+    getProveedorById, getProductoById, formatCurrency, onUpdatePrePedido, onAddCategoria
 }: RecepcionesProps) {
     const { check } = useCan();
     const { usuario } = useAuth();
+    const sensoresOrden = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
     const [view, setView] = useState<'list' | 'new' | 'details' | 'galeria'>('list');
     const [editandoId, setEditandoId] = useState<string | null>(null);
     const [selectedRecepcion, setSelectedRecepcion] = useState<Recepcion | null>(null);
@@ -72,12 +200,15 @@ export default function Recepciones({
     const [proveedorFiltro, setProveedorFiltro] = useState<string>('todos');
     const [filtroFecha, setFiltroFecha] = useState<'todos' | 'hoy' | 'ayer' | 'semana' | 'mes'>('todos');
     const [filtroEstado, setFiltroEstado] = useState<'todos' | 'ok' | 'incidencias'>('todos');
+    // Rango de fechas libres: para encontrar una recepción vieja por su día exacto.
+    const [filtroFechaDesde, setFiltroFechaDesde] = useState('');
+    const [filtroFechaHasta, setFiltroFechaHasta] = useState('');
     const [prePedidoSeleccionado, setPrePedidoSeleccionado] = useState<string>('');
     
     // === ESTADO PRODUCT FORM MODAL ===
     const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+    const historialPrecios = useCambiosPrecio(precios);
     const [productToEdit, setProductToEdit] = useState<Producto | null>(null);
-    const [isCreatingNewFromAction, setIsCreatingNewFromAction] = useState(false);
 
     // === ESTADO GALERÍA DE FACTURAS ===
     const [facturasGuardadas, setFacturasGuardadas] = useState<FacturaEscaneada[]>([]);
@@ -152,9 +283,12 @@ export default function Recepciones({
         }
     };
 
-    // Pre-pedidos confirmados disponibles para vincular
+    // Preventas que ya se armaron y todavía no se reciben.
+    // 'enviado' también entra: marcarlo en preventa no debe esconderlo aquí.
     const prepedidosConfirmados = useMemo(() =>
-        prepedidos.filter(p => p.estado === 'confirmado'),
+        prepedidos
+            .filter(p => p.estado === 'confirmado' || p.estado === 'enviado')
+            .sort((a, b) => new Date(b.fechaCreacion).getTime() - new Date(a.fechaCreacion).getTime()),
         [prepedidos]);
 
     // Proveedores ordenados por última recepción (el más reciente primero)
@@ -186,6 +320,7 @@ export default function Recepciones({
         porcentajeIva: number;
         descuentoFactura: number;
         totalImpreso: string;
+        fechaRecepcion?: string;
     }>({
         proveedorId: '',
         prePedidoId: undefined,
@@ -200,6 +335,8 @@ export default function Recepciones({
         descuentoFactura: 0,
         totalImpreso: '',
     });
+    const [pestañaId, setPestañaId] = useState(() => generateUUID());
+    const [pestañasEnEspera, setPestañasEnEspera] = useState<BorradorPestaña[]>([]);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const imagenFileRef = useRef<File | null>(null);
@@ -210,6 +347,7 @@ export default function Recepciones({
     const [scanProgress, setScanProgress] = useState(0);
     const [busquedaProveedor, setBusquedaProveedor] = useState('');
     const [busquedaProducto, setBusquedaProducto] = useState('');
+    const [precioDraft, setPrecioDraft] = useState<Record<string, string>>({});
     const [mostrarDropProducto, setMostrarDropProducto] = useState(false);
     const [categoriaFiltroRecepcion, setCategoriaFiltroRecepcion] = useState('');
     const [mobilePanelRec, setMobilePanelRec] = useState<'productos' | 'ticket'>('productos');
@@ -355,90 +493,163 @@ export default function Recepciones({
             stockActual: formDataModal.stockActual === '' ? undefined : parseInt(formDataModal.stockActual) || 0,
             stockMinimo: parseInt(formDataModal.stockMinimo) || 5,
         };
+        const productoExistiaAntes = !productToEdit && productos.some(
+            p => p.nombre.trim().toLocaleLowerCase('es-CO') === productoData.nombre.trim().toLocaleLowerCase('es-CO')
+        );
         try {
             if (productToEdit) {
                 await onUpdateProducto(productToEdit.id, productoData);
                 toast.success('Producto actualizado');
             } else {
-                await onAddProducto(productoData);
-                setIsCreatingNewFromAction(true);
+                let productoCreado: Producto | null = null;
+                let falloSecundario = false;
+                try {
+                    productoCreado = (await onAddProducto(productoData)) ?? null;
+                } catch {
+                    // addProducto puede persistir el producto antes de fallar al crear su inventario.
+                    falloSecundario = true;
+                }
+
+                if (!productoCreado) {
+                    const normalizar = (nombre: string) => nombre.trim().toLocaleLowerCase('es-CO');
+                    const existentes = await db.getAllProductos().catch(() => productos);
+                    productoCreado = existentes.find(p => normalizar(p.nombre) === normalizar(productoData.nombre)) ?? null;
+                }
+                if (!productoCreado) throw new Error('No se encontró el producto guardado');
+
+                handleAddItem(productoCreado.id, productoCreado);
+                if (falloSecundario) {
+                    toast.message('El producto se guardó. Revisa su inventario al terminar la recepción.');
+                }
+
+                const proveedorId = formDataModal.proveedorId || newRecepcion.proveedorId;
+                if (onAddOrUpdatePrecio && proveedorId && costo > 0) {
+                    try {
+                        await onAddOrUpdatePrecio({
+                            productoId: productoCreado.id,
+                            proveedorId,
+                            precioCosto: Math.round(costo * 100) / 100,
+                            destino: productoCreado.tipo === 'ingrediente' ? 'insumo' : 'venta',
+                        });
+                        toast.success(`Producto guardado en el catálogo de ${getProveedorById(proveedorId)?.nombre || 'este proveedor'}`);
+                    } catch {
+                        toast.error('El producto se creó, pero no se pudo guardar el precio del proveedor. Puedes reintentarlo desde el ticket.');
+                    }
+                } else if (!proveedorId) {
+                    toast.message('Producto creado y añadido a la recepción. Selecciona un proveedor para enlazar su catálogo.');
+                }
             }
             setIsProductModalOpen(false);
             setProductToEdit(null);
             setFormDataModal(FORM_DATA_VACIO);
+            if (!productToEdit) {
+                toast.success(productoExistiaAntes
+                    ? `"${productoData.nombre}" se agregó a la recepción`
+                    : `"${productoData.nombre}" quedó disponible para la recepción`);
+            }
         } catch {
             toast.error('Error al guardar el producto');
         }
     };
 
-    const handleProductSaved = async (productoData: any) => {
+    const leerBorradoresGuardados = (): { lista: BorradorPestaña[]; activaId: string } => {
+        const vacio = { lista: [] as BorradorPestaña[], activaId: '' };
         try {
-            if (productToEdit) {
-                await onUpdateProducto(productToEdit.id, productoData);
-                toast.success('Producto maestro actualizado');
-            } else {
-                await onAddProducto(productoData);
-                setIsCreatingNewFromAction(true);
+            const rawTabs = localStorage.getItem('rec_draft_tabs_v1');
+            const rawUno = localStorage.getItem('rec_draft_v2');
+            const rawBackup = localStorage.getItem('rec_draft_last_good_v1');
+            let lista: BorradorPestaña[] = [];
+            let activaId = '';
+            if (rawTabs) {
+                const parsed = JSON.parse(rawTabs);
+                lista = Array.isArray(parsed?.pestañas) ? parsed.pestañas : [];
+                activaId = parsed?.activaId || '';
             }
-            setIsProductModalOpen(false);
-            setProductToEdit(null);
-            setFormDataModal(FORM_DATA_VACIO);
+            if (lista.length === 0 && rawUno) {
+                const parsed = JSON.parse(rawUno);
+                const items: RecepcionItem[] = parsed?.form?.items || [];
+                if (items.length > 0 || parsed?.form?.proveedorId) {
+                    lista = [{ id: generateUUID(), editandoId: null, step: parsed.step || 1, form: parsed.form }];
+                }
+            }
+            // Si el guardado vacío borró las claves vivas, el respaldo bueno aún puede tener la 36.
+            if (lista.length === 0 && rawBackup) {
+                const parsed = JSON.parse(rawBackup);
+                lista = Array.isArray(parsed?.pestañas) ? parsed.pestañas : [];
+                activaId = parsed?.activaId || '';
+            }
+            lista = lista.filter(p => p?.form && (p.form.proveedorId || (p.form.items || []).length > 0));
+            return { lista, activaId };
         } catch {
-            toast.error('Error al guardar el producto maestro');
+            return vacio;
         }
     };
 
-    // Auto-agregar productos recién creados al listado de recepción
-    useEffect(() => {
-        if (isCreatingNewFromAction && productos.length > 0) {
-            // Buscamos el producto más reciente o el que coincida (simplificado por ahora)
-            // En una app real usaríamos el ID devuelto.
-            const ultimo = productos[productos.length - 1];
-            if (ultimo) {
-                handleAddItem(ultimo.id);
-                setIsCreatingNewFromAction(false);
-                toast.success(`"${ultimo.nombre}" registrado y añadido a la recepción`);
-            }
-        }
-    }, [productos.length, isCreatingNewFromAction]);
+    const aplicarBorradores = (lista: BorradorPestaña[], activaId: string) => {
+        if (lista.length === 0) return false;
+        const activa = lista.find(p => p.id === activaId) || lista[0];
+        setPestañaId(activa.id);
+        setNewRecepcion(activa.form);
+        setEditandoId(activa.editandoId);
+        setStep(activa.step || 1);
+        setPestañasEnEspera(lista.filter(p => p.id !== activa.id));
+        setView('new');
+        return true;
+    };
 
-    // Auto-borrador: guarda en localStorage al editar
-    useEffect(() => {
-        if (view !== 'new') return;
-        if (!newRecepcion.proveedorId && newRecepcion.items.length === 0) return;
-        try {
-            localStorage.setItem('rec_draft_v2', JSON.stringify({ form: newRecepcion, step }));
-        } catch {}
-    }, [newRecepcion, step, view]);
-
-    // Recuperar borrador si el celular se reinició o la app se cerró a medio pedido
+    // Primero recuperar. El guardado NO corre hasta que esto termine — si no, borra la 36 al abrir.
     useEffect(() => {
         if (draftRestorado) return;
-        setDraftRestorado(true);
         try {
-            const raw = localStorage.getItem('rec_draft_v2');
-            if (!raw) return;
-            const parsed = JSON.parse(raw);
-            const items: RecepcionItem[] = parsed?.form?.items || [];
-            if (items.length === 0) return;
-            const proveedor = getProveedorById(parsed.form.proveedorId);
-            const totalDraft = items.reduce((s: number, i: RecepcionItem) => s + (i.cantidadRecibida * i.precioFacturado), 0);
-            const quiereRestaurar = confirm(
-                `Encontramos una recepción sin guardar de "${proveedor?.nombre || 'proveedor'}" con ${items.length} producto${items.length > 1 ? 's' : ''} (${formatCurrency(totalDraft)}).\n\n¿Quieres continuarla donde la dejaste?`
+            const { lista, activaId } = leerBorradoresGuardados();
+            if (lista.length === 0) {
+                setDraftRestorado(true);
+                return;
+            }
+            const nombres = lista.map(p => getProveedorById(p.form.proveedorId)?.nombre || 'sin proveedor').join(', ');
+            const productos = lista.reduce((s, p) => s + (p.form.items?.length || 0), 0);
+            const quiere = confirm(
+                lista.length === 1
+                    ? `Hay una recepción sin guardar de "${nombres}" con ${lista[0].form.items.length} productos.\n\n¿La continúas donde la dejaste?`
+                    : `Hay ${lista.length} recepciones sin guardar (${productos} productos): ${nombres}.\n\n¿Las continúas? Cada una queda en su pestaña.`
             );
-            if (quiereRestaurar) {
-                setNewRecepcion(parsed.form);
-                setStep(parsed.step || 1);
-                setView('new');
-                toast.success('Recepción recuperada');
-            } else {
-                localStorage.removeItem('rec_draft_v2');
+            if (quiere) {
+                aplicarBorradores(lista, activaId);
+                toast.success(lista.length === 1 ? 'Recepción recuperada' : `${lista.length} recepciones recuperadas`);
+            }
+            // Si dice que no, NO borramos el respaldo bueno — solo las claves vivas.
+            if (!quiere) {
+                try {
+                    localStorage.removeItem('rec_draft_tabs_v1');
+                    localStorage.removeItem('rec_draft_v2');
+                } catch {}
             }
         } catch {
-            localStorage.removeItem('rec_draft_v2');
+            /* no tocar el respaldo bueno */
         }
+        setDraftRestorado(true);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
+    // Cada pestaña es una recepción abierta. Solo escribe DESPUÉS de intentar recuperar.
+    useEffect(() => {
+        if (!draftRestorado) return;
+        const actual: BorradorPestaña = { id: pestañaId, editandoId, step, form: newRecepcion };
+        const utiles = [actual, ...pestañasEnEspera].filter(p => p.form.proveedorId || p.form.items.length > 0);
+        try {
+            if (utiles.length === 0) {
+                // No borrar el respaldo bueno: solo las claves de trabajo.
+                localStorage.removeItem('rec_draft_tabs_v1');
+                localStorage.removeItem('rec_draft_v2');
+                return;
+            }
+            const payload = JSON.stringify({ activaId: pestañaId, pestañas: utiles, guardadoEn: new Date().toISOString() });
+            localStorage.setItem('rec_draft_tabs_v1', payload);
+            localStorage.setItem('rec_draft_v2', JSON.stringify({ form: newRecepcion, step }));
+            // Respaldo que NUNCA se borra al abrir vacío — solo se actualiza con datos reales.
+            localStorage.setItem('rec_draft_last_good_v1', payload);
+        } catch {}
+    }, [newRecepcion, step, pestañaId, pestañasEnEspera, editandoId, draftRestorado]);
 
     // === FUNCIÓN DE ESCANEO OCR REAL (Tesseract.js) ===
     const handleScanFactura = async () => {
@@ -636,6 +847,24 @@ export default function Recepciones({
                 observaciones: ''
             }));
 
+        if (newRecepcion.items.length > 0 && newRecepcion.proveedorId && newRecepcion.proveedorId !== pedido.proveedorId) {
+            const id = generateUUID();
+            setPestañasEnEspera(prev => [...prev, { id: pestañaId, editandoId, step, form: newRecepcion }]);
+            setPestañaId(id);
+            setEditandoId(null);
+            setStep(1);
+            setNewRecepcion({
+                ...formularioVacio(),
+                prePedidoId: pedidoId,
+                proveedorId: pedido.proveedorId,
+                items: itemsDesdePrePedido,
+            });
+            setPantallaFactura(false);
+            setPrecioDraft({});
+            setView('new');
+            toast.success(`La otra recepción se quedó en su pestaña. Esta es ${getProveedorById(pedido.proveedorId)?.nombre || 'el proveedor nuevo'}.`);
+            return;
+        }
         setNewRecepcion(prev => ({
             ...prev,
             prePedidoId: pedidoId,
@@ -692,6 +921,9 @@ export default function Recepciones({
                 else if (filtroFecha === 'ayer') matchFecha = fRec === ayerStr;
                 else if (filtroFecha === 'semana') matchFecha = fRec >= ymdLocal(semanaAtras);
                 else if (filtroFecha === 'mes') matchFecha = fRec.slice(0, 7) === mesActualStr;
+                // Rango libre (para buscar fechas viejas por día exacto).
+                if (filtroFechaDesde && fRec && fRec < filtroFechaDesde) matchFecha = false;
+                if (filtroFechaHasta && fRec && fRec > filtroFechaHasta) matchFecha = false;
 
                 // Filtro estado incidencias
                 const hasIssues = recepcion.items.some(i => !i.productoOk || !i.embalajeOk || i.defectuosos > 0);
@@ -709,7 +941,7 @@ export default function Recepciones({
             console.error("Shield-Guardian: Error filtrando recepciones", error);
             return [];
         }
-    }, [recepciones, busqueda, proveedorFiltro, filtroFecha, filtroEstado, getProveedorById, deletedIds]);
+    }, [recepciones, busqueda, proveedorFiltro, filtroFecha, filtroEstado, filtroFechaDesde, filtroFechaHasta, getProveedorById, deletedIds]);
 
     // Eliminar recepción del historial
     const handleDeleteRecepcion = async (id: string) => {
@@ -770,8 +1002,8 @@ export default function Recepciones({
     };
 
     // Agregar Item a la recepción
-    const handleAddItem = (productoId: string) => {
-        const producto = getProductoById(productoId);
+    const handleAddItem = (productoId: string, productoDirecto?: Producto) => {
+        const producto = productoDirecto || getProductoById(productoId);
         if (!producto) return;
         // Precio preferido: precioCosto del proveedor > costoBase del producto
         const precioProveedor = preciosDelProveedor.find(pp => pp.productoId === productoId);
@@ -803,6 +1035,17 @@ export default function Recepciones({
         }));
     };
 
+    const alSoltarOrden = (event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+        setNewRecepcion(prev => {
+            const desde = prev.items.findIndex(i => i.id === active.id);
+            const hasta = prev.items.findIndex(i => i.id === over.id);
+            if (desde < 0 || hasta < 0) return prev;
+            return { ...prev, items: arrayMove(prev.items, desde, hasta) };
+        });
+    };
+
     const formularioVacio = () => ({
         proveedorId: '',
         prePedidoId: undefined as string | undefined,
@@ -819,6 +1062,118 @@ export default function Recepciones({
         totalImpreso: '',
     });
 
+    const nombrePestaña = (proveedorId: string, productos: number) => {
+        const nombre = getProveedorById(proveedorId)?.nombre;
+        if (nombre) return nombre;
+        if (productos > 0) return 'Sin proveedor';
+        return 'Nueva';
+    };
+
+    const pestañasVisibles = [
+        { id: pestañaId, nombre: nombrePestaña(newRecepcion.proveedorId, newRecepcion.items.length), productos: newRecepcion.items.length, activa: true, form: newRecepcion, editandoId },
+        ...pestañasEnEspera.map(p => ({
+            id: p.id,
+            nombre: nombrePestaña(p.form.proveedorId, p.form.items.length),
+            productos: p.form.items.length,
+            activa: false,
+            form: p.form,
+            editandoId: p.editandoId,
+        })),
+    ];
+
+    const limpiarPantallaAlCambiar = () => {
+        setPantallaFactura(false);
+        setPrecioDraft({});
+        setBusquedaProducto('');
+        imagenFileRef.current = null;
+    };
+
+    const abrirOtraRecepcion = () => {
+        const tieneTrabajo = !!(newRecepcion.proveedorId || newRecepcion.items.length > 0 || editandoId);
+        if (!tieneTrabajo) {
+            setView('new');
+            return;
+        }
+        const id = generateUUID();
+        setPestañasEnEspera(prev => [...prev, { id: pestañaId, editandoId, step, form: newRecepcion }]);
+        setPestañaId(id);
+        setNewRecepcion(formularioVacio());
+        setEditandoId(null);
+        setStep(1);
+        limpiarPantallaAlCambiar();
+        setView('new');
+    };
+
+    const irAPestaña = (id: string) => {
+        if (id === pestañaId) {
+            setView('new');
+            return;
+        }
+        const destino = pestañasEnEspera.find(p => p.id === id);
+        if (!destino) return;
+        setPestañasEnEspera(prev => [
+            ...prev.filter(p => p.id !== id),
+            { id: pestañaId, editandoId, step, form: newRecepcion },
+        ]);
+        setPestañaId(destino.id);
+        setNewRecepcion(destino.form);
+        setEditandoId(destino.editandoId);
+        setStep(destino.step || 1);
+        limpiarPantallaAlCambiar();
+        setView('new');
+    };
+
+    const cerrarPestaña = (id: string) => {
+        const datos = id === pestañaId
+            ? { form: newRecepcion, editandoId }
+            : pestañasEnEspera.find(p => p.id === id);
+        if (!datos) return;
+        const tiene = datos.form.items.length > 0 || !!datos.form.proveedorId;
+        if (tiene && !confirm(`¿Cerrar la recepción de ${nombrePestaña(datos.form.proveedorId, datos.form.items.length)}? Lo que no se haya guardado se pierde.`)) return;
+        if (id !== pestañaId) {
+            setPestañasEnEspera(prev => prev.filter(p => p.id !== id));
+            return;
+        }
+        const siguiente = pestañasEnEspera[0];
+        if (!siguiente) {
+            setNewRecepcion(formularioVacio());
+            setEditandoId(null);
+            setStep(1);
+            setPestañaId(generateUUID());
+            limpiarPantallaAlCambiar();
+            setView('list');
+            return;
+        }
+        setPestañasEnEspera(prev => prev.slice(1));
+        setPestañaId(siguiente.id);
+        setNewRecepcion(siguiente.form);
+        setEditandoId(siguiente.editandoId);
+        setStep(siguiente.step || 1);
+        limpiarPantallaAlCambiar();
+    };
+
+    const seguirConLaSiguiente = () => {
+        limpiarPantallaAlCambiar();
+        const resto = pestañasEnEspera.filter(p => p.id !== pestañaId);
+        if (resto.length === 0) {
+            setPestañasEnEspera([]);
+            setView('list');
+            setStep(1);
+            setEditandoId(null);
+            setNewRecepcion(formularioVacio());
+            setPestañaId(generateUUID());
+            return;
+        }
+        const siguiente = resto[0];
+        setPestañasEnEspera(resto.slice(1));
+        setPestañaId(siguiente.id);
+        setNewRecepcion(siguiente.form);
+        setEditandoId(siguiente.editandoId);
+        setStep(siguiente.step || 1);
+        setView('new');
+        toast.info(`Esta ya quedó guardada. Sigues con ${nombrePestaña(siguiente.form.proveedorId, siguiente.form.items.length)}.`);
+    };
+
     const armarCuadre = () => cuadreFactura(newRecepcion.items, {
         incluyeIva: newRecepcion.incluyeIva,
         porcentajeIva: newRecepcion.porcentajeIva,
@@ -827,22 +1182,28 @@ export default function Recepciones({
     });
 
     const handleEditarRecepcion = (recepcion: Recepcion) => {
-        setEditandoId(recepcion.id);
-        setNewRecepcion({
+        const form = {
             proveedorId: recepcion.proveedorId,
             prePedidoId: recepcion.prePedidoId,
             numeroFactura: recepcion.numeroFactura || '',
             fechaFactura: (recepcion.fechaFactura || '').slice(0, 10) || hoyLocal(),
+            fechaRecepcion: ymdLocal(recepcion.fechaRecepcion || recepcion.fechaFactura || ''),
             imagenFactura: recepcion.imagenFactura || null,
             items: recepcion.items.map(i => ({ ...i })),
             observaciones: recepcion.observaciones || '',
-            metodoPago: recepcion.metodoPago || 'efectivo',
+            metodoPago: recepcion.metodoPago || 'efectivo' as MetodoPago,
             cajaId: recepcion.cajaId,
             incluyeIva: !!recepcion.incluyeIva,
             porcentajeIva: recepcion.porcentajeIva ?? 19,
             descuentoFactura: recepcion.descuentoFactura ?? 0,
             totalImpreso: recepcion.totalImpreso ? String(recepcion.totalImpreso) : '',
-        });
+        };
+        if ((newRecepcion.items.length > 0 || newRecepcion.proveedorId) && editandoId !== recepcion.id) {
+            setPestañasEnEspera(prev => [...prev, { id: pestañaId, editandoId, step, form: newRecepcion }]);
+            setPestañaId(generateUUID());
+        }
+        setEditandoId(recepcion.id);
+        setNewRecepcion(form);
         setView('new');
         toast.info('Estás corrigiendo una recepción ya guardada. El inventario solo se mueve por la diferencia.');
     };
@@ -856,6 +1217,9 @@ export default function Recepciones({
         const numFactura = newRecepcion.numeroFactura || `F-${Date.now().toString().slice(-6)}`;
 
         try {
+            const fechaRecDia = (newRecepcion.fechaRecepcion || '').slice(0, 10);
+            // Se guarda a las 12:00 hora local para que la zona horaria de Colombia (-05:00) no corra el día.
+            const fechaRecISO = fechaRecDia ? new Date(`${fechaRecDia}T12:00:00`).toISOString() : null;
             const cuadre = armarCuadre();
             const total = cuadre.total;
             const camposDinero = {
@@ -899,6 +1263,7 @@ export default function Recepciones({
                     metodoPago: newRecepcion.metodoPago,
                     cajaId: newRecepcion.cajaId,
                     imagenFactura: newRecepcion.imagenFactura || undefined,
+                    ...(fechaRecISO ? { fechaRecepcion: fechaRecISO } : {}),
                     ...camposDinero,
                 });
                 if (onUpdateGasto && gastos) {
@@ -917,15 +1282,17 @@ export default function Recepciones({
                             metodoPago,
                             estado: metodoPago === 'credito' ? 'pendiente' : (gasto.estado === 'anulado' ? 'anulado' : 'pagado'),
                             cajaId: newRecepcion.cajaId,
+                            // Si se corrigió la fecha de la recepción, el gasto de la compra se mueve con ella.
+                            ...(fechaRecISO ? { fecha: fechaRecISO } : {}),
                         });
                     }
                 }
                 toast.success('Recepción del historial actualizada');
-                try { localStorage.removeItem('rec_draft_v2'); } catch {}
-                setEditandoId(null);
-                setPantallaFactura(false);
-                setView('list');
-                setNewRecepcion(formularioVacio());
+                try {
+                    localStorage.removeItem('rec_draft_v2');
+                    // last_good se actualiza solo con lo que queda abierto
+                } catch {}
+                seguirConLaSiguiente();
                 return;
             }
 
@@ -941,7 +1308,7 @@ export default function Recepciones({
                 ...camposDinero,
                 estado: 'en_proceso',
                 recibidoPor: usuario?.nombre || usuario?.email || 'Sistema',
-                fechaRecepcion: new Date().toISOString(),
+                fechaRecepcion: fechaRecISO ?? new Date().toISOString(),
                 imagenFactura: newRecepcion.imagenFactura || undefined,
                 observaciones: newRecepcion.observaciones,
                 metodoPago: newRecepcion.metodoPago,
@@ -1003,12 +1370,7 @@ export default function Recepciones({
                 { duration: 5000 }
             );
             try { localStorage.removeItem('rec_draft_v2'); } catch {}
-            setView('list');
-            setStep(1);
-            setPrePedidoSeleccionado('');
-            setEditandoId(null);
-            setPantallaFactura(false);
-            setNewRecepcion(formularioVacio());
+            seguirConLaSiguiente();
         } catch (error) {
             console.error(error);
             toast.error('Error al guardar la recepción');
@@ -1261,7 +1623,13 @@ export default function Recepciones({
         if (!newRecepcion.proveedorId) {
             return (
                 <div className="space-y-4 animate-ag-fade-in pb-24">
-                    <div className="flex items-center gap-3">
+                    <BarraRecepcionesAbiertas
+                        pestañas={pestañasVisibles}
+                        onIr={irAPestaña}
+                        onCerrar={cerrarPestaña}
+                        onNueva={abrirOtraRecepcion}
+                    />
+                    <div className="flex items-center gap-3 px-1">
                         <button onClick={() => setView('list')}
                             className="w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors shrink-0">
                             <ArrowLeft className="w-4 h-4" />
@@ -1305,7 +1673,7 @@ export default function Recepciones({
                                         {p.nombre.charAt(0).toUpperCase()}
                                     </div>
                                     <div className="w-full space-y-0.5">
-                                        <p className="font-black text-sm text-slate-900 dark:text-white line-clamp-2 leading-tight">{p.nombre}</p>
+                                        <p className="font-black text-sm text-slate-900 dark:text-white leading-snug break-words">{p.nombre}</p>
                                         <p className="text-[9px] text-slate-400 font-bold">
                                             {lastRec ? `Últ: ${new Date(lastRec.fechaRecepcion).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })}` : 'Nueva recepción'}
                                         </p>
@@ -1327,10 +1695,17 @@ export default function Recepciones({
         /* ── PANTALLA B: POS directo (catálogo + ticket) ── */
         return (
             <div className="flex flex-col animate-ag-fade-in" style={{ height: 'calc(100dvh - 56px)' }}>
+                <BarraRecepcionesAbiertas
+                    pestañas={pestañasVisibles}
+                    onIr={irAPestaña}
+                    onCerrar={cerrarPestaña}
+                    onNueva={abrirOtraRecepcion}
+                />
                 {/* Cabecera compacta */}
                 <div className="shrink-0 bg-white dark:bg-slate-900 border-b border-slate-100 dark:border-slate-800 px-3 py-2 flex items-center gap-2 z-20">
                     <button
-                        onClick={() => setNewRecepcion(p => ({ ...p, proveedorId: '', items: [] }))}
+                        onClick={() => setView('list')}
+                        title="Volver a la lista. Esta recepción se queda abierta en su pestaña"
                         className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors shrink-0"
                     ><ArrowLeft className="w-4 h-4" /></button>
                     <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center font-black text-white text-sm shrink-0", paleta[proveedores.findIndex(p => p.id === newRecepcion.proveedorId) % paleta.length] || 'bg-indigo-600')}>
@@ -1426,10 +1801,11 @@ export default function Recepciones({
                                                             ? "bg-indigo-50 border-indigo-200 hover:border-indigo-400"
                                                             : "bg-white dark:bg-slate-800 border-slate-200 hover:border-indigo-400 hover:bg-indigo-50"
                                                     )}>
-                                                    <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                    <span className="font-black text-[11px] text-slate-800 dark:text-white leading-snug break-words group-hover:text-indigo-700">{p.nombre}</span>
                                                     <span className={cn("text-[10px] font-black tabular-nums", precioMostrar ? "text-indigo-600" : "text-slate-400")}>
                                                         {precioMostrar ? formatCurrency(precioMostrar) : 'Sin precio'}
                                                     </span>
+                                                    <MarcaPrecioModificado cambio={ultimoCambioPrecio(historialPrecios, p.id, newRecepcion.proveedorId)} />
                                                 </button>
                                             );
                                         })}
@@ -1456,10 +1832,11 @@ export default function Recepciones({
                                                     return (
                                                         <button key={p.id} onClick={() => handleAddItem(p.id)}
                                                             className="flex flex-col items-start p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50 active:scale-95 transition-all text-left gap-0.5 group">
-                                                            <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                            <span className="font-black text-[11px] text-slate-800 dark:text-white leading-snug break-words group-hover:text-indigo-700">{p.nombre}</span>
                                                             <span className={cn("text-[10px] font-black tabular-nums", precioMostrar ? "text-indigo-600" : "text-slate-400")}>
                                                                 {precioMostrar ? formatCurrency(precioMostrar) : 'Sin precio'}
                                                             </span>
+                                                            <MarcaPrecioModificado cambio={ultimoCambioPrecio(historialPrecios, p.id, newRecepcion.proveedorId)} />
                                                         </button>
                                                     );
                                                 })}
@@ -1490,10 +1867,11 @@ export default function Recepciones({
                                                             return (
                                                                 <button key={p.id} onClick={() => handleAddItem(p.id)}
                                                                     className="flex flex-col items-start p-2.5 rounded-lg bg-slate-50 hover:bg-indigo-50 hover:border-indigo-300 border border-transparent active:scale-95 transition-all text-left gap-0.5 group">
-                                                                    <span className="font-black text-[10px] text-slate-800 dark:text-white leading-tight line-clamp-2 group-hover:text-indigo-700">{p.nombre}</span>
+                                                                    <span className="font-black text-[11px] text-slate-800 dark:text-white leading-snug break-words group-hover:text-indigo-700">{p.nombre}</span>
                                                                     <span className={cn("text-[10px] font-black tabular-nums", precioMostrar ? "text-indigo-600" : "text-slate-400")}>
                                                                         {precioMostrar ? formatCurrency(precioMostrar) : 'Sin precio'}
                                                                     </span>
+                                                                    <MarcaPrecioModificado cambio={ultimoCambioPrecio(historialPrecios, p.id, newRecepcion.proveedorId)} />
                                                                 </button>
                                                             );
                                                         })}
@@ -1514,11 +1892,12 @@ export default function Recepciones({
                             <div>
                                 <p className="text-[9px] font-black uppercase tracking-[0.25em] text-indigo-300">Ticket</p>
                                 <p className="font-black text-xs truncate">{proveedorActual?.nombre ?? '—'}</p>
+                                <p className="text-[9px] text-slate-400">Agarra el número y muévelo como en la factura</p>
                             </div>
                             {totalItems > 0 && (
-                                <div className="text-right">
+                                <div className="text-right shrink-0">
                                     <p className="text-[9px] text-indigo-400 font-bold">{totalItems} prod · {totalUnidades} uds</p>
-                                    <p className="text-sm font-black tabular-nums">{plata(totalDinero)}</p>
+                                    <p className="text-base font-black tabular-nums whitespace-nowrap">{plata(totalDinero)}</p>
                                 </div>
                             )}
                         </div>
@@ -1531,6 +1910,8 @@ export default function Recepciones({
                                     <p className="text-xs font-bold text-center px-4">Toca un producto del catálogo para agregarlo</p>
                                 </div>
                             ) : (
+                                <DndContext sensors={sensoresOrden} collisionDetection={closestCenter} onDragEnd={alSoltarOrden}>
+                                <SortableContext items={newRecepcion.items.map(i => i.id)} strategy={verticalListSortingStrategy}>
                                 <div className="divide-y divide-white/5">
                                     {newRecepcion.items.map((item, idx) => {
                                         const prod = getProductoById(item.productoId);
@@ -1541,9 +1922,19 @@ export default function Recepciones({
                                         const bajo = diff < -2;
                                         const linea = cuadre.lineas.find(l => l.id === item.id);
                                         return (
-                                            <div key={item.id} className="px-3 py-2.5 space-y-2">
+                                            <FilaOrdenable key={item.id} id={item.id}>
+                                            {(asa) => (
+                                            <div className="px-3 py-2.5 space-y-2">
                                                 <div className="flex items-start gap-2">
-                                                    <span className="text-[9px] font-black text-slate-500 mt-0.5 shrink-0 w-4 text-right">{idx + 1}</span>
+                                                    <button
+                                                        type="button"
+                                                        {...asa}
+                                                        title="Arrastra para dejarlo en el puesto de la factura"
+                                                        className="mt-0.5 shrink-0 w-8 h-8 rounded-lg bg-white/10 text-white flex flex-col items-center justify-center cursor-grab active:cursor-grabbing touch-none"
+                                                    >
+                                                        <GripVertical className="w-3 h-3 text-slate-300" />
+                                                        <span className="text-[9px] font-black leading-none">{idx + 1}</span>
+                                                    </button>
                                                     <div className="flex-1 min-w-0">
                                                         <p className="font-black text-xs text-white leading-tight">{prod?.nombre || '??'}</p>
                                                         {precioAnt > 0 && (
@@ -1557,13 +1948,32 @@ export default function Recepciones({
                                                         <X className="w-3 h-3" />
                                                     </button>
                                                 </div>
-                                                <div className="flex items-center gap-1.5 pl-6">
-                                                    <input type="number" value={item.precioFacturado || ''} placeholder="$"
-                                                        onChange={e => handleUpdateItem(item.id, { precioFacturado: parseFloat(e.target.value) || 0 })}
-                                                        className={cn("w-20 h-8 rounded-lg px-2 text-center font-black text-xs outline-none border transition-colors",
-                                                            subio ? "bg-rose-900/40 border-rose-700 text-rose-300" : bajo ? "bg-emerald-900/40 border-emerald-700 text-emerald-300" : "bg-white/10 border-white/10 text-white"
+                                                <div className="pl-6 space-y-2">
+                                                    <div>
+                                                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Precio</p>
+                                                        <input type="text" inputMode="decimal" placeholder="$"
+                                                            value={precioDraft[item.id] ?? textoPrecio(item.precioFacturado)}
+                                                            onFocus={() => setPrecioDraft(d => ({ ...d, [item.id]: textoPrecio(item.precioFacturado) }))}
+                                                            onChange={e => setPrecioDraft(d => ({ ...d, [item.id]: e.target.value }))}
+                                                            onBlur={e => {
+                                                                handleUpdateItem(item.id, { precioFacturado: parsearPesosCol(e.target.value) });
+                                                                setPrecioDraft(d => {
+                                                                    const next = { ...d };
+                                                                    delete next[item.id];
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            className={cn("w-full h-10 rounded-lg px-3 text-right font-black text-base outline-none border transition-colors",
+                                                                subio ? "bg-rose-900/40 border-rose-700 text-rose-300" : bajo ? "bg-emerald-900/40 border-emerald-700 text-emerald-300" : "bg-white/10 border-white/10 text-white"
+                                                            )}
+                                                        />
+                                                        {precioAnt >= 10000 && item.precioFacturado > 0 && item.precioFacturado < precioAnt / 50 && (
+                                                            <p className="mt-1 text-[11px] font-bold text-amber-300 leading-snug">
+                                                                Este precio quedó corto. Escríbelo completo, por ejemplo {textoPrecio(precioAnt)}.
+                                                            </p>
                                                         )}
-                                                    />
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5">
                                                     <div className="flex items-center bg-white/10 rounded-lg overflow-hidden shrink-0">
                                                         <button onClick={() => handleUpdateItem(item.id, { cantidadRecibida: Math.max(0, item.cantidadRecibida - 1) })}
                                                             className="w-7 h-8 flex items-center justify-center text-slate-300 hover:bg-white/10 font-black text-base transition-colors">−</button>
@@ -1585,8 +1995,10 @@ export default function Recepciones({
                                                         )}>
                                                         <Package className="w-3.5 h-3.5" />
                                                     </button>
-                                                    <div className="flex-1 text-right">
-                                                        <p className="font-black text-sm text-white tabular-nums">
+                                                    </div>
+                                                    <div className="flex items-baseline justify-between gap-3 rounded-lg bg-white/5 px-3 py-2">
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total</span>
+                                                        <p className="font-black text-lg text-white tabular-nums whitespace-nowrap">
                                                             {linea && linea.total > 0 ? plata(linea.total) : '—'}
                                                         </p>
                                                     </div>
@@ -1624,9 +2036,13 @@ export default function Recepciones({
                                                     />
                                                 )}
                                             </div>
+                                            )}
+                                            </FilaOrdenable>
                                         );
                                     })}
                                 </div>
+                                </SortableContext>
+                                </DndContext>
                             )}
                         </div>
 
@@ -1635,7 +2051,7 @@ export default function Recepciones({
                             <div className="flex items-end justify-between gap-2">
                                 <div>
                                     <p className="text-[9px] font-black uppercase text-indigo-400 tracking-widest">{totalItems} productos · {totalUnidades} unidades{editandoId ? ' · editando historial' : ''}</p>
-                                    <p className="text-2xl font-black text-white tabular-nums">{plata(totalDinero)}</p>
+                                    <p className="text-2xl font-black text-white tabular-nums whitespace-nowrap">{plata(totalDinero)}</p>
                                 </div>
                             </div>
                             <button
@@ -1733,6 +2149,21 @@ export default function Recepciones({
                             )}
 
                             <div>
+                                <label className="block text-[11px] font-black uppercase tracking-widest text-indigo-300 mb-1">Fecha de la recepción (el día que entró la mercancía)</label>
+                                <input
+                                    type="date"
+                                    value={newRecepcion.fechaRecepcion || ''}
+                                    onChange={e => setNewRecepcion(p => ({ ...p, fechaRecepcion: e.target.value }))}
+                                    className="w-full h-11 rounded-xl bg-white/10 border border-white/15 text-white text-sm font-bold px-3 outline-none"
+                                />
+                                <p className="text-xs text-indigo-200 mt-1">
+                                    {newRecepcion.fechaRecepcion
+                                        ? `Se guarda con ese día. Úsalo para registrar o corregir una recepción con fecha vieja.`
+                                        : 'Vacía = se guarda con la fecha y hora de hoy.'}
+                                </p>
+                            </div>
+
+                            <div>
                                 <label className="block text-[11px] font-black uppercase tracking-widest text-indigo-300 mb-1">Forma de pago</label>
                                 <select
                                     value={newRecepcion.metodoPago}
@@ -1795,11 +2226,13 @@ export default function Recepciones({
                         onOpenChange={(open) => { if (!open) { setIsProductModalOpen(false); setProductToEdit(null); setFormDataModal(FORM_DATA_VACIO); } }}
                         editingProducto={productToEdit}
                         categorias={categorias}
+                        productos={productos}
                         proveedores={proveedores}
                         formData={formDataModal}
                         setFormData={setFormDataModal}
                         onSubmit={handleSubmitModal}
                         formatCurrency={formatCurrency}
+                        onAddCategoria={onAddCategoria}
                     />
                 )}
                 <input ref={fileInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
@@ -2119,12 +2552,96 @@ export default function Recepciones({
                             Archivo de Facturas
                         </Button>
                         {check('CREAR_RECEPCIONES') && (
-                            <Button onClick={() => { setEditandoId(null); setNewRecepcion(formularioVacio()); setView('new'); }} className="gap-2 h-12 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 font-black uppercase text-[11px] tracking-widest">
+                            <Button onClick={() => {
+                                const hayAbierta = !!(newRecepcion.proveedorId || newRecepcion.items.length > 0 || pestañasEnEspera.length > 0);
+                                if (hayAbierta) abrirOtraRecepcion();
+                                else { setEditandoId(null); setView('new'); }
+                            }} className="gap-2 h-12 px-6 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-600/20 font-black uppercase text-[11px] tracking-widest">
                                 <Plus className="w-4 h-4" /> Registrar Factura
                             </Button>
                         )}
                     </div>
                 </div>
+
+                {pestañasVisibles.some(p => p.productos > 0 || p.form.proveedorId) && (
+                    <div className="rounded-2xl border-2 border-indigo-200 bg-indigo-50 dark:bg-indigo-950/30 dark:border-indigo-800 overflow-hidden">
+                        <p className="px-3 pt-3 text-[10px] font-black uppercase tracking-widest text-indigo-700">Recepciones abiertas</p>
+                        <p className="px-3 text-xs font-bold text-indigo-900/70 dark:text-indigo-200">Toca una para seguirla. La otra se queda con sus precios, esperando.</p>
+                        <BarraRecepcionesAbiertas
+                            pestañas={pestañasVisibles}
+                            onIr={irAPestaña}
+                            onCerrar={cerrarPestaña}
+                            onNueva={abrirOtraRecepcion}
+                        />
+                    </div>
+                )}
+
+                {(() => {
+                    const { lista } = leerBorradoresGuardados();
+                    const hayEnMemoria = pestañasVisibles.some(p => p.productos > 0 || p.form.proveedorId);
+                    if (lista.length === 0 || hayEnMemoria) return null;
+                    const nombres = lista.map(p => getProveedorById(p.form.proveedorId)?.nombre || 'proveedor').join(', ');
+                    const totalProd = lista.reduce((s, p) => s + (p.form.items?.length || 0), 0);
+                    return (
+                        <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-4 space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-800">Recepción sin guardar</p>
+                            <p className="text-sm font-bold text-amber-950 dark:text-amber-100">
+                                Quedó abierta: {nombres} · {totalProd} productos. No la pierdas — tócala para recuperarla.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const { lista: L, activaId } = leerBorradoresGuardados();
+                                    if (aplicarBorradores(L, activaId)) toast.success('Recepción recuperada');
+                                    else toast.error('No hay borrador para recuperar');
+                                }}
+                                className="h-11 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-black uppercase tracking-widest"
+                            >
+                                Recuperar recepción abierta
+                            </button>
+                        </div>
+                    );
+                })()}
+
+                {prepedidosConfirmados.length > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-950/20 border-2 border-amber-200 dark:border-amber-800 rounded-2xl p-4 space-y-3">
+                        <div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700">Preventas por recibir</p>
+                            <p className="text-xs font-bold text-amber-900/70 dark:text-amber-200/80">Estas órdenes ya se hicieron en preventa. Toca una para recibirla.</p>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {prepedidosConfirmados.map(p => {
+                                const proveedorNombre = getProveedorById(p.proveedorId)?.nombre || p.nombre;
+                                const fecha = (() => {
+                                    const d = new Date(p.fechaCreacion);
+                                    return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+                                })();
+                                return (
+                                    <button
+                                        key={p.id}
+                                        type="button"
+                                        disabled={!check('CREAR_RECEPCIONES')}
+                                        onClick={() => {
+                                            setEditandoId(null);
+                                            setView('new');
+                                            handleVincularPrePedido(p.id);
+                                        }}
+                                        className="flex items-center justify-between gap-3 text-left bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-3 hover:border-amber-400 disabled:opacity-60"
+                                    >
+                                        <div className="min-w-0">
+                                            <p className="font-black text-sm text-slate-900 dark:text-white break-words">{proveedorNombre}</p>
+                                            <p className="text-[10px] font-bold text-slate-500">{p.items.length} productos · {fecha}</p>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className="text-sm font-black text-indigo-600 tabular-nums">{formatCurrency(p.total)}</p>
+                                            <p className="text-[10px] font-black uppercase text-amber-700">Recibir</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+                )}
 
                 <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm space-y-3">
                     <div className="flex flex-col sm:flex-row gap-3">
@@ -2223,6 +2740,37 @@ export default function Recepciones({
                                 </button>
                             ))}
                         </div>
+                    </div>
+
+                    {/* Rango libre de fechas: para buscar una recepción vieja por su día exacto */}
+                    <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 shrink-0 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-indigo-500" /> Entre fechas:
+                        </span>
+                        <input
+                            type="date"
+                            aria-label="Desde"
+                            value={filtroFechaDesde}
+                            onChange={e => setFiltroFechaDesde(e.target.value)}
+                            className="h-8 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/50 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none"
+                        />
+                        <span className="text-[10px] font-black text-slate-400">hasta</span>
+                        <input
+                            type="date"
+                            aria-label="Hasta"
+                            value={filtroFechaHasta}
+                            onChange={e => setFiltroFechaHasta(e.target.value)}
+                            className="h-8 px-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950/50 text-xs font-bold text-slate-700 dark:text-slate-200 outline-none"
+                        />
+                        {(filtroFechaDesde || filtroFechaHasta) && (
+                            <button
+                                type="button"
+                                onClick={() => { setFiltroFechaDesde(''); setFiltroFechaHasta(''); }}
+                                className="h-8 px-2.5 rounded-xl bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider"
+                            >
+                                Limpiar fechas
+                            </button>
+                        )}
                     </div>
 
                     {/* Resumen de resultados filtrados */}
@@ -2327,11 +2875,13 @@ export default function Recepciones({
                     onOpenChange={(open) => { if (!open) { setIsProductModalOpen(false); setProductToEdit(null); setFormDataModal(FORM_DATA_VACIO); } }}
                     editingProducto={productToEdit}
                     categorias={categorias}
+                    productos={productos}
                     proveedores={proveedores}
                     formData={formDataModal}
                     setFormData={setFormDataModal}
                     onSubmit={handleSubmitModal}
                     formatCurrency={formatCurrency}
+                    onAddCategoria={onAddCategoria}
                 />
             )}
         </div>

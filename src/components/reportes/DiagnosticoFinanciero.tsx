@@ -14,7 +14,10 @@ import { GastoDiarioForm } from '@/components/gastos/gasto-diario-form';
 import { ExpenseList } from '@/components/gastos/ExpenseList';
 import { TurboExpenseManager } from '@/components/gastos/TurboExpenseManager';
 import type { GastoCategoria, MetodoPago } from '@/types';
-import { normalizarFechaYYYYMMDD, getProducciones, deleteProduccion, esCompromisoYaEnNomina, compromisoAMensual, claveCicloCompromiso, diasObjetivoCompromiso } from '@/lib/finanzas-personales';
+import { normalizarFechaYYYYMMDD, getProducciones, deleteProduccion, esCompromisoYaEnNomina, compromisoAMensual, claveCicloCompromiso, diasObjetivoCompromiso, calcularPanoramaSupervivencia } from '@/lib/finanzas-personales';
+import { calcularAnalisisOperativo } from '@/lib/analisis-operativo';
+import { opcionesPersonaFamilia } from '@/lib/familia-duenos';
+import { getBovedas, setBovedaSaldoReal } from '@/lib/boveda-store';
 import { useAuth } from '@/contexts/AuthContext';
 import { resolverKgPorArrobaMasa } from '@/lib/arroba-masa';
 import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
@@ -819,6 +822,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
     const { role, currentMonth, reporteActual, comparativoData, date, periodo, r, proyeccion, hoy, diaActual, diasDelMes, ventasMesActual, tasaDiaria, rentabilidadProductos, prod, totalVentasProductos, gastosData, ventasMetodoData, prevPeriodo, d, reporteMesAnterior, calcTrend, pct, margenActual, margenAnterior, ventasMes, ticketPromedio, ventasMesAnt, ticketAnterior, ratioGasto, ratioGastoAnt, compromisos, setCompromisos, ventasDiarias, setVentasDiarias, detallesModal, setDetallesModal, producciones, setProducciones, formProd, setFormProd, editProduccionId, setEditProduccionId, masasPreparadas, setMasasPreparadas, hornadas, setHornadas, handleAddMasa, handleRemoveMasa, handleMasaChange, handleAddHornada, handleRemoveHornada, handleHornadaChange, isStringField, updated, handleSaveProduccion, validHornadas, masaTotal, nueva, pinModal, setPinModal, activeTab, setActiveTab, analisisIA, setAnalisisIA, pidiendoIA, setPidiendoIA, pedirConsejoIA, contextoData, prompt, temporadaBaja, setTemporadaBaja, presupuestosMinimos, setPresupuestosMinimos, editCompraId, setEditCompraId, handleStorage, sugerencias, loading, generarSugerencias, totalCompromisosActivos, ratioCompromisosVsVentas, saludFinanciera, margen, cobertura, score, formCompromiso, setFormCompromiso, formVenta, setFormVenta, proyeccionQuincena, consejo, periodoFiltro, setPeriodoFiltro, m, q, quincenaReal, year, month, pad, lastDayOfMonth, y1, m1, d1, y2, m2, d2, inicioDate, finDate, hoyDate, hoyStr, maxTranscurrido, transcurridoTime, diasTranscurridos, totalDiasPeriodo, f, ventasTotalDia, diagnosticoFinanciero, operativos, ingresos, fijos, getLimite, compras, limite, promedioGastosMensuales, mes, numMeses, promedioInsumos, promedioOtrosGastos, totalObligaciones, coberturaActual, ventasNecesariasDiarias, diasMes, obligacionesBreakdown, alertasAutomaticas, pctInsumos, handleAddCompromiso, monto, dia, cId, nuevo, handleToggleCompromiso, handleDeleteCompromiso, handleAddVentaDiaria, ef, nq, tr, cr, cajas, sumCajas, bovedasExistentes, syncToBoveda, handleDeleteVentaDiaria, confirmarDeleteConPin, cfg, cardsData, formatCurrency, ventas, gastos, formulaciones, modelosPan, onNavigateTo, addGasto, updateGasto, deleteGasto, proveedores, productos, precios, cajaActiva, sesionesCaja } = data;
     const { usuario } = useAuth();
     const esAdmin = (usuario?.rol === 'ADMIN' || usuario?.rol === 'admin' || usuario?.rol === 'superadmin');
+    const rolUp = String(usuario?.rol || role || '').toUpperCase();
+    const puedeVerSupervivencia = rolUp === 'ADMIN' || rolUp === 'GERENTE' || rolUp === 'SUPERADMIN' || esAdmin;
     const [editGastoId, setEditGastoId] = useState<string | null>(null);
     const [editGastoData, setEditGastoData] = useState<any>(null);
     const [isSavingGasto, setIsSavingGasto] = useState(false);
@@ -836,6 +841,8 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
     const [pidiendoPanorama, setPidiendoPanorama] = useState(false);
     const [vigiaIA, setVigiaIA] = useState('');
     const [pidiendoVigia, setPidiendoVigia] = useState(false);
+    const [supervivenciaIA, setSupervivenciaIA] = useState('');
+    const [pidiendoSupervivencia, setPidiendoSupervivencia] = useState(false);
     /** Si true, muestra cierres fuera de la quincena/mes filtrado. */
     const [verTodasVentasDiarias, setVerTodasVentasDiarias] = useState(false);
 
@@ -1026,6 +1033,51 @@ export function DiagnosticoFinanciero({ data, addMovimientoBoveda, modoLibretaHo
     const vigiaVentas = useMemo(() => vigilarCuadres(sesionesCaja), [sesionesCaja]);
     const comparativaCajas = useMemo(() => compararEscalera(sesionesCaja), [sesionesCaja]);
 
+    const [bovedaAjusteId, setBovedaAjusteId] = useState('');
+    const [bovedaAjusteMonto, setBovedaAjusteMonto] = useState('');
+    const [bovedasTick, setBovedasTick] = useState(0);
+
+    const panoramaSupervivencia = useMemo(() => {
+        const trabajadores = Array.isArray(data.trabajadores) ? data.trabajadores : [];
+        const nominaMes = trabajadores
+            .filter((t: any) => t.activo !== false)
+            .reduce((s: number, t: any) => s + (Number(t.salarioBase) || Number(t.salario) || 0), 0);
+        const qFiltro = (periodoFiltro?.quincena || 'mes') as '1' | '2' | 'mes';
+        return calcularPanoramaSupervivencia({
+            ventas: Array.isArray(ventas) ? ventas : [],
+            ventasDiarias: Array.isArray(ventasDiarias) ? ventasDiarias : [],
+            gastos: Array.isArray(gastos) ? gastos : [],
+            compromisos: Array.isArray(compromisos) ? compromisos : [],
+            nominaMesEstimada: nominaMes,
+            periodo: quincenaReal?.inicioStr && quincenaReal?.finStr
+                ? {
+                    inicioStr: quincenaReal.inicioStr,
+                    finStr: quincenaReal.finStr,
+                    quincena: qFiltro === 'mes' ? 'mes' : qFiltro,
+                }
+                : undefined,
+        });
+    }, [ventas, ventasDiarias, gastos, compromisos, data.trabajadores, quincenaReal?.inicioStr, quincenaReal?.finStr, periodoFiltro?.quincena]);
+
+    const analisisOperativo = useMemo(() => {
+        void bovedasTick;
+        let bovedas: { id: string; nombre: string; saldo: number }[] = [];
+        try {
+            bovedas = getBovedas().map((b) => ({ id: b.id, nombre: b.nombre, saldo: b.saldo }));
+        } catch { /* sin bóvedas */ }
+        const provLista = Array.isArray(proveedores)
+            ? proveedores.map((p: any) => ({ id: p.id, nombre: p.nombre }))
+            : [];
+        return calcularAnalisisOperativo({
+            ventas: Array.isArray(ventas) ? ventas.map((v: any) => ({ fecha: v.fecha, total: Number(v.total) || 0 })) : [],
+            ventasDiarias: Array.isArray(ventasDiarias) ? ventasDiarias : [],
+            gastos: Array.isArray(gastos) ? gastos : [],
+            compromisos: Array.isArray(compromisos) ? compromisos : [],
+            proveedores: provLista,
+            bovedas,
+        });
+    }, [ventas, ventasDiarias, gastos, compromisos, proveedores, bovedasTick]);
+
     const pedirPanoramaIA = async () => {
         setPidiendoPanorama(true);
         setPanoramaIA('');
@@ -1050,6 +1102,56 @@ Responde en español claro, con viñetas: 1) cómo va SOLO la quincena en curso,
         } finally {
             setPidiendoPanorama(false);
         }
+    };
+
+    const pedirSupervivenciaIA = async () => {
+        setPidiendoSupervivencia(true);
+        setSupervivenciaIA('');
+        try {
+            const { consultarAgente } = await import('@/constants/agentes');
+            const prompt = [
+                'Analiza supervivencia y caja real de Dulce Placer. Usa SOLO estos números:',
+                '',
+                panoramaSupervivencia.contextoAgente,
+                '',
+                analisisOperativo.contextoAgente,
+                '',
+                'Responde con el formato ESTADO / FUGAS FAMILIA / LO QUE FALTA PAGAR / 3 ACCIONES ESTA SEMANA.',
+                'Incluye si las bóvedas del sistema parecen desactualizadas frente a la operación.',
+            ].join('\n');
+            await consultarAgente(
+                'tesoreria-supervivencia',
+                prompt,
+                (chunk: string) => setSupervivenciaIA((prev) => prev + chunk),
+                undefined,
+                panoramaSupervivencia.contextoAgente + '\n' + analisisOperativo.contextoAgente
+            );
+        } catch (e) {
+            console.error(e);
+            toast.error('No se pudo consultar Tesorería Supervivencia');
+        } finally {
+            setPidiendoSupervivencia(false);
+        }
+    };
+
+    const aplicarSaldoRealBoveda = () => {
+        if (!bovedaAjusteId) {
+            toast.error('Elige la bóveda');
+            return;
+        }
+        const monto = Number(String(bovedaAjusteMonto).replace(/[^\d.]/g, '')) || 0;
+        if (monto < 0) {
+            toast.error('El saldo real no puede ser negativo');
+            return;
+        }
+        const mov = setBovedaSaldoReal(bovedaAjusteId, monto, usuario?.nombre || 'Administrador');
+        if (!mov) {
+            toast.info('El saldo ya estaba igual; no hubo ajuste');
+        } else {
+            toast.success(`Bóveda actualizada a $${Math.round(monto).toLocaleString('es-CO')}`);
+        }
+        setBovedaAjusteMonto('');
+        setBovedasTick((t) => t + 1);
     };
 
     const pedirVigia = async () => {
@@ -1609,6 +1711,241 @@ Responde en español claro, con viñetas: 1) cómo va SOLO la quincena en curso,
                             </div>
                         </div>
                     </div>
+
+                    {/* ── MODO ALERTA SUPERVIVENCIA + ANÁLISIS OPERATIVO ── */}
+                    {puedeVerSupervivencia && (
+                    <div className={cn(
+                        'rounded-2xl border-2 p-4 space-y-4 shadow-sm',
+                        panoramaSupervivencia.nivel === 'critico' && 'border-rose-500/50 bg-rose-500/5',
+                        panoramaSupervivencia.nivel === 'alerta' && 'border-amber-500/50 bg-amber-500/5',
+                        panoramaSupervivencia.nivel === 'ok' && 'border-emerald-500/40 bg-emerald-500/5',
+                    )}>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
+                                    <LifeBuoy className="w-3.5 h-3.5" /> Modo alerta · Supervivencia
+                                </p>
+                                <p className="text-sm font-black text-slate-900 dark:text-white">
+                                    {panoramaSupervivencia.nivel === 'critico' && '🔴 Crítico'}
+                                    {panoramaSupervivencia.nivel === 'alerta' && '🟡 Alerta'}
+                                    {panoramaSupervivencia.nivel === 'ok' && '🟢 Alcanza lo esencial'}
+                                    <span className="ml-2 text-xs font-bold text-slate-500">
+                                        {analisisOperativo.rangoDatos.primeraFecha
+                                            ? `${analisisOperativo.rangoDatos.primeraFecha} → ${analisisOperativo.rangoDatos.ultimaFecha} · ${analisisOperativo.rangoDatos.diasCubiertos} días`
+                                            : 'Sin historial aún'}
+                                    </span>
+                                </p>
+                                <p className="text-xs font-medium text-slate-600 dark:text-slate-300 max-w-2xl">
+                                    {panoramaSupervivencia.mensaje}
+                                    {analisisOperativo.equilibrio.avisoDatos ? ` ${analisisOperativo.equilibrio.avisoDatos}` : ''}
+                                </p>
+                            </div>
+                            <Button
+                                type="button"
+                                size="sm"
+                                disabled={pidiendoSupervivencia}
+                                onClick={pedirSupervivenciaIA}
+                                className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-black text-xs h-9 gap-1.5"
+                            >
+                                {pidiendoSupervivencia ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+                                Preguntar a la IA
+                            </Button>
+                        </div>
+
+                        {/* Cola de pagos */}
+                        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                            {panoramaSupervivencia.cola.map((c) => (
+                                <div key={c.id} className="rounded-xl border border-slate-200 dark:border-white/10 bg-white/70 dark:bg-black/20 px-3 py-2">
+                                    <p className="text-[9px] font-black uppercase tracking-widest text-slate-500">{c.label}</p>
+                                    <p className="text-sm font-black tabular-nums">{formatCurrency(c.pagado)}</p>
+                                    {c.falta > 0 ? (
+                                        <p className="text-[10px] font-bold text-rose-600">Falta {formatCurrency(c.falta)}</p>
+                                    ) : (
+                                        <p className="text-[10px] font-bold text-emerald-600">
+                                            {c.id === 'proveedores' ? 'Pagado a proveedores' : c.id === 'familia' ? 'Retiros familia' : 'Cubierto'}
+                                        </p>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Fuga familiar */}
+                        <div className="rounded-xl border border-amber-300/40 bg-amber-50/50 dark:bg-amber-950/20 px-3 py-2 space-y-1">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">
+                                Fuga familiar · {formatCurrency(panoramaSupervivencia.totalFamilia)} ({panoramaSupervivencia.pctFamiliaSobreVentas}% de ventas del periodo)
+                            </p>
+                            {panoramaSupervivencia.rankingFamilia.length === 0 ? (
+                                <p className="text-[11px] text-slate-500">Sin gastos categoría Familia etiquetados. Usa Gastos → Familia y elige la persona.</p>
+                            ) : (
+                                <ul className="flex flex-wrap gap-2">
+                                    {panoramaSupervivencia.rankingFamilia.map((r) => (
+                                        <li key={r.persona} className="text-[11px] font-bold bg-white/80 dark:bg-black/30 rounded-lg px-2 py-1">
+                                            {r.persona}: {formatCurrency(r.monto)}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        {/* Equilibrio + capital */}
+                        <div className="grid sm:grid-cols-3 gap-2">
+                            <div className="rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 bg-white/60 dark:bg-black/20">
+                                <p className="text-[9px] font-black uppercase text-slate-500">Punto de equilibrio / mes</p>
+                                <p className="text-base font-black">{formatCurrency(analisisOperativo.equilibrio.ventasEquilibrioMensual)}</p>
+                                <p className="text-[10px] text-slate-500">
+                                    Sem {formatCurrency(analisisOperativo.equilibrio.ventasEquilibrioSemanal)} · Q {formatCurrency(analisisOperativo.equilibrio.ventasEquilibrioQuincenal)}
+                                </p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 bg-white/60 dark:bg-black/20">
+                                <p className="text-[9px] font-black uppercase text-slate-500">Capital a proteger</p>
+                                <p className="text-base font-black text-indigo-600 dark:text-indigo-400">{formatCurrency(analisisOperativo.equilibrio.capitalTrabajoMinimo)}</p>
+                                <p className="text-[10px] text-slate-500">Fijos + ~2 semanas de insumos</p>
+                            </div>
+                            <div className="rounded-xl border border-slate-200 dark:border-white/10 px-3 py-2 bg-white/60 dark:bg-black/20">
+                                <p className="text-[9px] font-black uppercase text-slate-500">Sobre / bajo equilibrio</p>
+                                <p className={cn(
+                                    'text-base font-black',
+                                    analisisOperativo.equilibrio.sobreEquilibrio >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                                )}>
+                                    {analisisOperativo.equilibrio.sobreEquilibrio >= 0 ? '+' : ''}
+                                    {formatCurrency(analisisOperativo.equilibrio.sobreEquilibrio)}
+                                </p>
+                                <p className="text-[10px] text-slate-500">Ventas approx mes vs equilibrio</p>
+                            </div>
+                        </div>
+
+                        {/* Semanal / quincenal resumido */}
+                        <div className="grid lg:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Semanas (ventas − gastos)</p>
+                                <div className="max-h-36 overflow-y-auto space-y-1">
+                                    {(analisisOperativo.semanal.slice(-6)).map((s) => (
+                                        <div key={s.label} className="flex justify-between text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-50 dark:bg-black/20">
+                                            <span>{s.label}</span>
+                                            <span className={s.saldo >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                                                V {formatCurrency(s.ventas)} · G {formatCurrency(s.gastos)} · {formatCurrency(s.saldo)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {analisisOperativo.semanal.length === 0 && (
+                                        <p className="text-[11px] text-slate-500">Sin semanas con datos todavía.</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Quincenas</p>
+                                <div className="max-h-36 overflow-y-auto space-y-1">
+                                    {analisisOperativo.quincenal.map((s) => (
+                                        <div key={s.label} className="flex justify-between text-[11px] font-bold px-2 py-1 rounded-lg bg-slate-50 dark:bg-black/20">
+                                            <span>{s.label}</span>
+                                            <span className={s.saldo >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                                                V {formatCurrency(s.ventas)} · G {formatCurrency(s.gastos)}
+                                            </span>
+                                        </div>
+                                    ))}
+                                    {analisisOperativo.quincenal.length === 0 && (
+                                        <p className="text-[11px] text-slate-500">Sin quincenas con datos.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Proveedores + patrones + líneas */}
+                        <div className="grid lg:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                                    Proveedores · total {formatCurrency(analisisOperativo.totalProveedores)}
+                                </p>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                    {analisisOperativo.proveedores.slice(0, 10).map((p) => (
+                                        <div key={p.proveedorId} className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white/70 dark:bg-black/20 flex justify-between gap-2">
+                                            <span className="truncate">{p.nombre}</span>
+                                            <span className="shrink-0 tabular-nums">{formatCurrency(p.promedioSemanal)}/sem</span>
+                                        </div>
+                                    ))}
+                                    {analisisOperativo.proveedores.length === 0 && (
+                                        <p className="text-[11px] text-slate-500">Aún no hay gastos con proveedor.</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Patrones (servicios / banco…)</p>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                    {analisisOperativo.patrones.slice(0, 8).map((p) => (
+                                        <div key={p.clave} className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white/70 dark:bg-black/20">
+                                            {p.label}: {p.nVeces}× · día típ. {p.diaTipico ?? '—'} · {p.frecuenciaSugerida}
+                                        </div>
+                                    ))}
+                                    {analisisOperativo.patrones.length === 0 && (
+                                        <p className="text-[11px] text-slate-500">Con más pagos repetidos saldrá el patrón.</p>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Líneas (torta / helado / gaseosa…)</p>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                    {analisisOperativo.lineasCaja.map((l) => (
+                                        <div key={l.clave} className="text-[11px] font-bold px-2 py-1 rounded-lg bg-white/70 dark:bg-black/20 flex justify-between">
+                                            <span>{l.label}</span>
+                                            <span>{formatCurrency(l.ventas)} · {l.pctSobreTotal}%</span>
+                                        </div>
+                                    ))}
+                                    {analisisOperativo.lineasCaja.length === 0 && (
+                                        <p className="text-[11px] text-slate-500">Los cuadres con cajas separadas (Tortas, Helados…) alimentan este bloque.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Bóvedas: saldo real */}
+                        <div className="rounded-xl border border-indigo-300/40 bg-indigo-50/40 dark:bg-indigo-950/20 px-3 py-3 space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-indigo-700 dark:text-indigo-300">
+                                Caja real en bóveda (el saldo del sistema puede estar desactualizado)
+                            </p>
+                            <div className="flex flex-wrap gap-2 text-[11px] font-bold">
+                                {analisisOperativo.bovedas.map((b) => (
+                                    <span key={b.id} className="rounded-lg bg-white/80 dark:bg-black/30 px-2 py-1">
+                                        {b.nombre}: sistema {formatCurrency(b.saldoSistema)}
+                                    </span>
+                                ))}
+                                {analisisOperativo.bovedas.length === 0 && (
+                                    <span className="text-slate-500">No hay bóvedas. Créalas en Tesorería / Bóveda.</span>
+                                )}
+                            </div>
+                            {analisisOperativo.bovedas.length > 0 && (
+                                <div className="flex flex-wrap gap-2 items-end">
+                                    <select
+                                        value={bovedaAjusteId}
+                                        onChange={(e) => setBovedaAjusteId(e.target.value)}
+                                        className="h-9 text-xs rounded-xl border border-input bg-background px-2 font-bold"
+                                    >
+                                        <option value="">— Bóveda —</option>
+                                        {analisisOperativo.bovedas.map((b) => (
+                                            <option key={b.id} value={b.id}>{b.nombre}</option>
+                                        ))}
+                                    </select>
+                                    <Input
+                                        type="number"
+                                        inputMode="numeric"
+                                        placeholder="Saldo físico real $"
+                                        value={bovedaAjusteMonto}
+                                        onChange={(e) => setBovedaAjusteMonto(e.target.value)}
+                                        className="h-9 text-xs rounded-xl w-40 font-bold"
+                                    />
+                                    <Button type="button" size="sm" onClick={aplicarSaldoRealBoveda} className="h-9 rounded-xl text-xs font-black">
+                                        Guardar saldo real
+                                    </Button>
+                                </div>
+                            )}
+                        </div>
+
+                        {supervivenciaIA && (
+                            <div className="rounded-xl border border-rose-200 dark:border-rose-800 bg-white/80 dark:bg-black/30 p-3 text-xs whitespace-pre-wrap font-medium text-slate-700 dark:text-slate-200">
+                                {supervivenciaIA}
+                            </div>
+                        )}
+                    </div>
+                    )}
 
                     {vista === 'gasto' && (
                     <>
@@ -2540,7 +2877,7 @@ Responde en español claro, con viñetas: 1) cómo va SOLO la quincena en curso,
                                         <select value={formCompromiso.categoria}
                                             onChange={e => setFormCompromiso(p => ({ ...p, categoria: e.target.value as GastoCategoria }))}
                                             className="h-9 text-xs rounded-xl border border-input bg-background px-2">
-                                            {(['Arriendo','Servicios','Nómina','Materia Prima','Mantenimiento','Otros'] as GastoCategoria[]).map(c => (
+                                            {(['Arriendo','Servicios','Nómina','Materia Prima','Mantenimiento','Familia','Otros'] as GastoCategoria[]).map(c => (
                                                 <option key={c} value={c}>{c}</option>
                                             ))}
                                         </select>
@@ -2552,9 +2889,16 @@ Responde en español claro, con viñetas: 1) cómo va SOLO la quincena en curso,
                                         </label>
                                     </div>
                                     {formCompromiso.esPropietario && (
-                                        <Input placeholder="Persona (Yo / Esposa / ...)" value={formCompromiso.persona}
+                                        <select
+                                            value={formCompromiso.persona || ''}
                                             onChange={e => setFormCompromiso(p => ({ ...p, persona: e.target.value }))}
-                                            className="h-9 text-sm rounded-xl" />
+                                            className="h-9 text-sm rounded-xl border border-input bg-background px-2 font-bold w-full"
+                                        >
+                                            <option value="">— Quién (familia / gerencia) —</option>
+                                            {opcionesPersonaFamilia().map(o => (
+                                                <option key={o.value} value={o.value}>{o.label}</option>
+                                            ))}
+                                        </select>
                                     )}
                                     <Input placeholder="Notas (ej. llega entre el 8 y el 12)" value={formCompromiso.notas ?? ''}
                                         onChange={e => setFormCompromiso((p: any) => ({ ...p, notas: e.target.value }))}

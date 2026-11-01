@@ -201,6 +201,10 @@ export default function Gastos({
             toast.error('Ingresa la descripción y un monto válido');
             return;
         }
+        if (!data.esIngreso && data.categoria === 'Familia' && !data.personaFamilia?.trim()) {
+            toast.error('Retiro de familia: indica a quién salió la plata.');
+            return;
+        }
 
         setIsSaving(true);
         try {
@@ -273,6 +277,10 @@ export default function Gastos({
                         usuarioId: usuario.id,
                         proveedorId: data.proveedorId,
                         estado: 'pagado',
+                        personaFamilia: data.personaFamilia,
+                        metadata: data.personaFamilia
+                            ? { ...(data.metadata || {}), personaFamilia: data.personaFamilia }
+                            : data.metadata,
                     });
                     
                     // Sincronizar con Bóveda si aplica (solo al crear)
@@ -315,7 +323,7 @@ export default function Gastos({
     };
 
     // ── Entrada rápida (QuickEntryBar) ────────────────────────────────────────
-    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string , origenTipo?: string, cajaId?: string, bovedaId?: string }) => {
+    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string ; origenTipo?: string; cajaId?: string; bovedaId?: string; personaFamilia?: string }) => {
         const fechaElegida = data.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
         if (data.esIngreso) {
             const nuevo = {
@@ -334,6 +342,10 @@ export default function Gastos({
             guardarIngresos(actualizados);
             toast.success('Ingreso rápido guardado ✓');
         } else {
+            if (data.categoria === 'Familia' && !data.personaFamilia?.trim()) {
+                toast.error('Retiro de familia: indica a quién salió la plata.');
+                return;
+            }
             await onAddGasto({
                 descripcion: data.descripcion,
                 monto: data.monto,
@@ -346,7 +358,9 @@ export default function Gastos({
                 cajaId: data.cajaId,
                 bovedaId: data.bovedaId,
                 origenTipo: data.origenTipo,
-            });
+                personaFamilia: data.personaFamilia,
+                metadata: data.personaFamilia ? { personaFamilia: data.personaFamilia } : undefined,
+            } as Omit<Gasto, 'id'>);
             // 🩹 FIX 2026-10-09: si la plata sale de una BÓVEDA, descontarla de su saldo
             // (antes solo lo hacía el formulario grande; el Modo Turbo/Clásico no).
             if (data.bovedaId && data.bovedaId !== '__ninguno__') {

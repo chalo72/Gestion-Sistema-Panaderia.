@@ -3,6 +3,8 @@ import { enviarAlertaPreventistaPorWhatsApp, enviarAlertasAutomatico, enviarAler
 import { validarCatalogo } from '@/lib/price-guard';
 import { useCan } from '@/contexts/AuthContext';
 import { db } from '@/lib/database';
+import { MarcaPrecioModificado } from '@/components/precios/MarcaPrecioModificado';
+import { ultimoCambioPrecio, useCambiosPrecio } from '@/lib/cambio-precio-catalogo';
 import { supabase } from '@/lib/supabase';
 import {
   Truck,
@@ -272,7 +274,7 @@ const RUBROS = [
 export function Proveedores({
   proveedores,
   productos: _productos,
-  precios: _precios,
+  precios,
   onAddProveedor,
   onUpdateProveedor,
   onDeleteProveedor,
@@ -291,6 +293,7 @@ export function Proveedores({
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { check } = useCan();
+  const historialPrecios = useCambiosPrecio(precios);
   const [editingProveedor, setEditingProveedor] = useState<Proveedor | null>(null);
   const [orden, setOrden] = useState<OrdenTipo>('nombre');
   const [vistaActual] = useState<VistasTipo>('lista');
@@ -669,7 +672,7 @@ export function Proveedores({
         // Eliminar el producto si quedó sin ningún proveedor que lo venda
         if (onDeleteProducto) {
           for (const precio of preciosAEliminar) {
-            const otrosPrecios = _precios.filter(
+            const otrosPrecios = precios.filter(
               p => p.productoId === precio.productoId && !idsAEliminar.has(p.id)
             );
             if (otrosPrecios.length === 0) {
@@ -749,7 +752,7 @@ export function Proveedores({
               // Si el producto está compartido entre varios proveedores, solo actualizar campos
               // neutros (nombre, tipo, descripción). Los campos económicos (categoría, margen,
               // precio, costoBase) son contextuales al proveedor y no deben contaminar a los otros.
-              const esCompartido = _precios.some(
+              const esCompartido = precios.some(
                 p => p.productoId === productoId && p.proveedorId !== provId
               );
               await onUpdateProducto(productoId, {
@@ -916,7 +919,7 @@ export function Proveedores({
       <ComparadorPrecios 
         proveedores={proveedores} 
         productos={_productos} 
-        precios={_precios} 
+        precios={precios} 
         formatCurrency={formatCurrency} 
         onVolver={() => setActiveView('lista')} 
       />
@@ -1467,6 +1470,7 @@ export function Proveedores({
                                         <div className="flex flex-col text-right">
                                           <span className="text-[9px] uppercase font-bold text-slate-400">Costo Aliado</span>
                                           <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 tabular-nums">{formatCurrency(precioCosto)}</p>
+                                          <MarcaPrecioModificado cambio={ultimoCambioPrecio(historialPrecios, precio.productoId, prov.id)} />
                                           {cantidadEmbalaje > 1 && (
                                             <p className="text-[9px] uppercase font-black tracking-widest text-slate-400">
                                               P.U/{(() => {

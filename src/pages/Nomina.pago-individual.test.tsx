@@ -5,6 +5,10 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react';
 import Nomina from './Nomina';
 
+vi.mock('@/contexts/AuthContext', () => ({
+  useCan: () => ({ isAdmin: true, role: 'ADMIN', usuario: { id: 'admin', nombre: 'Admin' } }),
+}));
+
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
 const fmt = (n: number) => `$ ${n.toLocaleString('es-CO')}`;
@@ -36,6 +40,38 @@ const clickTexto = async (el: HTMLElement, texto: string | RegExp, selector = 'b
 };
 
 describe('Nómina · pago individual', () => {
+  it('muestra trabajadores activos aunque el estado llegue con mayúsculas o espacios', async () => {
+    const { el } = await montar({
+      trabajadores: [{ ...trab('t1', 'Samir', 900_000), estado: ' ACTIVO ' }],
+      asistencia: [], creditosTrabajadores: [], nominas: [],
+      onAddNomina: vi.fn(), onUpdateNomina: vi.fn(), onAddGasto: vi.fn(),
+      onAddCreditoTrabajador: vi.fn(), onUpdateCreditoTrabajador: vi.fn(), onDeleteCreditoTrabajador: vi.fn(),
+      formatCurrency: fmt, onBack: vi.fn(),
+    });
+
+    expect(el.textContent).toContain('Samir');
+  });
+
+  it('mantiene visible la nómina si el registro existente no tiene items', async () => {
+    const ahora = new Date();
+    const { el } = await montar({
+      trabajadores: [trab('t1', 'Samir', 900_000)],
+      asistencia: [],
+      creditosTrabajadores: [],
+      nominas: [{
+        id: 'nomina-incompleta',
+        periodo: ahora.getDate() <= 15 ? 'primera' : 'segunda',
+        mes: ahora.getMonth() + 1,
+        año: ahora.getFullYear(),
+      }],
+      onAddNomina: vi.fn(), onUpdateNomina: vi.fn(), onAddGasto: vi.fn(),
+      onAddCreditoTrabajador: vi.fn(), onUpdateCreditoTrabajador: vi.fn(), onDeleteCreditoTrabajador: vi.fn(),
+      formatCurrency: fmt, onBack: vi.fn(),
+    });
+
+    expect(el.textContent).toContain('Samir');
+  });
+
   it('paga solo a Samir, acumula lo no cobrado y deja la nómina en pagos parciales', async () => {
     const onAddGasto = vi.fn(async (g: any) => g);
     const onAddNomina = vi.fn(async (n: any) => ({ ...n, id: 'n1', createdAt: 'x' }));

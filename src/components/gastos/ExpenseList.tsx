@@ -26,6 +26,7 @@ const CATEGORIAS_GASTOS = [
     { value: 'Arriendo',      label: 'Local',         icon: Folder,    color: 'amber'  },
     { value: 'Nómina',        label: 'Nómina',        icon: Users,     color: 'violet' },
     { value: 'Mantenimiento', label: 'Mantenim.',     icon: Settings,  color: 'cyan'   },
+    { value: 'Familia',       label: 'Familia',       icon: Users,     color: 'amber'  },
     { value: 'Otros',         label: 'Otros',         icon: Plus,      color: 'slate'  },
 ];
 

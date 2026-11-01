@@ -37,6 +37,7 @@ import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
 import { supabaseDB, flushSyncOutbox } from '@/lib/supabase-sync-bridge';
 import { db, localAdapter } from '@/lib/database';
 import { mergeHydrateItem, timestampDeDoc, esCajaRevivida } from '@/lib/sync-merge-local-gana';
+import { RESPALDOS_HORARIO } from '@/lib/horario-tienda';
 
 const _sdb = new SupabaseDatabase();
 // Mapeadores internos de supabase-db (privados en TypeScript, pero son funciones normales).
@@ -66,7 +67,7 @@ const borrarSoloLocal = (tabla: string) => async (id: string) => {
 const noBorrar = async () => {};
 
 /** Filas de la tabla configuracion que se comparten entre aparatos por este hook. */
-const RESPALDOS_COMPARTIDOS: readonly string[] = ['formulaciones_data', 'modelosPan_data', 'cajas_config'];
+export const RESPALDOS_COMPARTIDOS: readonly string[] = ['formulaciones_data', 'modelosPan_data', 'cajas_config', ...Object.values(RESPALDOS_HORARIO)];
 
 /** ¿El registro trae su propia hora de "último cambio"? (no cuenta la de creación) */
 const tieneHoraDeCambio = (d: any) =>
@@ -367,6 +368,10 @@ function leerLocal(table: string): Promise<any[]> {
       if (fData) list.push({ id: 'formulaciones_data', categorias: fData });
       if (mData) list.push({ id: 'modelosPan_data', categorias: mData });
       if (cData) list.push({ id: 'cajas_config', categorias: cData });
+      for (const id of Object.values(RESPALDOS_HORARIO)) {
+        const data = await db.getBackup(id);
+        if (data) list.push({ id, categorias: data });
+      }
       return list;
     });
     default:                       return Promise.resolve([]);

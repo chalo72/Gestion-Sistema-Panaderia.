@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { puedeAccederVista, VISTA_PERMISO } from './view-guards';
+import { puedeAccederVista, puedeEditarHorario, puedeVerModuloMenu, VISTA_PERMISO } from './view-guards';
 import type { Permission } from '@/types';
 
 describe('puedeAccederVista', () => {
@@ -50,6 +50,31 @@ describe('puedeAccederVista', () => {
         puedeVer: puedeVerSi,
       })
     ).toBe(true);
+  });
+
+  it('permite abrir Nómina para consultar horario sin permisos financieros', () => {
+    expect(
+      puedeAccederVista('nomina', {
+        isAdmin: false,
+        role: 'VENDEDOR',
+        check: (p) => p === 'VER_DASHBOARD',
+        puedeVer: puedeVerNo,
+      })
+    ).toBe(true);
+  });
+
+  it('mantiene visible Horario aunque el permiso antiguo del módulo Nómina esté apagado', () => {
+    expect(puedeVerModuloMenu('VENDEDOR', 'nomina', puedeVerNo)).toBe(true);
+    expect(puedeVerModuloMenu('VENDEDOR', 'gastos', puedeVerNo)).toBe(false);
+  });
+
+  it('permite editar Horario a Administrador, Gerente y Vendedor solamente', () => {
+    expect(puedeEditarHorario('ADMIN')).toBe(true);
+    expect(puedeEditarHorario('GERENTE')).toBe(true);
+    expect(puedeEditarHorario('VENDEDOR')).toBe(true);
+    expect(puedeEditarHorario('COMPRADOR')).toBe(false);
+    expect(puedeEditarHorario('PANADERO')).toBe(false);
+    expect(puedeEditarHorario('AUXILIAR')).toBe(false);
   });
 
   it('mapa Sidebar incluye ventas y caja', () => {

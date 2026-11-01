@@ -31,6 +31,7 @@ export type AgenteId =
   | 'vigia-ventas'
   | 'vigia-app'
   | 'arqui-tech'
+  | 'tesoreria-supervivencia'
   // === TRINIDAD SUPREMA / HABILIDADES SUPREMAS ===
   | 'madre-suprema'
   | 'guardian-supremo'

@@ -7,6 +7,9 @@ import {
 import { toast } from 'sonner';
 import { escapeHtml } from '@/lib/utils';
 import { parseHorario, minutosEntre, diaSemana, fechaLocalHoy, NOMBRE_DIA_CORTO } from '@/lib/horario-trabajo';
+import HorarioSiEnferma from '@/components/nomina/HorarioSiEnferma';
+import { EVENTO_HORARIO, leerAncla, leerCambios, leerEnlace, mapaNotasPeriodo, type NotaDiaNomina } from '@/lib/horario-tienda';
+import { puedeEditarHorario } from '@/lib/view-guards';
 import { ymdLocal } from '@/lib/fecha-local';
 import { useCan } from '@/contexts/AuthContext';
 import { db } from '@/lib/database';
@@ -208,26 +211,35 @@ interface DiaInfo {
   salida?: string;
   salidaOlvidada: boolean;     // llegó pero no presionó "Me voy" (día ya pasado)
   mins: number;
+  notaHorario?: string | null; // por qué no vino / por qué se cambió el turno
+  esCambioHorario?: boolean;
 }
-interface HorarioUsado { dias: number[] | null; entrada: string | null; salida: string | null; deTrabajadores: boolean }
+interface HorarioUsado { dias: number[] | null; entrada: string | null; salida: string | null; deTrabajadores: boolean; deTienda: boolean }
 
 function analizarDias(
   t: Trabajador, diasPeriodo: string[], mapa: Map<string, RegistroAsistencia[]>,
   marcados: string[], habituales: { entrada: string; salida: string } | undefined, hoy: string,
+  notasTienda?: Map<string, NotaDiaNomina> | null,
 ): { dias: DiaInfo[]; horario: HorarioUsado } {
   const p = parseHorario(t.horario);
+  const enTienda = !!notasTienda && notasTienda.size > 0;
+  const diasTienda = enTienda
+    ? [...new Set(diasPeriodo.filter(f => notasTienda!.get(f)?.esperado).map(f => diaSemana(f)))].sort()
+    : null;
   const horario: HorarioUsado = {
-    dias: p.dias,
+    dias: diasTienda ?? p.dias,
     entrada: p.entrada ?? (habituales?.entrada || null),
     salida: p.salida ?? (habituales?.salida || null),
     deTrabajadores: p.entrada !== null,
+    deTienda: enTienda,
   };
   const dias = diasPeriodo.map((fecha): DiaInfo => {
     const regs = mapa.get(`${t.id}_${fecha}`) ?? [];
     const conRegistro = regs.length > 0;
     const marcado = !conRegistro && marcados.includes(fecha);
     const dow = diaSemana(fecha);
-    const esperado = horario.dias ? horario.dias.includes(dow) : true;
+    const notaDia = notasTienda?.get(fecha);
+    const esperado = notaDia ? notaDia.esperado : (horario.dias ? horario.dias.includes(dow) : true);
     let mins = 0; let abierta: string | null = null;
     for (const r of regs) {
       if (r.tipo === 'entrada') abierta = r.hora;
@@ -241,6 +253,8 @@ function analizarDias(
       fecha, dow, conRegistro, marcado, vino: conRegistro || marcado, esperado, futuro, salidaOlvidada, mins,
       entrada: regs.find(r => r.tipo === 'entrada')?.hora ?? (marcado ? horario.entrada ?? undefined : undefined),
       salida: [...regs].reverse().find(r => r.tipo === 'salida')?.hora ?? (marcado ? horario.salida ?? undefined : undefined),
+      notaHorario: notaDia?.texto ?? null,
+      esCambioHorario: notaDia?.esCambio ?? false,
     };
   });
   return { dias, horario };
@@ -440,7 +454,7 @@ interface LoanModal { trabajadorId: string; trabajadorNombre: string; credito?: 
 
 // ── Componente principal ───────────────────────────────────────────────────
 
-type Tab = 'liquidar' | 'historial' | 'deudas' | 'liquidacion' | 'acuerdos';
+type Tab = 'liquidar' | 'horario' | 'historial' | 'deudas' | 'liquidacion' | 'acuerdos';
 
 export default function Nomina({
   trabajadores, asistencia, creditosTrabajadores, nominas,
@@ -449,7 +463,26 @@ export default function Nomina({
   formatCurrency, onBack,
 }: NominaProps) {
 
-  const [tab, setTab] = useState<Tab>('liquidar');
+  const { isAdmin, role, usuario } = useCan();
+  const puedeEditarNomina = isAdmin || role === 'GERENTE';
+  const soloHorario = !puedeEditarHorario(role);
+
+  // Acceso directo: ?tab=horario (o historial, deudas, liquidacion, acuerdos) abre esa pestaña.
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      const url = new URL(window.location.href);
+      const pedido = url.searchParams.get('tab');
+      const validas: Tab[] = ['liquidar', 'horario', 'historial', 'deudas', 'liquidacion', 'acuerdos'];
+      const encontrada = validas.find(t => t === pedido);
+      if (pedido) {
+        url.searchParams.delete('tab');
+        window.history.replaceState(window.history.state, '', url);
+      }
+      if (soloHorario) return 'horario';
+      if (encontrada) return encontrada;
+    } catch { /* sin enlace directo */ }
+    return soloHorario ? 'horario' : 'liquidar';
+  });
   const hoy = quincenaActual();
   const [periodo, setPeriodo] = useState<'primera' | 'segunda'>(hoy.periodo);
   const [mes, setMes] = useState(hoy.mes);
@@ -464,6 +497,14 @@ export default function Nomina({
   const [valorDiaEdit, setValorDiaEdit] = useState<Record<string, number>>({});
   // Días que se marcaron "sí vino" a mano (no presionó "Llegué"), por trabajadora. Se guardan al guardar el pago.
   const [diasVino, setDiasVino] = useState<Record<string, string[]>>({});
+  // Días en que hizo doble turno, por trabajadora. Cada uno suma "valor del doble turno" al pago.
+  const [diasDoble, setDiasDoble] = useState<Record<string, string[]>>({});
+  // Trabajadora cuyo calendario está en modo "marcar doble turno"
+  const [marcandoDoble, setMarcandoDoble] = useState<string | null>(null);
+  // Lo que se paga por cada doble turno, por trabajadora (si está vacío = valor de un día)
+  const [valorDoble, setValorDoble] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('nomina_valor_doble_turno') || '{}'); } catch { return {}; }
+  });
   // Hora de entrada/salida habitual cuando el horario escrito en Trabajadores no se puede leer
   const [horasHabituales, setHorasHabituales] = useState<Record<string, { entrada: string; salida: string }>>(() => {
     try { return JSON.parse(localStorage.getItem('nomina_horas_habituales') || '{}'); } catch { return {}; }
@@ -478,8 +519,6 @@ export default function Nomina({
   const [loanSaving, setLoanSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<CreditoTrabajador | null>(null);
   const [selectedNomina, setSelectedNomina] = useState<NominaQuincenal | null>(null);
-  const { isAdmin, role, usuario } = useCan();
-  const puedeEditarNomina = isAdmin || role === 'GERENTE';
   const [buscaHist, setBuscaHist] = useState('');
   const [filtroQuincena, setFiltroQuincena] = useState<'todas' | 'primera' | 'segunda'>('todas');
   const [filtroFecha, setFiltroFecha] = useState('');
@@ -494,7 +533,7 @@ export default function Nomina({
   } | null>(null);
   const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [fondos, setFondos] = useState<{ clave: string; tipo: 'caja' | 'boveda'; id: string; nombre: string; disponible: number }[]>([]);
-  const [montosFondo, setMontosFondo] = useState<Record<string, string>>({});
+  const [fondosElegidos, setFondosElegidos] = useState<string[]>([]);
   const [cargandoFondos, setCargandoFondos] = useState(false);
   const [expandedWorker, setExpandedWorker] = useState<string | null>(null);
   // 'estricto_asistencia' descuenta automáticamente los días no asistidos; 'quincena_completa' asume quincena completa salvo ajustes
@@ -519,7 +558,7 @@ export default function Nomina({
 
   // ── Período nav ────────────────────────────────────────────────────────
   function limpiarEdicionesDeDias() {
-    setAjustes({}); setDiasMenos({}); setDiasExtra({}); setValorDiaEdit({}); setDiasVino({}); setExpandedWorker(null);
+    setAjustes({}); setDiasMenos({}); setDiasExtra({}); setValorDiaEdit({}); setDiasVino({}); setDiasDoble({}); setMarcandoDoble(null); setExpandedWorker(null);
   }
   function anteriorQuincena() {
     limpiarEdicionesDeDias();
@@ -543,7 +582,20 @@ export default function Nomina({
     [nominas, periodo, mes, año]
   );
 
-  const trabajadoresActivos = trabajadores.filter(t => t.estado === 'activo');
+  const trabajadoresActivos = trabajadores.filter(
+    t => String(t.estado ?? '').trim().toLowerCase() === 'activo'
+  );
+
+  const [horarioRev, setHorarioRev] = useState(0);
+  useEffect(() => {
+    const refrescar = () => setHorarioRev(n => n + 1);
+    window.addEventListener(EVENTO_HORARIO, refrescar);
+    window.addEventListener('storage', refrescar);
+    return () => {
+      window.removeEventListener(EVENTO_HORARIO, refrescar);
+      window.removeEventListener('storage', refrescar);
+    };
+  }, []);
 
   const asistenciaMap = useMemo(() => {
     const map = new Map<string, RegistroAsistencia[]>();
@@ -561,11 +613,23 @@ export default function Nomina({
 
   const hoyLocal = fechaLocalHoy();
 
+  const notasPeriodo = useMemo(() => {
+    void horarioRev;
+    return mapaNotasPeriodo(
+      diasPeriodo,
+      trabajadoresActivos.map(t => ({ id: t.id, nombre: t.nombre, estado: t.estado })),
+      leerEnlace(),
+      leerCambios(),
+      leerAncla(),
+      hoyLocal,
+    );
+  }, [diasPeriodo, trabajadoresActivos, hoyLocal, horarioRev]);
+
   // ── Cálculo items nómina ───────────────────────────────────────────────
   const itemsVivos = useMemo((): (NominaItem & { _totalMins: number; _diasFaltados: number })[] => {
     return trabajadoresActivos.map(t => {
       // Asistencia real + días marcados "sí vino" a mano + salidas olvidadas completadas con su horario
-      const an = analizarDias(t, diasPeriodo, asistenciaMap, diasVino[t.id] ?? [], horasHabituales[t.id], hoyLocal);
+      const an = analizarDias(t, diasPeriodo, asistenciaMap, diasVino[t.id] ?? [], horasHabituales[t.id], hoyLocal, notasPeriodo.get(t.id));
       const diasTrabajados = an.dias.filter(d => d.vino).length;
       const totalMins = an.dias.reduce((s, d) => s + d.mins, 0);
 
@@ -596,7 +660,11 @@ export default function Nomina({
       const diasExtraAplicados = Math.max(0, diasExtra[t.id] ?? 0);
       const montoDiasMenos = Math.round(diasMenosAplicados * valorDia);
       const montoDiasExtra = Math.round(diasExtraAplicados * valorDia);
-      const valorBruto = Math.max(0, valorBrutoCalculado - montoDiasMenos + montoDiasExtra + (ajustes[t.id] ?? 0));
+      // Doble turno: solo cuentan los días de esta quincena en que sí vino
+      const dobles = (diasDoble[t.id] ?? []).filter(f => an.dias.some(d => d.fecha === f && d.vino)).sort();
+      const vDoble = Math.max(0, valorDoble[t.id] || valorDia);
+      const montoDoble = Math.round(dobles.length * vDoble);
+      const valorBruto = Math.max(0, valorBrutoCalculado - montoDiasMenos + montoDiasExtra + montoDoble + (ajustes[t.id] ?? 0));
       const credActivos = creditosTrabajadores.filter(
         c => c.trabajadorId === t.id && c.estado === 'activo' && c.saldo > 0 && entraEnQuincena(c, rango.fin)
       );
@@ -629,6 +697,7 @@ export default function Nomina({
         valorBase: valorBrutoCalculado, valorDia,
         diasMenos: diasMenosAplicados, diasExtra: diasExtraAplicados,
         diasVinoManual: an.dias.filter(d => d.marcado).map(d => d.fecha),
+        ...(dobles.length > 0 ? { diasDobleTurno: dobles, valorDobleTurno: vDoble } : {}),
         trabajadorId: t.id, trabajadorNombre: t.nombre, salarioBase: t.salarioBase,
         diasTrabajados, totalDiasPeriodo: diasPeriodo.length, valorBruto,
         descuentos: descuentosConExtra, totalDescuentos, valorNeto: Math.max(0, valorBruto - totalDescuentos),
@@ -636,7 +705,7 @@ export default function Nomina({
         _diasFaltados: diasFaltados,
       };
     });
-  }, [trabajadoresActivos, asistenciaMap, creditosTrabajadores, diasPeriodo, rango.fin, ajustes, cobroExtra, diasMenos, diasExtra, valorDiaEdit, diasVino, horasHabituales, hoyLocal, parciales, modoCalculo]);
+  }, [trabajadoresActivos, asistenciaMap, creditosTrabajadores, diasPeriodo, rango.fin, ajustes, cobroExtra, diasMenos, diasExtra, diasDoble, valorDoble, valorDiaEdit, diasVino, horasHabituales, hoyLocal, parciales, modoCalculo, notasPeriodo]);
 
   // Cada trabajadora se paga por separado: las ya pagadas quedan "congeladas" tal como se guardaron;
   // las demás siguen calculándose en vivo.
@@ -664,7 +733,9 @@ export default function Nomina({
     const mMenos = Math.round((i.diasMenos ?? 0) * vDia);
     const mExtra = Math.round((i.diasExtra ?? 0) * vDia);
     const base = i.valorBase ?? i.valorBruto;
-    const otro = i.valorBruto - (base - mMenos + mExtra);
+    const nDoble = i.diasDobleTurno?.length ?? 0;
+    const mDoble = Math.round(nDoble * (i.valorDobleTurno ?? vDia));
+    const otro = i.valorBruto - (base - mMenos + mExtra + mDoble);
     return (<>
       {mMenos > 0 && (
         <div className="flex justify-between text-rose-600 dark:text-rose-400">
@@ -676,6 +747,12 @@ export default function Nomina({
         <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
           <span>+ {i.diasExtra} {i.diasExtra === 1 ? 'día' : 'días'} de más ({formatCurrency(vDia)} c/u)</span>
           <span className="font-semibold">+{formatCurrency(mExtra)}</span>
+        </div>
+      )}
+      {mDoble > 0 && (
+        <div className="flex justify-between text-amber-600 dark:text-amber-400">
+          <span>+ {nDoble} doble {nDoble === 1 ? 'turno' : 'turnos'} ({i.diasDobleTurno!.map(f => `${NOMBRE_DIA_CORTO[diaSemana(f)]} ${Number(f.slice(8, 10))}`).join(', ')})</span>
+          <span className="font-semibold">+{formatCurrency(mDoble)}</span>
         </div>
       )}
       {otro !== 0 && (
@@ -749,7 +826,7 @@ export default function Nomina({
 
   // ── Control de turno: dejar anotado lo marcado a mano y las salidas olvidadas ──────
   const registrosACrear = (t: Trabajador) => {
-    const an = analizarDias(t, diasPeriodo, asistenciaMap, diasVino[t.id] ?? [], horasHabituales[t.id], hoyLocal);
+    const an = analizarDias(t, diasPeriodo, asistenciaMap, diasVino[t.id] ?? [], horasHabituales[t.id], hoyLocal, notasPeriodo.get(t.id));
     const lista: Omit<RegistroAsistencia, 'id' | 'createdAt'>[] = [];
     const base = { trabajadorId: t.id, trabajadorNombre: t.nombre };
     for (const d of an.dias) {
@@ -785,9 +862,23 @@ export default function Nomina({
     : itemsPorPagar.filter(i => i.trabajadorId === pagoObjetivo);
   const pagoNeto       = itemsDelPago.reduce((s, i) => s + i.valorNeto, 0);
   const pagoDescuentos = itemsDelPago.reduce((s, i) => s + i.totalDescuentos, 0);
-  const partesFondo: { tipo: 'caja' | 'boveda'; id: string; nombre: string; monto: number }[] = fondos
-    .map(f => ({ tipo: f.tipo, id: f.id, nombre: f.nombre, monto: Math.max(0, Math.round(Number(montosFondo[f.clave]) || 0)) }))
-    .filter(p => p.monto > 0);
+  // Se toma de cada caja elegida, en el orden en que se tocaron, hasta completar el pago.
+  const partesFondo: { tipo: 'caja' | 'boveda'; id: string; nombre: string; monto: number }[] = [];
+  {
+    let restante = Math.max(0, Math.round(pagoNeto));
+    for (const clave of fondosElegidos) {
+      const f = fondos.find(x => x.clave === clave);
+      if (!f || restante <= 0) continue;
+      const monto = Math.min(f.disponible, restante);
+      if (monto <= 0) continue;
+      partesFondo.push({ tipo: f.tipo, id: f.id, nombre: f.nombre, monto });
+      restante -= monto;
+    }
+  }
+  const montoDeFondo = (clave: string) => {
+    const f = fondos.find(x => x.clave === clave);
+    return f ? (partesFondo.find(p => p.tipo === f.tipo && p.id === f.id)?.monto || 0) : 0;
+  };
   const sumaFondos = partesFondo.reduce((s, p) => s + p.monto, 0);
   const fondosCuadran = pagoNeto <= 0 || sumaFondos === Math.round(pagoNeto);
 
@@ -813,7 +904,7 @@ export default function Nomina({
         disponible: Math.max(0, Math.round(Number(b.saldo) || 0)),
       }));
       setFondos([...deHoy, ...guardadas]);
-      setMontosFondo({});
+      setFondosElegidos([]);
     }).catch(() => {
       if (!vivo) return;
       setFondos(getBovedas().map(b => ({
@@ -966,7 +1057,7 @@ export default function Nomina({
       setDiasVino(prev => { const p = { ...prev }; guardados.forEach(g => delete p[g.trabajadorId]); return p; });
       const nombres = guardados.map(g => g.trabajadorNombre).join(', ');
       toast.success(`¡Pago guardado! ${nombres}: ${formatCurrency(guardados.reduce((s, g) => s + g.valorNeto, 0))}. Míralo en "Historial"; lo no cobrado queda en "Deudas".`);
-      setObsModal(false); setObsText(''); setMontosFondo({});
+      setObsModal(false); setObsText(''); setFondosElegidos([]);
     } catch (e) { console.error(e); toast.error('Error al procesar la nómina'); }
     finally { setPagando(false); }
   }, [itemsDelPago, periodo, mes, año, rango, obsText, nominaExistente, creditosTrabajadores, trabajadoresActivos,
@@ -1509,9 +1600,16 @@ export default function Nomina({
           <Wallet className="w-5 h-5 text-violet-600 dark:text-violet-400" />
           <h1 className="font-black text-gray-900 dark:text-white text-lg">Nómina</h1>
           <div className="ml-auto flex gap-1.5">
+            {soloHorario ? (
+              <button className="px-3 py-1.5 rounded-xl bg-rose-500 text-white font-bold text-sm">Horario</button>
+            ) : <>
             <button onClick={() => setTab('liquidar')}
               className={`px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${tab === 'liquidar' ? 'bg-violet-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
               Liquidar
+            </button>
+            <button onClick={() => setTab('horario')}
+              className={`px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${tab === 'horario' ? 'bg-rose-500 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
+              Horario
             </button>
             <button onClick={() => setTab('historial')}
               className={`flex items-center gap-1 px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${tab === 'historial' ? 'bg-violet-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
@@ -1529,11 +1627,14 @@ export default function Nomina({
               className={`flex items-center gap-1 px-3 py-1.5 rounded-xl font-bold text-sm transition-all ${tab === 'acuerdos' ? 'bg-emerald-600 text-white' : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'}`}>
               <ShieldCheck className="w-4 h-4" /><span className="hidden sm:inline">Acuerdos</span>
             </button>
+            </>}
           </div>
         </div>
       </div>
 
       <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+        {tab === 'horario' && <HorarioSiEnferma trabajadores={trabajadores} soloLectura={soloHorario} />}
 
         {/* ── TAB LIQUIDAR ─────────────────────────────────────────────── */}
         {tab === 'liquidar' && (<>
@@ -1728,10 +1829,11 @@ export default function Nomina({
                       <span className="font-semibold text-gray-700 dark:text-gray-200">{formatCurrency(item.valorBase ?? item.valorBruto)}</span>
                     </div>
                     {!estaPageada && trabajadora && (() => {
-                      const an = analizarDias(trabajadora, diasPeriodo, asistenciaMap, diasVino[trabajadora.id] ?? [], horasHabituales[trabajadora.id], hoyLocal);
+                      const an = analizarDias(trabajadora, diasPeriodo, asistenciaMap, diasVino[trabajadora.id] ?? [], horasHabituales[trabajadora.id], hoyLocal, notasPeriodo.get(trabajadora.id));
                       const sinMarcar = an.dias.filter(d => d.esperado && !d.vino && !d.futuro);
                       const fuera = an.dias.filter(d => d.vino && !d.esperado);
                       const olvidadas = an.dias.filter(d => d.salidaOlvidada);
+                      const notasCambio = an.dias.filter(d => d.notaHorario);
                       const porAnotar = registrosACrear(trabajadora).length;
                       const hayHorasHabituales = !!(an.horario.entrada && an.horario.salida);
                       const hora12 = (h?: string | null) => {
@@ -1743,6 +1845,20 @@ export default function Nomina({
                         const a = prev[trabajadora.id] ?? [];
                         return { ...prev, [trabajadora.id]: a.includes(fecha) ? a.filter(f => f !== fecha) : [...a, fecha] };
                       });
+                      const modoDoble = marcandoDoble === trabajadora.id;
+                      const doblesTrab = diasDoble[trabajadora.id] ?? [];
+                      // En modo doble turno: tocar el día lo marca/desmarca como doble. Si no tenía asistencia, también queda "sí vino".
+                      const alternarDoble = (d: DiaInfo) => {
+                        const ya = doblesTrab.includes(d.fecha);
+                        setDiasDoble(prev => ({ ...prev, [trabajadora.id]: ya ? doblesTrab.filter(f => f !== d.fecha) : [...doblesTrab, d.fecha] }));
+                        if (!ya && !d.vino) alternar(d.fecha);
+                      };
+                      const valorDiaTrab = valorDiaEdit[trabajadora.id] ?? Math.round(trabajadora.salarioBase / 30);
+                      const setValorDobleTrab = (v: number) => setValorDoble(prev => {
+                        const n = { ...prev, [trabajadora.id]: v };
+                        try { localStorage.setItem('nomina_valor_doble_turno', JSON.stringify(n)); } catch { /* sin almacenamiento */ }
+                        return n;
+                      });
                       const setHoras = (campo: 'entrada' | 'salida', valor: string) => setHorasHabituales(prev => {
                         const n = { ...prev, [trabajadora.id]: { entrada: prev[trabajadora.id]?.entrada ?? '', salida: prev[trabajadora.id]?.salida ?? '', [campo]: valor } };
                         try { localStorage.setItem('nomina_horas_habituales', JSON.stringify(n)); } catch { /* sin almacenamiento */ }
@@ -1753,10 +1869,18 @@ export default function Nomina({
                           <p className="text-[11px] font-black text-gray-600 dark:text-gray-300 uppercase tracking-widest">
                             Asistencia de la quincena (Control de turno)
                           </p>
+                          <button type="button" onClick={() => setMarcandoDoble(modoDoble ? null : trabajadora.id)}
+                            className={`w-full py-2 rounded-xl text-xs font-black active:scale-95 transition-all ${modoDoble ? 'bg-amber-500 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'}`}>
+                            {modoDoble ? 'Listo: dejar de marcar doble turno' : `Marcar doble turno${doblesTrab.length ? ` (${doblesTrab.length})` : ''}`}
+                          </button>
+                          {modoDoble && (
+                            <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">Toque los días en que hizo doble turno. Toque otra vez para quitarlo.</p>
+                          )}
                           <div className="grid grid-cols-8 gap-1">
                             {an.dias.map(d => {
                               const dia = Number(d.fecha.slice(8, 10));
-                              const clickable = !d.futuro && !d.conRegistro;
+                              const esDoble = doblesTrab.includes(d.fecha);
+                              const clickable = modoDoble ? !d.futuro : (!d.futuro && !d.conRegistro);
                               const estilo = d.conRegistro
                                 ? 'bg-emerald-500 text-white'
                                 : d.marcado
@@ -1766,19 +1890,24 @@ export default function Nomina({
                                     : d.esperado
                                       ? 'border-2 border-rose-400 bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400'
                                       : 'bg-gray-100 dark:bg-gray-800 text-gray-400';
-                              const titulo = d.conRegistro
-                                ? `Llegó ${d.entrada ?? ''}${d.salida ? ` · salió ${d.salida}` : ' · sin hora de salida'}`
-                                : d.marcado ? 'Marcado a mano: sí vino (toca para quitar)'
-                                : d.futuro ? 'Aún no llega este día'
-                                : d.esperado ? 'Sin marcar "Llegué". Toca si SÍ vino'
-                                : 'Día de descanso. Toca si vino (reemplazo / día extra)';
+                              const titulo = [
+                                d.conRegistro
+                                  ? `Llegó ${d.entrada ?? ''}${d.salida ? ` · salió ${d.salida}` : ' · sin hora de salida'}`
+                                  : d.marcado ? 'Marcado a mano: sí vino (toca para quitar)'
+                                  : d.futuro ? 'Aún no llega este día'
+                                  : d.esperado ? 'Sin marcar "Llegué". Toca si SÍ vino'
+                                  : 'Día de descanso. Toca si vino (reemplazo / día extra)',
+                                d.notaHorario || '',
+                              ].filter(Boolean).join(' · ');
                               return (
                                 <button key={d.fecha} type="button" title={titulo} disabled={!clickable}
-                                  onClick={() => alternar(d.fecha)}
-                                  className={`relative rounded-lg py-1 text-center leading-tight transition-all active:scale-95 ${estilo} ${clickable ? '' : 'cursor-default'}`}>
+                                  onClick={() => modoDoble ? alternarDoble(d) : alternar(d.fecha)}
+                                  className={`relative rounded-lg py-1 text-center leading-tight transition-all active:scale-95 ${estilo} ${esDoble ? 'ring-2 ring-amber-400' : ''} ${clickable ? '' : 'cursor-default'}`}>
                                   <span className="block text-[9px] font-bold uppercase opacity-80">{NOMBRE_DIA_CORTO[d.dow]}</span>
                                   <span className="block text-sm font-black">{dia}</span>
+                                  {esDoble && <span className="absolute -top-1.5 -left-1 rounded bg-amber-500 px-0.5 text-[8px] font-black text-white">2x</span>}
                                   {d.salidaOlvidada && <span className="absolute -top-1 -right-1 text-[9px]" title="No marcó 'Me voy'">⚠️</span>}
+                                  {d.esCambioHorario && <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-amber-500" title={d.notaHorario || 'Cambio de turno'} />}
                                 </button>
                               );
                             })}
@@ -1788,7 +1917,21 @@ export default function Nomina({
                             <span><b className="inline-block w-2.5 h-2.5 rounded bg-violet-500 align-middle" /> Marcado a mano: sí vino</span>
                             <span><b className="inline-block w-2.5 h-2.5 rounded border-2 border-rose-400 align-middle" /> Sin marcar</span>
                             <span><b className="inline-block w-2.5 h-2.5 rounded bg-gray-200 align-middle" /> Descanso / aún no</span>
+                            <span><b className="inline-block rounded bg-amber-500 px-0.5 text-[8px] text-white align-middle">2x</b> Doble turno</span>
                           </div>
+
+                          {(doblesTrab.length > 0 || modoDoble) && (
+                            <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 px-2 py-2">
+                              <span className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                                Pago por cada doble turno
+                                <span className="block text-[10px] font-normal">Vacío = valor de un día ({formatCurrency(valorDiaTrab)}). Se recuerda para la próxima.</span>
+                              </span>
+                              <input type="number" inputMode="numeric" min={0}
+                                value={valorDoble[trabajadora.id] || ''} placeholder={String(valorDiaTrab)}
+                                onChange={e => setValorDobleTrab(Math.max(0, Number(e.target.value) || 0))}
+                                className="w-24 text-right text-sm font-bold border border-amber-300 dark:border-amber-700 rounded-lg px-2 py-1.5 bg-white dark:bg-gray-900 text-amber-800 dark:text-amber-300" />
+                            </div>
+                          )}
 
                           {sinMarcar.length > 0 && (
                             <p className="text-xs text-rose-600 dark:text-rose-400 font-semibold">
@@ -1817,12 +1960,28 @@ export default function Nomina({
                             </p>
                           )}
 
-                          {an.horario.dias !== null || hayHorasHabituales ? (
+                          {an.horario.deTienda ? (
                             <p className="text-[11px] text-gray-500 dark:text-gray-400">
-                              Horario: {trabajadora.horario || 'del cuadro de abajo'}
+                              Horario del cuadro de la tienda (Nómina → Horario).
+                              {hayHorasHabituales && <> Entra {hora12(an.horario.entrada)}, sale {hora12(an.horario.salida)}.</>}
+                            </p>
+                          ) : an.horario.dias !== null || hayHorasHabituales ? (
+                            <p className="text-[11px] text-gray-500 dark:text-gray-400">
+                              Horario: {trabajadora.horario || 'del cuadro de Horario'}
                               {hayHorasHabituales && <> → entra {hora12(an.horario.entrada)}, sale {hora12(an.horario.salida)}</>}
                             </p>
                           ) : null}
+
+                          {notasCambio.length > 0 && (
+                            <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-2 py-2 space-y-1">
+                              <p className="text-[11px] font-black text-amber-800 dark:text-amber-300 uppercase tracking-wide">Descansos y cambios de turno</p>
+                              {notasCambio.map(d => (
+                                <p key={d.fecha} className="text-[11px] text-amber-900 dark:text-amber-200">
+                                  <b>{NOMBRE_DIA_CORTO[d.dow]} {Number(d.fecha.slice(8, 10))}.</b> {d.notaHorario}
+                                </p>
+                              ))}
+                            </div>
+                          )}
 
                           {!an.horario.deTrabajadores && (
                             <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 px-2 py-2 space-y-1.5">
@@ -1909,8 +2068,8 @@ export default function Nomina({
                           </div>
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                              Días de MÁS (doble turno, reemplazo)
-                              <span className="block text-[10px] font-normal text-gray-400">Se suman. Medio día = 0.5</span>
+                              Días de MÁS (reemplazo, otro)
+                              <span className="block text-[10px] font-normal text-gray-400">Se suman. Medio día = 0.5. El doble turno se marca arriba en el calendario.</span>
                             </span>
                             <input type="number" inputMode="decimal" min={0} step={0.5}
                               value={diasExtra[item.trabajadorId] ?? ''} placeholder="0"
@@ -2820,37 +2979,40 @@ export default function Nomina({
                   <p className="text-sm font-bold text-black">Cargando cajas…</p>
                 ) : fondos.length === 0 ? (
                   <p className="text-sm font-black text-black">No hay Caja Principal abierta ni bóvedas guardadas.</p>
-                ) : fondos.map(f => (
-                  <div key={f.clave} className="rounded-xl border-2 border-black bg-white p-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-black text-black">
-                        {f.tipo === 'caja' ? 'Caja de hoy' : 'Bóveda'} · {f.nombre}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const otros = fondos.reduce((s, x) => s + (x.clave === f.clave ? 0 : Math.round(Number(montosFondo[x.clave]) || 0)), 0);
-                          setMontosFondo(prev => ({ ...prev, [f.clave]: String(Math.max(0, Math.round(pagoNeto) - otros)) }));
-                        }}
-                        className="text-xs font-black text-black underline"
-                      >
-                        El resto
-                      </button>
-                    </div>
-                    <p className="text-xs font-bold text-black">Hay {formatCurrency(f.disponible)}</p>
-                    <input
-                      inputMode="numeric"
-                      value={montosFondo[f.clave] || ''}
-                      onChange={e => setMontosFondo(prev => ({ ...prev, [f.clave]: e.target.value.replace(/[^\d]/g, '') }))}
-                      placeholder="Cuánto coges de aquí"
-                      className="mt-1 w-full rounded-xl border-2 border-black px-3 py-2 text-base font-black text-black"
-                    />
-                  </div>
-                ))}
+                ) : (
+                  <>
+                    <p className="text-sm font-bold text-gray-950 dark:text-white">Toca la caja de donde sale. Si no alcanza, toca otra y se completa con esa.</p>
+                    {fondos.map(f => {
+                      const elegida = fondosElegidos.includes(f.clave);
+                      const sale = montoDeFondo(f.clave);
+                      const sinPlata = f.disponible <= 0;
+                      return (
+                        <button
+                          key={f.clave}
+                          type="button"
+                          disabled={sinPlata && !elegida}
+                          onClick={() => setFondosElegidos(prev => prev.includes(f.clave) ? prev.filter(c => c !== f.clave) : [...prev, f.clave])}
+                          className={`w-full text-left rounded-xl border-2 p-3 transition-all active:scale-[0.98] disabled:opacity-40 ${elegida ? 'border-violet-600 bg-violet-50 ring-2 ring-violet-400' : 'border-black bg-white'}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-black text-black">
+                              {elegida ? '✓ ' : ''}{f.tipo === 'caja' ? 'Caja de hoy' : 'Bóveda'} · {f.nombre}
+                            </p>
+                            <p className="text-sm font-black text-black shrink-0">Hay {formatCurrency(f.disponible)}</p>
+                          </div>
+                          {elegida && (
+                            <p className="text-xs font-black text-violet-800 mt-1">
+                              {sale > 0 ? `Sale ${formatCurrency(sale)} de aquí` : 'No hace falta, ya está completo con las otras'}
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
                 <p className={`text-sm font-black ${fondosCuadran ? 'text-gray-950 dark:text-white' : 'text-rose-700'}`}>
                   Llevas {formatCurrency(sumaFondos)} de {formatCurrency(pagoNeto)}
-                  {sumaFondos < Math.round(pagoNeto) ? ` · faltan ${formatCurrency(Math.round(pagoNeto) - sumaFondos)}` : ''}
-                  {sumaFondos > Math.round(pagoNeto) ? ` · sobran ${formatCurrency(sumaFondos - Math.round(pagoNeto))}` : ''}
+                  {sumaFondos < Math.round(pagoNeto) ? ` · faltan ${formatCurrency(Math.round(pagoNeto) - sumaFondos)}${fondosElegidos.length > 0 ? ', toca otra caja' : ''}` : ''}
                 </p>
               </div>
             )}

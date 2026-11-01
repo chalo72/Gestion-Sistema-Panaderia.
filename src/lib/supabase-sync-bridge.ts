@@ -11,6 +11,7 @@ import { registerSelfWrite } from './deviceId';
 import { encolarOutbox, flushOutbox } from './sync-outbox';
 import { stampUpdatedAt } from './sync-merge-local-gana';
 import { validarBackupNube } from './boveda-produccion-inmutable';
+import { RESPALDOS_HORARIO } from './horario-tienda';
 
 // Telemetría Nexus local y segura (sin depender de módulos externos)
 const enviarTelemetria = (tipoIncidente: string, descripcion: string, origen?: string) => {
@@ -200,7 +201,7 @@ export function applySyncPatch(): void {
 
     if (
       (!resolvedDoc || (Array.isArray(resolvedDoc) && resolvedDoc.length === 0)) &&
-      (key === 'formulaciones_data' || key === 'modelosPan_data' || key === 'cajas_config')
+      (key === 'formulaciones_data' || key === 'modelosPan_data' || key === 'cajas_config' || Object.values(RESPALDOS_HORARIO).includes(key as typeof RESPALDOS_HORARIO[keyof typeof RESPALDOS_HORARIO]))
     ) {
       try {
         const remote = await supabaseDB.getBackup(key);
@@ -229,7 +230,7 @@ export function applySyncPatch(): void {
     }
 
     await originalSaveBackup(key, val);
-    if (key === 'formulaciones_data' || key === 'modelosPan_data' || key === 'cajas_config') {
+    if (key === 'formulaciones_data' || key === 'modelosPan_data' || key === 'cajas_config' || Object.values(RESPALDOS_HORARIO).includes(key as typeof RESPALDOS_HORARIO[keyof typeof RESPALDOS_HORARIO])) {
       registerSelfWrite('configuracion', key);
       supabaseDB
         .saveBackup(key, val)

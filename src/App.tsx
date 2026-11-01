@@ -882,6 +882,8 @@ const App = () => {
             onNavigateToRecepciones={() => setCurrentView('recepciones')}
             addOrUpdatePrecio={addOrUpdatePrecio}
             removePrecioFromCatalogo={deletePrecio}
+            onAddProducto={addProducto}
+            categorias={configuracion.categorias}
           />
         );
       case 'recepciones':
@@ -897,6 +899,7 @@ const App = () => {
             onAddRecepcion={onAddRecepcion}
             onUpdateRecepcion={onUpdateRecepcion}
             onAjustarStock={onAjustarStock}
+            onAddCategoria={addCategoria}
             gastos={gastos}
             onUpdateGasto={updateGasto}
             onConfirmarRecepcion={async (recepcion) => {

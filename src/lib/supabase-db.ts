@@ -824,6 +824,7 @@ export class SupabaseDatabase implements IDatabase {
                 usuarioId: g.usuario_id,
                 // 🩹 2026-10-09: el nombre de la caja POS (no es uuid) viaja en metadata
                 cajaId: g.caja_id ?? meta.cajaId,
+                personaFamilia: meta.personaFamilia || g.persona_familia,
                 metadata: meta
             };
         });
@@ -832,6 +833,7 @@ export class SupabaseDatabase implements IDatabase {
         const {
             id, descripcion, monto, categoria, fecha, proveedorId,
             comprobanteUrl, metodoPago, usuarioId, cajaId, metadata,
+            personaFamilia,
             proveedor_id, comprobante_url, metodo_pago, usuario_id, caja_id, // ignore db keys if present
             ...rest
         } = gasto;
@@ -861,6 +863,7 @@ export class SupabaseDatabase implements IDatabase {
                 ...(metadata || {}),
                 ...rest,
                 ...extraMeta,
+                ...(personaFamilia ? { personaFamilia } : {}),
             }
         });
         // Antes el error se ignoraba en silencio; ahora se lanza para que el puente
@@ -1295,9 +1298,13 @@ export class SupabaseDatabase implements IDatabase {
             margenUtilidad: p.margen_utilidad,
             tipo: p.tipo || 'elaborado',
             costoBase: p.costo_base || 0,
+            // Mayoreo / pan de empaque (sincroniza celular y PC)
+            descuentoMayorista: p.descuento_mayorista ?? undefined,
+            comisionRepartidor: p.comision_repartidor ?? undefined,
+            unidadesPaquete: p.unidades_paquete ?? undefined,
             createdAt: p.created_at,
             updatedAt: p.updated_at
-        };
+        } as any;
     }
 
     private mapProductoToDB(p: DBProducto): any {
@@ -1310,6 +1317,10 @@ export class SupabaseDatabase implements IDatabase {
             margen_utilidad: safeN(p.margenUtilidad),
             tipo: p.tipo,
             costo_base: safeN(p.costoBase),
+            // Solo se envían si existen, para no borrar el % desde un aparato con datos viejos
+            ...((p as any).descuentoMayorista !== undefined ? { descuento_mayorista: safeN((p as any).descuentoMayorista) } : {}),
+            ...((p as any).comisionRepartidor !== undefined ? { comision_repartidor: safeN((p as any).comisionRepartidor) } : {}),
+            ...((p as any).unidadesPaquete !== undefined ? { unidades_paquete: Math.round(safeN((p as any).unidadesPaquete)) } : {}),
             created_at: p.createdAt,
             updated_at: p.updatedAt
         };

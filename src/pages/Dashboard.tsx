@@ -138,6 +138,13 @@ export default function Dashboard(props: DashboardProps) {
 
   const alertasNoLeidas = alertas.filter(a => !a.leida);
 
+  const abrirHorarioEnNomina = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('tab', 'horario');
+    window.history.replaceState(window.history.state, '', url);
+    onViewNomina?.();
+  };
+
   // Ingresos del día: el POS casi no se usa a diario, así que si hoy no
   // hay ninguna venta de POS, se usa el cierre manual del día (mismo
   // criterio "POS si existe, si no manual, nunca sumar los dos" que ya
@@ -273,6 +280,7 @@ export default function Dashboard(props: DashboardProps) {
         onViewNomina={onViewNomina}
         onViewBoveda={onViewBoveda}
         onViewMayoristas={canVerFinanzas ? onViewMayoristas : undefined}
+        onVerHorario={abrirHorarioEnNomina}
         productos={productos}
         proveedores={proveedores}
         precios={precios}
@@ -285,7 +293,7 @@ export default function Dashboard(props: DashboardProps) {
       {/* ═══ VISTA ESCRITORIO (Solo en pantallas >= 768px: 100% INTACTA) ═══ */}
       <div className="hidden md:block space-y-5 sm:space-y-8 pb-12">
         {/* Header Stitch Style */}
-        <DashboardHeader onViewVentas={onViewVentas} onViewProductos={onViewProductos} onViewRecepciones={onViewRecepciones} onViewNomina={onViewNomina} onViewBoveda={onViewBoveda} onViewCaja={onViewCaja} onViewGastos={onViewGastos} onViewPrePedidos={onViewPrePedidos} onViewMayoristas={canVerFinanzas ? onViewMayoristas : undefined} />
+        <DashboardHeader onViewVentas={onViewVentas} onViewProductos={onViewProductos} onViewRecepciones={onViewRecepciones} onViewNomina={onViewNomina} onViewBoveda={onViewBoveda} onViewCaja={onViewCaja} onViewGastos={onViewGastos} onViewPrePedidos={onViewPrePedidos} onViewMayoristas={canVerFinanzas ? onViewMayoristas : undefined} onVerHorario={abrirHorarioEnNomina} />
 
       <OnboardingChecklist 
         estadisticas={estadisticas} 

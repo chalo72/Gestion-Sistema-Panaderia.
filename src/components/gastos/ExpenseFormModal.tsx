@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { opcionesPersonaFamilia } from '@/lib/familia-duenos';
 import type { Gasto, GastoCategoria, MetodoPago, Proveedor } from '@/types';
 
 // ── Métodos de pago visuales ──────────────────────────────────────────────────
@@ -34,7 +35,7 @@ const METODOS = [
 ];
 
 // ── Categorías ────────────────────────────────────────────────────────────────
-const CATS_GASTO = ['Materia Prima', 'Servicios', 'Arriendo', 'Nómina', 'Mantenimiento', 'Otros'];
+const CATS_GASTO = ['Materia Prima', 'Servicios', 'Arriendo', 'Nómina', 'Mantenimiento', 'Familia', 'Otros'];
 const CATS_INGRESO = ['Venta', 'Anticipo', 'Préstamo recibido', 'Aporte socio', 'Otro ingreso'];
 
 interface ExpenseFormModalProps {
@@ -243,7 +244,11 @@ export function ExpenseFormModal({
                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Categoría</Label>
                         <Select
                             value={formData.categoria}
-                            onValueChange={val => setFormData({ ...formData, categoria: val as GastoCategoria })}
+                            onValueChange={val => setFormData({
+                                ...formData,
+                                categoria: val as GastoCategoria,
+                                ...(val !== 'Familia' ? { personaFamilia: undefined } : {}),
+                            })}
                         >
                             <SelectTrigger className="h-11 rounded-xl border border-slate-200 dark:border-slate-700 font-bold">
                                 <SelectValue placeholder={cats[0]} />
@@ -255,6 +260,27 @@ export function ExpenseFormModal({
                             </SelectContent>
                         </Select>
                     </div>
+
+                    {formData.categoria === 'Familia' && !esIngreso && (
+                        <div className="space-y-1.5">
+                            <Label className="text-[10px] font-black uppercase tracking-widest text-amber-600 ml-1">
+                                Quién de la familia *
+                            </Label>
+                            <Select
+                                value={formData.personaFamilia || ''}
+                                onValueChange={val => setFormData({ ...formData, personaFamilia: val })}
+                            >
+                                <SelectTrigger className="h-11 rounded-xl border border-amber-300 dark:border-amber-700 font-bold">
+                                    <SelectValue placeholder="Elegir persona…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {opcionesPersonaFamilia().map(o => (
+                                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
                     
                     {/* Es Factura? */}
                     <div className="flex items-center gap-2 pt-2 pb-1">

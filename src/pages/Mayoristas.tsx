@@ -25,6 +25,7 @@ import type { Producto, PrecioProveedor, Cliente } from '@/types';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import { exportCSV, getExportFilename } from '@/lib/exportUtils';
 import RutasReparto from '@/components/mayoristas/RutasReparto';
+import PanEmpaqueModal, { type FuenteCosto } from '@/components/mayoristas/PanEmpaqueModal';
 
 import type { ClienteMayorista, MetodoPago, Abono, TicketPendiente, HistorialMayorista, MayoristasProps } from '@/types/mayoristas';
 
@@ -47,8 +48,38 @@ const TIPO_CONFIG: Record<string, { label: string; color: string; bg: string }> 
 };
 
 // ─── Componente principal ────────────────────────────────────────────────────
-export default function Mayoristas({ productos, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
+export default function Mayoristas({ productos: productosProp, precios, clientes: allClientes, addCliente, updateCliente, deleteCliente, getMejorPrecio, formatCurrency, onNavigateTo, cajaActiva, registrarVenta, creditosClientes, addCreditoCliente, updateCreditoCliente, deleteCreditoCliente, registrarPagoCredito }: MayoristasProps) {
     const { usuario } = useAuth();
+    // ── Pan de empaque / mayoreo: productos creados o editados aquí se ven sin recargar ──
+    const [productosLocales, setProductosLocales] = useState<Producto[]>([]);
+    const productos = useMemo(() => {
+        if (productosLocales.length === 0) return productosProp;
+        const m = new Map(productosProp.map(p => [p.id, p]));
+        productosLocales.forEach(p => m.set(p.id, { ...(m.get(p.id) || {}), ...p } as Producto));
+        return Array.from(m.values());
+    }, [productosProp, productosLocales]);
+    // Costo real por pan que calcula Producción (Modelos de pan enlazados al producto)
+    const [modelosPan, setModelosPan] = useState<any[]>([]);
+    useEffect(() => { db.getAllModelosPan().then((m: any) => setModelosPan(Array.isArray(m) ? m : [])).catch(() => {}); }, []);
+    const costoProduccion = useMemo(() => {
+        const m = new Map<string, number>();
+        for (const mp of modelosPan) {
+            const c = Number(mp?.costoUnitario) || 0;
+            if (c <= 0) continue;
+            for (const id of [mp?.productoId, mp?.productoCatalogoId]) if (id && !m.has(id)) m.set(id, c);
+        }
+        return m;
+    }, [modelosPan]);
+    // Orden: Producción > proveedor > costo del catálogo. Si no hay ninguno se estima como antes, pero queda marcado 'estimado' (no real).
+    const resolverCosto = useCallback((p: Producto, mejorPrecio: PrecioProveedor | null): { costo: number; fuente: FuenteCosto } => {
+        const cp = costoProduccion.get(p.id);
+        if (cp && cp > 0) return { costo: cp, fuente: 'produccion' };
+        if (mejorPrecio?.precioCosto && mejorPrecio.precioCosto > 0) return { costo: calcularCosto(p, mejorPrecio), fuente: 'proveedor' };
+        if (p.costoBase && p.costoBase > 0) return { costo: p.costoBase, fuente: 'catalogo' };
+        let est = calcularCosto(p, null);
+        if (est <= 0 && p.precioVenta > 0) est = p.precioVenta / 1.30;
+        return { costo: est, fuente: 'estimado' };
+    }, [costoProduccion]);
     // Config de márgenes
     const [config, setConfig] = useState(cargarConfig);
     const [editandoConfig, setEditandoConfig] = useState(false);
@@ -986,8 +1017,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             )
             .map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
-                let costo = calcularCosto(p, mejorPrecio);
-                if (costo <= 0 && p.precioVenta > 0) costo = p.precioVenta / 1.30;
+                const rc = resolverCosto(p, mejorPrecio);
+                let costo = rc.costo;
                 
                 // Aunque no se pueda calcular costo, no ocultaremos el producto
                 // Para que el usuario lo vea y pueda fijarle precio manualmente
@@ -1034,6 +1065,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 return {
                     producto: p,
                     costo,
+                    costoFuente: rc.fuente,
                     precioMinPanaderia,
                     precioMayorista,
                     precioMayoristaAuto,
@@ -1055,7 +1087,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, preciosOverride, soloProduccionPropia]);
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, busqueda, preciosOverride, soloProduccionPropia, resolverCosto]);
 
     // Helper: normaliza categoría para comparaciones sin importar tildes/mayúsculas
     const normCat = (c: string | undefined) => (c || 'Sin categoría').toLowerCase().trim();
@@ -1070,8 +1102,8 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
             : productos;
         const mapped = fuente.map(p => {
                 const mejorPrecio = getMejorPrecio(p.id);
-                let costo = calcularCosto(p, mejorPrecio);
-                if (costo <= 0 && p.precioVenta > 0) costo = p.precioVenta / 1.30;
+                const rc = resolverCosto(p, mejorPrecio);
+                let costo = rc.costo;
                 const precioMinPanaderia = costo;
                 let precioMayoristaAuto = costo * (1 + config.margenNegocio / 100);
                 if ((p as any).descuentoMayorista !== undefined && (p as any).descuentoMayorista > 0) {
@@ -1095,7 +1127,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 else viabilidad = 'inviable';
                 const descuentoMonto = pvp - precioMayorista;
                 const descuentoPct = pvp > 0 ? (descuentoMonto / pvp) * 100 : 0;
-                return { producto: p, costo, precioMinPanaderia, precioMayoristaAuto, precioMayorista, tieneOverride, precioReventa, pvp, margenPanaderiaReal, margenRevendedorReal, gananciaPanaderiaPorUnidad, gananciRevendedorPorUnidad, reventaMenorQuePVP, panaderiaGana, revendedorGana, viabilidad, descuentoMonto, descuentoPct };
+                return { producto: p, costo, costoFuente: rc.fuente, precioMinPanaderia, precioMayoristaAuto, precioMayorista, tieneOverride, precioReventa, pvp, margenPanaderiaReal, margenRevendedorReal, gananciaPanaderiaPorUnidad, gananciRevendedorPorUnidad, reventaMenorQuePVP, panaderiaGana, revendedorGana, viabilidad, descuentoMonto, descuentoPct };
             });
 
         // Cuando varios proveedores venden el mismo producto, mostrar solo el de mayor rentabilidad
@@ -1111,7 +1143,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                 const orden = { excelente: 0, viable: 1, ajustado: 2, inviable: 3 };
                 return orden[a.viabilidad] - orden[b.viabilidad];
             });
-    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride, soloProduccionPropia]);
+    }, [productos, getMejorPrecio, config.margenNegocio, margenRevendedorEfectivo, preciosOverride, soloProduccionPropia, resolverCosto]);
 
     const productosEditTicketFiltrados = useMemo(() => {
         if (!busquedaEditTicket) return tablaDatosTodos;
@@ -1394,6 +1426,97 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
         setPerfilTab('pagados');
     };
 
+    // ── Pan de empaque: crear / editar con % para la tienda y % del repartidor ──
+    const [panEmpaque, setPanEmpaque] = useState<{ abierto: boolean; producto: Producto | null }>({ abierto: false, producto: null });
+    const abrirPanEmpaque = (producto: Producto | null = null) => setPanEmpaque({ abierto: true, producto });
+    const guardarPanEmpaque = async (d: { nombre: string; categoria: string; unidadesPaquete: number; precioVenta: number; descuentoMayorista: number; comisionRepartidor: number }): Promise<boolean> => {
+        const ahora = new Date().toISOString();
+        const editando = panEmpaque.producto;
+        const dup = productos.find(p => p.id !== editando?.id && p.nombre.trim().toLowerCase() === d.nombre.trim().toLowerCase());
+        if (dup) { toast.error(`Ya existe un producto llamado "${dup.nombre}". Edítelo desde su tarjeta.`); return false; }
+        const prod: Producto = editando
+            ? { ...editando, ...d, updatedAt: ahora }
+            : {
+                id: generateUUID(), nombre: d.nombre, categoria: d.categoria, descripcion: `Paquete x${d.unidadesPaquete}`,
+                precioVenta: d.precioVenta, margenUtilidad: 0, tipo: 'elaborado', costoBase: 0,
+                descuentoMayorista: d.descuentoMayorista, comisionRepartidor: d.comisionRepartidor, unidadesPaquete: d.unidadesPaquete,
+                createdAt: ahora, updatedAt: ahora,
+            };
+        try {
+            if (editando) await db.updateProducto(prod); else await db.addProducto(prod);
+        } catch (e) {
+            console.error('[Mayoristas] No se pudo guardar pan de empaque', e);
+            toast.error('No se pudo guardar el producto');
+            return false;
+        }
+        setProductosLocales(prev => [...prev.filter(p => p.id !== prod.id), prod]);
+        // El % manda: se quita un precio manual viejo que lo tapaba
+        if (preciosOverride[prod.id] !== undefined) setOverridePrecio(prod.id, null);
+        toast.success(editando ? 'Precios de mayoreo guardados' : `"${prod.nombre}" creado. Regístrelo en Producción para que salga su costo.`);
+        return true;
+    };
+    const categoriasCatalogo = Array.from(new Set(productos.filter(p => p.tipo === 'elaborado').map(p => p.categoria).filter(Boolean))).sort();
+    const costoPanEmpaque = panEmpaque.producto
+        ? (() => { const pe = panEmpaque.producto!; const rc = resolverCosto(pe, getMejorPrecio(pe.id)); return { valor: rc.costo, fuente: rc.fuente }; })()
+        : null;
+    const modalPanEmpaque = (
+        <PanEmpaqueModal
+            abierto={panEmpaque.abierto}
+            producto={panEmpaque.producto}
+            costo={costoPanEmpaque}
+            categorias={categoriasCatalogo}
+            formatCurrency={formatCurrency}
+            onCerrar={() => setPanEmpaque({ abierto: false, producto: null })}
+            onGuardar={guardarPanEmpaque}
+        />
+    );
+
+    // ── Resumen del pedido: repartidor, costo y lo que le queda a la panadería ──
+    const resumenPedido = carritoPos.length === 0 ? null : carritoPos.reduce((acc, it) => {
+        const p = productos.find(x => x.id === it.productoId);
+        acc.comision += Math.round(it.precio * ((p?.comisionRepartidor || 0) / 100)) * it.cantidad;
+        const rc = p ? resolverCosto(p, getMejorPrecio(p.id)) : null;
+        if (!rc || rc.fuente === 'estimado') acc.sinCosto += 1; else acc.costo += rc.costo * it.cantidad;
+        return acc;
+    }, { comision: 0, costo: 0, sinCosto: 0 });
+    const gananciaPedido = resumenPedido ? totalCarrito - resumenPedido.comision - resumenPedido.costo : 0;
+
+    // ── Ticket de despacho (imprimir / PDF / WhatsApp) ──
+    const metodoLabelDespacho: Record<string, string> = { efectivo: 'Efectivo', nequi: 'Nequi', transferencia: 'Transferencia', credito: 'Crédito' };
+    const imprimirTicketDespacho = (cliente: { nombre: string }) => {
+        if (carritoPos.length === 0) return;
+        const fecha = new Date().toLocaleString('es-CO', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const unidades = carritoPos.reduce((s, i) => s + i.cantidad, 0);
+        const filas = carritoPos.map(i => `<tr><td>${escapeHtml(i.nombre)}</td><td class="c">${i.cantidad}</td><td class="r">${formatCurrency(i.precio)}</td><td class="r">${formatCurrency(i.precio * i.cantidad)}</td></tr>`).join('');
+        const html = `<!doctype html><html><head><meta charset="utf-8"><title>Despacho - ${escapeHtml(cliente.nombre)}</title>
+<style>body{font-family:Arial,sans-serif;max-width:380px;margin:0 auto;padding:12px;color:#111}h1{font-size:18px;margin:0;text-align:center}p{margin:3px 0;font-size:12px}
+table{width:100%;border-collapse:collapse;margin-top:8px;font-size:12px}th,td{border-bottom:1px dashed #999;padding:4px 2px;text-align:left}.c{text-align:center}.r{text-align:right}
+.t{font-size:16px;font-weight:bold;text-align:right;margin-top:8px}.f{margin-top:40px;border-top:1px solid #111;text-align:center;font-size:12px;padding-top:4px}@media print{button{display:none}}</style></head><body>
+<h1>Panadería Dulce Placer</h1><p style="text-align:center"><b>TICKET DE DESPACHO</b></p>
+<p><b>Cliente:</b> ${escapeHtml(cliente.nombre)}</p><p><b>Fecha:</b> ${fecha}</p>
+<table><thead><tr><th>Producto</th><th class="c">Cant.</th><th class="r">Precio</th><th class="r">Subtotal</th></tr></thead><tbody>${filas}</tbody></table>
+<p class="t">TOTAL: ${formatCurrency(totalCarrito)}</p><p>Cantidad total: ${unidades}</p><p>Forma de pago: ${metodoLabelDespacho[metodoPagoSeleccionado] || metodoPagoSeleccionado}</p>
+<div class="f">Recibido por (nombre y firma)</div>
+<p style="text-align:center;margin-top:16px"><button onclick="window.print()">Imprimir / PDF</button></p></body></html>`;
+        const win = window.open('', '_blank', 'width=420,height=700');
+        if (!win) { toast.error('Habilita ventanas emergentes para ver el ticket'); return; }
+        win.document.write(html);
+        win.document.close();
+        win.focus();
+        setTimeout(() => win.print(), 400);
+    };
+    const whatsappTicketDespacho = (cliente: { nombre: string; telefono?: string | null }) => {
+        if (carritoPos.length === 0) return;
+        const tel = (cliente.telefono || '').replace(/\D/g, '');
+        const fecha = new Date().toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+        const lineas = [
+            '🥐 *DULCE PLACER*', '🧾 *TICKET DE DESPACHO*', `👤 ${cliente.nombre}`, `📅 ${fecha}`, '',
+            ...carritoPos.map(i => `• ${i.cantidad} x ${i.nombre} — ${formatCurrency(i.precio)} = *${formatCurrency(i.precio * i.cantidad)}*`),
+            '', `💰 *TOTAL: ${formatCurrency(totalCarrito)}*`, `Forma de pago: ${metodoLabelDespacho[metodoPagoSeleccionado] || metodoPagoSeleccionado}`,
+        ];
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(lineas.join('\n'))}`, '_blank');
+    };
+
     // ── Mini-POS del Cliente ─────────────────────────────────────────────────
     if (viendoPerfilCliente) {
         const cliente = viendoPerfilCliente;
@@ -1421,6 +1544,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
         return (
             <div className="min-h-screen flex flex-col gap-0 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+                {modalPanEmpaque}
 
                 {/* Header */}
                 <div className="flex items-center justify-between gap-4 bg-white dark:bg-slate-900 px-5 py-4 border-b border-slate-100 dark:border-slate-800 shadow-sm sticky top-0 z-20">
@@ -1905,6 +2029,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                     className="h-10 pl-9 rounded-xl border-slate-200 bg-white text-xs font-bold"
                                 />
                             </div>
+                            <button
+                                type="button"
+                                onClick={() => abrirPanEmpaque(null)}
+                                className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all"
+                            >
+                                <PlusCircle className="w-4 h-4" /> Nuevo pan de empaque
+                            </button>
 
                             {/* Filtro por categoría — scroll horizontal, sin wrap */}
                             {categoriasPerfil.length > 1 && (
@@ -2347,6 +2478,19 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                                                         EN TICKET
                                                     </div>
                                                 )}
+                                                {d.costoFuente === 'estimado' && (
+                                                    <div className="absolute bottom-1.5 left-1.5 bg-amber-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-md z-10 shadow" title="Sin costo real: regístrelo en Producción">
+                                                        SIN COSTO
+                                                    </div>
+                                                )}
+                                                <button
+                                                    type="button"
+                                                    onClick={e => { e.preventDefault(); e.stopPropagation(); abrirPanEmpaque(d.producto); }}
+                                                    className="absolute bottom-1.5 right-1.5 w-6 h-6 rounded-md bg-white/90 text-indigo-600 flex items-center justify-center z-10 shadow hover:bg-indigo-600 hover:text-white transition-colors"
+                                                    title="Editar precios de mayoreo (% tienda y % repartidor)"
+                                                >
+                                                    <Percent className="w-3 h-3" />
+                                                </button>
                                                 {(d.producto as any).descuentoMayorista > 0 && (
                                                     <div className="absolute top-1.5 left-1.5 bg-rose-500 text-white font-black text-[7px] px-1.5 py-0.5 rounded-md z-10 shadow">
                                                         -{(d.producto as any).descuentoMayorista}%
@@ -2682,6 +2826,24 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                             <div className="flex items-center justify-between">
                                 <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Total</span>
                                 <span className="text-2xl font-black text-slate-900 dark:text-white tabular-nums">{formatCurrency(totalCarrito)}</span>
+                            </div>
+                            {resumenPedido && (
+                                <div className="rounded-xl bg-slate-50 dark:bg-slate-800/50 p-2.5 space-y-1 text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                    <div className="flex justify-between"><span>Para el repartidor</span><span className="tabular-nums">− {formatCurrency(resumenPedido.comision)}</span></div>
+                                    <div className="flex justify-between"><span>Costo de producción</span><span className="tabular-nums">{resumenPedido.sinCosto > 0 ? `${resumenPedido.sinCosto} producto(s) sin costo` : `− ${formatCurrency(resumenPedido.costo)}`}</span></div>
+                                    <div className={cn("flex justify-between font-black", resumenPedido.sinCosto > 0 ? "text-amber-600" : gananciaPedido > 0 ? "text-emerald-600" : "text-rose-600")}>
+                                        <span>Le queda a la panadería</span>
+                                        <span className="tabular-nums">{resumenPedido.sinCosto > 0 ? "Pendiente" : formatCurrency(gananciaPedido)}</span>
+                                    </div>
+                                </div>
+                            )}
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button type="button" variant="outline" disabled={carritoPos.length === 0} onClick={() => imprimirTicketDespacho(cliente)} className="h-10 rounded-xl font-black uppercase text-[10px] tracking-widest gap-1.5">
+                                    <Printer className="w-4 h-4" /> Ticket despacho
+                                </Button>
+                                <Button type="button" variant="outline" disabled={carritoPos.length === 0} onClick={() => whatsappTicketDespacho(cliente as any)} className="h-10 rounded-xl font-black uppercase text-[10px] tracking-widest gap-1.5 text-emerald-700 border-emerald-200">
+                                    <MessageCircle className="w-4 h-4" /> WhatsApp
+                                </Button>
                             </div>
                             {/* Foto de factura */}
                             {fotoFactura ? (
@@ -3492,6 +3654,7 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
 
     return (
         <div className="min-h-full flex flex-col gap-5 p-4 bg-slate-50 dark:bg-slate-950 animate-ag-fade-in">
+            {modalPanEmpaque}
 
             {/* ── Header ──────────────────────────────────────────────────── */}
             <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white dark:bg-slate-900 px-5 py-4 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm">
@@ -3670,6 +3833,13 @@ export default function Mayoristas({ productos, precios, clientes: allClientes, 
                         >
                             <Package className="w-3.5 h-3.5" />
                             Solo producción propia
+                        </button>
+                        <button
+                            onClick={() => abrirPanEmpaque(null)}
+                            className="flex items-center gap-2 px-4 h-10 rounded-xl text-xs font-black uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 text-white transition-all"
+                        >
+                            <PlusCircle className="w-3.5 h-3.5" />
+                            Nuevo pan de empaque
                         </button>
                         <button
                             onClick={() => {

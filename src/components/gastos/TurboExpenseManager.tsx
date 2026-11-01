@@ -22,6 +22,7 @@ import {
   Receipt,
   Landmark,
   CalendarClock,
+  Users,
 } from 'lucide-react';
 import { getCompromisos } from '@/lib/finanzas-personales';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,10 @@ import { generateUUID } from '@/lib/safe-utils';
 import { CAJAS_POS_DEFAULT } from '@/lib/boveda-pos-sync';
 import { getBovedas, type Boveda } from '@/lib/boveda-store';
 import { matchProductoEnCatalogo } from '@/lib/ocr-service';
+import {
+  detectarPersonaFamiliaEnTexto,
+  opcionesPersonaFamilia,
+} from '@/lib/familia-duenos';
 import {
   inferirCategoriaGasto,
   planificarRecategorizacionGastos,
@@ -72,6 +77,7 @@ export interface TurboExpenseManagerProps {
     origenTipo?: 'pos' | 'tesoreria';
     cajaId?: string;
     bovedaId?: string;
+    personaFamilia?: string;
   }) => Promise<void>;
   esInline?: boolean;
   proveedores?: Proveedor[];
@@ -97,6 +103,7 @@ const TEMPLATES = [
   { label: 'Internet', icon: Wifi, monto: 0, desc: 'Pago Internet', cat: 'Servicios' },
   { label: 'Arreglos', icon: Wrench, monto: 0, desc: 'Arreglo / Mantenimiento', cat: 'Mantenimiento' },
   { label: 'Bancos', icon: Landmark, monto: 0, desc: 'Pago Banco / Crédito', cat: 'Otros' },
+  { label: 'Familia', icon: Users, monto: 0, desc: 'Retiro familia / dueños', cat: 'Familia' },
   { label: 'Compromisos', icon: CalendarClock, monto: 0, desc: 'Pago Compromiso', cat: 'Otros' },
   { label: 'Caja Menor', icon: Coffee, monto: 0, desc: 'Gastos de cafetería/aseo', cat: 'Otros' },
   { label: 'Empaques', icon: PackageSearch, monto: 0, desc: 'Bolsas y empaques', cat: 'Materia Prima' },
@@ -526,6 +533,14 @@ export function TurboExpenseManager({
     
     if (!validarOrigen(montoExtraido)) return;
     const cat = await resolverCategoriaGasto(descripcion, smartProv || undefined);
+    const personaSmart =
+      cat === 'Familia'
+        ? detectarPersonaFamiliaEnTexto(descripcion)?.nombre || ''
+        : '';
+    if (cat === 'Familia' && !personaSmart) {
+      toast.error('Retiro de familia: escribe el nombre (Emiliano, Isabela, Gonzalo Iván…) o usa el botón Familia.');
+      return;
+    }
     
     setSaving(true);
     try {
@@ -536,7 +551,7 @@ export function TurboExpenseManager({
         metodoPago: 'efectivo',
         esIngreso: false,
         fecha: fechaGlobal
-      , proveedorId: smartProv || undefined, origenTipo, cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined, bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined});
+      , proveedorId: smartProv || undefined, origenTipo, cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined, bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined, personaFamilia: cat === 'Familia' ? personaSmart : undefined});
       
       // 🚀 Ejecutar auditoría de precios
       if (cat === 'Materia Prima' || cat === 'Otros' || smartProv) {
@@ -596,23 +611,33 @@ export function TurboExpenseManager({
       return;
     }
     if (!validarOrigen(monto)) return;
+    const catGuardar = ((pagoFijo.label === 'Compromisos'
+      ? compromisosActivos.find((x) => x.id === compromisoId)?.categoria
+      : undefined) || pagoFijo.cat) as GastoCategoria;
+    const personaResuelta =
+      catGuardar === 'Familia'
+        ? (pagoFijoQuien.trim() || detectarPersonaFamiliaEnTexto(pagoFijoNota)?.nombre || '')
+        : '';
+    if (catGuardar === 'Familia' && !personaResuelta) {
+      toast.error('Retiro de familia: elige a quién salió la plata.');
+      return;
+    }
     const partes = [pagoFijo.desc];
-    if (pagoFijoQuien.trim()) partes.push(`— ${pagoFijoQuien.trim()}`);
+    if (personaResuelta || pagoFijoQuien.trim()) partes.push(`— ${(personaResuelta || pagoFijoQuien).trim()}`);
     if (pagoFijoNota.trim()) partes.push(`(${pagoFijoNota.trim()})`);
     setSaving(true);
     try {
       await onSave({
         descripcion: partes.join(' '),
         monto,
-        categoria: ((pagoFijo.label === 'Compromisos'
-          ? compromisosActivos.find((x) => x.id === compromisoId)?.categoria
-          : undefined) || pagoFijo.cat) as GastoCategoria,
+        categoria: catGuardar,
         metodoPago: 'efectivo',
         esIngreso: false,
         fecha: fechaGlobal,
         origenTipo,
         cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined,
         bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined,
+        personaFamilia: catGuardar === 'Familia' ? personaResuelta : undefined,
       });
       try {
         const ult = leerUltimosPagosFijos();
@@ -1227,12 +1252,29 @@ export function TurboExpenseManager({
             {leerUltimosPagosFijos()[pagoFijo.label] ? (
               <p className="text-[11px] font-semibold text-slate-500">La última vez pagaste ${Math.round(leerUltimosPagosFijos()[pagoFijo.label]).toLocaleString('es-CO')} (cámbialo si es otro valor).</p>
             ) : null}
-            <input
-              value={pagoFijoQuien}
-              onChange={(e) => setPagoFijoQuien(e.target.value)}
-              placeholder="¿A quién se le pagó? (opcional) Ej: Don Pedro, Fábrica de muebles"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-bold"
-            />
+            {pagoFijo.cat === 'Familia' ? (
+              <select
+                value={pagoFijoQuien}
+                onChange={(e) => setPagoFijoQuien(e.target.value)}
+                className={cn(
+                  selectCls,
+                  'w-full py-3',
+                  !pagoFijoQuien && 'border-amber-400 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30'
+                )}
+              >
+                <option value="">— ¿A quién de la familia? * —</option>
+                {opcionesPersonaFamilia().map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={pagoFijoQuien}
+                onChange={(e) => setPagoFijoQuien(e.target.value)}
+                placeholder="¿A quién se le pagó? (opcional) Ej: Don Pedro, Fábrica de muebles"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm font-bold"
+              />
+            )}
             <input
               value={pagoFijoNota}
               onChange={(e) => setPagoFijoNota(e.target.value)}

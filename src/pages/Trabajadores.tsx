@@ -1051,7 +1051,7 @@ export default function Trabajadores({
                         {/* Salario + Fecha ingreso */}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Salario base</Label>
+                                <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Sueldo del MES</Label>
                                 <Input
                                     type="number"
                                     placeholder="ej: 1300000"
@@ -1059,6 +1059,7 @@ export default function Trabajadores({
                                     onChange={e => setFormData(p => ({ ...p, salarioBase: parseFloat(e.target.value) || 0 }))}
                                     className="mt-1.5 rounded-xl border-slate-200 dark:border-slate-700 focus-visible:ring-violet-500"
                                 />
+                                <ConvertirSueldo onCalcular={mes => setFormData(p => ({ ...p, salarioBase: mes }))} />
                             </div>
                             <div>
                                 <Label className="text-xs font-black uppercase tracking-widest text-slate-500">Fecha de ingreso</Label>
@@ -1390,3 +1391,33 @@ export default function Trabajadores({
     );
 }
 
+
+// Nómina toma el sueldo como MENSUAL. Si le pagan por quincena, semana o día, esto lo pasa a mes.
+const FACTOR_MES = { quincena: 2, semana: 52 / 12, dia: 30 } as const;
+function ConvertirSueldo({ onCalcular }: { onCalcular: (mes: number) => void }) {
+    const [monto, setMonto] = useState('');
+    const [cada, setCada] = useState<keyof typeof FACTOR_MES>('quincena');
+    const valor = parseFloat(monto.replace(/[^\d]/g, '')) || 0;
+    const mes = Math.round(valor * FACTOR_MES[cada]);
+    return (
+        <div className="mt-2 rounded-xl bg-violet-50 dark:bg-violet-900/20 p-2 space-y-1.5">
+            <p className="text-[10px] font-bold text-violet-700 dark:text-violet-300">¿Le paga por quincena, semana o día? Escríbalo aquí y se pasa a mes:</p>
+            <div className="flex gap-1">
+                <input inputMode="numeric" value={monto} onChange={e => setMonto(e.target.value)} placeholder="ej: 125000"
+                    className="w-full min-w-0 rounded-lg border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900 px-2 py-1 text-xs font-bold text-slate-800 dark:text-slate-100" />
+                <select value={cada} onChange={e => setCada(e.target.value as keyof typeof FACTOR_MES)}
+                    className="rounded-lg border border-violet-200 dark:border-violet-800 bg-white dark:bg-slate-900 px-1 text-xs font-bold text-slate-800 dark:text-slate-100">
+                    <option value="quincena">por quincena</option>
+                    <option value="semana">por semana</option>
+                    <option value="dia">por día</option>
+                </select>
+            </div>
+            {mes > 0 && (
+                <button type="button" onClick={() => { onCalcular(mes); setMonto(''); }}
+                    className="w-full rounded-lg bg-violet-600 text-white text-[11px] font-black py-1 active:scale-95">
+                    Usar {mes.toLocaleString('es-CO')} al mes
+                </button>
+            )}
+        </div>
+    );
+}
