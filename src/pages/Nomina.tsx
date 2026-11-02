@@ -260,6 +260,17 @@ function analizarDias(
   return { dias, horario };
 }
 
+// "Doble turno (2): Mar 3, Jue 5" y lo que sumó, para la cuenta y los comprobantes impresos
+function textoDobleTurno(i: NominaItem): string {
+  const f = i.diasDobleTurno ?? [];
+  if (f.length === 0) return '';
+  return `Doble turno (${f.length}): ${f.map(d => `${NOMBRE_DIA_CORTO[diaSemana(d)]} ${Number(d.slice(8, 10))}`).join(', ')}`;
+}
+function montoDobleTurno(i: NominaItem): number {
+  const n = i.diasDobleTurno?.length ?? 0;
+  return Math.round(n * (i.valorDobleTurno ?? i.valorDia ?? Math.round(i.salarioBase / 30)));
+}
+
 const MOTIVOS: Record<string, string> = {
   retiro_voluntario:    'Retiro voluntario',
   mutuo_acuerdo:        'Mutuo acuerdo',
@@ -1277,6 +1288,7 @@ export default function Nomina({
     <p style="font-size:18px;font-weight:900;margin:0 0 12px">${escapeHtml(item.trabajadorNombre)}</p>
     <table>
       <tr><td style="padding:6px 8px">Días</td><td style="padding:6px 8px;text-align:right">${item.diasTrabajados}/${item.totalDiasPeriodo}</td></tr>
+      ${textoDobleTurno(item) ? `<tr><td style="padding:6px 8px;color:#b45309;font-weight:700">${escapeHtml(textoDobleTurno(item))}</td><td style="padding:6px 8px;text-align:right;color:#b45309;font-weight:700">+${formatCurrency(montoDobleTurno(item))}</td></tr>` : ''}
       <tr><td style="padding:6px 8px">Sueldo a recibir</td><td style="padding:6px 8px;text-align:right">${formatCurrency(item.valorBruto)}</td></tr>
       ${descs}
       <tr><td style="padding:8px;font-weight:900">Le pagamos</td><td style="padding:8px;text-align:right;font-weight:900;font-size:18px">${formatCurrency(item.valorNeto)}</td></tr>
@@ -1397,6 +1409,7 @@ export default function Nomina({
       const notaDias = [
         item.diasMenos ? `−${item.diasMenos} día(s) que no vino` : '',
         item.diasExtra ? `+${item.diasExtra} día(s) de más` : '',
+        textoDobleTurno(item) ? `${escapeHtml(textoDobleTurno(item))} +${formatCurrency(montoDobleTurno(item))}` : '',
       ].filter(Boolean).join(' · ');
       return `<tr>
         <td style="padding:7px 6px;font-weight:700;border-bottom:1px solid #f1f5f9">${escapeHtml(item.trabajadorNombre)}${notaDias ? `<div style="font-weight:400;font-size:10px;color:#64748b">${notaDias}</div>` : ''}</td>
