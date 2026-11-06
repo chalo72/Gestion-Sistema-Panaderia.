@@ -28,19 +28,38 @@ export interface ProductoBasura {
   dondeEsta: 'este aparato' | 'nube' | 'ambos';
 }
 
-/** Mismo criterio que la rutina original (textos vacíos, basura de OCR, etc.). */
-export function esProductoBasura(p: { nombre?: unknown; unidad?: unknown; categoria?: unknown }): boolean {
-  const name = String(p?.nombre ?? '').trim().toLowerCase();
+/**
+ * Criterio de la rutina original + (2026-11-06) basura que se le escapaba:
+ * letras sueltas de fotos mal leídas, renglones de factura, tecleo al azar y precios de prueba.
+ * Probado contra los 602 productos de la nube: marca 36, todos basura.
+ */
+export function esProductoBasura(p: { nombre?: unknown; unidad?: unknown; categoria?: unknown; precioVenta?: unknown }): boolean {
+  const original = String(p?.nombre ?? '').trim();
+  const name = original.toLowerCase();
   const unit = String(p?.unidad ?? '').toLowerCase();
-  const cat = String(p?.categoria ?? '').toLowerCase();
-  return name === '' ||
+  const cat = String(p?.categoria ?? '').trim().toLowerCase();
+  const precio = Number(p?.precioVenta) || 0;
+  if (name === '' ||
     name === 'undefined' ||
     name === 'null' ||
     cat === 'electrónica' || cat === 'electronica' ||
     name.includes('timiden') ||
     unit.includes('4 x e x z x x') ||
     name.includes('e n d r n t e l l') ||
-    (name === 'general' && cat === 'general');
+    (name === 'general' && cat === 'general')) return true;
+  // Renglones de factura leídos por la cámara ("OBSERVACIONES: | SUB-TOTAL", "ESTA FACTURA DE VENTA…")
+  if (/factura|sub-?total|observaciones|olservaciones|efectos legales/.test(name) || original.includes('|')) return true;
+  // Precio imposible para una panadería: quedó de pruebas (99.999.999, 7.236.700…)
+  if (precio >= 5_000_000) return true;
+  // Tecleo al azar: "zsc<zxv<", "PPPPPapa", "gogleeee", "panananana"
+  if (/[<>]/.test(original) || /(.)\1{3,}/.test(name) || /(..)\1{2,}/.test(name)) return true;
+  // Letras sueltas de una foto mal leída: "E A OA", "un Di", "e o)", "0 A edi CERIDE NI GUY SANDIA"
+  const toks = original.split(/\s+/).filter(Boolean);
+  const cortos = toks.filter(t => t.toLowerCase().replace(/[^0-9a-záéíóúñü]/g, '').length <= 2).length;
+  if (toks.length >= 2 && cortos === toks.length) return true;
+  if (cat === 'general' && toks.length > 0 &&
+    (cortos / toks.length >= 0.4 || /[a-z]\d{2}/.test(name) || /^[^0-9a-záéíóúñü]/.test(name))) return true;
+  return false;
 }
 
 /** Solo LEE. No borra nada. */
@@ -49,8 +68,10 @@ export async function buscarProductosBasura(): Promise<ProductoBasura[]> {
   let nube: any[] = [];
   try { locales = await db.getAllProductos(); } catch { locales = []; }
   try {
-    const { data, error } = await supabase.from('productos').select('id, nombre, categoria, unidad');
-    if (!error && Array.isArray(data)) nube = data;
+    // La tabla de la nube no tiene columna "unidad": pedirla hacía fallar la consulta y la nube nunca se revisaba
+    const { data, error } = await supabase.from('productos').select('id, nombre, categoria, precio_venta');
+    if (error) console.warn('[Limpieza] no se pudo leer la nube', error.message);
+    if (!error && Array.isArray(data)) nube = data.map((p: any) => ({ ...p, precioVenta: p.precio_venta }));
   } catch { nube = []; }
 
   const mapa = new Map<string, ProductoBasura>();
