@@ -1115,6 +1115,8 @@ export interface Gasto {
   proveedorId?: string;
   presupuestoId?: string; // Link to Presupuesto Mínimo (Control Semanal)
   comprobanteUrl?: string; // URL de la imagen de la factura escaneada
+  numeroFactura?: string;  // Nº de la factura del proveedor (viaja a la nube dentro de metadata)
+  presentacion?: string;   // Cómo vino: "paca x12", "caja x24"… (vacío = por unidad)
   metodoPago: MetodoPago;
   usuarioId: string;
   cajaId?: string; // Si el gasto salió de una caja abierta

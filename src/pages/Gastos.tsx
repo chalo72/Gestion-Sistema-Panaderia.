@@ -323,7 +323,7 @@ export default function Gastos({
     };
 
     // ── Entrada rápida (QuickEntryBar) ────────────────────────────────────────
-    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string ; origenTipo?: string; cajaId?: string; bovedaId?: string; personaFamilia?: string }) => {
+    const handleQuickSave = async (data: {  descripcion: string; monto: number; categoria: GastoCategoria; metodoPago: MetodoPago; esIngreso: boolean; fecha?: string; proveedorId?: string ; origenTipo?: string; cajaId?: string; bovedaId?: string; personaFamilia?: string; numeroFactura?: string; presentacion?: string }) => {
         const fechaElegida = data.fecha || new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
         if (data.esIngreso) {
             const nuevo = {
@@ -359,6 +359,8 @@ export default function Gastos({
                 bovedaId: data.bovedaId,
                 origenTipo: data.origenTipo,
                 personaFamilia: data.personaFamilia,
+                ...(data.numeroFactura ? { numeroFactura: data.numeroFactura } : {}),
+                ...(data.presentacion && data.presentacion !== 'unidad' ? { presentacion: data.presentacion } : {}),
                 metadata: data.personaFamilia ? { personaFamilia: data.personaFamilia } : undefined,
             } as Omit<Gasto, 'id'>);
             // 🩹 FIX 2026-10-09: si la plata sale de una BÓVEDA, descontarla de su saldo

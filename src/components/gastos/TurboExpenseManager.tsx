@@ -78,6 +78,9 @@ export interface TurboExpenseManagerProps {
     cajaId?: string;
     bovedaId?: string;
     personaFamilia?: string;
+    numeroFactura?: string;
+    /** Cómo vino el producto: "unidad", "paca x12"… */
+    presentacion?: string;
   }) => Promise<void>;
   esInline?: boolean;
   proveedores?: Proveedor[];
@@ -299,8 +302,16 @@ const FILA_VACIA = () => ({
   precioUnit: '',
   /** Costo que tenía el catálogo al elegir el producto (para avisar si cambió) */
   precioCatalogo: '',
+  /** Cómo viene: unidad, paca, caja… (sale del catálogo del proveedor y se puede cambiar) */
+  embalaje: 'unidad',
+  /** Unidades que trae cada paca/caja (vacío si es por unidad) */
+  cantEmbalaje: '',
   cat: 'Materia Prima' as GastoCategoria,
 });
+
+const EMBALAJES = ['unidad', 'paca', 'caja', 'bolsa', 'tarro', 'sipak', 'bloque', 'bulto', 'saco', 'docena'];
+const textoPresentacion = (embalaje: string, cant: string) =>
+  !embalaje || embalaje === 'unidad' ? 'unidad' : `${embalaje}${parseFloat(cant) > 0 ? ` x${parseFloat(cant)}` : ''}`;
 
 /** Desglosa descripción guardada → cantidad + nombre para la tabla */
 function parseDescripcionParaEdicion(descripcion: string): { cantidad: string; desc: string } {
@@ -398,6 +409,8 @@ export function TurboExpenseManager({
   
   // Estado para la tabla (Hoja de cálculo)
   const [rows, setRows] = useState([FILA_VACIA(), FILA_VACIA(), FILA_VACIA()]);
+  // Nº de la factura del proveedor en el modo "Por producto" (se guarda en cada renglón)
+  const [numeroFacturaTabla, setNumeroFacturaTabla] = useState('');
   const [catalogoTabla, setCatalogoTabla] = useState<{ productos: Producto[]; precios: PrecioProveedor[] }>({ productos: [], precios: [] });
   const recargarCatalogoTabla = useCallback(async () => {
     try {
@@ -416,6 +429,7 @@ export function TurboExpenseManager({
         new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
     );
     setSmartProv(g.proveedorId || '');
+    setNumeroFacturaTabla(g.numeroFactura || '');
     if (g.bovedaId) {
       setOrigenTipo('tesoreria');
       setBovedaId(g.bovedaId);
@@ -436,6 +450,9 @@ export function TurboExpenseManager({
         monto: g.monto > 0 ? String(Math.round(g.monto)) : '',
         precioUnit: '',
         precioCatalogo: '',
+        // "paca x12" → paca / 12
+        embalaje: (g.presentacion || 'unidad').split(' x')[0] || 'unidad',
+        cantEmbalaje: (g.presentacion || '').split(' x')[1] || '',
         cat: normalizarCategoriaGasto(g.categoria as string),
       },
     ]);
@@ -448,6 +465,7 @@ export function TurboExpenseManager({
   const cancelarEdicion = useCallback(() => {
     setEditandoGastoId(null);
     ultimaEdicionCargadaRef.current = null;
+    setNumeroFacturaTabla('');
     setRows([FILA_VACIA(), FILA_VACIA(), FILA_VACIA()]);
     onEdicionCerrada?.();
   }, [onEdicionCerrada]);
@@ -687,6 +705,7 @@ export function TurboExpenseManager({
         origenTipo,
         cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined,
         bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined,
+        numeroFactura: facturaNumero.trim() || undefined,
       });
       toast.success(`Factura de ${provNombre}: $${Math.round(total).toLocaleString('es-CO')} guardada`);
       setFacturaNumero('');
@@ -718,24 +737,45 @@ export function TurboExpenseManager({
   // Estrategia 3: Modo Hoja de cálculo
   // 🩹 2026-10-09: elegir PRODUCTO por fila. Al escribir/elegir un producto del catálogo del
   // proveedor se pone su último costo registrado y se calcula monto = cantidad × costo.
-  const costoSugerido = (nombre: string, provId: string): number => {
+  const precioDelCatalogo = (nombre: string, provId: string): PrecioProveedor | undefined => {
     const n = nombre.trim().toLowerCase();
-    if (!n) return 0;
+    if (!n) return undefined;
     const prod = catalogoTabla.productos.find((p) => (p.nombre || '').trim().toLowerCase() === n);
-    if (!prod) return 0;
+    if (!prod) return undefined;
     const delProv = provId
       ? catalogoTabla.precios.find((px) => px.productoId === prod.id && px.proveedorId === provId)
       : undefined;
-    const cualquiera = delProv ?? catalogoTabla.precios.find((px) => px.productoId === prod.id);
-    return Number(cualquiera?.precioCosto) || 0;
+    return delProv ?? catalogoTabla.precios.find((px) => px.productoId === prod.id);
+  };
+  const costoSugerido = (nombre: string, provId: string): number =>
+    Number(precioDelCatalogo(nombre, provId)?.precioCosto) || 0;
+  // Si cambiaron la presentación (paca x12, caja x24…), dejarla igual en el catálogo de ese proveedor
+  const sincronizarPresentacion = async (row: ReturnType<typeof FILA_VACIA>, provId: string | undefined) => {
+    if (!provId) return;
+    const px = precioDelCatalogo(row.desc, provId);
+    if (!px || px.proveedorId !== provId) return;
+    const emb = row.embalaje || 'unidad';
+    const cant = emb === 'unidad' ? 1 : (parseFloat(row.cantEmbalaje) || undefined);
+    if ((px.tipoEmbalaje || 'unidad') === emb && (px.cantidadEmbalaje || undefined) === cant) return;
+    try {
+      await db.updatePrecio({ ...px, tipoEmbalaje: emb, cantidadEmbalaje: cant, fechaActualizacion: new Date().toISOString() });
+    } catch (e) {
+      console.warn('[Gastos] no se pudo actualizar la presentación en el catálogo', e);
+    }
   };
   const updateRow = (id: number, field: string, value: string) => {
     const nuevas = rows.map(r => {
       if (r.id !== id) return r;
       const nueva = { ...r, [field]: value };
+      if (field === 'embalaje' && value === 'unidad') nueva.cantEmbalaje = '';
       const provFila = nueva.proveedorId || smartProv;
       const qty = parseFloat((field === 'cantidad' ? value : nueva.cantidad) || '1') || 1;
       if (field === 'desc' || field === 'proveedorId') {
+        const px = precioDelCatalogo(nueva.desc, provFila);
+        if (px) {
+          nueva.embalaje = px.tipoEmbalaje || 'unidad';
+          nueva.cantEmbalaje = px.tipoEmbalaje && px.tipoEmbalaje !== 'unidad' && px.cantidadEmbalaje ? String(px.cantidadEmbalaje) : '';
+        }
         const costo = costoSugerido(nueva.desc, provFila);
         if (costo > 0) {
           nueva.precioUnit = String(costo);
@@ -801,6 +841,8 @@ export function TurboExpenseManager({
         monto: monto > 0 ? monto.toString() : '',
         precioUnit: '',
         precioCatalogo: '',
+        embalaje: 'unidad',
+        cantEmbalaje: '',
         cat,
       };
     }).filter((r) => r.desc.length > 0);
@@ -963,9 +1005,13 @@ export function TurboExpenseManager({
           proveedorId: provId,
           cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined,
           bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined,
-        });
+          numeroFactura: numeroFacturaTabla.trim() || undefined,
+          presentacion: textoPresentacion(row.embalaje, row.cantEmbalaje),
+        } as Partial<Gasto>);
+        await sincronizarPresentacion(row, provId);
 
         toast.success('Gasto actualizado ✓');
+        setNumeroFacturaTabla('');
         setEditandoGastoId(null);
         ultimaEdicionCargadaRef.current = null;
         setRows([FILA_VACIA(), FILA_VACIA(), FILA_VACIA()]);
@@ -994,10 +1040,12 @@ export function TurboExpenseManager({
           metodoPago: 'efectivo',
           esIngreso: false,
           fecha: fechaGlobal,
-          proveedorId: undefined, 
-          origenTipo, 
-          cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined, 
-          bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined
+          proveedorId: undefined,
+          origenTipo,
+          cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined,
+          bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined,
+          numeroFactura: numeroFacturaTabla.trim() || undefined,
+          presentacion: textoPresentacion(row.embalaje, row.cantEmbalaje),
         });
         count++;
       }
@@ -1023,7 +1071,10 @@ export function TurboExpenseManager({
           origenTipo,
           cajaId: origenTipo === 'pos' ? cajaId || undefined : undefined,
           bovedaId: origenTipo === 'tesoreria' ? bovedaId || undefined : undefined,
+          numeroFactura: numeroFacturaTabla.trim() || undefined,
+          presentacion: textoPresentacion(row.embalaje, row.cantEmbalaje),
         });
+        await sincronizarPresentacion(row, row.proveedorId);
 
         await procesarAuditoriaPrecios(
           [
@@ -1042,6 +1093,7 @@ export function TurboExpenseManager({
       toast.success(`¡Masivo! ${count} registros guardados exitosamente.`);
       refrescarBovedas();
       void recargarCatalogoTabla(); // precios corregidos ya quedaron en el catálogo
+      setNumeroFacturaTabla('');
       setRows([FILA_VACIA(), FILA_VACIA(), FILA_VACIA()]);
     } catch (err) {
       toast.error('Error guardando registros masivos');
@@ -1420,6 +1472,13 @@ export function TurboExpenseManager({
                   <option value="">-- Proveedor General Opcional --</option>
                   {proveedores.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                 </select>
+                <input
+                  type="text"
+                  value={numeroFacturaTabla}
+                  onChange={e => setNumeroFacturaTabla(e.target.value)}
+                  placeholder="Nº de factura (opcional)"
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 dark:text-slate-300 w-full sm:w-56 placeholder:text-slate-400"
+                />
               </div>
             <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-amber-800 dark:text-amber-400 text-[10px] uppercase font-bold p-2 rounded-lg flex flex-col gap-1">
               <div className="flex items-center gap-2">
@@ -1434,8 +1493,9 @@ export function TurboExpenseManager({
             </div>
             
             <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden overflow-x-auto">
-              <div className="grid grid-cols-[56px_3fr_2fr_1.5fr_1.5fr_36px] min-w-[720px] gap-px bg-slate-200 dark:bg-slate-800 text-[10px] font-black uppercase text-slate-500 text-center">
+              <div className="grid grid-cols-[56px_1.6fr_3fr_2fr_1.5fr_1.5fr_36px] min-w-[860px] gap-px bg-slate-200 dark:bg-slate-800 text-[10px] font-black uppercase text-slate-500 text-center">
                 <div className="bg-slate-100 dark:bg-slate-900 py-1.5">Cant.</div>
+                <div className="bg-slate-100 dark:bg-slate-900 py-1.5" title="Cómo viene: por unidad o por paca/caja de N unidades (sale del catálogo)">Presentación</div>
                 <div className="bg-slate-100 dark:bg-slate-900 py-1.5">Producto / Descripción</div>
                 <div className="bg-slate-100 dark:bg-slate-900 py-1.5">Proveedor</div>
                 <div className="bg-slate-100 dark:bg-slate-900 py-1.5">Precio c/u</div>
@@ -1444,14 +1504,37 @@ export function TurboExpenseManager({
               </div>
               
               {rows.map((row, idx) => (
-                <div key={row.id} className="grid grid-cols-[56px_3fr_2fr_1.5fr_1.5fr_36px] min-w-[720px] gap-px bg-slate-100 dark:bg-slate-800 group">
-                  <input 
+                <div key={row.id} className="grid grid-cols-[56px_1.6fr_3fr_2fr_1.5fr_1.5fr_36px] min-w-[860px] gap-px bg-slate-100 dark:bg-slate-800 group">
+                  <input
                     type="number"
                     value={row.cantidad}
                     onChange={(e) => updateRow(row.id, 'cantidad', e.target.value)}
                     placeholder="1"
                     className="text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-950 px-2 py-3 text-sm font-bold focus:outline-none focus:bg-indigo-50 dark:focus:bg-indigo-950/30 w-full text-center tabular-nums"
                   />
+                  {/* Cómo viene el producto (del catálogo del proveedor). Si se cambia, al guardar queda igual en el catálogo. */}
+                  <div className="flex items-center gap-1 bg-white dark:bg-slate-950 px-1.5">
+                    <select
+                      value={row.embalaje || 'unidad'}
+                      onChange={(e) => updateRow(row.id, 'embalaje', e.target.value)}
+                      className="min-w-0 flex-1 bg-transparent py-3 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none"
+                    >
+                      {EMBALAJES.map(em => <option key={em} value={em}>{em === 'unidad' ? 'Suelto (unidad)' : em.charAt(0).toUpperCase() + em.slice(1)}</option>)}
+                    </select>
+                    {row.embalaje && row.embalaje !== 'unidad' && (
+                      <label className="flex items-center text-[11px] font-bold text-slate-500 shrink-0">
+                        x
+                        <input
+                          type="number"
+                          value={row.cantEmbalaje}
+                          onChange={(e) => updateRow(row.id, 'cantEmbalaje', e.target.value)}
+                          placeholder="12"
+                          title="Unidades que trae cada una"
+                          className="w-10 bg-transparent text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none tabular-nums"
+                        />
+                      </label>
+                    )}
+                  </div>
                   <input 
                     value={row.desc}
                     onChange={(e) => updateRow(row.id, 'desc', e.target.value)}

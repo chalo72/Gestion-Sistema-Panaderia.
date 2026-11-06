@@ -342,6 +342,16 @@ export function ExpenseList({
                                                         {prov}
                                                     </span>
                                                 )}
+                                                {(gasto.numeroFactura || (gasto.metadata as any)?.numeroFactura) && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 uppercase tracking-wider">
+                                                        Fact. Nº {gasto.numeroFactura || (gasto.metadata as any)?.numeroFactura}
+                                                    </span>
+                                                )}
+                                                {(gasto.presentacion || (gasto.metadata as any)?.presentacion) && (
+                                                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[8px] font-black bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 uppercase tracking-wider">
+                                                        {gasto.presentacion || (gasto.metadata as any)?.presentacion}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2 shrink-0">
