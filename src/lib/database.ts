@@ -531,7 +531,15 @@ class NexusDatabase implements IDatabase {
   // caja abierta por este usuario → abiertas[0] (respaldo viejo, para no bloquear ventas).
   async getSesionCajaActiva(usuarioId?: string, opciones?: { cajaId?: string; usuarioNombre?: string }) {
     const sesiones = await this.adapter.getCollection<any>('sesiones_caja');
-    const abiertas = sesiones.filter((s: any) => s.estado === 'abierta');
+    // Una caja abierta de un día anterior nunca se toma como activa (la cierra el cron
+    // de madrugada); antes el PC seguía vendiendo en la caja de ayer (2026-11-07).
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const diaLocal = (iso: string) => {
+      const d = new Date(iso);
+      return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    const hoy = diaLocal(new Date().toISOString());
+    const abiertas = sesiones.filter((s: any) => s.estado === 'abierta' && diaLocal(s.fechaApertura) === hoy);
     const recordada = opciones?.cajaId ? abiertas.find((s: any) => s.id === opciones.cajaId) : undefined;
     if (recordada) return recordada;
     const nombre = (opciones?.usuarioNombre || '').trim().toLowerCase();

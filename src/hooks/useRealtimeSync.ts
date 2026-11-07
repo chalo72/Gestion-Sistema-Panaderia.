@@ -344,7 +344,15 @@ export function useRealtimeSync() {
       }, (d) => supabaseDB.updateInventarioItem(d)],
       ['prepedidos',  () => db.getAllPrePedidos(),       (d) => supabaseDB.addPrePedido(d)],
       ['creditos_clientes',    () => db.getAllCreditosClientes(), (d) => supabaseDB.addCreditoCliente(d)],
-      ['sesiones_caja',        () => db.getAllSesionesCaja(),     (d) => supabaseDB.updateSesionCaja(d)],
+      // No subir cajas ABIERTAS de días anteriores: son copias viejas y reabrían en la nube
+      // cajas que el cron ya había cerrado (2026-11-07, PC con la caja de ayer).
+      ['sesiones_caja',        async () => {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const dia = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? '' : `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+        const hoy = dia(new Date().toISOString());
+        const todas = await db.getAllSesionesCaja();
+        return todas.filter((s: any) => s.estado !== 'abierta' || dia(s.fechaApertura) === hoy);
+      }, (d) => supabaseDB.updateSesionCaja(d)],
       ['mesas',       () => db.getAllMesas(),             (d) => supabaseDB.updateMesa(d)],
       ['pedidos_activos', () => db.getAllPedidosActivos(), (d) => supabaseDB.addPedidoActivo(d)],
       ['trabajadores',    () => db.getAllTrabajadores(),   (d) => supabaseDB.addTrabajador(d)],
@@ -465,6 +473,12 @@ export function useRealtimeSync() {
               return !localItem
                 || remote.stockActual !== localItem.stockActual
                 || remote.stockMinimo  !== localItem.stockMinimo;
+            }
+
+            // Caja cerrada en la nube y abierta aquí → siempre traer el cierre (2026-11-07).
+            if (table === 'sesiones_caja') {
+              const localCaja = localItems.find((l: any) => l.id === remote.id);
+              if (remote.estado === 'cerrada' && localCaja?.estado === 'abierta') return true;
             }
 
             // Extraer timestamp de modificación del registro (varios nombres de campo posibles)

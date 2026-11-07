@@ -1261,6 +1261,9 @@ export class SupabaseDatabase implements IDatabase {
             totalVentas: c.total_ventas,
             ventasIds: c.ventas_ids || [],
             estado: c.estado,
+            // Sin esto la nube "no tenía fecha" y la copia local siempre ganaba: un PC
+            // nunca se enteraba de que su caja se cerró en otro lado (2026-11-07).
+            ...(c.actualizado_en ? { updatedAt: c.actualizado_en } : {}),
             // Fix 2026-11-07 (AUTORIZO Gonzalo): antes no se leían → otros dispositivos
             // no sabían de quién era cada caja y todos usaban la misma.
             ...(c.caja_nombre ? { cajaNombre: c.caja_nombre } : {}),

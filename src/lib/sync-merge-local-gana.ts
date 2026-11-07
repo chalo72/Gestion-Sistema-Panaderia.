@@ -132,6 +132,27 @@ export const mergePrecioLocalGana = <T extends { id: string }>(local: T | undefi
 };
 
 /**
+ * Sesiones de caja: si un lado está cerrado y el otro abierto, gana el cerrado
+ * (con su fechaCierre/montoCierre). Devuelve undefined si no hay conflicto de estado.
+ */
+export const mergeCajaCierreGana = <T extends { id: string }>(local: T, cloud: T): T | undefined => {
+  const l = local as Record<string, unknown>;
+  const c = cloud as Record<string, unknown>;
+  const lCerrada = l.estado === 'cerrada';
+  const cCerrada = c.estado === 'cerrada';
+  if (lCerrada === cCerrada) return undefined;
+  const cerrada = lCerrada ? l : c;
+  const base = mergeCloudItemLocalGana(local, cloud) as Record<string, unknown>;
+  return {
+    ...base,
+    estado: 'cerrada',
+    fechaCierre: cerrada.fechaCierre ?? base.fechaCierre,
+    montoCierre: cerrada.montoCierre ?? base.montoCierre,
+    id: local.id,
+  } as unknown as T;
+};
+
+/**
  * Merge inteligente con timestamps (para syncCloudToLocal / realtime / hydrate).
  * - nube más nueva → cloud manda (aparatos al día)
  * - local ≥ nube → LOCAL GANA campos
@@ -143,6 +164,13 @@ export const mergeHydrateItem = <T extends { id: string }>(
   cloud: T
 ): T => {
   if (!local) return { ...cloud, id: cloud.id };
+
+  // Caja: un cierre nunca se deshace. Si cualquiera de los dos lados la tiene cerrada,
+  // queda cerrada con los datos de cierre de ese lado (2026-11-07: el PC reabría cajas).
+  if (collection === 'sesiones_caja') {
+    const merged = mergeCajaCierreGana(local, cloud);
+    if (merged) return merged;
+  }
 
   const remoteTs = timestampDeDoc(cloud);
   const localTs = timestampDeDoc(local);
