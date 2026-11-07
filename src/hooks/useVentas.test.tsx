@@ -24,7 +24,7 @@ vi.mock('@/lib/supabase-db', () => ({
 }));
 vi.mock('@/lib/security-agent', () => ({ procesarCuadreTurno: vi.fn() }));
 vi.mock('@/lib/finanzas-personales', () => ({ upsertCajaEnVentaDiaria: vi.fn() }));
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }));
 
 import { useVentas, avisarFalloNube } from './useVentas';
 

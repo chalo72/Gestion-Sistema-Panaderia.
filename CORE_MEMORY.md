@@ -303,3 +303,10 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Cambio (commit 734dc6ac)**: `supabase-db.ts` mapCajaFromDB trae `updatedAt`; `sync-merge-local-gana.ts` nueva regla `mergeCajaCierreGana` (si un lado está cerrada, gana cerrada); `useRealtimeSync.ts` no sube cajas abiertas de días anteriores y siempre baja un cierre de la nube; `database.ts` getSesionCajaActiva ignora cajas abiertas de días anteriores. Test nuevo `src/lib/caja-cierre-gana.test.ts` (4 ok). tsc 0 nuevos, mismos fallos previos, build OK.
 
 **Candado en la nube (APLICADO 2026-11-07 con permiso de Gonzalo; verificado: 0 cajas abiertas, 10 re-cerradas, intento de reabrir dentro de transacción deshecha → quedó cerrada con su monto)**: `supabase/migrations/20261107170000_caja_cerrada_no_se_reabre.sql` = trigger `trg_caja_no_reabrir` (una caja cerrada no vuelve a abierta) + re-cierre de las cajas abiertas de días anteriores (las 10 del 6-nov 2:21 p. m., todas en $0). La rama ya está en GitHub hasta e97a8cb9 (push interrumpido sí subió); sin PR, sin publicar.
+
+### 🔧 2026-11-07 (tarde) — Claude Opus 5.5 — Refuerzo: cada equipo fija su caja (PR #11)
+- `ControlCaja.tsx` (pestaña Resumen): botón "Usar <caja> en este equipo" → evento `dp-caja-elegida`.
+- `useVentas.ts`: escucha `dp-caja-elegida`, fija `cajaActiva` y guarda `dp_caja_activa_id`; si otro equipo cierra la caja de este, avisa con toast en vez de soltarla en silencio.
+- `useVentas.test.tsx`: mock de sonner con `warning`.
+- Riesgo que queda: un equipo que no abrió caja, no eligió caja y cuya vendedora no coincide con `vendedoraNombre` sigue cayendo en `abiertas[0]` (compartida). Hay que pedirles a las vendedoras que usen el botón.
+- Verificado: tsc 0 nuevos, mismos fallos previos, build OK. No probado en celular/PC real.
