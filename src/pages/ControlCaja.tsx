@@ -1870,6 +1870,17 @@ export function ControlCaja({
                 {/* ── TAB: RESUMEN ── */}
                 <TabsContent value="resumen" className="mt-4 space-y-4">
 
+                    {/* ── Fijar la caja de ESTE equipo (2026-11-07): sin esto un celular/PC
+                         sin caja propia vendía en la primera caja abierta, compartida con otros. ── */}
+                    {cajaVista && cajaVista.id !== cajaActiva?.id && (
+                        <button
+                            onClick={() => window.dispatchEvent(new CustomEvent('dp-caja-elegida', { detail: { id: cajaVista.id } }))}
+                            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-700 text-xs font-black uppercase"
+                        >
+                            Usar {cajaVista.cajaNombre || 'esta caja'}{cajaVista.vendedoraNombre ? ` (${cajaVista.vendedoraNombre})` : ''} en este equipo
+                        </button>
+                    )}
+
                     {/* ── Selector de caja (CajaPicker) ── */}
                     {cajasAbiertas.length > 1 && (
                         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">

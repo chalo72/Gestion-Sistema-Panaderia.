@@ -393,6 +393,17 @@ export function usePriceControl() {
   // 📦 DATOS SECUNDARIOS = Cargar en background para no bloquear el inicio
   const loadSecondaryDataInBackground = async () => {
     try {
+      // Caja de ESTE dispositivo / usuario (antes todos tomaban la primera abierta y
+      // al cerrarla se cerraba en todos los celulares y el PC).
+      let cajaPreferida: { usuarioId?: string; cajaId?: string; usuarioNombre?: string } = {};
+      try {
+        const u = JSON.parse(localStorage.getItem('pricecontrol_local_user') || 'null');
+        cajaPreferida = {
+          usuarioId: u?.id,
+          usuarioNombre: u?.nombre,
+          cajaId: localStorage.getItem('dp_caja_activa_id') || undefined,
+        };
+      } catch { /* sin usuario guardado: comportamiento anterior */ }
       const [
         alertas, inventario, movimientos, gastos, recepciones, historial, recetas, 
         ventas, sesionesCaja, cajaActiva, ahorros, mesas, pedidosActivos, 
@@ -408,7 +419,7 @@ export function usePriceControl() {
         db.getAllRecetas(),
         db.getAllVentas(),
         db.getAllSesionesCaja(),
-        db.getSesionCajaActiva(),
+        db.getSesionCajaActiva(cajaPreferida.usuarioId, cajaPreferida),
         db.getAllAhorros(),
         db.getAllMesas(),
         db.getAllPedidosActivos(),

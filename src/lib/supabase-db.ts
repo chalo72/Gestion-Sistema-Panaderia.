@@ -675,7 +675,7 @@ export class SupabaseDatabase implements IDatabase {
     }
 
     async getSesionCajaActiva(): Promise<DBCajaSesion | undefined> {
-        const { data, error } = await supabase.from('caja').select('*').eq('estado', 'abierta').order('fechaApertura', { ascending: false }).limit(1).maybeSingle();
+        const { data, error } = await supabase.from('caja').select('*').eq('estado', 'abierta').order('fecha_apertura', { ascending: false }).limit(1).maybeSingle();
         return data ? this.mapCajaFromDB(data) : undefined;
     }
 
@@ -1261,16 +1261,21 @@ export class SupabaseDatabase implements IDatabase {
             totalVentas: c.total_ventas,
             ventasIds: c.ventas_ids || [],
             estado: c.estado,
-            // Multi-caja (columnas agregadas 2026-10-18): solo se incluyen si la nube las tiene,
-            // para no pisar con undefined los datos locales de cajas viejas.
+            // Sin esto la nube "no tenía fecha" y la copia local siempre ganaba: un PC
+            // nunca se enteraba de que su caja se cerró en otro lado (2026-11-07).
+            ...(c.actualizado_en ? { updatedAt: c.actualizado_en } : {}),
+            // Fix 2026-11-07 (AUTORIZO Gonzalo): antes no se leían → otros dispositivos
+            // no sabían de quién era cada caja y todos usaban la misma.
             ...(c.caja_nombre ? { cajaNombre: c.caja_nombre } : {}),
             ...(c.turno ? { turno: c.turno } : {}),
             ...(c.vendedora_nombre ? { vendedoraNombre: c.vendedora_nombre } : {}),
             ...(c.evento_especial ? { eventoEspecial: c.evento_especial } : {}),
-        } as DBCajaSesion;
+            ...(Array.isArray(c.movimientos) ? { movimientos: c.movimientos } : {}),
+        } as any;
     }
 
     private mapCajaToDB(c: DBCajaSesion): any {
+        const x = c as any;
         return {
             id: c.id,
             usuario_id: c.usuarioId || 'admin',
@@ -1281,12 +1286,13 @@ export class SupabaseDatabase implements IDatabase {
             total_ventas: safeN(c.totalVentas),
             ventas_ids: Array.isArray(c.ventasIds) ? c.ventasIds : [],
             estado: c.estado || 'abierta',
-            // Un upsert solo toca las columnas que van en el payload; null/undefined se omite
-            // para que una versión local sin estos datos no borre lo que otro aparato guardó.
-            ...((c as any).cajaNombre ? { caja_nombre: (c as any).cajaNombre } : {}),
-            ...((c as any).turno ? { turno: (c as any).turno } : {}),
-            ...((c as any).vendedoraNombre ? { vendedora_nombre: (c as any).vendedoraNombre } : {}),
-            ...((c as any).eventoEspecial ? { evento_especial: (c as any).eventoEspecial } : {}),
+            // Solo se mandan si este dispositivo los tiene: un upsert sin la columna no
+            // borra lo que otro dispositivo ya subió (fix 2026-11-07, AUTORIZO Gonzalo).
+            ...(x.cajaNombre ? { caja_nombre: x.cajaNombre } : {}),
+            ...(x.turno ? { turno: x.turno } : {}),
+            ...(x.vendedoraNombre ? { vendedora_nombre: x.vendedoraNombre } : {}),
+            ...(x.eventoEspecial ? { evento_especial: x.eventoEspecial } : {}),
+            ...(Array.isArray(x.movimientos) && x.movimientos.length > 0 ? { movimientos: x.movimientos } : {}),
         };
     }
 

@@ -19,6 +19,10 @@ jobs:
       - run: npm ci
       - run: npm run lint || true
       - run: npx tsc --noEmit || true
+      # Candado de caja (2026-11-07): estas pruebas SÍ bloquean el PR si fallan.
+      # Cuidan que una caja cerrada no se reabra y que cada equipo use su caja.
+      - name: 🔒 Pruebas de caja (obligatorias)
+        run: npx vitest run src/lib/caja-cierre-gana.test.ts src/hooks/useVentas.test.tsx src/lib/sync-merge-local-gana.test.ts
 
   build:
     name: 🏗️ Build

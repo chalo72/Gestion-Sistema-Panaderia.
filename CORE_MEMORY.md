@@ -330,3 +330,47 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **OJO — producción hoy corre `main`**, que NO tiene lo de `feat/marketing-studio-y-ajustes` (PR #3, sin mergear): Consumo y Préstamos con créditos en la nube, mejoras de ControlCaja/historial, Marketing Studio, etc. Decidir si se mergea el PR #3 a main o se publica desde esa rama, y que NADIE vuelva a publicar a producción desde otra carpeta sin avisar. Hasta que el arreglo de esta entrada llegue a producción (merge del PR #6 a main), los navegadores en versión 9 seguirán viendo el error.
 
 **Nota al juntar con el PR 6 (2026-10-19)**: el conflicto en `useVentas.ts` se resolvió quedándose con la versión de main (la caja activa de este aparato NUNCA se reemplaza por una de otro; solo se suelta si se cerró) y conservando del PR 6 solo que el listener acepta también el evento `'sesiones_caja'` (la clave con la que sale el evento realtime/sync manual; la tabla remota real es `caja`).
+
+### 🔧 2026-11-06 (noche) — Claude Opus 5.5 — "Cierro mi caja y se cierra en todos los celulares y el PC" (rama claude/croissant-production-comparison-392595, sin commit)
+
+**Qué reportó Gonzalo**: en la caja de una trabajadora, al cerrar caja se cierra todo, en celular y computador.
+
+**Causa**: `usePriceControl.ts` al arrancar llamaba `db.getSesionCajaActiva()` SIN usuario → `database.ts` devolvía `abiertas[0]`. Todos los dispositivos quedaban sobre la MISMA caja; al cerrarla uno, el evento realtime de `useVentas.ts` (suelta `cajaActiva` si esa caja se cerró) la cerraba en todos.
+
+**Cambio (AUTORIZO de Gonzalo para usePriceControl.ts y database.ts)**:
+- `src/lib/database.ts` `getSesionCajaActiva(usuarioId?, { cajaId?, usuarioNombre? })`: orden caja recordada por el dispositivo → caja cuya `vendedoraNombre` incluye al usuario logueado → caja abierta por ese `usuarioId` → `abiertas[0]` (respaldo viejo, para no bloquear ventas). Firma en `IDatabase` actualizada.
+- `src/hooks/usePriceControl.ts`: lee `pricecontrol_local_user` (id, nombre) y `dp_caja_activa_id` de localStorage y se los pasa.
+- `src/hooks/useVentas.ts`: `abrirCaja` guarda `dp_caja_activa_id`; `cerrarCaja` lo borra si cierra esa caja.
+
+**Verificación**: `tsc` 1785 errores antes y después (0 nuevos); vitest mismas pruebas fallidas antes y después (deuda previa); `vite build` OK.
+
+**Datos vistos en Supabase (hora Colombia)**: 6-nov 7:16 a. m. se abren 10 cajas; 2:19–2:20 p. m. se cierran; 2:21 p. m. se abren 8 (siguen abiertas); 10:08–10:11 p. m. se cierran cajas del 4-nov, se abren 10 nuevas y se cierran 9 en 90 s con montos reales. `caja_nombre`/`turno`/`vendedora_nombre` llegan NULL a la nube (`mapCajaToDB` no los manda). Cron `cerrar-cajas-colgadas` corre 3:05 a. m. (no es la causa).
+
+**2026-11-07 (AUTORIZO de Gonzalo para supabase-db.ts)**: `mapCajaToDB` ahora sube `caja_nombre`, `turno`, `vendedora_nombre`, `evento_especial` y `movimientos` SOLO si el dispositivo los tiene (un upsert sin la columna no borra lo que subió otro); `mapCajaFromDB` los lee. `getSesionCajaActiva` de Supabase ordenaba por `fechaApertura` (no existe) → ahora `fecha_apertura`.
+
+**Libro de Caja sin ingresos (Gastos.tsx, no protegido)**: el Libro solo contaba ingresos manuales guardados en localStorage del equipo; nunca leía el cuadre de las vendedoras. El cuadre real vive en `caja.monto_cierre` (base siempre 0; patrón diario: jornada mañana ~7 a. m.→2 p. m.; la tarde se registra de noche abriendo y cerrando cajas en ~1 min; `ventas_diarias` en la nube tiene 0 filas). Ahora `Gastos.tsx` agrega como ingreso de solo lectura cada caja cerrada con `montoCierre − montoApertura > 0` (id `cuadre-<cajaId>`, categoría Venta, fecha = día local del cierre); editar/borrar esos muestra aviso. Se recarga con el evento `nexus-realtime-change` de tabla `caja`.
+
+**Verificación final**: tsc 1785 → 1784 (0 nuevos); vitest mismos fallos que antes; `vite build` OK.
+
+**Pendiente / NO hecho**: sin commit, merge ni publicación; no probado en celular real. Las cajas viejas en la nube siguen con nombre/vendedora NULL (solo las nuevas los tendrán). Si el dispositivo no abrió la caja y la vendedora logueada no coincide con `vendedoraNombre`, sigue cayendo a `abiertas[0]`. Las 10 cajas abiertas a las 2:21 p. m. del 6-nov siguen ABIERTAS en la nube con 0 (la plata de la tarde quedó en las cajas abiertas y cerradas a las 10:10 p. m.); no se tocaron (dato de producción).
+
+### 🔧 2026-11-07 — Claude Opus 5.5 — "El PC sigue con la caja de ayer" (cajas que resucitan)
+
+**Qué pasó**: el cron `cerrar_cajas_colgadas` cerró a las 3:05 a. m. 11 cajas del 6-nov; a las 11:18 a. m. el PC las volvió a subir como "abierta". Causas: (1) `mapCajaFromDB` no traía `actualizado_en` → la nube "no tenía fecha" y LOCAL GANA siempre → el PC nunca recibía el cierre; (2) `useRealtimeSync` sube TODAS las cajas locales al reconectar → reabre en la nube.
+
+**Cambio (commit 734dc6ac)**: `supabase-db.ts` mapCajaFromDB trae `updatedAt`; `sync-merge-local-gana.ts` nueva regla `mergeCajaCierreGana` (si un lado está cerrada, gana cerrada); `useRealtimeSync.ts` no sube cajas abiertas de días anteriores y siempre baja un cierre de la nube; `database.ts` getSesionCajaActiva ignora cajas abiertas de días anteriores. Test nuevo `src/lib/caja-cierre-gana.test.ts` (4 ok). tsc 0 nuevos, mismos fallos previos, build OK.
+
+**Candado en la nube (APLICADO 2026-11-07 con permiso de Gonzalo; verificado: 0 cajas abiertas, 10 re-cerradas, intento de reabrir dentro de transacción deshecha → quedó cerrada con su monto)**: `supabase/migrations/20261107170000_caja_cerrada_no_se_reabre.sql` = trigger `trg_caja_no_reabrir` (una caja cerrada no vuelve a abierta) + re-cierre de las cajas abiertas de días anteriores (las 10 del 6-nov 2:21 p. m., todas en $0). La rama ya está en GitHub hasta e97a8cb9 (push interrumpido sí subió); sin PR, sin publicar.
+
+### 🔧 2026-11-07 (tarde) — Claude Opus 5.5 — Refuerzo: cada equipo fija su caja (PR #11)
+- `ControlCaja.tsx` (pestaña Resumen): botón "Usar <caja> en este equipo" → evento `dp-caja-elegida`.
+- `useVentas.ts`: escucha `dp-caja-elegida`, fija `cajaActiva` y guarda `dp_caja_activa_id`; si otro equipo cierra la caja de este, avisa con toast en vez de soltarla en silencio.
+- `useVentas.test.tsx`: mock de sonner con `warning`.
+- Riesgo que queda: un equipo que no abrió caja, no eligió caja y cuya vendedora no coincide con `vendedoraNombre` sigue cayendo en `abiertas[0]` (compartida). Hay que pedirles a las vendedoras que usen el botón.
+- Verificado: tsc 0 nuevos, mismos fallos previos, build OK. No probado en celular/PC real.
+
+### 🔒 2026-11-07 (tarde) — Claude Opus 5.5 — 4 protecciones para que la caja no vuelva a fallar
+1. **GitHub** (`.github/workflows/deploy.yml`, Quality Check): paso "Pruebas de caja (obligatorias)" corre `caja-cierre-gana.test.ts`, `useVentas.test.tsx`, `sync-merge-local-gana.test.ts` SIN `|| true` → bloquea el PR si fallan.
+2. **Hook** `.claude/hooks/pruebas-caja.mjs`: tras editar archivos de caja/sync corre esas pruebas en la carpeta del archivo (sirve en worktrees) y avisa con código 2 si fallan. Probado: pasa en ~3 s y detecta una regla rota. **Falta registrarlo** en `.claude/settings.json` de la carpeta principal (PostToolUse, matcher `Edit|Write|MultiEdit`); desde el worktree no se puede escribir ahí.
+3. **Skill** `~/.claude/skills/caja-cerrada-no-se-reabre-dulce-placer/SKILL.md` con las reglas.
+4. **Alarma en Supabase** (APLICADA): `caja_no_reabrir` ahora es SECURITY DEFINER y anota en `caja_vigilancia` (alarma=true, "REAPERTURA BLOQUEADA…") cuando un equipo intenta reabrir una caja; máx. 1 por caja cada 30 min; si anotar falla, el guardado sigue. Migración `20261107180000_caja_alarma_reapertura.sql`. Probado en transacción deshecha.

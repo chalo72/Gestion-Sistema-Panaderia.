@@ -76,6 +76,8 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     setSesionesCaja(prev => [...prev, sesion]);
     setCajaActiva(sesion);
     localStorage.setItem('dp_caja_apertura_ts', sesion.fechaApertura);
+    // Este dispositivo recuerda SU caja para no tomar la de otro al recargar.
+    try { localStorage.setItem('dp_caja_activa_id', sesion.id); } catch { /* ignorar */ }
     toast.success('Caja abierta correctamente');
     return sesion;
   }, []);
@@ -104,6 +106,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     _supaDB.updateSesionCaja(sesion as any).catch(avisarFalloNube('subir cierre de caja'));
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
     if (cajaActiva?.id === sesion.id) setCajaActiva(undefined);
+    try { if (localStorage.getItem('dp_caja_activa_id') === sesion.id) localStorage.removeItem('dp_caja_activa_id'); } catch { /* ignorar */ }
     // Generar cuadre de seguridad automáticamente
     try {
       procesarCuadreTurno({
@@ -311,7 +314,13 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
           setCajaActiva(prev => {
             if (!prev) return prev;
             const actual = (sesiones as any[]).find((s: any) => s.id === prev.id);
-            return actual && actual.estado !== 'abierta' ? undefined : prev;
+            if (actual && actual.estado !== 'abierta') {
+              // Avisar en vez de que la caja "desaparezca" sin explicación (2026-11-07).
+              toast.warning(`La caja ${actual.cajaNombre || ''} fue cerrada desde otro equipo. Abre o elige tu caja en Control de Caja.`, { duration: 10000 });
+              try { if (localStorage.getItem('dp_caja_activa_id') === prev.id) localStorage.removeItem('dp_caja_activa_id'); } catch { /* ignorar */ }
+              return undefined;
+            }
+            return prev;
           });
         }).catch(avisarFalloNube('releer cajas tras cambio remoto'));
       } else if (table === 'mesas') {
@@ -330,6 +339,23 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     };
     window.addEventListener('nexus-realtime-change', handle);
     return () => window.removeEventListener('nexus-realtime-change', handle);
+  }, []);
+
+  // "Usar esta caja en este equipo" (Control de Caja): fija la caja de ESTE dispositivo
+  // y la recuerda al recargar, para no caer en la primera caja abierta compartida.
+  useEffect(() => {
+    const elegir = async (e: Event) => {
+      const id = (e as CustomEvent<{ id?: string }>).detail?.id;
+      if (!id) return;
+      const sesiones = (await db.getAllSesionesCaja().catch(() => [])) as CajaSesion[];
+      const caja = sesiones.find(s => s.id === id && s.estado === 'abierta');
+      if (!caja) { toast.error('Esa caja ya no está abierta'); return; }
+      setCajaActiva(caja);
+      try { localStorage.setItem('dp_caja_activa_id', caja.id); } catch { /* ignorar */ }
+      toast.success(`Este equipo ahora vende en ${caja.cajaNombre || 'la caja elegida'}`);
+    };
+    window.addEventListener('dp-caja-elegida', elegir);
+    return () => window.removeEventListener('dp-caja-elegida', elegir);
   }, []);
 
   return {
