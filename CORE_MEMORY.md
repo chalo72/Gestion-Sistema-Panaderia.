@@ -295,3 +295,11 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 **Verificación final**: tsc 1785 → 1784 (0 nuevos); vitest mismos fallos que antes; `vite build` OK.
 
 **Pendiente / NO hecho**: sin commit, merge ni publicación; no probado en celular real. Las cajas viejas en la nube siguen con nombre/vendedora NULL (solo las nuevas los tendrán). Si el dispositivo no abrió la caja y la vendedora logueada no coincide con `vendedoraNombre`, sigue cayendo a `abiertas[0]`. Las 10 cajas abiertas a las 2:21 p. m. del 6-nov siguen ABIERTAS en la nube con 0 (la plata de la tarde quedó en las cajas abiertas y cerradas a las 10:10 p. m.); no se tocaron (dato de producción).
+
+### 🔧 2026-11-07 — Claude Opus 5.5 — "El PC sigue con la caja de ayer" (cajas que resucitan)
+
+**Qué pasó**: el cron `cerrar_cajas_colgadas` cerró a las 3:05 a. m. 11 cajas del 6-nov; a las 11:18 a. m. el PC las volvió a subir como "abierta". Causas: (1) `mapCajaFromDB` no traía `actualizado_en` → la nube "no tenía fecha" y LOCAL GANA siempre → el PC nunca recibía el cierre; (2) `useRealtimeSync` sube TODAS las cajas locales al reconectar → reabre en la nube.
+
+**Cambio (commit 734dc6ac)**: `supabase-db.ts` mapCajaFromDB trae `updatedAt`; `sync-merge-local-gana.ts` nueva regla `mergeCajaCierreGana` (si un lado está cerrada, gana cerrada); `useRealtimeSync.ts` no sube cajas abiertas de días anteriores y siempre baja un cierre de la nube; `database.ts` getSesionCajaActiva ignora cajas abiertas de días anteriores. Test nuevo `src/lib/caja-cierre-gana.test.ts` (4 ok). tsc 0 nuevos, mismos fallos previos, build OK.
+
+**Candado en la nube (NO aplicado — el modo automático lo bloqueó, espera permiso de Gonzalo)**: `supabase/migrations/20261107170000_caja_cerrada_no_se_reabre.sql` = trigger `trg_caja_no_reabrir` (una caja cerrada no vuelve a abierta) + re-cierre de las cajas abiertas de días anteriores (las 10 del 6-nov 2:21 p. m., todas en $0). La rama ya está en GitHub hasta e97a8cb9 (push interrumpido sí subió); sin PR, sin publicar.
