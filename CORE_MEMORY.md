@@ -272,3 +272,26 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 
 **Pendiente / NO hecho**: no probado en celular real; sin merge a main ni publicación; cerrar las 10 cajas abiertas de hoy (dato de producción, no se tocó); investigar por qué `ventas` no sube a Supabase desde julio; traer a main los commits 0dec90f2, 9635a60f, c3237115; `supabase-db.ts` `getSesionCajaActiva` ordena por `fechaApertura` (columna real `fecha_apertura`); `mapCajaToDB` en main no guarda cajaNombre/turno/movimientos (fix en c3237115).
 **Ojo**: otro agente trabaja ControlCaja.tsx, supabase-db.ts e historial-cajas.ts en la carpeta principal (rama feat/marketing-studio-y-ajustes) → posible conflicto al juntar. Este worktree usa un enlace (junction) a node_modules de la carpeta principal.
+
+### 🔧 2026-11-06 (noche) — Claude Opus 5.5 — "Cierro mi caja y se cierra en todos los celulares y el PC" (rama claude/croissant-production-comparison-392595, sin commit)
+
+**Qué reportó Gonzalo**: en la caja de una trabajadora, al cerrar caja se cierra todo, en celular y computador.
+
+**Causa**: `usePriceControl.ts` al arrancar llamaba `db.getSesionCajaActiva()` SIN usuario → `database.ts` devolvía `abiertas[0]`. Todos los dispositivos quedaban sobre la MISMA caja; al cerrarla uno, el evento realtime de `useVentas.ts` (suelta `cajaActiva` si esa caja se cerró) la cerraba en todos.
+
+**Cambio (AUTORIZO de Gonzalo para usePriceControl.ts y database.ts)**:
+- `src/lib/database.ts` `getSesionCajaActiva(usuarioId?, { cajaId?, usuarioNombre? })`: orden caja recordada por el dispositivo → caja cuya `vendedoraNombre` incluye al usuario logueado → caja abierta por ese `usuarioId` → `abiertas[0]` (respaldo viejo, para no bloquear ventas). Firma en `IDatabase` actualizada.
+- `src/hooks/usePriceControl.ts`: lee `pricecontrol_local_user` (id, nombre) y `dp_caja_activa_id` de localStorage y se los pasa.
+- `src/hooks/useVentas.ts`: `abrirCaja` guarda `dp_caja_activa_id`; `cerrarCaja` lo borra si cierra esa caja.
+
+**Verificación**: `tsc` 1785 errores antes y después (0 nuevos); vitest mismas pruebas fallidas antes y después (deuda previa); `vite build` OK.
+
+**Datos vistos en Supabase (hora Colombia)**: 6-nov 7:16 a. m. se abren 10 cajas; 2:19–2:20 p. m. se cierran; 2:21 p. m. se abren 8 (siguen abiertas); 10:08–10:11 p. m. se cierran cajas del 4-nov, se abren 10 nuevas y se cierran 9 en 90 s con montos reales. `caja_nombre`/`turno`/`vendedora_nombre` llegan NULL a la nube (`mapCajaToDB` no los manda). Cron `cerrar-cajas-colgadas` corre 3:05 a. m. (no es la causa).
+
+**2026-11-07 (AUTORIZO de Gonzalo para supabase-db.ts)**: `mapCajaToDB` ahora sube `caja_nombre`, `turno`, `vendedora_nombre`, `evento_especial` y `movimientos` SOLO si el dispositivo los tiene (un upsert sin la columna no borra lo que subió otro); `mapCajaFromDB` los lee. `getSesionCajaActiva` de Supabase ordenaba por `fechaApertura` (no existe) → ahora `fecha_apertura`.
+
+**Libro de Caja sin ingresos (Gastos.tsx, no protegido)**: el Libro solo contaba ingresos manuales guardados en localStorage del equipo; nunca leía el cuadre de las vendedoras. El cuadre real vive en `caja.monto_cierre` (base siempre 0; patrón diario: jornada mañana ~7 a. m.→2 p. m.; la tarde se registra de noche abriendo y cerrando cajas en ~1 min; `ventas_diarias` en la nube tiene 0 filas). Ahora `Gastos.tsx` agrega como ingreso de solo lectura cada caja cerrada con `montoCierre − montoApertura > 0` (id `cuadre-<cajaId>`, categoría Venta, fecha = día local del cierre); editar/borrar esos muestra aviso. Se recarga con el evento `nexus-realtime-change` de tabla `caja`.
+
+**Verificación final**: tsc 1785 → 1784 (0 nuevos); vitest mismos fallos que antes; `vite build` OK.
+
+**Pendiente / NO hecho**: sin commit, merge ni publicación; no probado en celular real. Las cajas viejas en la nube siguen con nombre/vendedora NULL (solo las nuevas los tendrán). Si el dispositivo no abrió la caja y la vendedora logueada no coincide con `vendedoraNombre`, sigue cayendo a `abiertas[0]`. Las 10 cajas abiertas a las 2:21 p. m. del 6-nov siguen ABIERTAS en la nube con 0 (la plata de la tarde quedó en las cajas abiertas y cerradas a las 10:10 p. m.); no se tocaron (dato de producción).

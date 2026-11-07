@@ -49,7 +49,7 @@ export interface IDatabase {
   getAllVentas(): Promise<any[]>;
   addVenta(v: any): Promise<void>;
   getAllSesionesCaja(): Promise<any[]>;
-  getSesionCajaActiva(): Promise<any | null>;
+  getSesionCajaActiva(usuarioId?: string, opciones?: { cajaId?: string; usuarioNombre?: string }): Promise<any | null>;
   addSesionCaja(s: any): Promise<void>;
   updateSesionCaja(s: any): Promise<void>;
   
@@ -525,13 +525,24 @@ class NexusDatabase implements IDatabase {
   async getAllVentas() { return this.adapter.getCollection('ventas'); }
   async addVenta(v: any) { return this.adapter.setDocument('ventas', v.id, v); }
   async getAllSesionesCaja() { return this.adapter.getCollection('sesiones_caja'); }
-  async getSesionCajaActiva(usuarioId?: string) {
+  // Antes cada dispositivo tomaba abiertas[0]: todos los celulares y el PC quedaban
+  // sobre la MISMA caja y al cerrarla una vendedora se cerraba en todos (2026-11-06).
+  // Orden: caja recordada por este dispositivo → caja con la vendedora logueada →
+  // caja abierta por este usuario → abiertas[0] (respaldo viejo, para no bloquear ventas).
+  async getSesionCajaActiva(usuarioId?: string, opciones?: { cajaId?: string; usuarioNombre?: string }) {
     const sesiones = await this.adapter.getCollection<any>('sesiones_caja');
-    // Busca por estado === 'abierta' (campo correcto del tipo CajaSesion)
-    // Si se pasa usuarioId, filtra por la caja del usuario actual
     const abiertas = sesiones.filter((s: any) => s.estado === 'abierta');
+    const recordada = opciones?.cajaId ? abiertas.find((s: any) => s.id === opciones.cajaId) : undefined;
+    if (recordada) return recordada;
+    const nombre = (opciones?.usuarioNombre || '').trim().toLowerCase();
+    if (nombre) {
+      const deVendedora = abiertas.find((s: any) =>
+        String(s.vendedoraNombre || '').toLowerCase().split(',').some((v: string) => v.trim() === nombre));
+      if (deVendedora) return deVendedora;
+    }
     if (usuarioId) {
-      return abiertas.find((s: any) => s.usuarioId === usuarioId) || abiertas[0] || null;
+      const propia = abiertas.find((s: any) => s.usuarioId === usuarioId);
+      if (propia) return propia;
     }
     return abiertas[0] || null;
   }

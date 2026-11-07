@@ -76,6 +76,8 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     setSesionesCaja(prev => [...prev, sesion]);
     setCajaActiva(sesion);
     localStorage.setItem('dp_caja_apertura_ts', sesion.fechaApertura);
+    // Este dispositivo recuerda SU caja para no tomar la de otro al recargar.
+    try { localStorage.setItem('dp_caja_activa_id', sesion.id); } catch { /* ignorar */ }
     toast.success('Caja abierta correctamente');
     return sesion;
   }, []);
@@ -104,6 +106,7 @@ export function useVentas({ onAjustarStock }: UseVentasParams) {
     _supaDB.updateSesionCaja(sesion as any).catch(avisarFalloNube('subir cierre de caja'));
     setSesionesCaja(prev => prev.map(s => s.id === sesion.id ? sesion : s));
     if (cajaActiva?.id === sesion.id) setCajaActiva(undefined);
+    try { if (localStorage.getItem('dp_caja_activa_id') === sesion.id) localStorage.removeItem('dp_caja_activa_id'); } catch { /* ignorar */ }
     // Generar cuadre de seguridad automáticamente
     try {
       procesarCuadreTurno({

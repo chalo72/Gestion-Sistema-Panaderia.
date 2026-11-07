@@ -12,6 +12,36 @@ import type { Gasto, GastoCategoria, Proveedor, MetodoPago, Usuario, CajaSesion 
 import { procesarImagenFactura, sugerirCategoria, matchProveedorEnCatalogo } from '@/lib/ocr-service';
 import { getCompromisos } from '@/lib/finanzas-personales';
 import { getBovedas, addMovimientoBoveda, type Boveda } from '@/lib/boveda-store';
+import { db } from '@/lib/database';
+
+// ── Ingresos desde el cuadre de caja (2026-11-07) ───────────────────────────
+// Lo que la vendedora declara al cerrar su caja (montoCierre − base) entra al Libro
+// de Caja como ingreso de solo lectura. Antes el Libro solo veía ingresos manuales.
+const PREFIJO_CUADRE = 'cuadre-';
+const fechaLocalYMD = (iso: string) => {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return (iso || '').slice(0, 10);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+function cuadresComoIngresos(sesiones: CajaSesion[]): (Gasto & { esIngreso: true })[] {
+    return sesiones
+        .filter(s => s.estado === 'cerrada' && !(s as any).deletedAt)
+        .map(s => {
+            const monto = Math.round(((Number(s.montoCierre) || 0) - (Number(s.montoApertura) || 0)) * 100) / 100;
+            const quien = s.vendedoraNombre ? ` · ${s.vendedoraNombre}` : '';
+            return {
+                id: `${PREFIJO_CUADRE}${s.id}`,
+                descripcion: `Cuadre de caja: ${s.cajaNombre || 'Caja'}${s.turno ? ` (${s.turno})` : ''}${quien}`,
+                monto,
+                categoria: 'Venta' as GastoCategoria,
+                fecha: fechaLocalYMD(s.fechaCierre || s.fechaApertura),
+                metodoPago: 'efectivo' as MetodoPago,
+                esIngreso: true as const,
+            } as Gasto & { esIngreso: true };
+        })
+        .filter(i => i.monto > 0);
+}
 
 // ── Ingresos virtuales para el libro de caja ────────────────────────────────
 // Los ingresos se persisten en localStorage para no alterar el tipo Gasto en DB
@@ -105,7 +135,24 @@ export default function Gastos({
 
     // ── Ingresos locales ──────────────────────────────────────────────────────
     const [ingresos, setIngresos] = useState<(Gasto & { esIngreso: true })[]>(cargarIngresos);
-    
+
+    // ── Ingresos del cuadre de caja (solo lectura) ────────────────────────────
+    const [ingresosCuadre, setIngresosCuadre] = useState<(Gasto & { esIngreso: true })[]>([]);
+    useEffect(() => {
+        let vivo = true;
+        const cargar = () => {
+            db.getAllSesionesCaja()
+                .then(s => { if (vivo) setIngresosCuadre(cuadresComoIngresos(s as CajaSesion[])); })
+                .catch(err => console.warn('[Libro de Caja] No se pudieron leer los cuadres de caja:', err));
+        };
+        cargar();
+        const alCambiar = (e: Event) => {
+            if ((e as CustomEvent<{ table?: string }>).detail?.table === 'caja') cargar();
+        };
+        window.addEventListener('nexus-realtime-change', alCambiar);
+        return () => { vivo = false; window.removeEventListener('nexus-realtime-change', alCambiar); };
+    }, [cajaActiva?.id, cajasAbiertas?.length]);
+
     // ── Bóvedas ─────────────────────────────────────────────────────────────
     const [bovedas, setBovedas] = useState<Boveda[]>([]);
     useEffect(() => {
@@ -127,8 +174,8 @@ export default function Gastos({
     // ── Lista unificada (egresos + ingresos locales) ──────────────────────────
     const todosLosRegistros = useMemo(() => {
         const egresos = gastos.map(g => ({ ...g, esIngreso: false as const }));
-        return [...egresos, ...ingresos];
-    }, [gastos, ingresos]);
+        return [...egresos, ...ingresos, ...ingresosCuadre];
+    }, [gastos, ingresos, ingresosCuadre]);
 
     // ── Filtrado ──────────────────────────────────────────────────────────────
     const registrosFiltrados = useMemo(() => {
@@ -176,6 +223,10 @@ export default function Gastos({
 
     // ── Editar registro ───────────────────────────────────────────────────────
     const handleEditGasto = (g: Gasto & { esIngreso?: boolean }) => {
+        if (g.id?.startsWith(PREFIJO_CUADRE)) {
+            toast.info('Este ingreso viene del cuadre de caja. Corrígelo en Control de Caja.');
+            return;
+        }
         setScanResult(null);
         setFormData({ ...g });
         setEditingId(g.id);
@@ -292,6 +343,10 @@ export default function Gastos({
 
     // ── Eliminar registro ─────────────────────────────────────────────────────
     const handleDelete = async (id: string) => {
+        if (id.startsWith(PREFIJO_CUADRE)) {
+            toast.info('Este ingreso viene del cuadre de caja. Corrígelo en Control de Caja.');
+            return;
+        }
         const esIngresoLocal = ingresos.some(i => i.id === id);
         if (esIngresoLocal) {
             const actualizados = ingresos.filter(i => i.id !== id);
