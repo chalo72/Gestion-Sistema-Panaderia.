@@ -310,3 +310,9 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - `useVentas.test.tsx`: mock de sonner con `warning`.
 - Riesgo que queda: un equipo que no abrió caja, no eligió caja y cuya vendedora no coincide con `vendedoraNombre` sigue cayendo en `abiertas[0]` (compartida). Hay que pedirles a las vendedoras que usen el botón.
 - Verificado: tsc 0 nuevos, mismos fallos previos, build OK. No probado en celular/PC real.
+
+### 🔒 2026-11-07 (tarde) — Claude Opus 5.5 — 4 protecciones para que la caja no vuelva a fallar
+1. **GitHub** (`.github/workflows/deploy.yml`, Quality Check): paso "Pruebas de caja (obligatorias)" corre `caja-cierre-gana.test.ts`, `useVentas.test.tsx`, `sync-merge-local-gana.test.ts` SIN `|| true` → bloquea el PR si fallan.
+2. **Hook** `.claude/hooks/pruebas-caja.mjs`: tras editar archivos de caja/sync corre esas pruebas en la carpeta del archivo (sirve en worktrees) y avisa con código 2 si fallan. Probado: pasa en ~3 s y detecta una regla rota. **Falta registrarlo** en `.claude/settings.json` de la carpeta principal (PostToolUse, matcher `Edit|Write|MultiEdit`); desde el worktree no se puede escribir ahí.
+3. **Skill** `~/.claude/skills/caja-cerrada-no-se-reabre-dulce-placer/SKILL.md` con las reglas.
+4. **Alarma en Supabase** (APLICADA): `caja_no_reabrir` ahora es SECURITY DEFINER y anota en `caja_vigilancia` (alarma=true, "REAPERTURA BLOQUEADA…") cuando un equipo intenta reabrir una caja; máx. 1 por caja cada 30 min; si anotar falla, el guardado sigue. Migración `20261107180000_caja_alarma_reapertura.sql`. Probado en transacción deshecha.
