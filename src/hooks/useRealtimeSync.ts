@@ -13,7 +13,7 @@ import { SupabaseDatabase } from '@/lib/supabase-db';
 import { isSelfWrite, registerSelfWrite } from '@/lib/deviceId';
 import { originalDbMethods, supabaseDB, flushSyncOutbox } from '@/lib/supabase-sync-bridge';
 import { db, localAdapter } from '@/lib/database';
-import { mergeHydrateItem, mergePrecioLocalGana } from '@/lib/sync-merge-local-gana';
+import { mergeHydrateItem, mergePrecioLocalGana, preciosParaSubir } from '@/lib/sync-merge-local-gana';
 
 const _sdb = new SupabaseDatabase();
 
@@ -301,12 +301,18 @@ export function useRealtimeSync() {
     // Esto evita que un dispositivo con datos viejos sobreescriba ediciones recientes
     // y evita resurrecciones de productos eliminados que otro dispositivo tenía.
     const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const [supabaseProductos, supabaseProveedores] = await Promise.all([
+    const [supabaseProductos, supabaseProveedores, supabasePrecios] = await Promise.all([
       _sdb.getAllProductos().catch(() => [] as any[]),
       _sdb.getAllProveedores().catch(() => [] as any[]),
+      _sdb.getAllPrecios().catch(() => null),
     ]);
     const sProdsMap = new Map(supabaseProductos.map((i: any) => [i.id, i.updatedAt ?? i.createdAt ?? '']));
     const sProvsMap = new Map(supabaseProveedores.map((i: any) => [i.id, i.updatedAt ?? i.createdAt ?? '']));
+    // Precios: la nube solo guarda fecha_actualizacion, así que se compara por esa fecha.
+    // null = no se pudo leer la nube → no subir precios esta vez (no arriesgar pisar datos nuevos).
+    const sPreciosMap = supabasePrecios
+      ? new Map((supabasePrecios as any[]).map((i: any) => [i.id, i.fechaActualizacion ?? '']))
+      : null;
 
     const pushTasks: [string, () => Promise<any[]>, (d: any) => Promise<void>][] = [
       ['productos', async () => {
@@ -332,7 +338,16 @@ export function useRealtimeSync() {
           return new Date(local.updatedAt ?? local.createdAt ?? 0) > new Date(remoteTs);
         });
       }, (d) => supabaseDB.addProveedor(d)],
-      ['precios',     () => db.getAllPrecios(),          (d) => supabaseDB.addPrecio(d)],
+      // Precios: antes se subían TODOS sin mirar fecha, y un celular con un costo viejo
+      // borraba en la nube la corrección hecha en otro equipo (2026-11-16).
+      // Ahora solo sube si no existe en la nube o si la versión local es MÁS NUEVA.
+      ['precios',     async () => {
+        if (!sPreciosMap) return [];
+        const tombstones = await db.getTombstones('precios').catch(() => [] as string[]);
+        const tombSet = new Set(tombstones);
+        const items = (await db.getAllPrecios()) as any[];
+        return preciosParaSubir(items, sPreciosMap, tombSet);
+      }, (d) => supabaseDB.addPrecio(d)],
       ['ventas',      () => db.getAllVentas(),           (d) => supabaseDB.addVenta(d)],
       ['gastos',      () => db.getAllGastos(),           (d) => supabaseDB.addGasto(d)],
       ['recepciones', () => db.getAllRecepciones(),      (d) => supabaseDB.addRecepcion(d)],

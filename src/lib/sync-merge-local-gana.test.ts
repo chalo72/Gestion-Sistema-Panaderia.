@@ -3,7 +3,46 @@ import {
   mergeCloudItemLocalGana,
   mergePrecioLocalGana,
   mergeHydrateItem,
+  preciosParaSubir,
 } from './sync-merge-local-gana';
+
+describe('preciosParaSubir (celular viejo no borra corrección de otro equipo)', () => {
+  const nube = new Map([
+    ['p1', '2026-11-16T15:00:00.000Z'], // corregido hoy en otro equipo
+    ['p2', '2026-11-01T10:00:00.000Z'],
+  ]);
+
+  it('NO sube un costo viejo cuando la nube tiene uno más nuevo', () => {
+    const local = [{ id: 'p1', precioCosto: 80, fechaActualizacion: '2026-10-01T10:00:00.000Z' }];
+    expect(preciosParaSubir(local, nube)).toEqual([]);
+  });
+
+  it('SÍ sube cuando este aparato lo editó después que la nube', () => {
+    const local = [{ id: 'p2', precioCosto: 4800, fechaActualizacion: '2026-11-16T16:00:00.000Z' }];
+    expect(preciosParaSubir(local, nube).map(p => p.id)).toEqual(['p2']);
+  });
+
+  it('SÍ sube un precio nuevo que la nube no tiene', () => {
+    const local = [{ id: 'nuevo', precioCosto: 1000, fechaActualizacion: '2026-11-16T16:00:00.000Z' }];
+    expect(preciosParaSubir(local, nube).map(p => p.id)).toEqual(['nuevo']);
+  });
+
+  it('NO sube si la fecha es igual (ya está al día)', () => {
+    const local = [{ id: 'p2', precioCosto: 1, fechaActualizacion: '2026-11-01T10:00:00.000Z' }];
+    expect(preciosParaSubir(local, nube)).toEqual([]);
+  });
+
+  it('NO sube precios borrados ni nada si no se pudo leer la nube', () => {
+    const local = [{ id: 'nuevo', precioCosto: 1000, fechaActualizacion: '2026-11-16T16:00:00.000Z' }];
+    expect(preciosParaSubir(local, nube, new Set(['nuevo']))).toEqual([]);
+    expect(preciosParaSubir(local, null)).toEqual([]);
+  });
+
+  it('NO sube un precio local sin fecha si ya existe en la nube', () => {
+    const local = [{ id: 'p1', precioCosto: 80 }];
+    expect(preciosParaSubir(local, nube)).toEqual([]);
+  });
+});
 
 describe('mergeCloudItemLocalGana', () => {
   it('si no hay local, usa la nube', () => {

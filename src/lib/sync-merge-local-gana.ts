@@ -190,6 +190,29 @@ export const mergeHydrateItem = <T extends { id: string }>(
   return mergeCloudItemLocalGana(local, cloud);
 };
 
+/**
+ * Qué precios de este aparato se suben a la nube al sincronizar (2026-11-16).
+ * Solo los que no existen en la nube o cuya fecha local es MÁS NUEVA que la de la nube.
+ * Así un celular con un costo viejo no borra la corrección hecha en otro equipo.
+ * - remotoFechas: id → fechaActualizacion en la nube. null = no se pudo leer la nube → no subir nada.
+ */
+export const preciosParaSubir = <T extends { id: string; fechaActualizacion?: string; updatedAt?: string }>(
+  locales: T[],
+  remotoFechas: Map<string, string> | null,
+  borrados: Set<string> = new Set()
+): T[] => {
+  if (!remotoFechas) return [];
+  return locales.filter((local) => {
+    if (!local?.id || borrados.has(local.id)) return false;
+    if (!remotoFechas.has(local.id)) return true; // nuevo en este aparato
+    const remoteTs = new Date(remotoFechas.get(local.id) || 0).getTime();
+    const localTs = new Date(local.fechaActualizacion ?? local.updatedAt ?? 0).getTime();
+    if (!Number.isFinite(localTs) || localTs <= 0) return false;
+    if (!Number.isFinite(remoteTs) || remoteTs <= 0) return true;
+    return localTs > remoteTs;
+  });
+};
+
 /** Asegura updatedAt al guardar (para que otros aparatos sepan qué versión es más nueva). */
 export const stampUpdatedAt = <T extends Record<string, unknown>>(data: T): T => {
   const now = new Date().toISOString();
