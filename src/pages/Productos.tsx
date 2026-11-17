@@ -12,7 +12,9 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ProductAvatar } from '@/components/ui/ProductAvatar';
 import { AvatarConfigurator } from '@/components/ui/AvatarConfigurator';
-import type { Producto, Proveedor, PrecioProveedor, Categoria, InventarioItem } from '@/types';
+import type { Producto, Proveedor, PrecioProveedor, Categoria, InventarioItem, ModeloPan, FormulacionBase } from '@/types';
+import { OrdenarPanesModal } from '@/components/productos/OrdenarPanesModal';
+import { planOrdenPanes } from '@/lib/clasificar-panes';
 import { ProductHeader } from '@/components/productos/ProductHeader';
 import { ProductCard } from '@/components/productos/ProductCard';
 import { ProductFormModal } from '@/components/productos/ProductFormModal';
@@ -40,6 +42,12 @@ interface ProductosProps {
     getPreciosByProducto: (productoId: string) => PrecioProveedor[];
     getProveedorById: (id: string) => Proveedor | undefined;
     formatCurrency: (value: number) => string;
+    /** Modelos de pan (Recetas / Libreta de horno): ayudan a sugerir Pan de sal vs Pan de dulce */
+    modelosPan?: ModeloPan[];
+    formulaciones?: FormulacionBase[];
+    onUpdateModeloPan?: (id: string, updates: Partial<ModeloPan>) => void | Promise<void>;
+    sesionesCaja?: any[];
+    gastos?: any[];
 }
 
 const COLORES_PRESET = [
@@ -51,8 +59,14 @@ export default function Productos({
     productos, proveedores, precios: _precios, categorias, inventario,
     onAddProducto, onUpdateProducto, onDeleteProducto,
     onAddCategoria, onDeleteCategoria, onUpdateCategoria, onAddOrUpdatePrecio, onDeletePrecio,
-    getMejorPrecio, getPreciosByProducto, getProveedorById, formatCurrency,
+    getMejorPrecio, getPreciosByProducto, getProveedorById, formatCurrency, modelosPan = [], formulaciones = [], onUpdateModeloPan,
+    sesionesCaja = [], gastos = [],
 }: ProductosProps) {
+    const [isOrdenarPanesOpen, setIsOrdenarPanesOpen] = useState(false);
+    const panesPorOrdenar = useMemo(
+        () => planOrdenPanes(productos, modelosPan, formulaciones).pendientes,
+        [productos, modelosPan, formulaciones]
+    );
     const [searchTerm, setSearchTerm] = useState('');
     const [filtroCategoria, setFiltroCategoria] = useState('Todos');
     const [filtroTipo, setFiltroTipo] = useState<'todos' | 'elaborado' | 'ingrediente'>('todos');
@@ -256,6 +270,22 @@ export default function Productos({
                 onOpenIceCreamAssistant={() => setIsIceCreamAssistantOpen(true)}
                 onOpenBeverageAssistant={() => setIsBeverageAssistantOpen(true)}
                 checkPermission={(p: any) => check(p)} />
+
+            {/* Panes sin ordenar: separar en Pan de sal / Pan de dulce / Croissant… */}
+            {panesPorOrdenar > 0 && (
+                <button
+                    type="button"
+                    onClick={() => setIsOrdenarPanesOpen(true)}
+                    className="w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/60 hover:bg-amber-50 transition-all text-left"
+                >
+                    <span className="text-2xl">🥖</span>
+                    <div>
+                        <p className="text-sm font-black text-amber-800">Ordenar los panes por categoría</p>
+                        <p className="text-xs text-amber-600 mt-0.5">{panesPorOrdenar} pan{panesPorOrdenar === 1 ? '' : 'es'} de tus Modelos de pan (Recetas) sin su categoría en el catálogo. Sepáralos en Pan de sal, Pan de dulce, Croissant…</p>
+                    </div>
+                    <span className="ml-auto text-xs font-black text-amber-700 bg-amber-100 px-3 py-1.5 rounded-xl">Ordenar →</span>
+                </button>
+            )}
 
             {/* Botón acceso al Configurador de Avatares */}
             <button
@@ -521,6 +551,19 @@ export default function Productos({
                 onAddCategoria={handleHandleAddCategoria}
                 nuevaCategoria={nuevaCategoria} setNuevaCategoria={setNuevaCategoria} coloresPreset={COLORES_PRESET} />
 
+            <OrdenarPanesModal
+                isOpen={isOrdenarPanesOpen}
+                onOpenChange={setIsOrdenarPanesOpen}
+                productos={productos}
+                modelosPan={modelosPan}
+                formulaciones={formulaciones}
+                categorias={categorias}
+                onAddCategoria={onAddCategoria}
+                onAddProducto={onAddProducto}
+                onUpdateProducto={onUpdateProducto}
+                onUpdateModelo={onUpdateModeloPan}
+            />
+
             <IceCreamAssistantModal
                 isOpen={isIceCreamAssistantOpen}
                 onOpenChange={setIsIceCreamAssistantOpen}
@@ -530,6 +573,8 @@ export default function Productos({
                 onUpdateProducto={onUpdateProducto}
                 onDeleteProducto={onDeleteProducto}
                 formatCurrency={formatCurrency}
+                sesionesCaja={sesionesCaja}
+                gastos={gastos}
             />
 
             <BeverageAssistantModal

@@ -39,6 +39,21 @@ export const MODELOS_PAN_INMUTABLES: ModeloPan[] = [
     "ingredientesAdicionales": []
   },
   {
+    "activo": true,
+    "costoUnitario": 178.7755850962522,
+    "createdAt": "2026-07-27T15:49:59.058Z",
+    "formulacionId": "7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f52",
+    "id": "9a8b7c6d-5e4f-4d3c-b2a1-0f9e8d7c6b99",
+    "margenPorcentaje": 70,
+    "mermaEstimada": 3,
+    "nombre": "Pan pequeño de queso",
+    "panesPorArroba": 402,
+    "pesoUnitarioGr": 45,
+    "precioVentaUnitario": 600,
+    "piezasPorLata": 40,
+    "ingredientesAdicionales": []
+  },
+  {
     "id": "9a8b7c6d-5e4f-4d3c-b2a1-0f9e8d7c6b54",
     "nombre": "Torta media",
     "formulacionId": "7d8e9f0a-b1c2-4d3e-8f9a-0b1c2d3e4f54",

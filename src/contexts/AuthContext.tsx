@@ -4,6 +4,7 @@ import type { Usuario, UserRole, Permission } from '@/types';
 import { ROLE_PERMISSIONS } from '@/types';
 import { USUARIOS_PRUEBA, EMAILS_USUARIOS_LEGACY } from '@/lib/seed-data';
 import { normalizarUsuariosLogin } from '@/lib/usuarios-login-oficiales';
+import { pushAllUsersToCloud } from '@/lib/user-cloud-sync';
 import { supabase } from '@/lib/supabase';
 import { firestore } from '@/lib/firebase';
 import { collection, getDocs, doc as fbDoc, setDoc, deleteDoc } from 'firebase/firestore';
@@ -73,7 +74,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUsuarios(baseList);
       localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(baseList));
+      // Migrar a Supabase (Rescate global)
+      pushAllUsersToCloud(baseList).catch(e=>console.log(e));
 
+      
+      try {
+        const { data: cloudUsers, error } = await supabase.from('usuarios_sistema').select('*');
+        if (!error && cloudUsers) {
+          const legacyEmails = new Set(EMAILS_USUARIOS_LEGACY.map(e => e.toLowerCase()));
+          const validCloudUsers = cloudUsers.filter(u => !legacyEmails.has((u.email || '').toLowerCase()));
+          const mergedMap = new Map();
+          validCloudUsers.forEach(u => mergedMap.set(u.email.toLowerCase(), u));
+          baseList.forEach(u => mergedMap.set(u.email.toLowerCase(), u)); // local gana
+          let merged = normalizarUsuariosLogin(Array.from(mergedMap.values()));
+          setUsuarios(merged);
+          localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(merged));
+        }
+      } catch (e) { console.error('Error supabase auth sync', e); }
       // 2. Sincronizar con Firebase Firestore (nube — en segundo plano, solo si disponible)
       if (firestore) {
         try {
@@ -110,6 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           setUsuarios(merged);
           localStorage.setItem('pricecontrol_local_user_list', JSON.stringify(merged));
+            pushAllUsersToCloud(merged).catch(e=>console.log(e));
         } catch (cloudErr) {
           console.warn('⚠️ [Auth] Firestore no disponible, modo local activo:', cloudErr);
         }

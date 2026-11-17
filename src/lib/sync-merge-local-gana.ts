@@ -15,16 +15,39 @@ const isEmptyValue = (v: unknown): boolean =>
 export const timestampDeDoc = (doc: unknown): number => {
   if (!doc || typeof doc !== 'object') return 0;
   const d = doc as Record<string, unknown>;
-  const raw =
-    d.updatedAt ??
-    d.fechaActualizacion ??
-    d.ultimoCambio ??
-    d.updated_at ??
-    d.createdAt ??
-    d.created_at ??
-    0;
-  const t = new Date(String(raw || 0)).getTime();
-  return Number.isFinite(t) ? t : 0;
+  const aMs = (v: unknown): number => {
+    if (v === undefined || v === null || v === '') return 0;
+    const t = new Date(String(v)).getTime();
+    return Number.isFinite(t) ? t : 0;
+  };
+  // La hora MÁS RECIENTE entre los campos de cambio: un registro puede traer un updatedAt
+  // viejo (bajado de la nube) y un actualizadoEn nuevo (cierre de caja hecho aquí).
+  const cambio = Math.max(
+    aMs(d.updatedAt),
+    aMs(d.fechaActualizacion),
+    aMs(d.ultimoCambio),
+    aMs(d.updated_at),
+    aMs(d.actualizadoEn), // sesiones de caja (hora de la última modificación)
+  );
+  if (cambio > 0) return cambio;
+  return aMs(d.createdAt) || aMs(d.created_at);
+};
+
+/** Campos que fija el cierre de una caja; una copia "abierta" nunca debe borrarlos. */
+const CAMPOS_CIERRE_CAJA = ['estado', 'fechaCierre', 'montoCierre', 'observaciones', 'ventasManualIngresadas'] as const;
+
+/** ¿La nube intenta reabrir una caja que este aparato ya cerró? (no existe "reabrir caja") */
+export const esCajaRevivida = (local: unknown, cloud: unknown): boolean =>
+  (local as { estado?: string } | undefined)?.estado === 'cerrada' &&
+  (cloud as { estado?: string } | undefined)?.estado === 'abierta';
+
+const conservarCierreCaja = <T extends { id: string }>(local: T, merged: T): T => {
+  const l = local as Record<string, unknown>;
+  const o = { ...(merged as Record<string, unknown>) };
+  for (const k of CAMPOS_CIERRE_CAJA) {
+    if (!isEmptyValue(l[k])) o[k] = l[k];
+  }
+  return o as T;
 };
 
 /**
@@ -168,6 +191,10 @@ export const mergeHydrateItem = <T extends { id: string }>(
   // Caja: un cierre nunca se deshace. Si cualquiera de los dos lados la tiene cerrada,
   // queda cerrada con los datos de cierre de ese lado (2026-11-07: el PC reabría cajas).
   if (collection === 'sesiones_caja') {
+    // Cerrar es definitivo: gana el cierre, venga de aquí o de la nube; el resto (ventas
+    // de último minuto) se toma de la versión más nueva.
+    if (esCajaRevivida(local, cloud)) return conservarCierreCaja(local, mergeCloudMasNueva(local, cloud));
+    if (esCajaRevivida(cloud, local)) return conservarCierreCaja(cloud, mergeCloudMasNueva(local, cloud));
     const merged = mergeCajaCierreGana(local, cloud);
     if (merged) return merged;
   }
@@ -235,4 +262,48 @@ export const stampUpdatedAt = <T extends Record<string, unknown>>(data: T): T =>
     updatedAt: now,
     fechaActualizacion: data.fechaActualizacion || now,
   };
+};
+
+const ES_FECHA_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+const vacio = (v: unknown) => v === null || v === undefined || v === '';
+
+/**
+ * ¿Es el mismo dato aunque venga escrito distinto? (2026-11-16)
+ * La nube devuelve fechas como "2026-11-07T13:05:00+00:00" y el aparato las guarda con "Z";
+ * los objetos JSON vuelven con las llaves en otro orden. Antes eso contaba como "cambió"
+ * y cada aparato resubía todos sus registros en cada sincronización (6.000 envíos al día).
+ */
+export const valoresIguales = (a: unknown, b: unknown): boolean => {
+  if (vacio(a) && vacio(b)) return true;
+  if (vacio(a) || vacio(b)) return false;
+  if (typeof a === 'number' || typeof b === 'number') {
+    const na = Number(a), nb = Number(b);
+    return Number.isFinite(na) && Number.isFinite(nb) ? na === nb : a === b;
+  }
+  if (typeof a === 'string' && typeof b === 'string') {
+    if (a === b) return true;
+    if (ES_FECHA_ISO.test(a) && ES_FECHA_ISO.test(b)) {
+      const ta = new Date(a).getTime(), tb = new Date(b).getTime();
+      return Number.isFinite(ta) && ta === tb;
+    }
+    return false;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((x, i) => valoresIguales(x, b[i]));
+  }
+  if (typeof a === 'object' && typeof b === 'object') {
+    const ra = a as Record<string, unknown>, rb = b as Record<string, unknown>;
+    const llaves = new Set([...Object.keys(ra), ...Object.keys(rb)]);
+    for (const k of llaves) if (!valoresIguales(ra[k], rb[k])) return false;
+    return true;
+  }
+  return a === b;
+};
+
+/** Ejecuta `fn` sobre la lista de a `tamano` a la vez (no cientos de envíos simultáneos). */
+export const enLotes = async <T>(lista: T[], tamano: number, fn: (item: T) => Promise<unknown>): Promise<void> => {
+  for (let i = 0; i < lista.length; i += tamano) {
+    await Promise.all(lista.slice(i, i + tamano).map(fn));
+  }
 };

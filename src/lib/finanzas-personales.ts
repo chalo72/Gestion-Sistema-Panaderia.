@@ -3,6 +3,10 @@
  * y consejero IA financiero. Persistencia en localStorage.
  */
 import { generateUUID } from '@/lib/safe-utils';
+import {
+  UMBRAL_FAMILIA_PCT_VENTAS,
+  personaFamiliaDeGasto,
+} from '@/lib/familia-duenos';
 import type { CompromisoFijo, VentaDiaria, GastoCategoria } from '@/types';
 
 const KEY_COMPROMISOS = 'dp_compromisos_fijos';
@@ -12,12 +16,52 @@ const KEY_VENTAS_DIARIAS = 'dp_ventas_diarias';
 export function getCompromisos(): CompromisoFijo[] {
   try {
     const raw = localStorage.getItem(KEY_COMPROMISOS);
-    return raw ? JSON.parse(raw) : [];
+    if (!raw) {
+      // 🩹 2026-10-09: celular nuevo → traer la copia de la nube (antes solo vivían en este aparato)
+      traerCompromisosDeLaNube().catch(() => {});
+      return [];
+    }
+    const lista = JSON.parse(raw);
+    // Subir una vez por sesión los compromisos que ya existían solo en este aparato
+    if (!compromisosSubidosEstaSesion && Array.isArray(lista) && lista.length > 0) {
+      compromisosSubidosEstaSesion = true;
+      pushCompromisosToCloud(lista).catch(() => {});
+    }
+    return lista;
   } catch { return []; }
 }
 
 export function saveCompromisos(list: CompromisoFijo[]): void {
   localStorage.setItem(KEY_COMPROMISOS, JSON.stringify(list));
+  // 🩹 2026-10-09: copia en Supabase (tabla configuracion, id 'compromisos_fijos_data')
+  pushCompromisosToCloud(list).catch(() => {});
+}
+
+async function pushCompromisosToCloud(list: CompromisoFijo[]): Promise<void> {
+  try {
+    const { db } = await import('@/lib/database');
+    await db.saveBackup('compromisos_fijos_data', list);
+  } catch (err) {
+    console.warn('⚠️ [Finanzas] Error enviando compromisos a la nube:', err);
+  }
+}
+
+let trayendoCompromisos = false;
+let compromisosSubidosEstaSesion = false;
+async function traerCompromisosDeLaNube(): Promise<void> {
+  if (trayendoCompromisos) return;
+  trayendoCompromisos = true;
+  try {
+    const { db } = await import('@/lib/database');
+    const cloud = await db.getBackup('compromisos_fijos_data');
+    if (Array.isArray(cloud) && cloud.length > 0 && !localStorage.getItem(KEY_COMPROMISOS)) {
+      localStorage.setItem(KEY_COMPROMISOS, JSON.stringify(cloud));
+    }
+  } catch (err) {
+    console.warn('⚠️ [Finanzas] No se pudieron traer compromisos de la nube:', err);
+  } finally {
+    trayendoCompromisos = false;
+  }
 }
 
 export function addCompromiso(data: Omit<CompromisoFijo, 'id'>): CompromisoFijo {
@@ -32,6 +76,110 @@ export function updateCompromiso(id: string, data: Partial<CompromisoFijo>): voi
 
 export function deleteCompromiso(id: string): void {
   saveCompromisos(getCompromisos().filter(c => c.id !== id));
+}
+
+const sinTilde = (s: string) => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+/** Personas que ya se pagan en el módulo Nómina y no deben duplicarse aquí. */
+const YA_EN_NOMINA: string[][] = [
+  ['andrea', 'cadena'],
+  ['gonzalo', 'panadero'],
+];
+
+export function esCompromisoYaEnNomina(c: Pick<CompromisoFijo, 'nombre' | 'persona' | 'esDeNomina'>): boolean {
+  if (c.esDeNomina) return true;
+  const t = sinTilde(`${c.nombre || ''} ${c.persona || ''}`);
+  return YA_EN_NOMINA.some(partes => partes.every(p => t.includes(p)));
+}
+
+/** Marca en disco los compromisos que ya viven en Nómina, para que no se sumen dos veces. */
+export function apartarCompromisosDeNomina(): CompromisoFijo[] {
+  const lista = getCompromisos();
+  let cambio = false;
+  const next = lista.map(c => {
+    if (c.esDeNomina) return c;
+    if (esCompromisoYaEnNomina(c)) { cambio = true; return { ...c, esDeNomina: true }; }
+    return c;
+  });
+  if (cambio) saveCompromisos(next);
+  return cambio ? next : lista;
+}
+
+function ultimoDiaMes(year: number, monthIndex: number): number {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+/** Días del mes en los que “más o menos” toca pagar este compromiso. */
+export function diasObjetivoCompromiso(c: CompromisoFijo, year: number, monthIndex: number): number[] {
+  const ultimo = ultimoDiaMes(year, monthIndex);
+  const dia = Math.min(ultimo, Math.max(1, Number(c.diaDeCobro) || 1));
+  const freq = c.frecuencia || 'mensual';
+  if (freq === 'quincenal') {
+    const segundo = Math.min(ultimo, dia <= 15 ? dia + 15 : 15);
+    return Array.from(new Set([dia, segundo])).sort((a, b) => a - b);
+  }
+  if (freq === 'solo_q1') return [Math.min(15, dia)];
+  if (freq === 'solo_q2') return [Math.min(ultimo, Math.max(16, dia))];
+  return [dia];
+}
+
+export function claveCicloCompromiso(c: CompromisoFijo, fecha: Date, diaObjetivo: number): string {
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, '0');
+  if ((c.frecuencia || 'mensual') === 'mensual') return `${y}-${m}`;
+  return `${y}-${m}-${diaObjetivo <= 15 ? 'q1' : 'q2'}`;
+}
+
+export interface AvisoCompromiso {
+  compromiso: CompromisoFijo;
+  estado: 'hoy' | 'ventana' | 'vencido';
+  diaObjetivo: number;
+  mensaje: string;
+}
+
+/** Compromisos fijos cuya fecha aproximada ya llegó o está a pocos días. */
+export function avisosCompromisos(lista: CompromisoFijo[], hoy: Date = new Date()): AvisoCompromiso[] {
+  const hoyDia = hoy.getDate();
+  const avisos: AvisoCompromiso[] = [];
+  for (const c of lista) {
+    if (!c.activo || esCompromisoYaEnNomina(c)) continue;
+    const ventana = Math.max(0, Number(c.ventanaDias ?? 2));
+    const pagados = new Set(c.ciclosPagados || []);
+    for (const dia of diasObjetivoCompromiso(c, hoy.getFullYear(), hoy.getMonth())) {
+      const clave = claveCicloCompromiso(c, hoy, dia);
+      if (pagados.has(clave)) continue;
+      const diff = hoyDia - dia;
+      if (diff === 0) {
+        avisos.push({ compromiso: c, estado: 'hoy', diaObjetivo: dia, mensaje: `Hoy toca pagar ${c.nombre} (alrededor del día ${dia}).` });
+      } else if (Math.abs(diff) <= ventana) {
+        avisos.push({ compromiso: c, estado: 'ventana', diaObjetivo: dia, mensaje: `${c.nombre} se paga alrededor del día ${dia}. Hoy estás a ${Math.abs(diff)} día(s).` });
+      } else if (diff > ventana && diff <= 10) {
+        avisos.push({ compromiso: c, estado: 'vencido', diaObjetivo: dia, mensaje: `${c.nombre} pasó el día ${dia} y aún no está marcado como pagado.` });
+      }
+    }
+  }
+  const orden = { vencido: 0, hoy: 1, ventana: 2 };
+  return avisos.sort((a, b) => orden[a.estado] - orden[b.estado]);
+}
+
+export function marcarCompromisoPagado(id: string, nota?: string): CompromisoFijo[] {
+  const hoy = new Date();
+  const next = getCompromisos().map(c => {
+    if (c.id !== id) return c;
+    const dias = diasObjetivoCompromiso(c, hoy.getFullYear(), hoy.getMonth());
+    const dia = dias.reduce((mejor, d) => Math.abs(hoy.getDate() - d) < Math.abs(hoy.getDate() - mejor) ? d : mejor, dias[0]);
+    const clave = claveCicloCompromiso(c, hoy, dia);
+    const historial = [...(c.historialPagos || []), { fecha: toLocalYMD(hoy), monto: c.monto, nota }].slice(-24);
+    return { ...c, ciclosPagados: Array.from(new Set([...(c.ciclosPagados || []), clave])), historialPagos: historial };
+  });
+  saveCompromisos(next);
+  return next;
+}
+
+/** Monto de un compromiso expresado en un mes (quincenal cuenta dos veces). */
+export function compromisoAMensual(c: CompromisoFijo): number {
+  const m = Number(c.monto) || 0;
+  return c.frecuencia === 'quincenal' ? m * 2 : m;
 }
 
 // ── Ventas Diarias (registro manual mientras arranca el POS) ──
@@ -244,7 +392,7 @@ export function calcularProyeccionQuincena(params: {
 
   // Compromisos activos que caen en este periodo
   const compromisosQuincena = params.compromisos
-    .filter(c => c.activo)
+    .filter(c => c.activo && !esCompromisoYaEnNomina(c))
     .filter(c => {
       if (quincenaFiltro === 'mes') return true;
       if (c.frecuencia === 'quincenal') return true;
@@ -370,11 +518,23 @@ export function generarConsejo(params: {
   // ── Salarios del dueño
   const salarios = params.compromisos.filter(c => c.activo && c.esPropietario);
   if (salarios.length === 0) {
-    puntos.push(`👤 No tienes registrado tu salario ni el de tu esposa como compromiso fijo. Agrégalos para que la proyección sea precisa.`);
+    puntos.push(`👤 No tienes registrado salarios de dueños/familia como compromiso fijo. Agrégalos (Emiliano, Isabela, Gonzalo Iván, Andrea Cadena, Santiago, Andrea Rosales) para que la proyección sea precisa.`);
     if (nivel === 'ok') nivel = 'alerta';
   } else {
     const totalSal = salarios.reduce((s, c) => s + c.monto, 0);
-    puntos.push(`👥 Salarios de propietarios registrados: $${totalSal.toLocaleString('es-CO')} por quincena.`);
+    puntos.push(`👥 Salarios de propietarios registrados: $${totalSal.toLocaleString('es-CO')} en compromisos del periodo.`);
+  }
+
+  // ── Retiros Familia (categoría dedicada)
+  const gastosFamilia = gastosMes.filter(g => g.categoria === 'Familia');
+  const totalFamilia = gastosFamilia.reduce((s, g) => s + (Number(g.monto) || 0), 0);
+  if (ventasTotalMes > 0 && totalFamilia > 0) {
+    const pctFam = (totalFamilia / ventasTotalMes) * 100;
+    puntos.push(`🏠 Retiros Familia este mes: $${totalFamilia.toLocaleString('es-CO')} (${pctFam.toFixed(0)}% de ventas).`);
+    if (pctFam > UMBRAL_FAMILIA_PCT_VENTAS) {
+      nivel = nivel === 'critico' ? 'critico' : 'alerta';
+      puntos.push(`⚠️ Familia supera el ${UMBRAL_FAMILIA_PCT_VENTAS}% de las ventas — prioriza nómina de trabajadores, servicios y proveedores antes de más retiros.`);
+    }
   }
 
   const titulo = nivel === 'critico'
@@ -386,13 +546,228 @@ export function generarConsejo(params: {
   return { titulo, nivel, puntos };
 }
 
+// ── Panorama Supervivencia (nómina / servicios / proveedores / familia) ──
+
+export type NivelSupervivencia = 'ok' | 'alerta' | 'critico';
+
+export interface RankingPersonaFamilia {
+  persona: string;
+  monto: number;
+}
+
+export interface ColaPagoSupervivencia {
+  id: 'nomina' | 'servicios' | 'proveedores' | 'familia';
+  label: string;
+  comprometido: number;
+  pagado: number;
+  falta: number;
+}
+
+export interface PanoramaSupervivencia {
+  nivel: NivelSupervivencia;
+  ventasPeriodo: number;
+  totalFamilia: number;
+  pctFamiliaSobreVentas: number;
+  rankingFamilia: RankingPersonaFamilia[];
+  cola: ColaPagoSupervivencia[];
+  proyeccionAlcanza: boolean;
+  proyeccionDeficit: number;
+  mensaje: string;
+  /** Texto listo para enviar al agente IA */
+  contextoAgente: string;
+}
+
+/**
+ * Resume si la quincena/periodo alcanza para trabajadores, servicios, proveedores
+ * y cuánta plata salió a la familia.
+ */
+export function calcularPanoramaSupervivencia(params: {
+  ventas: { fecha: string; total: number; metodoPago?: string }[];
+  ventasDiarias: VentaDiaria[];
+  gastos: {
+    fecha: string;
+    monto: number;
+    categoria: GastoCategoria | string;
+    descripcion?: string;
+    personaFamilia?: string;
+    metadata?: { personaFamilia?: string; [k: string]: unknown };
+    estado?: string;
+    proveedorId?: string;
+  }[];
+  compromisos: CompromisoFijo[];
+  /** Suma salarios base de trabajadoras activas (mes) — se toma mitad por quincena */
+  nominaMesEstimada?: number;
+  periodo?: { inicioStr: string; finStr: string; quincena: '1' | '2' | 'mes' };
+  umbralFamiliaPct?: number;
+}): PanoramaSupervivencia {
+  const umbral = params.umbralFamiliaPct ?? UMBRAL_FAMILIA_PCT_VENTAS;
+  const proy = calcularProyeccionQuincena({
+    ventas: params.ventas,
+    ventasDiarias: params.ventasDiarias,
+    gastos: params.gastos.map(g => ({
+      fecha: g.fecha,
+      monto: g.monto,
+      categoria: (g.categoria as GastoCategoria) || 'Otros',
+    })),
+    compromisos: params.compromisos,
+    periodo: params.periodo,
+  });
+
+  const hoy = new Date();
+  let inicio: string;
+  let fin: string;
+  let q: '1' | '2' | 'mes';
+  if (params.periodo?.inicioStr && params.periodo?.finStr) {
+    inicio = params.periodo.inicioStr;
+    fin = params.periodo.finStr;
+    q = params.periodo.quincena;
+  } else {
+    const dia = hoy.getDate();
+    const i = dia <= 15
+      ? new Date(hoy.getFullYear(), hoy.getMonth(), 1)
+      : new Date(hoy.getFullYear(), hoy.getMonth(), 16);
+    const f = dia <= 15
+      ? new Date(hoy.getFullYear(), hoy.getMonth(), 15)
+      : new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0);
+    inicio = toLocalYMD(i);
+    fin = toLocalYMD(f);
+    q = dia <= 15 ? '1' : '2';
+  }
+
+  const enPeriodo = <T extends { fecha: string }>(arr: T[]) =>
+    arr.filter(x => (x.fecha || '').slice(0, 10) >= inicio && (x.fecha || '').slice(0, 10) <= fin);
+
+  const gastosP = enPeriodo(params.gastos).filter(g => g.estado !== 'anulado');
+  const ventasPOS = enPeriodo(params.ventas).reduce((s, v) => s + (Number(v.total) || 0), 0);
+  const fechasPOS = new Set(enPeriodo(params.ventas).map(v => v.fecha.slice(0, 10)));
+  const ventasMan = enPeriodo(params.ventasDiarias)
+    .filter(v => !fechasPOS.has(v.fecha))
+    .reduce((s, v) => s + (Number(v.total) || 0), 0);
+  const ventasPeriodo = ventasPOS + ventasMan;
+
+  const sumCat = (cats: string[]) =>
+    gastosP
+      .filter(g => cats.includes(String(g.categoria || '')))
+      .reduce((s, g) => s + (Number(g.monto) || 0), 0);
+
+  const pagadoNomina = sumCat(['Nómina']);
+  const pagadoServicios = sumCat(['Servicios', 'Arriendo']);
+  const pagadoProveedores = gastosP
+    .filter(g => g.categoria === 'Materia Prima' || !!g.proveedorId)
+    .reduce((s, g) => s + (Number(g.monto) || 0), 0);
+  const pagadoFamilia = sumCat(['Familia']);
+
+  const fijos = params.compromisos.filter(c => c.activo && !esCompromisoYaEnNomina(c));
+  const fijosServ = fijos
+    .filter(c => !c.esPropietario && (c.categoria === 'Servicios' || c.categoria === 'Arriendo'))
+    .filter(c => {
+      if (q === 'mes') return true;
+      if (c.frecuencia === 'quincenal') return true;
+      if (c.frecuencia === 'solo_q1') return q === '1';
+      if (c.frecuencia === 'solo_q2') return q === '2';
+      const d = Number(c.diaDeCobro) || 1;
+      return q === '1' ? d <= 15 : d >= 16;
+    })
+    .reduce((s, c) => s + (Number(c.monto) || 0), 0);
+
+  const nominaMes = Number(params.nominaMesEstimada) || 0;
+  const nominaQ = q === 'mes' ? nominaMes : nominaMes / 2;
+
+  const cola: ColaPagoSupervivencia[] = [
+    {
+      id: 'nomina',
+      label: 'Nómina trabajadores',
+      comprometido: Math.round(nominaQ),
+      pagado: Math.round(pagadoNomina),
+      falta: Math.max(0, Math.round(nominaQ - pagadoNomina)),
+    },
+    {
+      id: 'servicios',
+      label: 'Servicios y arriendo',
+      comprometido: Math.round(fijosServ),
+      pagado: Math.round(pagadoServicios),
+      falta: Math.max(0, Math.round(fijosServ - pagadoServicios)),
+    },
+    {
+      id: 'proveedores',
+      label: 'Proveedores (materia prima)',
+      comprometido: Math.round(pagadoProveedores), // ya pagado = referencia; falta 0 si no hay tope
+      pagado: Math.round(pagadoProveedores),
+      falta: 0,
+    },
+    {
+      id: 'familia',
+      label: 'Familia / dueños',
+      comprometido: Math.round(pagadoFamilia + proy.totalSalarios),
+      pagado: Math.round(pagadoFamilia),
+      falta: 0,
+    },
+  ];
+
+  const porPersona = new Map<string, number>();
+  for (const g of gastosP.filter(x => x.categoria === 'Familia')) {
+    const quien = personaFamiliaDeGasto(g) || 'Sin asignar';
+    porPersona.set(quien, (porPersona.get(quien) || 0) + (Number(g.monto) || 0));
+  }
+  const rankingFamilia = [...porPersona.entries()]
+    .map(([persona, monto]) => ({ persona, monto: Math.round(monto) }))
+    .sort((a, b) => b.monto - a.monto);
+
+  const pctFamilia = ventasPeriodo > 0 ? (pagadoFamilia / ventasPeriodo) * 100 : 0;
+  const faltaCritica = cola[0].falta + cola[1].falta;
+
+  let nivel: NivelSupervivencia = 'ok';
+  if (!proy.alcanza || faltaCritica > 0) {
+    nivel = proy.deficit > 200000 || cola[0].falta > 0 ? 'critico' : 'alerta';
+  } else if (pctFamilia > umbral) {
+    nivel = 'alerta';
+  }
+
+  const mensaje =
+    nivel === 'critico'
+      ? 'No alcanza con claridad para nómina y/o servicios. Congela retiros de familia hasta cubrir lo esencial.'
+      : nivel === 'alerta'
+        ? 'Hay tensión de caja o la familia se está llevando demasiado frente a las ventas. Revisa la cola de pagos.'
+        : 'La proyección cubre lo esencial. Sigue etiquetando cada retiro de familia.';
+
+  const contextoAgente = [
+    `PERIODO ${inicio} → ${fin} (quincena=${q})`,
+    `Ventas periodo: $${Math.round(ventasPeriodo).toLocaleString('es-CO')}`,
+    `Proyección alcanza: ${proy.alcanza ? 'SÍ' : 'NO'} · déficit $${proy.deficit.toLocaleString('es-CO')} · saldo proyectado $${proy.saldoProyectado.toLocaleString('es-CO')}`,
+    `Nómina trabajadores (estimado periodo): $${Math.round(nominaQ).toLocaleString('es-CO')} · pagado $${Math.round(pagadoNomina).toLocaleString('es-CO')} · falta $${cola[0].falta.toLocaleString('es-CO')}`,
+    `Servicios/arriendo comprometidos: $${Math.round(fijosServ).toLocaleString('es-CO')} · pagado $${Math.round(pagadoServicios).toLocaleString('es-CO')} · falta $${cola[1].falta.toLocaleString('es-CO')}`,
+    `Proveedores (materia prima pagada): $${Math.round(pagadoProveedores).toLocaleString('es-CO')}`,
+    `Familia (categoría): $${Math.round(pagadoFamilia).toLocaleString('es-CO')} (${pctFamilia.toFixed(1)}% de ventas; umbral ${umbral}%)`,
+    rankingFamilia.length
+      ? `Ranking familia: ${rankingFamilia.map(r => `${r.persona}=$${r.monto.toLocaleString('es-CO')}`).join(', ')}`
+      : 'Ranking familia: sin gastos Familia etiquetados aún',
+    `Salarios propietarios en compromisos: $${proy.totalSalarios.toLocaleString('es-CO')}`,
+    `Nivel supervivencia: ${nivel}`,
+  ].join('\n');
+
+  return {
+    nivel,
+    ventasPeriodo: Math.round(ventasPeriodo),
+    totalFamilia: Math.round(pagadoFamilia),
+    pctFamiliaSobreVentas: Math.round(pctFamilia * 10) / 10,
+    rankingFamilia,
+    cola,
+    proyeccionAlcanza: proy.alcanza,
+    proyeccionDeficit: proy.deficit,
+    mensaje,
+    contextoAgente,
+  };
+}
+
 // ── Registro de Producción Diaria ────────────────────────────
 export interface HornadaDia {
-  tipoPan: string;       // Ej: "Pan dulce", "Hojaldrado"
+  id?: string;           // Identificador estable de la fila (para no duplicar la Orden de Producción que se crea sola)
+  tipoPan: string;       // Ej: "Pan dulce", "Hojaldrado" — siempre elegido de la lista de Modelos de Pan
   bandejas: number;      // Nº de bandejas
   panesPorBandeja: number;
   totalPanes: number;    // calculado: bandejas * panesPorBandeja
   masaId?: string;       // ID de la masa origen
+  ordenCreada?: boolean; // true cuando ya se creó/completó su Orden de Producción (puente Libreta → Inventario)
 }
 
 export interface MasaPreparadaDia {
@@ -465,8 +840,10 @@ export function saveProducciones(list: RegistroProduccion[]): void {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('dp_producciones_changed'));
   }
-  // Respaldo en la nube en segundo plano (no bloqueante)
-  pushProduccionesToCloud(normalizados).catch(() => {});
+  // Respaldo en la nube fusionando con los datos existentes (evita sobrescribir lo de otros dispositivos)
+  setTimeout(() => {
+    sincronizarProduccionesConNube().catch(() => {});
+  }, 500);
 }
 
 export function addProduccion(data: Omit<RegistroProduccion, 'id'>): RegistroProduccion {

@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { hoyLocal } from '@/lib/fecha-local';
 
 /** Evita que un nombre de producto rompa el HTML del informe. */
 export const escaparHtmlInforme = (valor: unknown): string =>
@@ -47,7 +48,7 @@ const dispararDescargaBlob = (blob: Blob, nombreArchivo: string): void => {
  * Más fiable en móvil y en PWA que html2canvas.
  */
 export const descargarInformePdf = async (datos: InformePdfDatos): Promise<void> => {
-  const fecha = new Date().toISOString().slice(0, 10);
+  const fecha = hoyLocal();
   const nombre = `DulcePlacer_${slugArchivo(datos.titulo)}_${fecha}.pdf`;
   const toastId = toast.loading('Generando PDF…');
 

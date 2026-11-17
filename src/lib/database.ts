@@ -4,9 +4,11 @@ import { FirebaseAdapter } from './firebaseAdapter';
 import { IndexedDBAdapter } from './indexedDBAdapter';
 import { SupabaseDatabase } from './supabase-db';
 import { RESCUE_DATA } from './rescue';
+import { hoyLocal } from '@/lib/fecha-local';
 
 // Definición de la interfaz IDatabase que la app espera
 export interface IDatabase {
+  triggerCerebroGerente?(): Promise<any>;
   init(): Promise<void>;
 
   // Productos
@@ -141,6 +143,11 @@ export interface IDatabase {
   addRegistroAsistencia(r: any): Promise<void>;
   getAsistenciaByFecha(fecha: string): Promise<any[]>;
 
+  // Checklist de tareas (sincronizado — NEXUS)
+  getAllChecklistCompletadas(): Promise<any[]>;
+  addChecklistCompletada(c: any): Promise<void>;
+  deleteChecklistCompletada(id: string): Promise<void>;
+
   // Nóminas
   getAllNominas(): Promise<any[]>;
   addNomina(n: any): Promise<void>;
@@ -174,7 +181,12 @@ export interface IDatabase {
 class MultiAdapter implements DatabaseAdapter {
   constructor(private primary: DatabaseAdapter, private shadow?: DatabaseAdapter) {}
 
-  async init() {
+  async triggerCerebroGerente() {
+      const supaDB = new SupabaseDatabase();
+      return await supaDB.triggerCerebroGerente();
+    }
+
+    async init() {
     await this.primary.init();
     if (this.shadow) await this.shadow.init();
   }
@@ -375,7 +387,12 @@ class NexusDatabase implements IDatabase {
     return this.adapter.deleteDocument(collection, id);
   }
 
-  async init() { await this.adapter.init(); }
+  async triggerCerebroGerente() {
+      const supaDB = new SupabaseDatabase();
+      return await supaDB.triggerCerebroGerente();
+    }
+
+    async init() { await this.adapter.init(); }
 
   // 🔄 Helper de escritura Supabase (fire-and-forget, fallo silencioso)
   private _supabaseSync(op: 'add' | 'update' | 'delete', col: string, data?: any) {
@@ -482,7 +499,8 @@ class NexusDatabase implements IDatabase {
     return configs.find(c => c.id === 'main');
   }
   async saveConfiguracion(config: any) {
-    return this.adapter.setDocument('configuracion', 'main', { ...config, id: 'main' });
+    const ts = new Date().toISOString();
+    return this.adapter.setDocument('configuracion', 'main', { ...config, id: 'main', updated_at: ts, updatedAt: ts });
   }
 
   // ─── Métodos adicionales — ahora delegan al adapter real ───
@@ -554,8 +572,10 @@ class NexusDatabase implements IDatabase {
     }
     return abiertas[0] || null;
   }
-  async addSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
-  async updateSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, s); }
+  // 🩹 FIX 2026-10-03: cada guardado de caja lleva su hora ("actualizadoEn") para que la
+  // sincronización solo suba/baje la versión MÁS NUEVA y no resucite cajas viejas ya cerradas.
+  async addSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, { ...s, actualizadoEn: new Date().toISOString() }); }
+  async updateSesionCaja(s: any) { return this.adapter.setDocument('sesiones_caja', s.id, { ...s, actualizadoEn: new Date().toISOString() }); }
   async getBackup(key: string) { 
     const doc = await this.adapter.getDocument<any>('backups', key);
     if (doc && doc.data && Array.isArray(doc.data) && doc.data.length > 0) return doc.data;
@@ -695,6 +715,11 @@ class NexusDatabase implements IDatabase {
     const all = await this.adapter.getCollection<any>('asistencia');
     return all.filter((r: any) => r.fecha === fecha);
   }
+
+  // Checklist de tareas (sincronizado — NEXUS)
+  async getAllChecklistCompletadas() { return this.adapter.getCollection('checklist_completadas'); }
+  async addChecklistCompletada(c: any) { return this.adapter.setDocument('checklist_completadas', c.id, c); }
+  async deleteChecklistCompletada(id: string) { return this._delete('checklist_completadas', id); }
 
   // Nóminas
   async getAllNominas() { return this.adapter.getCollection('nominas'); }
@@ -875,13 +900,13 @@ class NexusDatabase implements IDatabase {
   }
   async deleteCreditoCliente(id: string) { return this._delete('creditos_clientes', id); }
 
-  async addCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
-  async updateCreditoTrabajador(c: any) { return this.adapter.setDocument('creditos_trabajadores', c.id, c); }
+  async addCreditoTrabajador(c: any) { await this.adapter.setDocument('creditos_trabajadores', c.id, c); this._supabaseSync('add', 'creditos_trabajadores', c); }
+  async updateCreditoTrabajador(c: any) { await this.adapter.setDocument('creditos_trabajadores', c.id, c); this._supabaseSync('update', 'creditos_trabajadores', c); }
   async deleteCreditoTrabajador(id: string) { return this._delete('creditos_trabajadores', id); }
 
-  async addTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
-  async updateTrabajador(t: any) { return this.adapter.setDocument('trabajadores', t.id, t); }
-  async deleteTrabajador(id: string) { return this._delete('trabajadores', id); }
+  async addTrabajador(t: any) { await this.adapter.setDocument('trabajadores', t.id, t); this._supabaseSync('add', 'trabajadores', t); }
+  async updateTrabajador(t: any) { await this.adapter.setDocument('trabajadores', t.id, t); this._supabaseSync('update', 'trabajadores', t); }
+  async deleteTrabajador(id: string) { await this._delete('trabajadores', id); this._supabaseSync('delete', 'trabajadores', {id}); }
 
   // Movimientos e Inventario
   async addMovimiento(m: any) { return this.adapter.setDocument('movimientos', m.id, m); }
@@ -932,23 +957,30 @@ class NexusDatabase implements IDatabase {
   async syncCloudToLocal() {
     let cloudExito = false;
 
-    // 1️⃣ Intentar Firebase (legacy)
-    if (firebaseAdapter) {
-      try {
-        await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
-        cloudExito = true;
-      } catch (error) {
-        console.error('❌ [NEXUS] Falla al conectar con Firebase. Usando BUNDLE DE RESCATE LOCAL.', error);
-      }
-    }
+    // 🩹 FIX 2026-10-03 (celular nuevo vacío): Supabase PRIMERO. Antes se esperaba a
+    // Firebase colección por colección (31 colecciones) antes de pedirle nada a Supabase;
+    // con Firebase sin conexión eso tardaba más de 13 minutos en un aparato nuevo.
+    // Firebase (legacy) queda solo como respaldo si Supabase no respondió (ver 2️⃣ abajo).
 
-    // 2️⃣ Intentar Supabase siempre (fuente principal de datos actualizados)
+    // 1️⃣ Supabase (fuente principal de datos actualizados)
     if (true) {
       try {
         const supaDB = new SupabaseDatabase();
         const remoteProductos = await supaDB.getAllProductos();
         if (remoteProductos && remoteProductos.length > 0) {
-          const tasks: Array<{ col: string; fn: () => Promise<any[]> }> = [
+          
+        try {
+          const trabajadoresLocal = await localAdapter.getCollection('trabajadores') || [];
+          for (const t of trabajadoresLocal) {
+            try { await supaDB.addTrabajador(t); } catch(e){}
+          }
+          const creditosLocal = await localAdapter.getCollection('creditos_trabajadores') || [];
+          for (const c of creditosLocal) {
+            try { await supaDB.addCreditoTrabajador(c); } catch(e){}
+          }
+        } catch(e){}
+
+        const tasks: Array<{ col: string; fn: () => Promise<any[]> }> = [
             { col: 'productos',          fn: () => supaDB.getAllProductos() },
             { col: 'proveedores',        fn: () => supaDB.getAllProveedores() },
             { col: 'precios',            fn: () => supaDB.getAllPrecios() },
@@ -971,9 +1003,15 @@ class NexusDatabase implements IDatabase {
             (tombstonesData || []).map((t) => `${t.table}:${t.item_id}`)
           );
 
-          for (const task of tasks) {
+          // 🩹 FIX 2026-10-03: descargar todas las tablas EN PARALELO (antes una tras otra).
+          // El guardado local sigue siendo en orden, tabla por tabla.
+          const descargas = await Promise.all(
+            tasks.map((task) => task.fn().catch(() => [] as any[]))
+          );
+          for (let idx = 0; idx < tasks.length; idx++) {
+            const task = tasks[idx];
             try {
-              const items = await task.fn();
+              const items = descargas[idx];
               if (items && items.length > 0) {
                 const vivos = items.filter(
                   (i: { id?: string }) => i?.id && !deadKeys.has(`${task.col}:${i.id}`)
@@ -1001,6 +1039,21 @@ class NexusDatabase implements IDatabase {
               );
               await (localAdapter as any).hydrateFromCloud(task.col, vivos);
             } catch (_) { /* opcional */ }
+          }
+
+          // 🩹 FIX 2026-10-03: configuración del negocio. En un aparato nuevo no había
+          // configuración local y se arrancaba con la de fábrica. Solo se baja si NO hay local
+          // (LOCAL SIEMPRE GANA).
+          try {
+            const configLocal = await localAdapter.getDocument<any>('configuracion', 'main').catch(() => null);
+            if (!configLocal) {
+              const configNube = await supaDB.getConfiguracion();
+              if (configNube) {
+                await localAdapter.setDocument('configuracion', 'main', { ...configNube, id: 'main' });
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ [NEXUS] No se pudo bajar la configuración desde Supabase:', e);
           }
 
           // Sincronizar formulaciones y modelosPan desde Supabase configuracion hacia localAdapter
@@ -1037,6 +1090,16 @@ class NexusDatabase implements IDatabase {
         }
       } catch (e) {
         console.warn('☁️ [NEXUS] Supabase no disponible en este momento:', e);
+      }
+    }
+
+    // 2️⃣ Firebase (legacy) SOLO si Supabase no respondió
+    if (!cloudExito && firebaseAdapter) {
+      try {
+        await hydratarDesdeNube(localAdapter, firebaseAdapter, COLECCIONES_PRINCIPALES, true);
+        cloudExito = true;
+      } catch (error) {
+        console.error('❌ [NEXUS] Falla al conectar con Firebase. Usando BUNDLE DE RESCATE LOCAL.', error);
       }
     }
 
@@ -1114,7 +1177,7 @@ class NexusDatabase implements IDatabase {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup_full_nexus_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `backup_full_nexus_${hoyLocal()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -1202,3 +1265,5 @@ const activeAdapter: DatabaseAdapter = firebaseAdapter
 export const db = new NexusDatabase(activeAdapter);
 
 // db.init() será llamado desde main.tsx o App.tsx para asegurar un ciclo de vida predecible.
+
+

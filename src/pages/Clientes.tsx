@@ -22,7 +22,8 @@ const TIPO_CLIENTE_CONFIG: Record<ClienteTipo, { label: string; color: string; b
   particular: { label: 'Particular', color: 'text-blue-600', bg: 'bg-blue-50 dark:bg-blue-950/30', icon: User },
   empresa: { label: 'Empresa', color: 'text-purple-600', bg: 'bg-purple-50 dark:bg-purple-950/30', icon: Building2 },
   frecuente: { label: 'Frecuente', color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950/30', icon: Star },
-  mayorista: { label: 'Mayorista', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-950/30', icon: BadgeCheck },
+  // En operación Dulce Placer, "mayorista" = tienda / punto de reventa (no hay tipo CRM separado "tienda").
+  mayorista: { label: 'Mayorista / Tienda', color: 'text-indigo-600', bg: 'bg-indigo-50 dark:bg-indigo-950/30', icon: BadgeCheck },
 };
 
 interface ClientesProps {

@@ -71,6 +71,7 @@ import { ArqueoCajas } from '@/components/reportes/ArqueoCajas';
 import { useAuth } from '@/contexts/AuthContext';
 import {
     getCompromisos, saveCompromisos, addCompromiso, deleteCompromiso, updateCompromiso,
+    apartarCompromisosDeNomina, esCompromisoYaEnNomina, marcarCompromisoPagado,
     getVentasDiarias, addVentaDiaria, deleteVentaDiaria,
     calcularProyeccionQuincena, generarConsejo,
     getProducciones, addProduccion, deleteProduccion, saveProducciones, fechaLocalHoy, normalizarFechaYYYYMMDD,
@@ -256,7 +257,7 @@ export function useReportesData(props: ReportesProps) {
         : 0;
 
     // ── Estado: Compromisos y Ventas Diarias ──────────────────────
-    const [compromisos, setCompromisos] = useState<CompromisoFijo[]>(() => getCompromisos());
+    const [compromisos, setCompromisos] = useState<CompromisoFijo[]>(() => apartarCompromisosDeNomina());
     const [ventasDiarias, setVentasDiarias] = useState<VentaDiaria[]>(() => getVentasDiarias());
     const [detallesModal, setDetallesModal] = useState<string | null>(null);
 
@@ -323,7 +324,7 @@ export function useReportesData(props: ReportesProps) {
         notas: ''
     });
     const [masasPreparadas, setMasasPreparadas] = useState<MasaPreparadaDia[]>([]);
-    const [hornadas, setHornadas] = useState<HornadaDia[]>([{ tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
+    const [hornadas, setHornadas] = useState<HornadaDia[]>([{ id: crypto.randomUUID(), tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
 
     const handleAddMasa = () => setMasasPreparadas(m => [...m, { id: crypto.randomUUID(), nombre: '', cantidadArrobas: 0 }]);
     const handleRemoveMasa = (id: string) => setMasasPreparadas(m => m.filter(x => x.id !== id));
@@ -334,7 +335,7 @@ export function useReportesData(props: ReportesProps) {
         }));
     };
 
-    const handleAddHornada = () => setHornadas(h => [...h, { tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
+    const handleAddHornada = () => setHornadas(h => [...h, { id: crypto.randomUUID(), tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
     const handleRemoveHornada = (i: number) => setHornadas(h => h.filter((_, idx) => idx !== i));
     const handleHornadaChange = (i: number, field: keyof HornadaDia, value: string | number) => {
         setHornadas(prev => prev.map((h, idx) => {
@@ -368,18 +369,86 @@ export function useReportesData(props: ReportesProps) {
     const [editProduccionId, setEditProduccionId] = useState<string | null>(null);
 
     const handleSaveProduccion = () => {
+        // Pedido de Gonzalo 2026-09-20: antes, una fila de masa con el tipo elegido pero sin
+        // cantidad (o con cantidad pero sin tipo elegido) se guardaba a medias, o una hornada
+        // en la misma situacion se descartaba en silencio - sin avisar nunca cual fila quedo
+        // incompleta. Actualizado el mismo dia (mismo pedido, ampliado): tambien pasaba que
+        // una fila se agregaba (con "Registrar Masa"/"+ Hornada") y se guardaba SIN elegir
+        // el tipo NI la cantidad - completamente vacia - y eso tampoco avisaba nada. Ahora
+        // CUALQUIER fila que quede en la lista sin completar (le falte el tipo, la cantidad,
+        // o los dos) bloquea el guardado y avisa exactamente cual fila y que le falta. Si una
+        // fila se agrego por error y no se va a usar, hay que quitarla con el boton de basura
+        // antes de guardar.
+        const masasIncompletas = masasPreparadas.filter(m => {
+            const tieneNombre = !!m.nombre?.trim();
+            const tieneCantidad = Number(m.cantidadArrobas) > 0;
+            return !(tieneNombre && tieneCantidad);
+        });
+        const hornadasIncompletas = hornadas.filter(h => {
+            const tieneTipo = !!h.tipoPan?.trim();
+            const tieneCantidad = Number(h.bandejas) > 0 || Number(h.totalPanes) > 0 || Number(h.panesPorBandeja) > 0;
+            return !(tieneTipo && tieneCantidad);
+        });
+        if (masasIncompletas.length > 0 || hornadasIncompletas.length > 0) {
+            const describirFaltanteMasa = (m: typeof masasPreparadas[number]) => {
+                const falta: string[] = [];
+                if (!m.nombre?.trim()) falta.push('elegir el tipo de masa');
+                if (!(Number(m.cantidadArrobas) > 0)) falta.push('la cantidad');
+                return `Masa "${m.nombre?.trim() || 'sin nombre'}" (falta ${falta.join(' y ')})`;
+            };
+            const describirFaltanteHornada = (h: typeof hornadas[number]) => {
+                const falta: string[] = [];
+                if (!h.tipoPan?.trim()) falta.push('elegir el tipo de pan');
+                if (!(Number(h.bandejas) > 0 || Number(h.totalPanes) > 0 || Number(h.panesPorBandeja) > 0)) falta.push('la cantidad de bandejas o panes');
+                return `Pan "${h.tipoPan?.trim() || 'sin tipo'}" (falta ${falta.join(' y ')})`;
+            };
+            const detalles = [
+                ...masasIncompletas.map(describirFaltanteMasa),
+                ...hornadasIncompletas.map(describirFaltanteHornada),
+            ].join(' · ');
+            toast.error(`⚠️ Faltan datos: ${detalles}. Completa esa(s) fila(s) o quítala(s) con el botón de basura antes de guardar.`);
+            return;
+        }
+
+        const masasCompletas = masasPreparadas.filter(m => m.nombre?.trim() && Number(m.cantidadArrobas) > 0);
         const validHornadas = hornadas.filter(h => h.tipoPan.trim() && (h.bandejas > 0 || h.totalPanes > 0));
         const data: Omit<RegistroProduccion, 'id'> = {
             // Fecha local YYYY-MM-DD (nunca toISOString: en Colombia de noche salta al día siguiente)
             fecha: normalizarFechaYYYYMMDD(formProd.fecha),
-            masas: masasPreparadas,
+            masas: masasCompletas,
             hornadas: validHornadas,
             notas: formProd.notas
         };
-        const masaTotal = masasPreparadas.reduce((sum, m) => sum + m.cantidadArrobas, 0);
+        const masaTotal = masasCompletas.reduce((sum, m) => sum + m.cantidadArrobas, 0);
         if (masaTotal === 0 && validHornadas.length === 0) {
             toast.error('Ingresa al menos una masa o una hornada del día');
             return;
+        }
+
+        // 🩹 2026-10-09: no repetir la producción de un día al poner al día los atrasados.
+        // Mismo día + mismas masas y hornadas = ya estaba registrado → no se guarda otra vez.
+        if (!editProduccionId) {
+            const huella = (p: { masas?: MasaPreparadaDia[]; hornadas?: HornadaDia[] }) => JSON.stringify({
+                m: (p.masas || []).map(x => `${(x.nombre || '').trim().toLowerCase()}:${Number(x.cantidadArrobas) || 0}`).sort(),
+                h: (p.hornadas || []).map(x => `${(x.tipoPan || '').trim().toLowerCase()}:${Number(x.totalPanes) || 0}`).sort(),
+            });
+            const delMismoDia = getProducciones().filter(p => normalizarFechaYYYYMMDD(p.fecha) === data.fecha);
+            if (delMismoDia.some(p => huella(p) === huella(data))) {
+                toast.info(`La producción del ${data.fecha} ya está registrada igual. No se guardó otra vez — pasa al siguiente día.`, { duration: 6000 });
+                return;
+            }
+            if (delMismoDia.length > 0) {
+                const resumen = delMismoDia.map(p => {
+                    const arrobas = (p.masas || []).reduce((s, m) => s + (Number(m.cantidadArrobas) || 0), 0);
+                    const panes = (p.hornadas || []).reduce((s, h) => s + (Number(h.totalPanes) || 0), 0);
+                    return `• ${arrobas} arrobas de masa, ${panes} panes`;
+                }).join('\n');
+                const ok = window.confirm(
+                    `El ${data.fecha} YA tiene producción registrada:\n${resumen}\n\n` +
+                    `¿Es otra producción distinta del mismo día y quieres AGREGARLA?\n(Cancelar = no se guarda)`
+                );
+                if (!ok) return;
+            }
         }
 
         // 🩹 FIX 2026-09-16: saveProducciones/addProduccion escriben a localStorage sin
@@ -410,7 +479,7 @@ export function useReportesData(props: ReportesProps) {
         
         setFormProd(p => ({ ...p, notas: '' }));
         setMasasPreparadas([]);
-        setHornadas([{ tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
+        setHornadas([{ id: crypto.randomUUID(), tipoPan: '', bandejas: 0, panesPorBandeja: 0, totalPanes: 0 }]);
     };
     const [pinModal, setPinModal] = useState<{ ventaId: string; pin: string; error: string } | null>(null);
     const [activeTab, setActiveTab] = useState('resumen');
@@ -479,7 +548,7 @@ export function useReportesData(props: ReportesProps) {
     const totalCompromisosActivos = useMemo(() => {
         const diaActual = new Date().getDate();
         return compromisos
-            .filter(c => c.activo)
+            .filter(c => c.activo && !esCompromisoYaEnNomina(c))
             .filter(c => {
                 const d = typeof c.diaDeCobro === 'number' ? c.diaDeCobro : parseInt(c.diaDeCobro as string) || 1;
                 return diaActual <= 15 ? d >= 1 && d <= 15 : d >= 16 && d <= 31;
@@ -501,7 +570,9 @@ export function useReportesData(props: ReportesProps) {
     const [formCompromiso, setFormCompromiso] = useState({
         nombre: '', monto: '', diaDeCobro: '1', categoria: 'Otros' as GastoCategoria, 
         esPropietario: false, persona: '',
-        frecuencia: 'mensual' as 'quincenal' | 'mensual' | 'solo_q1' | 'solo_q2'
+        frecuencia: 'mensual' as 'quincenal' | 'mensual' | 'solo_q1' | 'solo_q2',
+        ventanaDias: '2',
+        notas: '',
     });
     const [formVenta, setFormVenta] = useState({
         id: '' as string | undefined,
@@ -800,33 +871,34 @@ export function useReportesData(props: ReportesProps) {
             toast.error('Nombre y monto son obligatorios'); return;
         }
         
+        const ventana = Math.min(7, Math.max(0, parseInt(formCompromiso.ventanaDias) || 2));
+        const datos = {
+            nombre: formCompromiso.nombre,
+            monto,
+            categoria: formCompromiso.categoria,
+            diaDeCobro: isNaN(dia) ? 1 : Math.min(31, Math.max(1, dia)),
+            frecuencia: formCompromiso.frecuencia,
+            esPropietario: formCompromiso.esPropietario,
+            persona: formCompromiso.persona || undefined,
+            ventanaDias: ventana,
+            notas: formCompromiso.notas?.trim() || undefined,
+        };
         const cId = (formCompromiso as any).id;
         if (cId) {
-            updateCompromiso(cId, {
-                nombre: formCompromiso.nombre,
-                monto,
-                categoria: formCompromiso.categoria,
-                diaDeCobro: isNaN(dia) ? 1 : Math.min(31, Math.max(1, dia)),
-                frecuencia: formCompromiso.frecuencia,
-                esPropietario: formCompromiso.esPropietario,
-                persona: formCompromiso.persona || undefined,
-            });
+            updateCompromiso(cId, datos);
             toast.success('Compromiso actualizado');
         } else {
-            const nuevo = addCompromiso({
-                nombre: formCompromiso.nombre, monto,
-                categoria: formCompromiso.categoria,
-                diaDeCobro: isNaN(dia) ? 1 : Math.min(31, Math.max(1, dia)),
-                frecuencia: formCompromiso.frecuencia,
-                activo: true,
-                esPropietario: formCompromiso.esPropietario,
-                persona: formCompromiso.persona || undefined,
-            });
+            addCompromiso({ ...datos, activo: true });
             toast.success('Compromiso guardado');
         }
         
         setCompromisos(getCompromisos());
-        setFormCompromiso({ nombre: '', monto: '', categoria: 'Otros', diaDeCobro: '', esPropietario: false, persona: '' });
+        setFormCompromiso({ nombre: '', monto: '', categoria: 'Otros', diaDeCobro: '', esPropietario: false, persona: '', frecuencia: 'mensual', ventanaDias: '2', notas: '' });
+    };
+
+    const handleMarcarCompromisoPagado = (id: string) => {
+        setCompromisos(marcarCompromisoPagado(id, 'Marcado desde la ficha'));
+        toast.success('Quedó anotado como pagado en este ciclo');
     };
 
     const handleToggleCompromiso = (id: string) => {
@@ -1174,6 +1246,7 @@ export function useReportesData(props: ReportesProps) {
         nuevo: null,
         handleToggleCompromiso,
         handleDeleteCompromiso,
+        handleMarcarCompromisoPagado,
         handleAddVentaDiaria,
         ef: 0,
         nq: 0,

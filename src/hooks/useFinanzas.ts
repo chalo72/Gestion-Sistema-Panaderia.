@@ -14,6 +14,76 @@ import type {
   Venta,
 } from '@/types';
 import { toast } from 'sonner';
+import { addMovimientoBoveda, getMovimientosBoveda } from '@/lib/boveda-store';
+import { SupabaseDatabase } from '@/lib/supabase-db';
+
+// 🩹 2026-10-20 (AUTORIZO Gonzalo): un gasto que sale de una CAJA del POS no se restaba del
+// cierre de esa caja (el cierre solo mira los movimientos de la caja). Ahora, al guardar el gasto,
+// se anota una "salida" en esa caja; y al borrar el gasto, se devuelve con una "entrada".
+// Solo aplica a gastos en efectivo, ya pagados, con origen 'pos' (no toca Recepciones ni créditos).
+async function moverGastoEnCaja(g: any, tipo: 'salida' | 'entrada'): Promise<'ok' | 'cerrada' | 'no-aplica'> {
+  const monto = Math.round((Number(g?.monto) || 0) * 100) / 100;
+  const efectivo = !g?.metodoPago || g.metodoPago === 'efectivo';
+  if (g?.origenTipo !== 'pos' || !g?.cajaId || monto <= 0 || !efectivo || g?.estado === 'pendiente') return 'no-aplica';
+  try {
+    const sesiones = await db.getAllSesionesCaja();
+    const sesion: any = sesiones.find((s: any) => s.id === g.cajaId);
+    if (!sesion) return 'no-aplica';
+    const movs: any[] = sesion.movimientos || [];
+    const idSalida = `gasto-${g.id}`;
+    const idMov = tipo === 'salida' ? idSalida : `${idSalida}-reverso`;
+    if (movs.some(m => m.id === idMov)) return 'ok'; // ya estaba, no repetir
+    if (tipo === 'entrada' && !movs.some(m => m.id === idSalida)) return 'no-aplica'; // nunca se descontó
+    if (sesion.estado !== 'abierta') return 'cerrada';
+    const mov = {
+      id: idMov,
+      cajaId: sesion.id,
+      tipo,
+      monto,
+      motivo: tipo === 'salida' ? `Gasto: ${g.descripcion || ''}` : `Reverso gasto anulado: ${g.descripcion || ''}`,
+      fecha: new Date().toISOString(),
+      usuarioId: g.usuarioId || 'sistema',
+    };
+    const actualizada = { ...sesion, movimientos: [...movs, mov] };
+    await db.updateSesionCaja(actualizada);
+    new SupabaseDatabase().updateSesionCaja(actualizada).catch(() => {});
+    window.dispatchEvent(new Event('dp_sesiones_caja_changed'));
+    return 'ok';
+  } catch (e) {
+    console.warn('[useFinanzas] No se pudo mover el gasto en la caja:', e);
+    return 'no-aplica';
+  }
+}
+
+// 🩹 2026-10-20 (AUTORIZO Gonzalo): borrar un gasto pagado desde una BÓVEDA no devolvía la plata.
+// Solo devuelve si encuentra el egreso original ("Gasto: <descripción>", mismo monto y bóveda)
+// y si todavía no se había devuelto. Así no se inventa plata en gastos viejos sin egreso.
+function devolverGastoABoveda(g: any): boolean {
+  const bovedaId = g?.bovedaId;
+  const monto = Number(g?.monto) || 0;
+  if (!bovedaId || bovedaId === '__ninguno__' || monto <= 0) return false;
+  try {
+    const movs = getMovimientosBoveda();
+    const motivoEgreso = `Gasto: ${g.descripcion || ''}`;
+    const motivoReverso = `Reverso gasto anulado: ${g.descripcion || ''}`;
+    const iguales = (m: any) => m.bovedaOrigenId === bovedaId || m.bovedaDestinoId === bovedaId;
+    const egresos = movs.filter(m => m.tipo === 'Egreso' && iguales(m) && m.motivo === motivoEgreso && Math.abs(m.monto - monto) < 1).length;
+    const reversos = movs.filter(m => m.tipo === 'Ingreso' && iguales(m) && m.motivo === motivoReverso && Math.abs(m.monto - monto) < 1).length;
+    if (egresos <= reversos) return false;
+    addMovimientoBoveda({
+      bovedaDestinoId: bovedaId,
+      monto,
+      motivo: motivoReverso,
+      tipo: 'Ingreso',
+      usuarioResponsable: 'Sistema (gasto anulado)',
+      metodoPago: g.metodoPago || 'Efectivo',
+    });
+    return true;
+  } catch (e) {
+    console.warn('[useFinanzas] No se pudo devolver el gasto a la bóveda:', e);
+    return false;
+  }
+}
 
 interface UseFinanzasParams {
   onAjustarStock: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida', motivo: string) => Promise<void>;
@@ -31,6 +101,8 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
     const newG = { ...g, id: generateUUID() };
     await db.addGasto(newG as any);
     setGastos(prev => [newG as Gasto, ...prev]);
+    const r = await moverGastoEnCaja(newG, 'salida');
+    if (r === 'cerrada') toast.warning('Esa caja ya está cerrada: el gasto quedó guardado, pero no se restó de su cierre');
   }, []);
 
   const updateGasto = useCallback(async (id: string, updates: Partial<Gasto>) => {
@@ -42,9 +114,15 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
   }, [gastos]);
 
   const deleteGasto = useCallback(async (id: string) => {
+    const gasto: any = gastos.find(g => g.id === id);
     await db.deleteGasto(id);
     setGastos(prev => prev.filter(g => g.id !== id));
-  }, []);
+    if (!gasto) return;
+    const r = await moverGastoEnCaja(gasto, 'entrada');
+    if (r === 'ok') toast.success(`Se devolvieron $${Math.round(Number(gasto.monto) || 0).toLocaleString('es-CO')} a la caja`);
+    if (r === 'cerrada') toast.warning('Esa caja ya está cerrada: la plata del gasto no se devolvió a su cierre');
+    if (devolverGastoABoveda(gasto)) toast.success(`Se devolvieron $${Math.round(Number(gasto.monto) || 0).toLocaleString('es-CO')} a la bóveda`);
+  }, [gastos]);
 
   // Refrescar lista cuando otro módulo anula/edita gastos (Mi Quincena, etc.)
   useEffect(() => {
@@ -241,3 +319,4 @@ export function useFinanzas({ onAjustarStock }: UseFinanzasParams) {
     addTrabajador, updateTrabajador, deleteTrabajador,
   };
 }
+

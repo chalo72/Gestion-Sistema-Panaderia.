@@ -1,0 +1,70 @@
+# Lo que NO se sube a Vercel (solo se excluye ruido, copias y secretos locales).
+# El build necesita: src, public, api, scripts, index.html, package*.json, configs (vite/ts/tailwind/postcss), vercel.json.
+
+# Copias y carpetas pesadas / de herramientas
+/app/
+/mcp-server/
+/n8n-setup/
+/archive/
+/Claude outputs/
+/.claude/
+/.agent/
+/.agents/
+/.cursor/
+/.githooks/
+/.github/
+/.vscode/
+/docs/
+/e2e/
+/testsprite_tests/
+/playwright-report/
+/test-results/
+/screenshots/
+/screenshots-mobile/
+/screenshots-pos/
+/herramientas/
+/supabase/
+/sql_pendientes/
+/_respaldo*/
+/.respaldos*/
+/respaldo_agente*/
+/_instalar_protecciones*/
+/graphify-out/
+/__pycache__/
+
+# Secretos y variables locales (Vercel usa las del proyecto)
+/key.txt
+/.env
+/.env.*
+!/.env.example
+
+# Scripts sueltos, pruebas y basura de la raiz
+/*.py
+/*.zip
+/*.png
+/*.sql
+/*.bat
+/*.vbs
+/check*.js
+/check*.cjs
+/check*.mjs
+/debug_*.js
+/inspect_*.js
+/list_users.js
+/verify*.js
+/test*.js
+/test*.ts
+/patch-*.cjs
+/fix_*.cjs
+/fix_*.js
+/heal.cjs
+/decode.cjs
+/scan_basura.cjs
+/clean_basura.cjs
+/captura.mjs
+/delete.mjs
+/temp_*.txt
+/*_backup.txt
+/server-proxy.js
+/RESCATE_*.csv
+/RESCATE_*.txt

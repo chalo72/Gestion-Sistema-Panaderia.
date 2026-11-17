@@ -3,6 +3,7 @@ import { Clock, CheckCircle2, LogOut, Users, ChevronDown, ChevronUp, ChevronLeft
 import { toast } from 'sonner';
 import { escapeHtml } from '@/lib/utils';
 import type { Trabajador, RegistroAsistencia } from '@/types';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 
 interface AsistenciaProps {
   trabajadores: Trabajador[];
@@ -14,7 +15,7 @@ function horaActual() {
   return new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true });
 }
 function fechaHoy() {
-  return new Date().toISOString().split('T')[0];
+  return hoyLocal();
 }
 function horaISO() {
   return new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -29,7 +30,7 @@ function getWeekDays(offset: number): string[] {
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return d.toISOString().split('T')[0];
+    return ymdLocal(d);
   });
 }
 

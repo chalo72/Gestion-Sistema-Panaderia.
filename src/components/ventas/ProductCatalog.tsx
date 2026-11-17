@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Search, Plus, Package, ArrowLeft, Edit2, X, Save, Zap, Mic } from 'lucide-react';
 import { CalculadoraRapida } from './CalculadoraRapida';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,7 @@ interface ProductCatalogProps {
     onEditProduct?: (id: string, updates: Partial<Producto>) => Promise<void>;
     onPrecioVentaCorregido?: (productoId: string, precioAnterior: number, precioNuevo: number) => void;
     onAjustarStock?: (productoId: string, cantidad: number, tipo: 'entrada' | 'salida' | 'ajuste', motivo: string) => Promise<void>;
-    onOpenAdHoc?: () => void;
+    onOpenAdHoc?: (nombreSugerido?: string) => void;
     cart?: { producto: { id: string }; cantidad: number }[];
 }
 
@@ -37,6 +37,29 @@ export function ProductCatalog({
     const [editForm, setEditForm] = useState({ nombre: '', precioVenta: 0, descripcion: '', stock: 0 });
     const [multiplier, setMultiplier] = useState(1);
     const [modoHoraPico, setModoHoraPico] = useState(false);
+
+    // Paginación infinita (Virtualización suave) para evitar congelar el celular
+    const [visibleCount, setVisibleCount] = useState(24);
+    const observerTarget = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setVisibleCount(24);
+    }, [searchTerm, selectedCategory]);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            entries => {
+                if (entries[0].isIntersecting) {
+                    setVisibleCount(prev => prev + 24);
+                }
+            },
+            { rootMargin: '200px' }
+        );
+        if (observerTarget.current) observer.observe(observerTarget.current);
+        return () => observer.disconnect();
+    }, []);
+
+    const visibleProducts = useMemo(() => productos.slice(0, visibleCount), [productos, visibleCount]);
 
     const handleAddToCart = (producto: Producto) => {
         for (let i = 0; i < multiplier; i++) onAddToCart(producto);
@@ -188,7 +211,7 @@ export function ProductCatalog({
                     {/* Botón producto ad-hoc */}
                     {onOpenAdHoc && (
                         <button
-                            onClick={onOpenAdHoc}
+                            onClick={() => onOpenAdHoc()}
                             title="Agregar producto no listado"
                             className="shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-violet-100 dark:bg-violet-900/30 border border-violet-200 dark:border-violet-800 flex items-center justify-center hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-all active:scale-90"
                         >
@@ -283,7 +306,7 @@ export function ProductCatalog({
                             <p className="text-sm font-bold text-slate-400">No se encontró "{searchTerm}"</p>
                             {onOpenAdHoc && (
                                 <button
-                                    onClick={onOpenAdHoc}
+                                    onClick={() => onOpenAdHoc(searchTerm)}
                                     className="flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-black shadow-sm active:scale-95 transition-all"
                                 >
                                     <Plus className="w-4 h-4" /> Agregar "{searchTerm}" al catálogo
@@ -291,8 +314,8 @@ export function ProductCatalog({
                             )}
                         </div>
                     ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {productos.map(producto => (
+                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                            {visibleProducts.map(producto => (
                                 <FastSearchCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
                                     onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
@@ -337,8 +360,8 @@ export function ProductCatalog({
                             <p className="text-sm font-bold text-slate-400">Sin productos en esta categoría</p>
                         </div>
                     ) : (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                            {productos.map(producto => (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4">
+                            {visibleProducts.map(producto => (
                                 <ProductCard key={producto.id} producto={producto} inventario={inventario}
                                     categorias={categorias} onAddToCart={handleAddToCart} formatCurrency={formatCurrency}
                                     onEdit={onEditProduct ? (e) => openEditModal(producto, e) : undefined}
@@ -347,6 +370,8 @@ export function ProductCatalog({
                         </div>
                     )
                 )}
+                {/* Intersection Observer Target */}
+                <div ref={observerTarget} className="h-10 w-full shrink-0" />
                 </div>
             )}
 
@@ -415,7 +440,9 @@ function ProductCard({ producto, inventario, categorias, onAddToCart, formatCurr
     const enCarrito = (cantidadEnCarrito ?? 0) > 0;
 
     return (
-        <div className={cn(
+        <div 
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '220px' }}
+            className={cn(
             "group bg-white dark:bg-slate-800 rounded-3xl border transition-all duration-300 cursor-pointer active:scale-[0.95] overflow-hidden flex flex-col",
             enCarrito
                 ? "border-emerald-400 dark:border-emerald-600 ring-2 ring-emerald-400/40 shadow-lg shadow-emerald-500/20"
@@ -505,6 +532,7 @@ function FastSearchCard({ producto, inventario, categorias, onAddToCart, formatC
 
     return (
         <div
+            style={{ contentVisibility: 'auto', containIntrinsicSize: '180px' }}
             onClick={() => onAddToCart(producto)}
             className={cn(
                 "group relative bg-white dark:bg-slate-900 rounded-3xl p-4 shadow-sm border-2 flex items-center justify-between gap-4 cursor-pointer transition-all active:scale-[0.98]",

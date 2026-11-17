@@ -4,6 +4,7 @@ import { db } from '@/lib/database';
 import { consultarAgente } from '@/constants/agentes';
 import type { DBMisionAgent, DBHallazgoAgente } from '@/lib/database';
 import { toast } from 'sonner';
+import { ymdLocal, hoyLocal } from '@/lib/fecha-local';
 
 /**
  * AgenteMissionDispatcher (v1.0.1 - NEXUS CORE + EAGLE EYES 🦅👁️)
@@ -104,7 +105,7 @@ export function AgentMissionDispatcher() {
                 - Productos en catálogo: ${productos.length}
                 - Ítems en inventario: ${inventario.length}
                 - Alertas de stock crítico: ${inventario.filter(i => i.stockActual <= i.stockMinimo).length}
-                - Facturas procesadas hoy: ${facturas.filter(f => f.fechaEscaneo.startsWith(new Date().toISOString().split('T')[0])).length}
+                - Facturas procesadas hoy: ${facturas.filter(f => ymdLocal(f.fechaEscaneo) === hoyLocal()).length}
 
                 HISTORIAL DE INTELIGENCIA (ENGRAMAS):
                 ${engramas || 'No hay hallazgos previos registrados.'}

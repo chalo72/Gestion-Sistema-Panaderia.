@@ -1,5 +1,31 @@
 # 🧠 CORE MEMORY — Gestión de Precios y Proveedores (Dulce Placer)
-> Última actualización: 2026-09-15
+> Última actualización: 2026-10-24
+
+# 🛑🔴🛑🔴🛑 PARE — CUALQUIER AGENTE, CUALQUIER CHAT: LEE ESTO ANTES DE TOCAR VERCEL 🛑🔴🛑🔴🛑
+
+> ## ⛔ ESTO NO ES OPCIONAL. APLICA SIEMPRE QUE VAYAS A:
+> - Desplegar (`vercel --prod`, `PUBLICAR_A_PRODUCCION.bat`, o cualquier deploy)
+> - Editar código que se vaya a desplegar
+> - **Y TAMBIÉN cuando vayas a tocar CONFIGURACIÓN DE VERCEL — variables de entorno, dominios, deployments — YA SEA por el dashboard web O por herramientas de API/MCP (`mcp__Vercel__*`).** Esto NO es solo sobre deploys de código.
+
+## 🔴🔴🔴 REGLA #1 — HAY DOS PROYECTOS DE VERCEL EN LA CUENTA. UNO ES UNA TRAMPA. 🔴🔴🔴
+
+| | NOMBRE EN VERCEL | PROJECT ID | ¿ES EL REAL? |
+|---|---|---|---|
+| ✅ **USA SIEMPRE ESTE** | **`app`** | **`prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`** | **SÍ.** Sirve `app-eight-sigma-13.vercel.app` — el sitio que Gonzalo realmente abre y usa. |
+| ❌ **NUNCA USES ESTE** | `panaderia-dulce-placer` | `prj_FadaTb8fTqzTXtBNxcs1u9qHPA4Z` | **NO.** Proyecto huérfano/duplicado. Nadie lo abre. No sirve nada real. |
+
+**⚠️ TODOS LOS AGENTES SE CONFUNDEN CON ESTO, SIN EXCEPCIÓN, PORQUE `panaderia-dulce-placer` "SUENA" COMO EL PROYECTO CORRECTO POR EL NOMBRE DEL NEGOCIO — Y NO LO ES.**
+
+Confirmado repetidas veces, la más reciente el **2026-09-19**: un agente (Claude, esta misma familia de asistente) buscó el proyecto por nombre, encontró `panaderia-dulce-placer`, y agregó ahí una variable de entorno (`NVIDIA_API_KEY`) pensando que era el proyecto real. No tuvo ningún efecto porque ese proyecto no se usa — el usuario tuvo que corregir al agente explícitamente, citando ESTE MISMO documento, y hubo que repetir el cambio en `app` (el proyecto correcto).
+
+### ✅ CÓMO NO CAER EN LA TRAMPA
+**Antes de leer, escribir o cambiar CUALQUIER COSA en Vercel — env vars, dominios, deployments, lo que sea — usa siempre el Project ID exacto `prj_jYDczKuEmfcLp1zyX5GTIWNjMleq` directamente (o el nombre exacto `app`). NUNCA busques el proyecto "por nombre parecido al negocio" ni asumas que el que suena más obvio es el correcto — es al revés.** Si por cualquier razón tienes duda, compara el dominio/alias del proyecto (`app-eight-sigma-13.vercel.app`) contra lo que el usuario realmente abre en el navegador, ANTES de tocar nada.
+
+## 🔴🔴🔴 REGLA #2 — HAY DOS COPIAS DEL CÓDIGO FUENTE EN ESTE REPO 🔴🔴🔴
+Ver el detalle completo justo abajo, en "🚨 CUÁL COPIA ES LA BUENA". Resumen: `src/` (raíz) y `app/src/` están vinculadas al MISMO proyecto de Vercel (el de la tabla de arriba) — quien despliegue desde cualquiera de las dos carpetas sobrescribe a la otra en producción. Compara antes de asumir cuál es la buena.
+
+---
 
 ## 🚨 CUÁL COPIA ES LA BUENA — LÉELO ANTES DE DESPLEGAR O EDITAR (actualizado 2026-09-15, tarde)
 Hay **dos copias del código fuente** en este repo: `src/` (raíz) y `app/src/`. Ambas carpetas están vinculadas al **mismo proyecto de Vercel** (`projectId: prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`, nombre de proyecto "app", sirviendo `app-eight-sigma-13.vercel.app`) — quien sea que corra `vercel --prod` desde una u otra carpeta es lo que queda publicado. **Ninguna de las dos es "la buena" de forma permanente** — han evolucionado en paralelo con trabajo real e independiente en cada una, y se pisan entre sí cada vez que se despliega la que no toca. Antes de decir "esta es la buena", compara — no asumas.
@@ -77,6 +103,25 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 ## 🔑 Decisiones Clave (Historial)
 | Fecha | Decisión | Razón |
 |-------|----------|-------|
+| 2026-10-24 | Deploy a producción hecho por un agente (DSH/DeepSeek) desde la raíz con `npx vercel --prod` | Gonzalo dijo «continúa» y no quedaba otro pendiente que publicar: el trabajo del 24-oct estaba terminado y sin publicar. Se verificó antes (tests + build local) y se confirmó el Project ID correcto (`app`) en `.vercel/project.json` para no caer en la trampa `panaderia-dulce-placer`. Producción quedó en `version.json` 1.1.1186. Un solo deploy, sin repetir (protección anti-abuso de Vercel). |
+| 2026-10-24 | Avisos de cambio de turno: WhatsApp + cartel en la app con «Ya lo leí» | Al guardar un cambio en Nómina → Horario se crean avisos (`avisos-turno.ts`) para quien no viene y quien cubre; banner global en `CentinelaProvider` se cierra al leer. WhatsApp: abre `wa.me` al teléfono de Trabajadores; si hay CallMeBot del negocio también avisa ahí. Sin teléfono en Trabajadores solo queda el aviso en app. |
+| 2026-10-24 | Horario de Nómina = ciclo rotativo equitativo (Andrea mañana / Erika+Dayana tarde / Shirley finde) | Gonzalo dio el esquema real: Lun–Vie fijas; Shirley cubre sáb/dom para que las 3 descansen 1 finde cada 3 semanas; Dayana iglesia el domingo de su turno; semana 4 = semana 1. Reescrito `src/lib/horario-tienda.ts` + `HorarioSiEnferma.tsx`. Nombres se eligen desde Trabajadores (editables). Cambios (cita/médico/permiso) quedan con motivo + nota y se leen en Liquidar → asistencia. Claves LS: `dulce_horario_tienda_*_v2`. Tests: `horario-tienda.test.ts` OK. Pendiente: marcar “esta semana es la N” al usar por primera vez; deploy con `PUBLICAR_A_PRODUCCION.bat` en PC. |
+| 2026-10-24 | Supervivencia caja familia + análisis operativo en Diagnóstico | Categoría `Familia` + catálogo personas; gastos exigen persona; panel ADMIN/GERENTE en `DiagnosticoFinanciero` (semaforo, cola pagos, fuga familiar, semanas/Q, proveedores, patrones, torta/helado/gaseosa, equilibrio, capital a proteger); saldo físico bóveda vía `setBovedaSaldoReal`; agente `tesoreria-supervivencia`. Libs: `familia-duenos.ts`, `analisis-operativo.ts`, `calcularPanoramaSupervivencia`. No inventa cifras. |
+| 2026-10-24 | Los 6 hooks de Claude Code también corren en Cursor (`.cursor/hooks.json`) | Gonzalo pidió portarlos. Siguen llamando a `.claude/hooks/` sin reescribir esas reglas. En Cursor, editar un archivo de `LOCKED_RESOURCES.md` se bloquea hasta que el usuario escriba AUTORIZO en ese chat (Cursor no muestra tarjeta de “preguntar” antes de editar). Una clave en texto plano se bloquea hasta FALSO POSITIVO o AUTORIZO CLAVE. Deploy desde `app/` se niega; publicar desde la raíz pregunta. SQL destructivo de Supabase pregunta. Tras editar `.ts`/`.tsx` de `src/` o `api/` avisa errores de tipos nuevos. Al abrir un chat nuevo informa la rama y archivos tocados en 3 horas. Hay que abrir un chat nuevo para que el aviso de inicio entre; si los hooks no aparecen, reiniciar Cursor. |
+| 2026-10-22 | D:\DulcePlacerEvidencia se revisa con las reglas, no es solo archivo | La carpeta dejó de recibir videos el 21 oct 20:59 porque el escritor viejo no corre y la app guardaba en Supabase. Ahora, en la app local, el botón «Revisar videos de D:\ con las reglas» saca fotogramas (ffmpeg) de los mp4 de Evidencia y PruebaIA, los pasa por ODYSSEUS con las reglas forenses y marca la ficha. Los hallazgos del forense DVR también copian el fotograma a sin_asignar. Hace falta reiniciar ABRIR_DULCE_PLACER_LOCAL para cargar /__evidencia. |
+| 2026-10-22 | Reglas forenses de producción y zona de helados + bloque de ocultación (tercero, trapo, gaveta tapada) | Gonzalo aprobó las reglas recomendadas y pidió el mismo criterio en horno/producción y vitrina de helados. Nuevas categorías: helado_sin_cobro, helado_extra, helado_personal, helado_regalo, topping_sin_cobro, nevera_helado_abierta, pan_se_come, pan_se_lleva, masa_bolsillo, bandeja_oculta, puerta_trasera, entrega_tercero, trapo_servilleta, gaveta_abierta, tapa_gaveta, salida_con_bulto, basura_sospechosa, dos_en_gaveta, visita_mostrador. Zona horno del vivo quedó activa. |
+| 2026-10-22 | Reglas forenses ampliadas: delantal, bolsos bajo caja, manga/ropa, fajo; identidad sin inventar parentesco | Gonzalo: formas reales de ocultar plata (bolsos bajo caja, delantal). Añadidas categorías `plata_delantal`, `bolsos_bajo_caja`, `plata_manga_ropa`, `fajo_fuera_caja`, `cambio_falso`. Identificar dueño/hijos/empleados desde video solo NO es fiable sin galería de rostros etiquetada o marca manual + cruce con turno/login. |
+| 2026-10-22 | Forense DVR ≠ vigilancia en vivo; escaneo solo disco histórico + reglas billete/bolsillo | Gonzalo simuló billete→bolsillo y el sistema no lo vio: el “escaneo” mezclaba vivo/bitácora y tomaba ~1 fotograma escaso por tramo. Ahora pestaña Escaneo = **forense de grabaciones ya en el DVR** (7/14/21 días), prioriza track 101 (caja) ~55%, 2–3 fotogramas por tramo, salta `live-fallback`, 11 reglas forenses, título/REPORTE con fecha, carpetas Sospechoso→Evidencia→Cuarentena. El vivo sigue aparte (ODYSSEUS). Archivos: `odysseus-vigilancia.ts`, `dvr-hikvision.ts`, `bitacora-visual.ts`, `Videovigilancia.tsx`. Límite real: un gesto de 2 s aún puede caer entre fotogramas; densificar más o clips cortos alrededor de gaveta es el siguiente paso. |
+| 2026-10-06 | Seguridad Supabase (Riesgo RLS Aceptado) | Para no romper el acceso de las vendedoras y el flujo actual (login local sin `supabase.auth`), se decidió mantener temporalmente la política `allow_all_access` en las tablas de Supabase. Este es un riesgo aceptado (Option 3) dado que es un sistema POS interno. La ofuscación de la URL y el `.env` son la defensa principal actual. |
+| 2026-10-06 | Optimización Arquitectura (God Hook Mitigado) | Para solucionar el problema de re-renders masivos causados por `usePriceControl.ts` en `App.tsx` *sin* destruir el contexto global ni reescribir la app, se inyectaron `useCallback` en los handlers de menú de `App.tsx` y se envolvieron `Sidebar` y `BottomNavBar` con `React.memo`. Esto frena drásticamente el recalentamiento en móviles al aislar las actualizaciones. |
+| 2026-10-06 | Cirugía TypeScript y Preservación de Contexto | Siguiendo instrucción estricta de NO borrar datos/contexto: Se repararon únicamente los errores estructurales graves en `Ventas.tsx` (aserciones incompletas de Producto perdiendo `margenUtilidad` y `createdAt`) y `Reportes.tsx` (fallo de interfaz en `exportCSV` y propiedad fantasma `v.hora`). Los +1500 warnings de "variables no usadas" se dejaron intactos para no romper flujos en desarrollo. |
+| 2026-10-06 | Auditoría Extrema, Fix PWA Lazy Load y Fix Bug Producción | 1) **PWA Lazy Load**: Se detectó que solo \`Inventario.tsx\` estaba protegido contra fallos de caché PWA. Se parcheó \`App.tsx\` para usar \`lazyWithRetry\` en rutas críticas (\`Ventas\`, \`ControlCaja\`, \`Produccion\`). 2) **Bug Producción Semana**: Se corrigió bug en \`Produccion.tsx\` -> \`handleLanzarPlan\` donde \`cantidadPlaneada\` era nula al lanzar desde el Plan Semanal (el item no tenía propiedad \`panes\`). Ahora calcula con: \`item.panes || Math.round(item.arrobas * modelo.panesPorArroba)\`. 3) **Deuda Técnica**: Reportada necesidad de limpiar miles de warnings de Typescript y refactorizar \`usePriceControl.ts\` (God Hook) para evitar re-renders. |
+| 2026-09-30 | Fix Reversión de Moneda (Euro a COP) y Reparación/Optimización Crítica de Nómina | 1) **Moneda (Reversión a Euro)**: La configuración perdía el formato `COP` al recargar porque en la función `saveConfiguracion` (local IndexedDB) faltaba agregar explícitamente el `updated_at`. Como consecuencia, `useRealtimeSync.ts` (encargado de sincronizar la nube con lo local) detectaba que la versión remota (Euro, que nunca se actualizó por tener timestamp más nuevo que la local) era la correcta y sobrescribía el cambio local con `EUR`. Se agregó autoestampado seguro de fecha en `src/lib/database.ts` -> `saveConfiguracion()`. 2) **Crash en Nómina (Blank Page) y Optimización**: Históricamente los registros `nominaExistente.items` llegaban de la base de datos sin arreglo instanciado (`undefined`), lo que provocaba crash de React al hacer un `.reduce()`. Se agregó un fallback. A su vez, el cálculo de asistencia empleaba filtros anidados de orden $O(N^3)$ que congelaba la pestaña; se reemplazó por un mapeo estricto `Map(O(1))` en `Nomina.tsx`. |
+| 2026-09-30 | Fix crítico de Sincronización en Libreta de Horno y Catálogo de Panes Faltantes | 1) **Sincronización destructiva reparada**: El PC sobrescribía la copia en la nube al llamar a `pushProduccionesToCloud` sin fusionar cuando se abría o actualizaba. Se reemplazó por `sincronizarProduccionesConNube` en `saveProducciones` para asegurar que todo guardado local baje, fusione y luego suba los datos sin pisar lo del celular. 2) **Buscador Inteligente de Panes**: "Pan de mantequilla" no aparecía si el pan se llamaba "Pan Mantequilla" (búsqueda exacta). Se actualizó `DistribuidorArroba.tsx` para usar división por palabras. 3) **Carga Inmutable Forzada**: Se quitó la limitante (`hasRealMod ? [] : ...`) en `useProduccionHook.ts` que impedía cargar los panes de `modelos-inmutables.ts` si existía al menos un dato en la DB, asegurando que ningún pan blindado desaparezca de la lista. Falta hacer deploy manual con el `.bat` en PC. |
+| 2026-09-30 | Playwright agregado al MCP de Claude (Desktop y Claude Code), paquete `@playwright/mcp@latest`. No usa clave. Reiniciar Claude para que aparezca. | Pedido de Gonzalo, mismo sitio que Perplexity. |
+| 2026-09-29 noche | Perplexity agregado al MCP de Claude (Desktop `claude_desktop_config.json` y Claude Code en `~/.claude.json`), paquete `@perplexity-ai/mcp-server`. | Pedido de Gonzalo. No había clave `PERPLEXITY_API_KEY` en el equipo: el campo quedó vacío. Hay que pegar la clave de https://www.perplexity.ai/settings/api y reiniciar Claude. |
+| 2026-09-29 noche | Instaladas las protecciones del paquete `_instalar_protecciones_2026-09-30` (Cursor, `INSTALAR.ps1`). No se tocó código de la app. | Quedaron: hooks Claude Code (revisión de tipos tras cada edición y aviso al iniciar), agentes de solo lectura en `.claude/agents/`, y chequeo git en `.git/hooks/pre-commit` + `.githooks/` que frena commits con `key.txt`, `.env` u otras claves. Deshacer: `powershell -ExecutionPolicy Bypass -File _instalar_protecciones_2026-09-30\DESHACER.ps1`. La clave ya publicada en GitHub sigue expuesta: hay que rotarla en el proveedor. La primera revisión de tipos de Claude Code tarda cerca de un minuto; las siguientes, unos segundos. |
+| 2026-09-18 noche | Panes Faltantes ("Pan pequeño de queso"), Optimización Modo Ayudante Móvil y Auditoría/Edición de Cuadres de Caja | Solicitud explícita de Gonzalo: 1) **Panes Faltantes / Catálogo Universal**: Se aseguró la presencia de `"Pan pequeño de queso"` en `modelos-inmutables.ts` / `.json` y se actualizaron los selectores de modelos en `DiagnosticoFinanciero.tsx` y `DistribuidorArroba.tsx` para mostrar siempre todos los modelos agrupados (`optgroup` de sugeridos para la masa + todos los demás panes) evitando que se oculten panes por diferencias de formulación. 2) **Modo Ayudante en Móvil**: Las secciones ahora inician cerradas (`defaultAbierto = false`), el selector de masas se rediseñó verticalmente a ancho completo para evitar que quede aplastado en celulares, y se añadió historial reactivo inmediato bajo el formulario de Venta Diaria. 3) **Historial y Edición de Cuadres de Caja**: En `ControlCaja.tsx` y `useVentas.ts`, se habilitó el historial de cuadres en escritorio y móvil, con evento reactivo `dp_sesiones_caja_changed`, y se implementó un modal interactivo para ver el desglose completo y editar fecha, responsable, turno, monto de cierre y notas del cuadre. Verificado con `tsc --noEmit` (0 errores). |
 | 2026-09-18 tarde | Desbloqueo de Guardado con Masa Extra / Sobregirada y Sincronización Total de Modo Ayudante (Venta Diaria y Producción) | Solicitud explícita de Gonzalo: 1) **Producción sin bloqueos**: En `DistribuidorArroba.tsx` se eliminó el bloqueo que impedía guardar o sumar al plan cuando la masa sobrepasaba la cantidad estimada (`estaSobregirado`). Ahora se permite guardar con notificación informativa y estado amarillo/ámbar de "Masa de Más", verde para exacto/bien y rojo para falta por repartir. 2) **Sincronización Nube en Modo Ayudante y Libreta del Horno**: Se conectó `pushVentasDiariasToCloud` en `src/lib/finanzas-personales.ts`, se añadió el evento reactivo `dp_ventas_diarias_changed` y la sincronización bidireccional inmediata en `useReportesData.ts`, `LibretaHornoForm` y `VentaDiariaRapidaForm`. 3) En `DiagnosticoFinanciero.tsx` se ajustó el selector de masas para incluir todas las fórmulas maestras y se robusteció la selección de modelos de pan. Verificado con `tsc --noEmit` limpio (0 errores). |
 | 2026-09-18 tarde | Acceso a Modo Ayudante (Captura Rápida Atrasados) para el rol PANADERO | Solicitud explícita del usuario: el Panadero necesita registrar producciones atrasadas desde su sesión. Se incluyó `'modo-ayudante'` en `VER_PANADERO` y se implementó el parche automático `PATCH_PANADERO_MODO_AYUDANTE` en `src/hooks/usePermisosModulos.ts` para habilitarlo en sesiones existentes sin requerir reconfiguración manual. Verificado con `tsc --noEmit` limpio. |
 | 2026-09-18 tarde | Icono de Mesas en Ventas (POS): Mesa Real con Sillas de Restaurante (`MesaIcon`) | Solicitud explícita del usuario para reemplazar el icono previo por uno que dibuje literalmente una mesa de restaurante con sus sillas y tablero superior (`MesaIcon` SVG nítido). Se actualizó en `src/components/ventas/POSHeader.tsx` (tanto en la vista de escritorio como en la barra móvil de acceso rápido). Verificado con `tsc --noEmit` limpio. |
@@ -121,14 +166,28 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 | 2026-09-16 tarde | "Masa Dulce" no muestra todos los panes agregados — mecanismo real encontrado, NO corregido (necesita revisión de datos reales, no solo de código) | Reportado por Gonzalo: en el celular, "Masa Dulce" (no "Masa Dulce Especial") no muestra todos los panes que sí tiene la PC. Leyendo `DiagnosticoFinanciero.tsx` (selector "Modelo de Pan" dentro de una hornada) y `DistribuidorArroba.tsx`: los panes visibles para una masa se filtran con `modelosPan.filter(mod => mod.formulacionId === formulacionSeleccionada.id)` — un ID exacto, no por nombre. Si existen DOS registros de formulación distintos (IDs distintos) con nombre igual o parecido a "Masa Dulce" (ej. uno creado en el celular antes de que la sincronización funcionara bien, otro en la PC), el selector `formulaciones.find(f => f.nombre === ...)` SIEMPRE resuelve al mismo (el primero que encuentra) — los panes enlazados al OTRO ID nunca aparecen, sin importar qué haga el usuario. La función de "bóveda inmutable" (`blindarYRepararFormulaciones` en `src/lib/boveda-produccion-inmutable.ts`) repara ingredientes degradados pero **no fusiona ni elimina formulaciones duplicadas con nombre parecido** — dos duplicados con alias que matchean 'dulce'/'masa dulce'/'dulce especial' pueden coexistir indefinidamente. Hay un comentario ya existente en `src/lib/database.ts` (~línea 396) que referencia un informe previo de OTRA sesión: `claude/auditoria-masa-dulce-especial-duplicada-dulce-placer.md` (vive en el proyecto Claude "Panadería Dulce Placer", no en el proyecto "Dulce Placer" al que esta sesión tiene acceso — no se pudo leer su contenido completo desde aquí). **No se tocó código de fusión/deduplicación** — no hay forma de confirmar desde el código solo si hoy existen duplicados reales ni cuál de los dos tiene los panes correctos; eso requiere ver las formulaciones reales guardadas en su celular/PC (Producción → pestaña de Formulaciones/Modelos) o que Gonzalo autorice construir una herramienta de diagnóstico que lea esos datos. |
 | 2026-09-16 tarde (2) | Agregado panel "🩺 Diagnóstico de Sincronización" (solo lectura) en Producción → Plan Diario, arriba de "Historial de Planes Guardados" | Gonzalo no podía decirme con certeza si el rango de fechas de la Libreta/Plan Diario era igual en celular y PC ("no me acuerdo"), y yo no tengo forma de ver el navegador de su celular desde esta sesión. En vez de seguir preguntándole de memoria, se agregó un panel visible en la misma pantalla que ya usa (`PlanDiarioView.tsx`, archivo libre, no protegido) que muestra, leyendo datos reales del aparato: 1) todas las formulaciones cuyo nombre contiene "dulce" con su ID corto y cuántos panes (`modelosPan`) tiene cada una vinculados — si aparece más de una, confirma la sospecha de duplicado de "Masa Dulce"; 2) total de registros y rango de fechas de la Libreta del Horno; 3) total y rango de fechas de Planes Guardados. Es de solo lectura, no modifica nada, no inventa datos (todo sale de `getProducciones()`, `formulaciones` y `planesDiarios` ya cargados). Verificado con `tsc --noEmit` limpio. Pendiente: que Gonzalo abra esta pantalla en el celular y en la PC y reporte lo que ve, para poder decidir con datos reales (no memoria) cómo migrar/conectar la Libreta y el Plan Diario a la nube, y confirmar si "Masa Dulce" está duplicada. |
 ## ⚠️ Errores Conocidos / Lecciones
+- **App en blanco «Error Crítico de Inicio» por copia vieja publicada (2026-11-07) — RESUELTO**: producción quedó sirviendo la versión **1.1.1163**, publicada desde `app/`, cuya base local es la **v8**; el navegador de Gonzalo ya tenía la **v9** (de la versión buena del 24-oct), así que `indexedDB.open(DB_NAME, 8)` lanzaba **`VersionError`** y `main.tsx` mostraba «La base de datos local no pudo iniciar». **No se perdió ningún dato**: la base v9 quedó intacta en el navegador y Supabase igual. Arreglo: se volvió a publicar la RAÍZ (base v9) → producción en **1.1.1193**; y `src/lib/indexedDBAdapter.ts` ahora **atrapa `VersionError` y abre la versión existente** (`abrir(undefined)`) para que una copia vieja nunca más deje la app en blanco. Se volvió a desconectar `app/` de Vercel (`app/.vercel` → `app/.vercel.DESCONECTADO_2026-11-07`) y se dejó `app/NO_DESPLEGAR_DESDE_AQUI.txt`. **REGLA: publicar SIEMPRE desde la raíz con `PUBLICAR_A_PRODUCCION.bat`; nunca desde `app/`.**
 - **Supabase Pausado**: El error `Database error querying schema` indica que el proyecto en la nube está inactivo o tiene llaves incorrectas.
 - **Llaves de Stripe**: Se detectó que el `VITE_SUPABASE_ANON_KEY` podía estar mezclada con una llave de Stripe (`sb_publishable_...`) — verificar que sea la de Supabase.
 - **Loop de Perfil**: Evitar loops infinitos en `onAuthStateChange` verificando si el usuario ya está cargado.
 - **`app/` como repo anidado divergido**: ver advertencia de estructura arriba — puede causar que cambios "no aparezcan" si se mira el repo equivocado.
+- **Shell del agente bloqueado por permisos NTFS en `G:` (2026-10-24)**: al remontar `G:`, la carpeta del proyecto quedó con dueño `S-1-5-21-2993687110-…` (OTRO SID, no el usuario actual) y solo hereda `Modify` de `1_ACTIVOS_Y_ACTUALIZADOS` — sin `WRITE_DAC`. Efecto: el sandbox del agente no puede preparar su permiso de escritura y **todo comando de shell falla con `SetNamedSecurityInfoW failed (Win32 5): grantWrite(...)`**; los tools de archivos (read/edit/write) sí siguen funcionando. Se añadió un ACE heredable de control total para `desktop-bpe566m\admin` en la carpeta superior, pero **no se propagó** al proyecto. Arreglo definitivo: correr en consola de administrador `icacls "<ruta del proyecto>" /grant "%USERNAME%:(OI)(CI)F" /T`, o trabajar con la sesión del agente en **acceso total**. Para quitar el ACE agregado en la carpeta superior: `icacls "G:\TODOS_MIS_PROYECTOS_MAESTROS\1_ACTIVOS_Y_ACTUALIZADOS" /remove:g "%USERNAME%:(OI)(CI)F"`.
 
 ## 🚀 Estado Actual y Pendientes
 
 ### ✅ Completado recientemente
+- (2026-10-24 tarde, DSH/DeepSeek) **Verificado y PUBLICADO a producción.** Tests nuevos 24/24 en verde (`avisos-turno`, `horario-tienda`, `horario-enfermo`, `analisis-operativo`, `familia-supervivencia`), `npm run build` exit 0, y `npx vercel --prod` desde la raíz al proyecto correcto `app` (`prj_jYDczKuEmfcLp1zyX5GTIWNjMleq`, verificado en `.vercel/project.json` antes de publicar). Producción ya sirve `version.json` = **1.1.1186** (antes 1.1.1185), alias `app-eight-sigma-13.vercel.app` confirmado. **No se editó código**: solo verificación + publicación.
+  - Ojo: `api/camara.ts` y `api/nequi-radar.ts` tiran `TS2307: Cannot find module '@vercel/node'` en el build de Vercel — **preexistente, no bloquea** (el build termina OK).
+  - Ojo: los imports `import type { DBMisionAgent, DBHallazgoAgente } from '@/lib/database'` en `CentinelaProvider.tsx`, `AgentMissionDispatcher.tsx` y `FindingsFeed.tsx` apuntan a un módulo que NO exporta esos tipos (viven en `@/types`). Es deuda vieja (ya estaba en HEAD), no del 24-oct; no rompe build porque es `import type`.
+  - El pendiente «marcar esta semana es la N» **ya estaba implementado** en `HorarioSiEnferma.tsx` (botones «Esta es la 1/2/3» + `guardarAncla`); la nota anterior de este archivo estaba desactualizada.
+- (2026-10-24) Bug: al abrir Recepción el auto-guardado vacío borraba el borrador ANTES del aviso «¿recuperar?» — se perdió el ticket de Surtidora la 36 (~2.364.000; no estaba en nube). Fix: no guardar hasta recuperar; respaldo `rec_draft_last_good_v1`; botón «Recuperar recepción abierta».
+- (2026-10-24) Nómina → Horario: avisos WhatsApp + cartel «Ya lo leí» al cambiar un turno (`avisos-turno.ts`, banner en Centinela).
+- (2026-10-24) Nómina → Horario: esquema rotativo equitativo (Andrea mañana, Erika+Dayana tarde, Shirley finde; ciclo 3 semanas; iglesia de Dayana). Nombres enlazados a Trabajadores; cambios con motivo sincronizados a asistencia al liquidar. Archivos: `horario-tienda.ts`, `HorarioSiEnferma.tsx`, `Nomina.tsx`.
+- (2026-10-24) Recepción: varias pestañas a la vez. Cada pestaña es un proveedor con sus productos y precios. «Otro proveedor» abre una nueva sin borrar la que se está revisando. Al guardar una, se sigue con la que quedaba en espera. Se guardan en localStorage (`rec_draft_tabs_v1`) por si se cierra la app.
+- (2026-10-23) Recepción: en el ticket se agarra el número de cada producto y se arrastra arriba o abajo para dejarlo en el mismo orden de la factura de papel. El orden queda en la lista de la recepción (`src/pages/Recepciones.tsx`). También: total de línea en su propia fila, y en Nómina → Horario los motivos cita médica, permiso y pidió el favor.
+- (2026-10-22) Listas de los formularios: el texto claro del body se heredaba en los select nativos y en Windows la lista salía blanca con letras casi invisibles. En `src/index.css` las opciones quedan negro sobre blanco en todos los módulos. El cuadro cerrado conserva su color si ya trae una clase Tailwind.
+- (2026-10-22) Catálogo de proveedor en preventa y recepción: si el precio cambió de verdad, la tarjeta muestra “Modificado” en rojo con la fecha (sale del historial, no de un retoque que no movió el valor). En preventa se puede editar el precio en la tarjeta y en la línea del pedido, y ese cambio se guarda en el catálogo de ese proveedor. Botón “Crear producto” en el catálogo de preventa: crea el producto y lo enlaza al proveedor abierto. Los nombres del catálogo ya no se cortan con puntos suspensivos.
+- (2026-10-22) Videovigilancia: Forense DVR separado del vivo; más reglas caja/bolsillo; hallazgos con título+fecha en carpetas forenses.
 - Producción Artesanal: planificación de lotes con verificación de insumos.
 - Ejecución de Lotes: sincronización atómica entre producción terminada e inventario.
 - Seguridad Nexus: `Usuarios.tsx` y `RoleManager.tsx` con permisos revisados.
@@ -228,6 +287,14 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - Bug #4 de la auditoría: `useAuditorias.ts` llama a `db.getAll()`, `db.add()` y `db.delete()` genéricos que NO existen en `database.ts` (`NexusDatabase` solo tiene métodos nombrados por entidad, ej. `getAllProductos()`). Esto rompe el historial de auditorías de producción. Es un hallazgo de arquitectura (afecta el diseño de la clase protegida `database.ts`), así que según la skill de deuda técnica lo dejo señalado para que Gonzalo decida entre: (a) agregar métodos CRUD genéricos a `NexusDatabase`, o (b) reescribir el hook para usar métodos nombrados. NO lo parcheé.
 - La limpieza de fin de línea (CRLF) de todo el repo — ver hallazgo de arriba, pendiente de decisión de Gonzalo.
 - Verificación EN VIVO de estos 3 fixes — pendiente de un build + deploy real desde la PC de Gonzalo (u otro agente con acceso a esa PC).
+
+### 🔧 2026-09-19 — Claude Sonnet 5 (Cowork) — Modo Rapido arreglado: modelos de Groq/NVIDIA retirados, no la llave
+**Sintoma**: Marketing Studio -> Modo Rapido mostraba "Hubo un error generando la campana" en TODOS los intentos, incluso despues de poner una NVIDIA_API_KEY nueva y verificada en el proyecto correcto (`app`).
+**Causa real (verificada, no adivinada)**: `api/agente.ts` intentaba, en orden, Ollama (esperado que falle desde Vercel) -> Groq (via `OPENAI_API_KEY`) -> NVIDIA (`NVIDIA_API_KEY`) -> Anthropic (no configurado). Los modelos de texto por defecto que pedia el codigo (`llama-3.1-8b-instant` y `llama-3.3-70b-versatile` en Groq, `meta/llama-3.1-8b-instruct` y `meta/llama-3.1-405b-instruct` en NVIDIA) estaban RETIRADOS: Groq los apago oficialmente el 16-ago-2026 (ver https://console.groq.com/docs/deprecations), y el "Free Endpoint" de ese modelo en NVIDIA build.nvidia.com aparece marcado "Deprecated" en su propia pagina. Por eso los tres proveedores de respaldo fallaban siempre, sin importar que la llave de NVIDIA fuera nueva y correcta.
+**Verificacion antes de diagnosticar**: se reprodujo el error llamando directamente a `/api/agente` desde el navegador (fetch en la misma pagina en produccion) y se confirmo el 500 con "No hay proveedores de IA disponibles o todos fallaron." antes de tocar nada.
+**Arreglo**: en `api/agente.ts`, funcion `handleOpenAI`, se reemplazaron los 4 nombres de modelo retirados por modelos activos: NVIDIA -> `meta/llama-3.3-70b-instruct` (para ambos casos); Groq -> `openai/gpt-oss-120b` (modelos "importantes") y `openai/gpt-oss-20b` (default), que son los reemplazos que Groq recomienda oficialmente en su propia documentacion de deprecaciones.
+**Verificacion despues del deploy**: tras `PUBLICAR_A_PRODUCCION.bat`, se volvio a llamar `/api/agente` en produccion y esta vez respondio 200 con texto real generado por IA (no un error) — confirmado con la peticion real, no asumido.
+**Leccion para el futuro**: si el Modo Rapido (o cualquier feature que use `/api/agente`) vuelve a fallar con "todos los proveedores fallaron" DESPUES de confirmar que las llaves estan bien puestas en el proyecto correcto de Vercel, sospechar primero de nombres de modelo retirados por el proveedor (Groq/NVIDIA/OpenAI cambian sus catalogos con frecuencia) antes de tocar llaves o proyectos de nuevo.
 
 ### 🔧 2026-09-18 — Claude Sonnet 5 (Cowork) — Fase 0 completada: qué usa HOY realmente `/api/agente` (antes de agregar NVIDIA Build)
 
@@ -331,4 +398,460 @@ La guerra de despliegues (`app/` sobrescribiendo el diseño/funciones más nuevo
 - **Protección anti-datos-viejos**: `pendientesDeSubir` en `sync-merge-local-gana.ts`; `syncNow` ahora sube clientes y créditos de clientes solo si la nube no los tiene o si el aparato los cambió después (un celular viejo no devuelve un saldo anterior a un abono). `mapClienteToDB` ya no pone `updated_at = ahora` siempre, y solo manda `en_consumo` si el aparato conoce el dato.
 - **Efecto esperado al publicar**: el primer aparato que abra la app subirá todos los créditos de clientes que tenía guardados solo localmente.
 - **Verificado**: pruebas nuevas pasan, tsc 1784 (0 nuevos), build OK. No probado en celular real.
-- **Pendiente (siguiente tarea, pedida por Gonzalo)**: Consumo de EMPLEADAS se guarda solo en `localStorage` (`dp_whatsapp_creditos_empleadas`) → no se ve en otros aparatos. Además `addCreditoTrabajador`/`getAllCreditosTrabajadores` en `supabase-db.ts` solo sincronizan 7 campos (pierden nombre, saldo, pagos, foto) y la tabla no tiene `updated_at`.
+- **Pendiente (siguiente tarea, pedida por Gonzalo)**: Consumo de EMPLEADAS se guarda solo en `localStorage` (`dp_whatsapp_creditos_empleadas`) → no se ve en otros aparatos. Además `addCreditoTrabajador`/`getAllCreditosTrabajadores` en `supabase-db.ts` solo sincronizan 7 campos (pierden nombre, saldo, pagos, foto) y la tabla no tiene `updated_at`. → **RESUELTO en la entrada siguiente.**
+
+### 🔄 2026-11-16 (noche) — Claude Opus 5.5 — main y producción UNIDAS + Consumo/Préstamos sincroniza entre aparatos (AUTORIZO de Gonzalo)
+- **Hallazgo clave**: producción (Vercel, 7-nov) NO era `main`: salía de la carpeta principal, rama `feat/marketing-studio-y-ajustes`, con ~65 archivos de código SIN commit. `main` tenía 23 commits que producción no tenía (arreglos de caja de nov) y producción 11 + cambios sueltos que `main` no tenía (Consumo y Préstamos sincronizado, nómina, rutas de reparto, pan de empaque…).
+- **Respaldo**: rama `respaldo/produccion-2026-11-07` (commit `cbd4688a`) = HEAD de feat + el código sin commit de src/api/public/supabase/CORE_MEMORY tal cual estaba. Hecho con un índice temporal: la carpeta principal NO se tocó (sigue con sus 2157 cambios preparados; ojo, entre ellos hay un `.env.vercel.tmp` preparado: no hacerle commit).
+- **Unión**: esa rama se unió a `claude/amazing-mclaren-6b0f47` (main + precios + Jairo). 14 conflictos resueltos: Consumo (FiadosEmpleados) y sincronización (useRealtimeSync) = versión publicada + arreglos; caja = reglas de main + respaldo `arqueo_por_caja` de producción; `DB_VERSION` local = 9 (la mayor, nunca bajar); `fecha-local.ts` exporta ambos nombres (`hoyLocal` y `hoyLocalYMD`).
+- **Causa real de que Consumo no se viera entre aparatos** (registros de Supabase: 6.166 envíos/día a `creditos_trabajadores`, 28 de 33 descargas con error 500, hasta 25 s):
+  1. `difiere()` comparaba fechas como texto (`+00:00` vs `Z`) y JSON con llaves en otro orden → todo "cambiaba" → cada aparato resubía sus 208 registros en cada sincronización. Arreglo: `valoresIguales()` en `sync-merge-local-gana.ts`.
+  2. Si la descarga fallaba se tomaba como "nube vacía" → se resubía todo. Arreglo: `sinLeer` en `syncNow` + consulta mínima de conteo antes de subir a una tabla "vacía".
+  3. 4 fotos base64 = 9,8 MB que cada aparato bajaba siempre (y cada aviso en vivo bajaba la tabla entera). Arreglo: la lista ya no trae `foto_evidencia` (columna generada `tiene_foto`), la foto se trae al tocarla (`src/lib/foto-credito-nube.ts`), las fotos nuevas se achican (`src/lib/achicar-foto.ts`, máx 1000 px JPEG), y el aviso en vivo usa `mapCreditoTrabajadorFromDB` en vez de bajar todo.
+  4. `addCreditoTrabajador` tragaba el error (solo `console.warn`) → no iba a la cola de reintento. Ahora lanza el error. Tampoco manda `foto_evidencia: null` (borraba fotos de otros aparatos).
+  5. La tabla no tenía `updated_at`. Migración `20261116230000_creditos_trabajadores_fecha_y_foto.sql` **APLICADA** (208 filas con fecha, 4 con foto). Envíos por lotes de 8 (`enLotes`).
+- **Clientes de confianza (Jairo)** pasados a la pantalla publicada: grupo "Clientes de confianza" en el selector + tarjeta de cuenta abierta.
+- **Verificado**: build OK; pruebas: 57 fallan, TODAS ya fallaban en main o en producción (0 nuevas). Pruebas nuevas: `achicar-foto.test.ts`, `valoresIguales`/`enLotes` en `sync-merge-local-gana.test.ts`. No probado en celular real.
+- **Para publicar**: juntar este PR a `main` y publicar DESDE `main`. Desde ahora `main` = producción; nadie debe volver a publicar con `vercel --prod` desde la carpeta principal (borraría estos arreglos).
+---
+
+✅ COMPLETADO — Claude Sonnet 5 — 2026-09-19 — Auditoría en vivo pedida por Gonzalo: Modo Ayudante (masa/arrobas), acceso por rol VENDEDOR/PANADERO, e historial de Caja/Ventas.
+
+**Qué encontré (verificado entrando yo mismo a `app-eight-sigma-13.vercel.app`, no solo leyendo código)**:
+1. ✅ El selector de masa (Sal, Dulce, Hojaldre, Batido de Tortas, Vatido Galleta) y el campo de cantidad en arrobas en Modo Ayudante → Producción/Libreta → pestaña Masas SÍ funcionan en producción ahora mismo (probado: seleccioné "Masa de Dulce" + "Cuarto de Arroba", el cálculo de panes esperados salió bien). Esto ya lo había arreglado otro agente ayer (ver entradas 2026-09-18 arriba) — confirmado que sigue funcionando, no hacía falta tocar nada.
+2. ⚠️ El rol PANADERO sí tiene acceso a `modo-ayudante` (agregado ayer), pero el rol VENDEDOR nunca lo tuvo — confirmado leyendo `VER_VENDEDOR` en `usePermisosModulos.ts`, no tenía `'modo-ayudante'`. Esto explica el reporte de Gonzalo de que "a las vendedoras no les sale".
+3. 🚨 **Control de Caja e Historial de Ventas se cayeron completamente** (pantalla "Error en el módulo X", `Cannot read properties of undefined (reading 'trim')`) en una primera visita, con una sesión de caja/jornada abierta. Confirmado con el stack trace que el error viene del chunk compilado `CajaMovimientosModal-CMVun8CN.js`, dentro de un `.map()`. **Revisé el código fuente de `CajaMovimientosModal.tsx` en la raíz Y en `app/` — en NINGUNA de las dos existe (ni existió nunca en su historial de git) ningún `.trim()`** — así que no pude confirmar la causa exacta desde el código que tengo disponible. Al volver a entrar más tarde con "Sin jornada activa" (sin caja abierta), ambas pantallas cargaron bien — o sea, **el error es intermitente y depende de que haya una jornada/caja abierta con algún dato faltante** (probablemente un campo de un movimiento o cuadre existente que no tiene `motivo`/`turno`/`notas` y algo le hace `.trim()` sin chequear undefined). **No pude reproducir el crash a voluntad ni encontrar la línea exacta** — haría falta que alguien abra una jornada de prueba y mire si se cae, o revisar en Vercel qué build exacto está sirviendo ahora mismo (la fecha de build del `version.json` en vivo, 2026-09-19, no coincide con la fecha del build local de la raíz ni de `app/`, así que ninguna de las dos carpetas que tengo es garantizado que sea exactamente lo que está publicado).
+4. Aparte (no pedido, encontrado de pasada): errores repetidos en consola de Supabase `PGRST204: Could not find the 'fecha' column of 'tombstones' in the schema cache` al borrar `trabajadores` y `mesas` — sincronización de borrados silenciosamente fallando.
+
+**Qué hice** (con autorización de Gonzalo tras reportarle el hallazgo #2, cambio mínimo, archivo libre no protegido):
+- `src/hooks/usePermisosModulos.ts`: agregué `'modo-ayudante'` a `VER_VENDEDOR`, y agregué el parche `PATCH_VENDEDOR_MODO_AYUDANTE` (mismo patrón exacto que `PATCH_PANADERO_MODO_AYUDANTE` de ayer) para activarlo automáticamente en sesiones ya guardadas sin que Gonzalo tenga que reconfigurar manualmente en Roles y Permisos.
+
+**Cómo lo verifiqué**: `npx tsc --noEmit -p tsconfig.app.json` → 1784 errores totales (bajó respecto a la última medición de 1804, dentro de lo normal), el único error en ese archivo es un `TODOS` sin usar que YA existía antes, nada nuevo en las líneas que toqué.
+
+**Qué queda pendiente / NO hice**:
+- El bug de `.trim()` en Caja/Historial de Ventas (punto 3 arriba) — es intermitente, no lo pude fijar en código porque no coincide con ninguna copia local. **Necesita que alguien lo reproduza con una jornada real abierta y mire la consola**, o revise en el dashboard de Vercel el commit exacto del deploy activo.
+- No probado con un usuario VENDEDOR real todavía (solo tengo sesión de Administrador) — falta que Gonzalo o alguien con ese rol confirme que ahora sí le aparece "Captura Rápida" en el celular.
+- El tema de `tombstones.fecha` en Supabase (punto 4) — no se tocó, es un hallazgo aparte.
+
+---
+
+✅ RESUELTO — Claude Sonnet 5 — 2026-09-19 (cont.) — Encontrada y arreglada la causa REAL del crash de Control de Caja / Historial de Ventas (el punto 3 de la entrada anterior).
+
+**Gonzalo mandó captura de pantalla mostrando el error en vivo en su celular ("Cannot read properties of undefined (reading 'trim')")**, así que reproduje el mismo crash en el navegador (antes me había cargado bien porque no tenía jornada activa) y esta vez sí lo agarré. Bajé el archivo JS real que está sirviendo Vercel ahora mismo (`CajaMovimientosModal-CMVun8CN.js`, es un chunk que Vite empaquetó junto con `AperturaCajaModal.tsx`) y busqué el `.trim()` exacto en el código minificado — no adivinando, leyendo el bundle real.
+
+**Causa real**: en `src/components/ventas/AperturaCajaModal.tsx`, la función `normalizarNombreCaja(nombre)` hacía `nombre.trim().toLowerCase()` sin revisar que `nombre` existiera. `cargarCajasGuardadas()` la llama así: `cargarNombresEliminados().map(normalizarNombreCaja)` — **esta línea específica corre ANTES de cualquier `try/catch`** (los otros 2 usos de `limpiarListaCajas` en el mismo archivo sí están protegidos). Si la lista de "nombres de cajas eliminadas" guardada en `localStorage` (`dp_cajas_eliminadas`) tiene algún elemento `null`/`undefined` adentro — dato viejo o corrupto de algún dispositivo — truena ahí mismo, en el render inicial, y como es un `useState(cargarCajasGuardadas)` (inicializador de estado), React lo agarra como error de render y tumba toda la pantalla vía ErrorBoundary. Como `AperturaCajaModal` y `CajaMovimientosModal` quedaron en el mismo chunk de Vite, el mismo bug tumba tanto Control de Caja como Historial de Ventas (ambos renderizan ese chunk).
+
+**Fix aplicado** (archivo libre, no protegido, cambio de una función/3 líneas): `normalizarNombreCaja` ahora hace `(nombre || '').trim().toLowerCase()`. Con esto, cualquier dato dañado (nombre `null`/`undefined` en cualquiera de los 2 localStorage keys `dp_cajas_config`/`dp_cajas_eliminadas` o en el respaldo de Supabase `cajas_config`/`cajas_eliminadas`) simplemente se normaliza a cadena vacía en vez de tronar — arregla los 3 puntos de llamada de una sola vez, no hacía falta tocar cada uno.
+
+**Cómo lo verifiqué**: `npx tsc --noEmit -p tsconfig.app.json` → 1784 errores (idéntico al conteo de antes de este cambio), los únicos 2 errores que aparecen en este archivo (línea 122-123, tipo `unknown` en `db.getAllTrabajadores()`) ya existían antes y no tienen nada que ver con la función que toqué.
+
+**Qué queda pendiente**: 
+- Falta build + `PUBLICAR_A_PRODUCCION.bat` para que esto llegue a producción — no lo puedo hacer desde esta terminal remota (ver skill de build/deploy).
+- Este fix hace que la pantalla YA NO SE CAIGA, pero el dato corrupto (el nombre `null`/`undefined` guardado) sigue ahí — no se pierde nada ni hace falta borrarlo, simplemente ahora se ignora sin romper nada. Si en algún momento se quiere depurar ESE dato dañado específico, habría que revisar `localStorage['dp_cajas_eliminadas']` en el celular de Gonzalo con las herramientas de desarrollador — no es urgente, el síntoma visible (pantalla roja) ya no debería pasar una vez se publique este fix.
+
+---
+
+### 🔒 2026-09-28 — Claude Opus 5.5 (Claude Code) — Hooks de protección automáticos en `.claude/settings.json`
+
+**Qué hice**: agregué 2 hooks `PreToolUse` de Claude Code (versionados en el repo, aplican a cualquier sesión de Claude Code en esta carpeta):
+- `.claude/hooks/proteger-archivos.mjs` → antes de Edit/Write lee `LOCKED_RESOURCES.md` y, si el archivo está en la lista, **pide confirmación** al usuario (protocolo "AUTORIZO" ya no depende de que el agente se acuerde).
+- `.claude/hooks/proteger-deploy.mjs` → ante `vercel --prod`, `npm run deploy` o `PUBLICAR_A_PRODUCCION` **pide confirmación**; si se intenta desplegar desde `app/` (cwd con `NO_DESPLEGAR_DESDE_AQUI.txt` o `cd app`), **lo bloquea**.
+
+**Por qué**: la "guerra de despliegues" desde `app/` y ediciones a archivos protegidos sin autorización pasaron varias veces.
+
+**Cómo lo verifiqué**: 13 casos simulados (rutas Windows/relativas/app/, deploy raíz/bat/app/Set-Location, comandos libres como `vercel ls`) → todos con la decisión esperada. El hook de deploy además bloqueó en vivo un comando de prueba de esta misma sesión.
+
+**Ojo**: solo protege a Claude Code. Cursor y Antigravity NO leen estos hooks. Para agregar un archivo protegido basta con listarlo en `LOCKED_RESOURCES.md` (formato ``- `ruta` ``), el hook lo toma solo.
+
+**Para agentes con terminal**: el hook de deploy revisa el TEXTO de cada comando Bash/PowerShell. Si un `cat >> archivo <<EOF` o `echo` menciona `vercel --prod`, `npm run deploy` o `PUBLICAR_A_PRODUCCION`, se traba pidiendo confirmación aunque no sea un despliegue. Para escribir en archivos (incluido este) usar Edit/Write, nunca la terminal.
+
+---
+
+### 🔒 2026-09-29 — Claude Opus 5.5 (Claude Code) — Hooks 3 y 4: secretos en archivos y SQL destructivo en Supabase
+
+**Qué hice**: agregué 2 hooks `PreToolUse` más en `.claude/settings.json` (ahora son 4). Los dos **piden confirmación** (`ask`), no bloquean.
+- `.claude/hooks/detectar-secretos.mjs` (Edit|Write|MultiEdit) → si lo que se va a escribir tiene forma de clave real en texto plano: token de Facebook (`EAA` + 20+), clave OpenAI/Anthropic (`sk-` + 20+), clave de Google (`AIza` + 30+) o JWT (`eyJ…​.…`). El aviso muestra solo los primeros 8 caracteres, nunca el secreto completo.
+- `.claude/hooks/proteger-supabase.mjs` (conector MCP de Supabase: `execute_sql` y `apply_migration`) → si el SQL tiene `DROP TABLE`, `DROP SCHEMA`, `DROP FUNCTION`, `TRUNCATE`, `ALTER TABLE … DROP` (columna), `ALTER TABLE … TYPE` (cambio de tipo), o `DELETE`/`UPDATE` **sin WHERE**. SELECT y cambios con WHERE pasan sin preguntar. Ignora comentarios y texto entre comillas.
+
+**Por qué**: el 2026-09-29 aparecieron 2 flujos n8n con el token de Facebook en texto plano (se excluyeron del PR #3 y quedaron en `.gitignore`), y ahora hay conector MCP directo a la base real de Supabase.
+
+**Ojo — nombre real del conector**: en Claude Code está registrado como `mcp__claude_ai_Supabase__execute_sql` / `mcp__claude_ai_Supabase__apply_migration` (NO `mcp__Supabase__…`). El matcher usa `mcp__.*[Ss]upabase.*__(execute_sql|apply_migration)` para cubrir ambos.
+
+**Cómo lo verifiqué**: casos simulados pasándole al hook el mismo JSON que manda Claude Code. Secretos: 4/4 (los 4 tipos detectados, código normal pasa). Supabase: 15/15 (DELETE sin WHERE → pide; SELECT → pasa; UPDATE con WHERE → pasa; TRUNCATE, DROP TABLE/SCHEMA/FUNCTION, DROP COLUMN, cambio de TYPE → piden; ADD COLUMN, `SELECT … FOR UPDATE`, `'DELETE FROM'` dentro de un string, CREATE FUNCTION → pasan).
+
+**Límites conocidos**:
+- Con **cualquier** WHERE pasa (un `DELETE … WHERE 1=1` borra todo y no avisa) — decisión de Gonzalo: no entorpecer ediciones puntuales.
+- El de secretos también avisa con la anon key pública de Supabase (es JWT); ahí basta con aprobar. No ve lo que se escriba por terminal (`echo`/`cat >`).
+- Igual que los hooks 1 y 2: **solo protegen a Claude Code**. Cursor, Antigravity, la app y el panel de Supabase no pasan por aquí.
+- Los hooks nuevos no se cargan a mitad de sesión: rigen desde la sesión siguiente (o tras revisarlos en `/hooks`).
+
+---
+
+### 📤 2026-09-29 — Claude Opus 5.5 (Claude Code) — Cambios pendientes subidos a rama + PR (NO a main)
+
+**Qué hice**: a pedido de Gonzalo, subí todo el trabajo sin commitear (Marketing Studio, Videovigilancia, dictado por voz, ajustes de caja/sync, etc. — 44+ archivos de varios agentes) a la rama `feat/marketing-studio-y-ajustes` y abrí PR contra `main`. **No se tocó main ni producción.**
+
+**Excluido a propósito**: `n8n-setup/NIVEL DIOS - Agencia IA Autónoma1.json` y `n8n-setup/Publicacion-Directa-Dulce-Placer.json` tienen **tokens de Facebook en texto plano** → quedaron fuera y agregados a `.gitignore`. Si se necesitan en el repo, primero reemplazar el token por una credencial de n8n.
+
+**Estado de pruebas al subir**: `npm run test` → 25 fallos, **los mismos 25 que ya fallaban en `main` (11bb3e9e)**, o sea no hay regresión nueva. `tsc` tiene cientos de errores de tipos preexistentes en todo el proyecto (el build de Vercel usa `vite build` sin `tsc`, así que no bloquean).
+| 2026-09-30 | Fix Currency Revert | SupabaseDatabase.getConfiguracion striping updated_at causaba que remoteTs siempre fuera 0, generando un loop infinito de sobrescrituras en la nube. Y la llegada de snake_case desde Realtime borraba los campos locales. Se ajusto supabase-db.ts y usePriceControl.ts |
+
+### 📅 2026-10-01 - Antigravity - Fixes de Performance y Lógica en Producción
+
+**Qué hice:**
+1. **ProductCatalog.tsx**: Resuelto el lag extremo al agregar productos en el celular (se memoizaron ProductCard y FastSearchCard para evitar el O(N) re-render de 300 componentes).
+2. **PlanSemanaView.tsx**: Solucionado el bug donde al '🚀 Lanzar a Producción' se guardaban 0 panes. Ahora calcula dinámicamente la cantidad de piezas usando 
+esolverKgPorArrobaMasa según la eficiencia, merma y peso del modelo.
+3. **DistribuidorArroba.tsx**: Fix de 'Panes Fantasmas'. Si la fórmula elegida no coincidía exactamente por ID debido a duplicados en DB, los modelos ahora se enlazan si comparten el mismo nombre exacto.
+
+**Hallazgos Pendientes por Resolver:**
+- **Supabase RLS Vulnerability**: Hay 14 tablas en producción con llow_all_access habilitado, dejando la data expuesta vía anon key. Se necesita arreglar esto en futuras sesiones.
+
+### 📅 2026-10-03 - Claude (Cowork) - Fix "celular nuevo abre la app vacía" (sincronización inicial)
+
+**Diagnóstico (probado en vivo, ver doc del proyecto Claude `claude/auditoria-sincronizacion-celular-nuevo-2026-10-03.md`):** la nube SÍ tiene los datos (anon lee 556 productos, 472 precios, 514 inventario...). En un navegador limpio la app soltaba la pantalla vacía a los 5 s; a los 13 min aún faltaban configuración, gastos, clientes, prepedidos. Causas: (1) Firebase en Vercel con Project ID que trae una tabulación (`%09panaderia-dulce-placer`) → nunca conecta y `syncCloudToLocal` lo esperaba ANTES de Supabase; (2) lo descargado se re-subía (db.updateProducto/updatePrecio/updateCliente/updateGasto suben por dentro) → 2.205 POST de productos en una sola carga; (3) handler precios leía todos los precios por cada precio; (4) push de precios subía TODO en cada sync (~8.800/día).
+
+**Qué cambié (autorizado con AUTORIZO):**
+1. `src/lib/database.ts` `syncCloudToLocal`: Supabase primero (descargas en paralelo), baja configuración si no hay local, Firebase solo si Supabase falla.
+2. `src/hooks/useRealtimeSync.ts`: `escribirSoloLocal()` — lo que baja (pull, realtime, restaurar) se guarda solo en IndexedDB local; precios lee por id; push de precios solo nuevos/cambiados (huella de contenido).
+3. `src/hooks/usePriceControl.ts`: si el aparato está vacío, no soltar la pantalla a los 5 s; espera la primera descarga (tope 90 s).
+
+**Pendiente:** borrar las 7 variables `VITE_FIREBASE_*` del proyecto Vercel `app` (prj_jYDczKuEmfcLp1zyX5GTIWNjMleq) y redeploy; verificar con build + prueba en navegador limpio. Siguen abiertos: ventas no llegan a Supabase (tabla `ventas` 18 filas, última 24-jul), gastos POST 400, RLS abierto, política recursiva en `usuarios`.
+
+### 📅 2026-10-06 - Antigravity - Auditoría Extrema, Bóveda, Nómina, y Arquitectura IA
+
+**Qué se hizo:**
+1. **Auditoría Extrema Completada:** Se resolvieron los bucles infinitos en useRealtimeSync (TS Chaos / God Hook) y se arregló la protección de rutas. Ver Reporte de Auditoría.
+2. **Ventas y Caja (Dividir Cuenta):** Se diseñó e implementó DividirCuentaModal integrado para cobrar pagos parciales sin borrar la mesa entera en Supabase.
+3. **Dashboard (Centro de Mando):** Se añadieron botones de acceso rápido Nómina Y Préstamos y Bóveda (Libro de Caja) en la vista móvil.
+4. **Nómina y Préstamos:** Se auditó y validó el uso de la casilla de descuento de quincena para aplazar deudas (fiados de panadería y efectivo) de empleados y la generación del recibo PDF.
+5. **Bóveda y Tesorería:** Validación del 'Sistema de Sobres' para préstamos internos entre cajas, y re-diseño conceptual para sincronizar datos históricos atrasados y datos POS en tiempo real para las IAs.
+6. **Arquitectura IA y Modo Voz:** Diseño del 'Consejo Directivo' (9 IAs especializadas) e implementación de la interfaz de Voz / Modo Manos Libres en AgentesIA (Web Speech API + speechSynthesis) para conversar fluidamente con el Director IA.
+
+
+
+
+
+
+
+- **2026-10-07 — Fix edición de cuadres de caja (admin):** `ControlCaja` calcula `esAdmin` desde la prop `usuario`, pero `App.tsx` NUNCA se la pasaba (`lazyWithRetry` oculta los tipos, así que tsc no lo detectó). Resultado: el admin siempre era bloqueado. Se agregó `usuario={user}`. Los roles reales son MAYÚSCULAS (`UserRole` = 'ADMIN' | 'GERENTE' ...). También se corrigió `esAdmin` de `FiadosEmpleados` (antes comparaba con 'admin' en minúscula, así que el botón Editar nunca aparecía). Fiados ahora tiene campo `tipo: 'consumo' | 'prestamo'`.
+
+
+### 📅 2026-10-08 - Cursor (auditoría) - Fix ReferenceError `describirProduccionIncompleta` en Diagnóstico Financiero
+
+**Qué hice:**
+1. Auditoría de solo lectura: `tsc` da ~1.818 avisos (1.142 son variables sin usar). El único que rompe en ejecución era `describirProduccionIncompleta` (TS2304): estaba definida dentro de la IIFE del historial (~línea 3615) y se llamaba desde el modal de detalle de producción (~línea 4525), fuera de su alcance. Al abrir el detalle de una producción daba `ReferenceError`. Ya estaba en HEAD y en `.claude/hooks/tipos-baseline.json`.
+2. `src/components/reportes/DiagnosticoFinanciero.tsx`: moví la función, sin cambiar su lógica (solo usa `p`), a nivel de módulo justo antes de `export function DiagnosticoFinanciero`. Las llamadas de las líneas ~3816 y ~3921 quedan igual. No toqué ningún otro cambio sin commit del otro agente en ese archivo.
+
+**Verificado:** `tsc` 1818 → 1815 errores, sin errores nuevos y sin el TS2304 de esa función. `vite build` OK (salida a carpeta temporal, `dist` no se tocó). Copia de respaldo previa: `respaldo_agente_2026-10-08/DiagnosticoFinanciero.tsx.antes`.
+
+**Pendiente (requiere AUTORIZO, archivo protegido):** `src/lib/integridad-codigo.test.ts` líneas 44-46 espera el texto `autoSeedData bloqueado` en `usePriceControl.ts` y no está (1 test falla; la protección funcional sí existe). No se tocó.
+**Pendiente (otros):** TS2305 de tipos `DB*` en `supabase-db.ts` y agentes (solo tipos, no rompen en ejecución); `CajaSesion`, `FormulacionBase`, `ModeloPan` sin importar en `ExpenseFormModal.tsx` y `useReportesData.ts`; 118 archivos sin commit.
+
+### 📅 2026-10-08 - Cursor (auditoría) - "Consumo y Préstamos": empleadas fantasma y no aparecen las reales
+
+**Diagnóstico (con datos reales de la nube, solo lectura):**
+1. `FiadosEmpleados.tsx` armaba la lista con `trabajadores` activos **+ todos los `usuarios`** (cuentas de login, sin mirar `activo`). Eso metía a Dilia, Gabriela (inactivas), Jhoana/JHONA, Posventa, Mari fLAKA y cuentas de rol (Administrador, Gerente, Panadero...). Además esos registros usaban el id del usuario y Nómina descuenta por id de `trabajadores`, así que nunca se descontaban.
+2. La tabla `trabajadores` de la nube solo tiene 2 filas viejas (30-mar: "Vendedor 1 Mañana", "Vendedor2 Tarde"). Las empleadas reales viven solo en la PC porque `supabase-db.ts` `addTrabajador` envía `horario` y la tabla tiene `turno` → Supabase rechaza el upsert completo y `syncNow` solo hace `console.warn`. Además mapea `cargo/salario/documento/notas` pero el tipo `Trabajador` usa `rol/salarioBase/cedula/observaciones` (se perdería sueldo y cargo aunque el upsert pasara).
+3. `creditos_trabajadores` en la nube tiene 0 filas: la app envía `tipo` y la tabla no tiene esa columna (ni saldo, trabajador_nombre, items, pagos, foto_evidencia, descontar_de_salario, usuario_id, created_at). Los registros no se comparten entre PC y celular.
+
+**Qué hice:**
+- `src/pages/FiadosEmpleados.tsx`: la lista sale SOLO de `trabajadores` con estado activo (sin duplicados, ordenada, estado sin importar mayúsculas). Ya no mezcla `usuarios`. El filtro de historial también muestra, marcadas "(ya no activa)", a quienes tienen registros viejos pero ya no están activas. Mensaje si no hay empleadas activas. Se agregó `createdAt` al crear un registro (faltaba, error TS2345). Respaldo: `respaldo_agente_2026-10-08/FiadosEmpleados.tsx.antes`.
+- `sql_pendientes/2026-10-08_creditos_trabajadores_columnas.sql`: agrega a `creditos_trabajadores` las columnas que faltan (idempotente, no borra datos). **Lo debe ejecutar Gonzalo en el SQL Editor de Supabase.**
+
+**Pendiente (requiere AUTORIZO, archivo protegido `supabase-db.ts`):** mapear `addTrabajador/getAllTrabajadores` (horario<->turno, rol/cargo en minúscula, salarioBase/salario, cedula/documento, observaciones/notas) y `addCreditoTrabajador/getAllCreditosTrabajadores` con todos los campos. No tocar hasta tener el SQL ejecutado.
+**Pendiente (datos):** borrar desde Trabajadores las 2 filas viejas de ejemplo si ya no sirven.
+
+### 📅 2026-10-08 - Cursor (auditoría) - supabase-db.ts: sincronización de Trabajadores y Créditos (AUTORIZO de Gonzalo, "ok")
+
+**SQL ejecutado por Gonzalo en Supabase:** `sql_pendientes/2026-10-08_creditos_trabajadores_columnas.sql` → `creditos_trabajadores` ahora tiene 17 columnas (verificado: trabajador_nombre, trabajador_rol, saldo, tipo, fecha_vencimiento, items, pagos, foto_evidencia, descontar_de_salario, usuario_id, created_at).
+
+**Qué cambié en `src/lib/supabase-db.ts` (respaldo previo: `respaldo_agente_2026-10-08/supabase-db.ts.antes`):**
+1. `getAllTrabajadores` / `addTrabajador`: ahora usan los nombres reales de la tabla y del tipo `Trabajador`: `turno`↔`horario`, `cargo`↔`rol` (a minúscula; si no es un rol válido → `otro`), `salario`↔`salarioBase`, `documento`↔`cedula`, `notas`↔`observaciones`. Antes enviaba `horario` (no existe en la nube) y Supabase rechazaba el upsert completo → ninguna empleada real subía.
+2. `getAllCreditosTrabajadores` / `addCreditoTrabajador`: envían y leen todos los campos (nombre, rol, saldo, tipo, vencimiento, items, pagos, foto, descontar_de_salario, usuario_id, created_at).
+3. Ambos `add*` ahora revisan `error` de Supabase y hacen `console.warn` (antes fallaban en silencio porque supabase-js no lanza excepción). No se cambió el comportamiento de sincronización, solo se hace visible el fallo.
+- A propósito NO se mapean a la lectura `createdAt`, `email` ni `fotoPerfil` (la nube no tiene esas columnas): la sincronización compara solo los campos que trae la nube y al bajar gana lo local, así que no se pierden ni se re-suben en bucle.
+
+**Verificado:** `tsc` 1814 errores (sin cambio, ninguno nuevo; los de supabase-db.ts son los TS2305/TS7006/TS2416 que ya existían). Las pruebas que siguen fallando (autoSeedData, DB-01 syncCloudToLocal, BusquedaRapida/Proveedores) no dependen de este cambio.
+**Cómo se verifica en vivo:** abrir la app en la PC (se sincroniza solo), luego en el celular → Consumo y Préstamos debe mostrar las empleadas activas de Trabajadores. En la consola, si algo falla, aparece `⚠️ [supabase-db] addTrabajador falló: ...`.
+**Pendiente:** las 2 empleadas de ejemplo viejas en la nube (“Vendedor 1 Mañana”, “Vendedor2 Tarde”) se borran desde Trabajadores si ya no sirven. Registros de crédito locales viejos con `trabajadorId` que no es UUID (ids de usuario) pueden seguir fallando al subir; solo saldrá el aviso en consola.
+
+### 📅 2026-10-08 - Cursor (auditoría) - Aclaración de despliegue (corrige una suposición mía)
+- `git push` NO publica la app. Producción (`app-eight-sigma-13.vercel.app`, proyecto Vercel `app`) se publica con `PUBLICAR_A_PRODUCCION.bat` (raíz), que corre `npx vercel --prod` y sube **la carpeta tal como está en el disco** (incluye cambios sin commit). Los cambios de hoy están en la RAÍZ `src/` (la correcta), commit `13ee607` en `feat/marketing-studio-y-ajustes` (solo respaldo en GitHub).
+- Confirmado por Gonzalo (captura de Trabajadores): las empleadas reales SÍ existen en el módulo Trabajadores de la PC (ANDREA, Andrea Cadena, Daniela, Erika, Freyle, Gonzalo Vibanco, Samir, Santiago, Shirley). No habían subido a la nube por el bug de columnas de `supabase-db.ts` (ya corregido en el código, pendiente de publicar). Los 2 "Vendedor..." con $0 son filas viejas de ejemplo de la nube.
+- Pendiente: publicar con el .bat para que el error `getAllPrestamosCaja` y la sincronización queden corregidos en la app real.
+
+### 📅 2026-10-08 - Cursor - PUBLICADO a producción v1.1.1174 (proyecto `app`, desde la RAÍZ)
+- Publicado con `npx vercel --prod --yes` desde la raíz → alias `https://app-eight-sigma-13.vercel.app` (verificado: `version.json` pasó de 1.1.1173 a 1.1.1174, buildDate 2026-10-08). Incluye todo lo que había en la carpeta (también lo del otro agente sin commit) + los arreglos de hoy: `getAllPrestamosCaja` (Caja), lista de empleadas en Consumo y Préstamos, sync de trabajadores y créditos (`supabase-db.ts`), `describirProduccionIncompleta` (Diagnóstico).
+- Se creó `.vercelignore` (excluye `app/`, `.claude/`, `mcp-server/`, respaldos, scripts sueltos, `key.txt`, `.env*`, etc.) para no subir secretos ni carpetas pesadas. No excluye nada que use el build (src, public, api, scripts, configs).
+- **Si `vercel --prod` se queda en "Retrieving project…":** es porque la CLI ejecuta `git status -s` y se traba cuando hay procesos `git.exe`/`vercel` colgados de intentos anteriores. Cerrar esos procesos (`git.exe`, `node` de vercel) y reintentar; `git status -s` debe tardar ~5 s. `vercel build` local falla en esta sesión con `spawn cmd.exe ENOENT` (no usarlo; se publica con build remoto).
+- Aviso de build no bloqueante ya existente: `api/nequi-radar.ts` no encuentra `@vercel/node` (TS2307).
+- **Pendiente para verificar con Gonzalo:** abrir la app en la PC (Ctrl+Shift+R), esperar ~1 min y comprobar en el celular que Consumo y Préstamos lista las empleadas de Trabajadores; entrar a Caja sin el cartel `getAllPrestamosCaja`.
+
+### 2026-10-08 · Nómina: cobro de préstamos/consumos más claro (src/pages/Nomina.tsx)
+- Cada deuda en Nómina > Liquidar muestra: "Cobrar todo", "No cobrar hoy (dejar para después)" y "cobrar solo una parte ($)". Un cuadro de color dice cuánto se descuenta y cuánto queda para la próxima quincena.
+- Nuevo helper `montoACobrar` (parciales[id] manda; si no, saldo cuando descontarDeSalario=true, si no 0). Ahora TODAS las deudas activas con saldo aparecen en el cálculo (antes las de descontarDeSalario=false no se podían cobrar nunca).
+- Solo se guardan descuentos con monto > 0; lo no cobrado queda en saldo y sigue activo.
+- Confirmar pago lista lo que queda pendiente para la próxima quincena. Etiqueta del modal de préstamo: "Proponer el descuento en cada nómina".
+- tsc 1814 (igual a baseline), vite build OK. Sin tocar la lógica de pago ni de BD. Pendiente: publicar.
+
+### 2026-10-08 (tarde) · Nómina: guardar pago, historial y acumulado de deudas (src/pages/Nomina.tsx + types)
+- Liquidar: barra fija abajo con "Resumen total de la quincena" (Sueldos / Se descuenta / TOTAL A PAGAR) y botón grande GUARDAR PAGO. Modal "Guardar pago de nómina". Si ya está pagada: botón "Ver en Historial".
+- Al guardar: cada deuda descontada recibe un abono en `pagos` (metodoPago 'descuento_nomina', nota con la quincena); el saldo baja; lo no cobrado sigue activo.
+- NominaItem.pendientes (opcional, nuevo en types) y NominaDescuento.saldoRestante guardan lo que quedó sin cobrar. Historial y "Ver detalle" lo muestran ("Quedó pendiente").
+- Nueva pestaña "Deudas": total que deben las empleadas activas, por deuda: original / ya descontado / saldo + lista de abonos.
+- Backups: respaldo_agente_2026-10-08/Nomina.tsx.antes y types-index.ts.antes. tsc 1814 (baseline). Publicado en producción.
+
+### 2026-10-08 (tarde 2) · Nómina: PAGO INDIVIDUAL por trabajadora (src/pages/Nomina.tsx + types)
+- Al tocar una trabajadora, la barra fija muestra SU resumen (Sueldo / Descuento / TOTAL A PAGAR) y el botón "GUARDAR PAGO DE <NOMBRE>". Sin seleccionar, muestra lo pendiente y el botón secundario "Pagar a todas las pendientes".
+- Dentro de la tarjeta: "Cuenta de <NOMBRE>" con sueldo, cada descuento, lo que sigue debiendo y total a pagarle.
+- Modelo: una NominaQuincenal por periodo; los pagos individuales se acumulan en items (con gastoId/fechaPago). estado='borrador' (mostrado "Pagos parciales") hasta que todas las activas estén pagadas -> 'pagada'. Un gasto 'nomina' por trabajadora.
+- Las ya pagadas quedan congeladas (PAGADA, solo lectura); las demás se siguen calculando en vivo.
+- types: NominaItem.gastoId/fechaPago/pendientes, NominaPendiente, NominaDescuento.saldoRestante (todos opcionales).
+- Test nuevo: src/pages/Nomina.pago-individual.test.tsx (pasa). tsc 1814 baseline. Publicado.
+
+### 2026-10-08 (tarde 3) · Nómina: días que no vino / días de más (src/pages/Nomina.tsx + types)
+- En la tarjeta de cada trabajadora: "Valor de cada día" (sueldo mensual ÷ 30, editable), "Días que NO vino (se restan)" y "Días de MÁS (doble turno, reemplazo)" (acepta 0.5). Sueldo a recibir = base - días menos x valor + días extra x valor + ajuste manual.
+- En modo "descuento por asistencia" los días que no vino manuales se desactivan (ya se restan solos) para no duplicar.
+- NominaItem guarda valorBase, valorDia, diasMenos, diasExtra; se muestran en Cuenta, trabajadora pagada, detalle de historial y PDF. Se limpian al pagar y al cambiar de quincena.
+- Test: Nomina.pago-individual.test.tsx (2 casos, pasan). tsc 1814 baseline. Publicado.
+
+### 2026-10-08 (noche) · Nómina ↔ Control de turno (src/pages/Nomina.tsx, src/lib/horario-trabajo.ts, App.tsx 1 línea, types)
+- Nuevo src/lib/horario-trabajo.ts: lee el horario de Trabajadores ("Lun-Vie 7am-3pm") -> días que le tocan + hora de entrada/salida (si no se entiende, no inventa).
+- Nómina: calendario "Asistencia de la quincena" por trabajadora (verde = marcó Llegué, violeta = marcado a mano "sí vino", rojo = sin marcar, gris = descanso/futuro). Tocar un día lo marca/desmarca "sí vino" (en memoria hasta guardar el pago).
+- Pago por asistencia: solo cuentan los días que le tocan por horario (antes: todos los días de la quincena). Días fuera de horario: botón "Sumar como días de más".
+- Salida olvidada (llegó, no marcó Me voy, día pasado): se asume su hora normal de salida; horas se calculan con eso. Botón "Anotar ahora en Control de turno" y se anotan solos al guardar el pago (registros con origen 'manual' / 'salida-automatica', via onAddAsistencia = addRegistroAsistencia).
+- Si el horario no se puede leer: inputs Entra/Sale (guardados en localStorage nomina_horas_habituales).
+- App.tsx: solo se agregó onAddAsistencia={addRegistroAsistencia} a <Nomina>. OJO: App.tsx tiene cambios sin commit de otro agente (lazyWithRetry, VoiceOrchestrator…) que también quedaron en el deploy.
+- Pendiente conocido (no tocado): Asistencia.tsx usa toISOString() para la fecha (UTC) -> pasadas las 7 pm hora Colombia el registro queda con fecha de mañana; y la nube guarda solo timestamp de creación (hora al bajar de la nube sale en UTC).
+- Tests: horario-trabajo.test.ts, Nomina.asistencia.test.tsx (pasan). tsc 1814 (baseline). Publicado.
+
+### 2026-10-08 (noche) - Control de Mermas real (src/pages/ControlMerma.tsx, src/lib/merma.ts, App.tsx solo el case 'control-merma')
+- Antes era un mock (texto libre, datos falsos, no guardaba). Ahora elige el producto REAL por categoria (Pan de sal, Pan de dulce... salen de las categorias de los productos del Catalogo; hay interruptor Productos/Insumos), con buscador y atajos "Los que mas se danan".
+- Registrar = onAjustarStock(productoId, cantidad, 'salida', "Merma · causa · nota: .. · por usuario · #token"): descuenta inventario y crea el movimiento (se ve tambien en Inventario y sincroniza por la tabla movimientos). No hay tabla nueva.
+- Historial por periodo (Hoy/7/30/Todo), filtros causa/busqueda, Anular (devuelve stock con movimiento 'Anulacion merma · #token'; requiere GESTIONAR_INVENTARIO). Analisis por causa/producto/categoria + consejo segun la causa principal. Dinero perdido = costoBase (o precioCompra) x unidades; si no hay costo avisa.
+- Tambien cuenta las mermas viejas de Produccion ("Merma: motivo").
+- Limite: el cloud no guarda 'usuario' del movimiento, por eso el nombre va dentro del motivo. Los movimientos no se refrescan en vivo entre dispositivos (hay que recargar).
+- Respaldo: respaldo_agente_2026-10-08/ControlMerma.tsx.antes. Tests: merma.test.ts, ControlMerma.test.tsx (6 pasan). tsc sin errores en archivos de merma.
+
+### 2026-10-08 (noche) - Panes divididos por categoria (seed-data.ts, lib/clasificar-panes.ts, components/productos/OrdenarPanesModal.tsx, pages/Productos.tsx, App.tsx 1 prop)
+- Problema: en POS solo existia la categoria "Panes" para todo. La categoria es el texto Producto.categoria: POS, Inventario, Merma y Catalogo la leen de ahi, asi que dividir en Catalogo sincroniza todo.
+- seed-data.ts: nuevas categorias de venta "Pan de sal", "Pan de dulce", "Croissant" (se agregan solas al abrir la app; Galleteria y Hojaldres ya existian). "Panes" se queda para lo que no encaje.
+- Catalogo: aviso "Ordenar los panes por categoria" (solo si hay productos de venta en "Panes") -> modal con sugerencia por producto: 1) categoriaProduccion del modelo de pan enlazado (Libreta/Recetas: pan_sal, pan_dulce, empacado_*, hojaldrado, galleta, torta), 2) palabras del nombre (croissant, galleta, coco, queso, frances...), 3) si no hay pista no adivina. Nada cambia hasta pulsar "Mover N productos"; crea la categoria si falta.
+- Respaldos: respaldo_agente_2026-10-08/Productos.tsx.antes (seed-data.ts.antes ya incluye el cambio de categorias).
+- Tests: clasificar-panes.test.ts, OrdenarPanesModal.test.tsx (5 pasan). tsc 1810. Suite completa: 28 fallos en tests de codigo-fuente/dictado/login ajenos a estos archivos.
+
+### 2026-10-08 (noche, correccion) - Ordenar panes ahora parte de los MODELOS DE PAN (OrdenarPanesModal.tsx, lib/clasificar-panes.ts, Productos.tsx, App.tsx)
+- Error mio: la primera version listaba productos con categoria 'Panes' del Catalogo; la lista real de panes esta en Recetas Tecnicas > Modelos de pan (35 modelos con masa: Sal Mixta, Dulce, Hojaldre, Batido de Tortas, Vatido Galleta).
+- Ahora la lista sale de modelosPan. Categoria = 1) categoriaProduccion del modelo si esta puesta, 2) masa (formulacion) que usa: Sal->Pan de sal, Dulce->Pan de dulce, Hojaldre->Hojaldres (Croissant si el nombre lo dice), Tortas->Pastelería, Galleta->Galletería, 3) palabras del nombre.
+- Por modelo: ok (ya en su categoria) / mover (producto vinculado por modelo.productoId) / vincular (producto del Catalogo con nombre parecido, ignora pesos tipo 45gr; tambien guarda modelo.productoId) / crear (producto elaborado nuevo con precio, margen y costo del modelo; se vincula al modelo). Productos sueltos en 'Panes' sin modelo aparecen aparte.
+- Nada se aplica hasta pulsar 'Aplicar N cambios'. Vincular el modelo con su producto tambien habilita el puente Libreta->Inventario.
+- Vista previa con los 35 modelos de la boveda: 8 Pan de sal, 15 Pan de dulce, 5 Hojaldres, 4 Galleteria, 4 Pasteleria (+ los que tengan categoriaProduccion).
+- Tests: clasificar-panes.test.ts + OrdenarPanesModal.test.tsx (7 pasan).
+
+| 2026-10-08 noche | Caja: al abrir turno Tarde solo se creó Caja Principal | Supabase mostró que la Tarde del 8-oct solo tenía Principal (los turnos anteriores abrieron las 10). La lista de cajas en la nube estaba completa, así que no era la configuración. Causa probable: el bucle de AperturaCajaModal.handleIniciarJornada no tenía try/catch por caja (una falla cortaba las demás) y Ventas.tsx cerraba el modal tras la primera caja. Fix: try/catch por caja + aviso de cuáles fallaron + modal no se cierra a mitad. Las cajas faltantes se abren con "Agregar Caja" (turno Tarde). Desplegado. |
+
+| 2026-10-08 noche | Mayoristas vs Créditos separados + nuevo módulo Rutas y Despachos | Regla: **Mayoristas VENDE** (precios, márgenes, mini-POS, rutas); **Créditos Clientes COBRA** (saldos, abonos, vencimientos). En Mayoristas.tsx los botones de abono/pago ahora llevan a Créditos (COBROS_SOLO_EN_CREDITOS = true; 
+egistrarAbono quedó bloqueado). Nueva pestaña **Rutas y Despachos** (src/components/mayoristas/RutasReparto.tsx, lógica pura en src/lib/rutas-reparto.ts, 13+2 tests): rutas (zona ciudad/municipio/corregimiento, días, horario, paradas en orden, enlace Maps), despachos (carga → salir a ruta descuenta inventario → por tienda dejó/recogió/hora/cobró/quién recibió → conteo de regreso → liquidar: sobrante bueno vuelve al stock y lo no cobrado crea crédito en Créditos Clientes), análisis por tienda (devolución %, utilidad del negocio, ganancia de la tienda, tendencia, estrategias, carga sugerida por rotación) y control de vendedores (faltantes, descuadre de efectivo). Datos en localStorage dp_rutas_reparto/dp_despachos_reparto + respaldo nube (
+utas_reparto_rutas/
+utas_reparto_despachos). PENDIENTE: el efectivo cobrado en ruta NO se registra aún como venta en caja/reportes (solo se muestra lo que el vendedor debe entregar). Desplegado. |
+
+- [2026-10-08] EQUIPO DEL TURNO: un solo usuario; al abrir jornada se marca quién llegó (Mañana: vendedora X; Tarde: María y Jessica como responsables conjuntas). Lib src/lib/equipo-turno.ts (dp_turno_equipo + nube equipo_turno), UI EquipoTurnoModal.tsx, chip en Ventas, ventas/mesas/venta rápida firmadas con vendedoraNombre, filtro por vendedora en HistorialVentas.
+
+- [2026-10-08] PEDIDOS DE TORTAS rehecho: tablero comanda (Por hacer / En preparación / Lista) ordenado por fecha, recordatorios hoy/mañana/atrasadas + avisos del navegador, fotos del modelo (cámara/galería, comprimidas), adicionales desde catálogo Piñatería (categoría con 'Piñatería') + libres, comanda impresa 80mm, envío WhatsApp con foto, repostera asignada, historial de estados. lib src/lib/pedidos-tortas.ts (dp_pedidos_tortas + nube pedidos_tortas). Pendiente: cobrar/registrar en caja al entregar y descontar stock de adicionales.
+
+- [2026-10-09] PEDIDOS DE TORTAS + caja/stock: abono y cobro de entrega se registran en caja abierta (registrarVenta con línea 'servicio:pedido-torta:<id>', sin tocar inventario; useVentas ignora productoId 'servicio:*'); campo registradoCaja evita duplicar; al entregar se descuentan adicionales del catálogo (batchAjustarStock, flag stockDescontado). Modal 'Entregar y cobrar'.
+
+- 2026-10-09 Auditoría Digital (AUTORIZO usuario): grabadora rrweb reescrita (cola de guardado, checkpoints 5 min, resumen por cinta, huella SHA-256 encadenada, nube vía dbNube en vez de Firestore); motor de reglas src/lib/auditoria-profunda.ts (caja, ventas, gastos, inventario, cintas); UI con pestañas Hallazgos/Cintas/Personas/IA; agente 'auditor-digital' en api/agente.ts; venta->cinta; resumen WhatsApp. src/lib/nube-kv.ts: dbNube lee/escribe la nube directo (equipo_turno, pedidos_tortas, rutas ahora sí sincronizan entre aparatos). Desplegado.
+
+- 2026-10-09 Sync Videovigilancia<->Auditoría Digital: clips de bitacora_visual (clipsEnRango) entran a ejecutarAuditoria (reglas video_alerta, video_sin_cobertura; refs tipo 'clip'; clipCercano/ventasCercanas); Auditoría puede abrir el video de una venta/alerta; Videovigilancia recibe ventas/sesionesCaja (informe del día cruzado con ventas, ventas cercanas por clip) y botón a Auditoría Digital.
+
+### 📅 2026-10-09 - Claude (Cowork) - Gastos / Libro de Caja: "¿De dónde sale la plata?" + gastos a la nube (AUTORIZO)
+
+**Problema:** en Modo Turbo Gastos no se podía decir de qué caja/bóveda salía la plata (selector diminuto, no obligatorio, lista vieja de 9 cajas); elegir bóveda NO descontaba el saldo; y los gastos con caja POS no subían a Supabase (`gastos.caja_id` es uuid y se mandaba el nombre "Principal" → 400 ~228/día, último gasto en nube 2026-09-01). Detalle: doc del proyecto Claude `claude/auditoria-modulo-gastos-libro-caja-2026-10-09.md`.
+
+**Cambios:**
+1. `src/components/gastos/TurboExpenseManager.tsx`: bloque grande obligatorio "¿De dónde sale la plata?" (cajas de `dp_cajas_config`, o las de fábrica si no hay; + bóvedas con saldo). Sin elegir no guarda (Smart, plantillas y masivo; edición no lo exige). Aviso si la bóveda no alcanza. Recuerda la última elección (`dp_gasto_origen_ultimo`). Tabla masiva: columna **Proveedor por fila** + "Total a pagar". Plantillas ahora mandan el origen.
+2. `src/pages/Gastos.tsx` `handleQuickSave`: si el origen es bóveda → `addMovimientoBoveda` Egreso (descuenta saldo).
+3. `src/lib/supabase-db.ts` `addGasto`: `caja_id`/`proveedor_id` solo si son uuid; si no, el valor va en `metadata`; revisa `error` y lo lanza (el puente lo encola). `getAllGastos` lee `cajaId/proveedorId` de metadata si la columna viene null.
+
+**Verificado:** `tsc` en los 3 archivos: 0 errores nuevos (39 → 37 preexistentes). Falta: `npx vite build` y publicar. Pendientes: Modo Clásico (QuickEntryBar) sigue sin selector de origen; gasto pagado desde caja POS no se descuenta en ninguna bóveda (revisado: `CierreCajaModal.tsx` y `ControlCaja.tsx` no leen los gastos de este módulo, así que hoy ese gasto no se resta del cuadre de la caja); anular gasto no devuelve plata a la bóveda; auditoría (foto, anular con motivo, duplicados, resumen por origen).
+
+- 2026-10-09 Videovigilancia: modo Estación (localStorage dp_estacion_vigilancia_v1; Videovigilancia siempre montada en App, auto-inicia ODYSSEUS+grabación, wakeLock) y Alertas al celular (src/lib/alertas-vigilancia.ts: CallMeBot WhatsApp + notificación/sonido, anti-spam 5 min). Config solo en localStorage del PC estación.
+- 2026-10-09 (2ª tanda, mismo AUTORIZO): `TurboExpenseManager.tsx` abre directo en **pago masivo**; cada fila permite **elegir el producto** (lista con los productos que vende el proveedor de la fila, según sus precios; si no tiene, todo el catálogo) y pone su último costo → monto = cantidad × costo (si se escribe el monto a mano, se respeta); debajo, **total de cada factura por proveedor** + total a pagar. La tabla ya no se cierra al guardar. `tsc`: 0 errores nuevos.
+- 2026-10-09 (3ª tanda): Turbo Gastos → columna **Precio c/u** editable (total = cantidad × precio; si se edita el total, recalcula el precio); si el precio difiere del catálogo sale aviso "Precios que cambiaron" y al guardar se actualiza el precio del proveedor (procesarAuditoriaPrecios → db.updatePrecio → nube); se recarga el catálogo de la tabla. **Sin límite de filas**: al escribir en la última aparece otra vacía + botón grande "Agregar otro producto"; botones con flex-wrap (en celular se salían de la pantalla). tsc: 0 errores nuevos.
+
+- 2026-10-09 Videovigilancia clips por evento: src/lib/disparadores-video.ts (detectarEventos: venta nueva, venta anulada, movimiento de caja) -> grabarClipCamara(camara, motivo) con contexto al prompt de ODYSSEUS; modo de clips (minuto/ambos/solo eventos) en localStorage dp_modo_clips_v1, default ambos.
+
+## 2026-10-09 — Editar gastos del historial
+- ExpenseFormModal: ventana con scroll (max-h-[90vh] overflow-y-auto), monto editable al editar (recalcula precio c/u), casillas producto/cant/precio mas grandes.
+- ExpenseList: botones editar/borrar visibles siempre en celular.
+- Gastos.tsx handleSave (edicion): con proveedor + producto actualiza precio en catalogo via procesarAuditoriaPrecios(..., crearSiNoExiste=false) (exportada desde TurboExpenseManager).
+- tsc: 0 errores nuevos. Falta build + deploy por Gonzalo.
+
+## 2026-10-09 — Gastos: 4 puntos (TurboExpenseManager)
+- Pagos fijos: botones Arriendo, Luz, Agua, Gas, Internet, Arreglos, Caja Menor, Empaques, Insumos. Ya no hay montos inventados: abre panel con monto real (sugiere el ultimo pagado, localStorage dp_pago_fijo_ultimo), a quien se pago y nota.
+- Modo masivo: selector Por producto | Por total de factura (proveedor, N factura, total, nota; no toca precios del catalogo). Falta: foto del recibo.
+- Aviso de nombres distintos al catalogo (matchProductoEnCatalogo): boton Usar nombre del catalogo o Cambiar el del catalogo (db.updateProducto con confirmacion).
+- tsc: 0 errores nuevos. Finales de linea normalizados a CRLF. Falta build + deploy.
+
+## 2026-10-09 — Proveedores: bloqueo de margen >400%
+- Proveedores.tsx handleSubmit: la validacion de margenes (validarCatalogo) se movio ANTES de actualizar el proveedor y borrar precios (antes dejaba todo guardado a medias al bloquear).
+- El bloqueo duro ahora es window.confirm "GUARDAR IGUAL"; si dice que no, no se guarda nada (VALIDATION_BLOCK).
+- tsc: 0 errores nuevos. Falta build + deploy.
+
+## 2026-10-09 — Gastos: Bancos, Compromisos y origen en pagos fijos
+- TurboExpenseManager: botones Bancos (Pago Banco / Credito) y Compromisos (elige de getCompromisos activos, llena monto y a quien).
+- El panel de pago fijo ahora tiene su propio selector "De donde sale la plata" (mismo estado que el de arriba).
+- tsc: 0 errores nuevos.
+
+## 2026-10-09 — Verificacion de persistencia de datos nuevos
+- Gastos nuevos (pagos fijos, factura por total, bancos/compromisos): llegan a Supabase tabla gastos (verificado 7 gastos del 2026-10-09; bovedaId/origenTipo en metadata).
+- Bovedas y movimientos: configuracion bovedas_lista_data (11) y bovedas_movimientos_data (591).
+- Compromisos fijos (dp_compromisos_fijos) SOLO vivian en el aparato: ahora finanzas-personales.ts los sube a configuracion compromisos_fijos_data y un celular nuevo los trae.
+- Solo en el aparato (a proposito): dp_gasto_origen_ultimo, dp_pago_fijo_ultimo (sugerencias). Ingresos extras siguen solo locales (pendiente).
+
+## 2026-10-09 — Captura Rapida (Atrasados): no repetir dias
+- venta-diaria-rapida-form.tsx: aviso "ya esta registrado" por fecha, tira de ultimos 30 dias (verde=registrado, rojo=falta, tocar = ir), boton "pasar al siguiente dia que falta". Al guardar: mismo dia+turno+mismo total = no guarda y pasa al siguiente; total distinto = confirm reemplazar (como EDICION, no suma doble a boveda); otro turno el mismo dia = confirm.
+- ModoAyudante.tsx: gasto con mismo dia + mismo monto = confirm antes de guardar.
+- Nube: ventas_diarias_data ultima fecha 2026-08-16 (73 registros) al 2026-10-09.
+- tsc: 0 errores nuevos. Falta build + deploy. Libreta/produccion sin control de repetidos aun.
+
+## 2026-10-09 — Libreta/Produccion: no repetir dias
+- useReportesData.ts (guardar produccion, solo registro nuevo): mismo dia + mismas masas y hornadas = no guarda ("ya esta registrada igual"); mismo dia distinto = confirm para agregar. Aplica tambien en Reportes y Panadero (mismo hook).
+- tsc: 0 errores nuevos en ese archivo (47 previos).
+
+## 2026-10-09 — Cajas: aviso falso "turno abierto desde las 08:52" en Tarde/Noche
+- Causa: useVentas.sesionesCaja (memoria) no se enteraba de cierres hechos en ControlCaja (db.updateSesionCaja directo + cierresLocales). abrirCaja veia cajas ya cerradas como abiertas; "Cancelar" las re-cerraba y depositaba otra vez en Boveda.
+- Evidencia: Boveda "Cierre automatico (turno nuevo)" $100.000 x3 (2026-10-08 19:24Z, 2026-10-09 19:31Z y 19:38Z UTC) justo despues de Entregas de Turno. Pendiente: Gonzalo confirma conteo para registrar reversos.
+- Arreglo: abrirCaja lee db.getAllSesionesCaja() antes del aviso; useVentas escucha dp_sesiones_caja_changed; ControlCaja dispara ese evento tras entregar/cerrar jornada/quitar caja.
+- tsc: 0 errores en esos archivos. Falta build + deploy.
+
+
+## 2026-10-20 — Claude (Cowork) — Orden general + inventario de pendientes (NO se tocó código)
+- Trabajo de otros agentes del 15 al 20 de oct NO estaba anotado aquí. Queda en el código (sin commit desde 2026-10-08, rama feat/marketing-studio-y-ajustes):
+  - 15-oct: buscador de productos, sync "local gana" (sync-merge-local-gana.ts), Bóveda, Fiados empleados, finanzas personales, Reportes, vigía de ventas.
+  - 16-oct: cuadre de factura en Recepciones (cuadre-factura.ts), asistente helados, Diagnóstico financiero. (Último build dist: 16-oct 19:32.)
+  - 17-oct: AvisosCompromisos en Dashboard.
+  - 18-oct: Historial de cajas del día, Rutas de reparto mayoristas, Nómina, CCTV/auditoría profunda, GerenteComprasIA, Clientes.
+  - 20-oct: bitácora anti-robo en la nube (seguridad-nube.ts + tabla seguridad_eventos YA creada en Supabase, recibe datos), cuadre de turno descuenta retiros, alerta de retiros grandes/sin motivo, PIN gerente en descuentos grandes, equipo del turno (EquipoTurnoModal), dividir cuenta; Videovigilancia: clips por evento, modo estación, reintento de cámara.
+- Carpeta app/ (copia vieja, NO_DESPLEGAR_DESDE_AQUI): el 18-oct se "editaron" 7 archivos. Revisado: 5 solo cambiaron finales de línea; usePriceControl/useVentas tienen lógica que la carpeta real ya tiene (mejor). No hay nada que rescatar. No usar app/.
+- RIESGO: key.txt (llave sk-…) está en git y subida a GitHub desde el commit 00c52682. Hay que ROTAR esa llave en su proveedor y sacarla de git (git rm --cached key.txt). Se agregó a .gitignore junto con temporales y respaldos.
+- PENDIENTES (verificados contra código/Supabase): reversos de Bóveda por "cierre automático" (confirmar con Gonzalo); gasto pagado desde caja POS no se resta del cierre; anular gasto no devuelve plata a Bóveda; Modo Clásico de gastos sin "de dónde sale la plata"; foto de recibo en factura por total; ingresos extras solo locales; 46 políticas RLS abiertas en Supabase; 2 empleadas de ejemplo en nube; Nómina: cobertura panadero y horas extras de ley; Mayoreo: comisión, preventa ligada a ruta, rol vendedor limitado (AUTORIZO); checklist proveedor La 36 (pasos de Gonzalo en la app); test integridad-codigo espera "autoSeedData bloqueado" en usePriceControl.ts.
+- Falta: commit + build (npm run build) + deploy desde la RAÍZ en el PC de Gonzalo. No se pudo correr tests/tsc desde Cowork (node_modules de Windows).
+
+
+## 2026-10-20 — Claude (Cowork) — Gastos ↔ Caja y Bóveda (AUTORIZO Gonzalo)
+- Solo se tocó src/hooks/useFinanzas.ts (respaldo en _respaldo_2026-10-20/).
+- addGasto: si el gasto es origenTipo 'pos' + cajaId + efectivo + pagado, se agrega una SALIDA a esa caja (id `gasto-<idGasto>`, motivo "Gasto: ..."), así el cierre la descuenta. Si la caja ya está cerrada, avisa y no toca el cierre. No aplica a Recepciones (no mandan origenTipo) ni a créditos.
+- deleteGasto: si existía esa salida, agrega ENTRADA de reverso (`gasto-<id>-reverso`) en la caja (solo si sigue abierta). Si el gasto salió de una bóveda, devuelve la plata con un Ingreso "Reverso gasto anulado: ..." SOLO si encuentra el egreso original y no se había devuelto antes.
+- Pendiente: borrar un INGRESO extra no saca la plata de la bóveda (el ingreso no guarda bovedaId). tsc completo no corrió en Cowork (tiempo); revisión de sintaxis OK. Falta build + deploy.
+
+## 2026-10-20 — Claude (Cowork) — Videovigilancia: por qué nunca grabó + arreglo (AUTORIZO Gonzalo)
+- Supabase: `bitacora_visual` 0 filas y bucket `bitacora-visual` 0 archivos desde que existe (27-sep). Permisos abiertos (no era eso).
+- Causa: la imagen de las cámaras viene de go2rtc (otro origen) → el lienzo queda "contaminado" y el navegador no deja grabar. El puente /__camara solo servía con la app local y excluía URLs 127.0.0.1. Además en pantalla estaba Estación OFF, Clips "Solo eventos" y el botón Activar Grabación quedaba escondido.
+- Cambios: `Videovigilancia.tsx` — la grabación pide siempre una copia con crossOrigin (por puente si es local, directo si no); botonera con flex-wrap; botón "En revisión (posible problema)" + marca ⚠ ALERTA en la lista. `bitacora-visual.ts` — nueva `clipsEnRevision()` (alerta o malo/regular/por_mejorar). `herramientas/puente-cctv/go2rtc.yaml` — `api: origin: "*"` (CORS). Respaldo: `_respaldo_2026-10-20_videovigilancia/`.
+- tsc: 0 errores en esos archivos. Falta: reiniciar go2rtc, probar grabación real, build + deploy. Riesgo pendiente: bucket bitacora-visual con política ALL para `public`.
+- 2026-10-20 (2ª tanda, AUTORIZO): Videovigilancia botón maestro "Vigilar y grabar todo" (vigilarTodo: Estación ON + ODYSSEUS + Grabación + clips 'ambos'; apaga todo si ya está). "Activar Ojo IA" renombrado a "Cámara de este PC (Ojo IA)" (usa la webcam del PC, es aparte de las 4 cámaras). Parseo OK; tsc no terminó por tiempo desde Cowork. Pendiente: 3 carpetas Revisión/Sospechoso/Cuarentena.
+- 2026-10-20 (3ª): Videovigilancia muestra arriba el último resultado de grabación (estadoGrab/marcarGrab): guardado ✓, BLOQUEADO (con dirección de cámara sin clave), vacío, ERROR al guardar. Prueba real tras deploy: Grabando activo pero 0 clips en nube.
+
+## 2026-10-21 — Cursor — Videovigilancia: continuar fix grabación BLOQUEADO (Tailscale)
+
+### Qué dejó el agente anterior (2026-10-20, Claude Cowork) — NO PISAR
+- Diagnóstico correcto: lienzo contaminado (CORS) porque la imagen viene de go2rtc (otro origen).
+- UI de estado (`estadoGrab` / `marcarGrab`) que muestra el aviso rojo BLOQUEADO que Gonzalo ve hoy.
+- Botón maestro "Vigilar y grabar todo", CORS `origin: "*"` en `herramientas/puente-cctv/go2rtc.yaml`, `clipsEnRevision()`, bitácora anti-robo en nube.
+- Pendiente explícito que dejó: grabación real seguía en 0 clips; el puente `/__camara` no cubría Tailscale ni 127.0.0.1; faltaba proxy same-origin para Vercel.
+
+### Qué se quería (pedido Gonzalo 2026-10-21)
+- Que el navegador SÍ deje grabar para buscar indicios de robo (plata, comida, etc.), con foco en caja, helados y zona de venta.
+- Seguir el trabajo del agente anterior, documentar y terminar sin pisar.
+
+### Causa del aviso en pantalla (confirmada)
+- URL real de cámara 3: `https://desktop-…ts.net/api/stream.mjpeg?src=cam4` (Tailscale Funnel).
+- El fix del 20-oct pedía `crossOrigin` directo a esa URL; MJPEG cross-origin + Funnel suele fallar → caía a la `<img>` visible → lienzo contaminado → BLOQUEADO.
+- `/__camara` solo servía en app local HTTP y excluía localhost; no aplicaba a `.ts.net`.
+
+### Qué se hizo hoy (cambio mínimo, sin tocar archivos protegidos)
+1. **Nuevo** `api/camara.ts` — proxy Vercel: trae `frame.jpeg` de hosts permitidos (`.ts.net`, LAN, localhost) al mismo origen.
+2. **`Videovigilancia.tsx`** — grabación y captura IA usan siempre URL same-origin (`/__camara` en local, `/api/camara` en Vercel); ya no dibuja la `<img>` contaminada.
+3. **`vite.config.local.ts`** — puente local acepta localhost + Tailscale HTTPS y reescribe a `frame.jpeg`.
+4. **`odysseus-vigilancia.ts`** — regla nueva activa `helados_vitrina` (además de caja/mostrador).
+
+### Cómo probar
+1. Reiniciar go2rtc (`INICIAR_PUENTE_CCTV.bat`) si se tocó el yaml.
+2. Local: `ABRIR_DULCE_PLACER_LOCAL` → Videovigilancia → "Vigilar y grabar todo" → barra superior debe pasar a guardado ✓ (no BLOQUEADO).
+3. Producción: hace falta `PUBLICAR_A_PRODUCCION.bat` (raíz) para que exista `/api/camara` en Vercel.
+4. Verificar en Supabase Storage bucket `bitacora-visual` que aparezcan `.webm`.
+
+### Pendiente (siguiente agente / Gonzalo)
+- Deploy desde la raíz.
+- Carpetas Revisión/Sospechoso/Cuarentena (las dejó pendientes el 20-oct).
+- Riesgo bucket `bitacora-visual` con política ALL pública (no tocado).
+
+### Prueba local 2026-10-21
+- Local (puente): UI OK con regla Helados; al grabar 4 a la vez go2rtc devolvía 500 → Cámara 2 `BLOQUEADO: no llegó imagen grabable (puente local)`.
+- Vercel: sigue con BLOQUEADO viejo (lienzo contaminado) hasta deploy de `/api/camara`.
+- Fix robustez: puente + `api/camara` con fallback MJPEG→1 JPEG; grabación **secuencial** (1 cámara tras otra); reintento de frame; menos spam de frames (1.5s).
+- **2026-10-21 noche:** G: estuvo desconectada (no se podía editar). Remontada. Fix extra: en local, URLs Tailscale se reescriben a `http://127.0.0.1:1984` para grabar (sin pasar por Funnel); carga de frame por `fetch`+blob; fallback a Tailscale si local falla.
+- Gonzalo: Ctrl+Shift+R en Videovigilancia local → "Vigilar y grabar todo" → barra verde `video guardado en la nube ✓`.
+- **2026-10-21 ~21:00 deploy prod** (`dpl_5sujUGVXxmo6hj8qBxdMxTTKLa4Y` + redeploy aviso Funnel) a `app-eight-sigma-13.vercel.app`. Incluye `api/camara.ts` + fix Videovigilancia.
+- **Decisión Gonzalo 2026-10-21 noche:** grabar Bitácora **solo en LOCAL** por ahora. Funnel queda `tailnet only` (no público). Vercel sirve para ver la app / clips en nube; no se exige grabar desde producción hasta nuevo aviso.
+
+## 2026-10-21 noche — Visión Gonzalo: Escaneo forense al regresar (DVR + agentes)
+
+### Pedido (voz)
+Mientras no haya logística de grabar a distancia 24/7: al volver de viaje, un **agente de videovigilancia** debe hacer **escaneo total** de grabaciones ya guardadas (DVR y/o bitácora) de **1–3 semanas**, buscar anomalías, sacar **micrograbaciones** y guardarlas en carpetas de cuarentena / posibles anomalías para que un **segundo agente auditor/forense** las revise a fondo.
+
+### Qué vigilar (mínimo — checklist Director)
+- **Caja:** robo de plata, meter billete al bolsillo, esconder bajo gaveta, arrugar billete, devolución falsa / plata entregada sin cobro real.
+- **Venta / helados / mostrador:** producto que sale sin cobro.
+- **Consumo:** comer pan/producto (ej. collera) sin registrar en consumo/crédito.
+- **Panaderos / horno (atrás):** comportamiento y posibles faltas.
+- **Bodega gaseosas:** vigilancia de salida de mercancía.
+- Familiar en caja: **difícil de confirmar por IA** (no inventar parentesco); marcar solo “persona no identificada / interacción rara” si aplica.
+- Todo lo mínimo sospechoso → cuarentena para humano + agente forense.
+
+### Carpetas destino (pendiente implementación; ya anunciadas 2026-10-20)
+En bucket `bitacora-visual` (o equivalente):
+1. `revision/` — dudoso, revisar
+2. `sospechoso/` — fuerte indicios
+3. `cuarentena/` — anomalía para auditor forense (prioridad)
+
+Hoy existe parcialmente: `situaciones/{clasificacion}/…`, `trabajadores/…`, `clipsEnRevision()`, categorías ODYSSEUS (robo, consumo_no_registrado, producto_regalado, devolucion_simulada, incumplimiento). **Faltan** las 3 carpetas formales + flujo “Escaneo al regresar”.
+
+### Flujo objetivo (2 agentes)
+1. **ODYSSEUS (rastreador):** escaneo masivo del rango de fechas → candidatos + microclips → `cuarentena/` / `sospechoso/` / `revision/`.
+2. **Auditor forense (nuevo o rol en Agentes IA):** solo revisa cuarentena; contraste con ventas/caja/consumo del mismo horario; veredicto más profundo; reporte al Director.
+
+### Fuentes de video (importante)
+| Fuente | Estado |
+|--------|--------|
+| Bitácora app (clips 10s en Supabase) | Ya parcialmente lista si se grabó en local |
+| Grabaciones completas del **DVR** (días/semanas) | **NO** integradas aún: hace falta exportar/importar del DVR (USB/red) o API del NVR hacia el escáner |
+
+### Fases sugeridas
+1. Carpetas Revisión / Sospechoso / Cuarentena + botón “Ver cuarentena”.
+2. “Escaneo al regresar”: elegir rango (7/14/21 días) sobre clips ya en bitácora_visual + checklist de búsqueda.
+3. Agente **Auditor forense** (prompt + cola de cuarentena).
+4. Importación / enlace a archivos del DVR (depende de marca Hikvision y cómo Gonzalo exporta).
+
+### Decisión operativa mientras tanto
+- Seguir grabando en **local** cuando el PC esté en la panadería (alimenta la bitácora).
+- DVR sigue grabando en disco propio (respaldo físico).
+- Al regresar: prioridad = escaneo bitácora nube; luego sumar DVR cuando haya importación.
+
+### 2026-10-21 noche — AUTORIZO Gonzalo: arranque DVR + escaneo
+- DVR alcanzó en LAN: `http://192.168.18.141` modelo **DS-7104HGHI-F1** (ISAPI digest OK). Search 7d cam1 → 156+ tramos (MORE).
+- Claves: solo desde `herramientas/puente-cctv/go2rtc.yaml` vía puente `/__dvr` (no en el chat ni en el bundle).
+- Código nuevo/actualizado:
+  - `vite.config.local.ts` — plugin `puenteDvr` (`/__dvr?op=info|search`)
+  - `src/lib/dvr-hikvision.ts` — cliente
+  - `bitacora-visual.ts` — bandejas `revision|sospechoso|cuarentena` + `archivarClipEnBandejaForense` / `bandejaDesdeAnalisis`
+  - `odysseus-vigilancia.ts` — `promptEscaneoAlRegresar` + categorías plata_bolsillo, escondite_gaveta, billete_arrugado, bodega_gaseosa
+  - `Videovigilancia.tsx` — panel “Escaneo al regresar · DVR” (conectar, listar 7/14/21d, escanear bitácora → bandejas)
+- Hecho: inventario DVR + escaneo bitácora → cuarentena. Pendiente: recortar/bajar video RTSP del DVR a microclips automáticos; agente auditor forense dedicado.
+- **UI 2026-10-21 noche:** panel Bitácora con 4 pestañas claras — Videos (carpetas Todas/Revisión/Sospechoso/Cuarentena) · Escaneo (pasos 1-2-3) · Preguntar · Reglas. Menos botones amontonados.
+- **Bug IA 2026-10-21 noche:** logs `No hay proveedores de IA…` — con `aiMode=local` o primary ollama en Vercel solo intentaba Ollama (no existe en la nube). Fix: en Vercel priorizar Gemini/NVIDIA/OpenAI; con imagen forzar hybrid en `consultarAgente`; mensaje de error más claro. Deploy prod requerido.
+- **Fix escaneo 2026-10-21 noche (Cursor):** el botón “Escanear” solo miraba clips de bitácora (a menudo vacía) y no bajaba del DVR. Ahora: `/__dvr?op=picture|frame` + búsqueda con TZ Colombia `-05:00`; escaneo muestrea hasta 24 tramos de cámaras 1–4 (track 401 OK: foto + playback ffmpeg); anomalías → JPEG en bandejas. Solo con `vite.config.local.ts` en el PC del local. Pendiente: microclips de video (no solo frames) + auditor forense.
+- **Fix cuota IA 2026-10-21 ~23:30:** toast “No hay proveedores… Gemini 429 / DeepSeek Too Many / NVIDIA Gone” — DVR OK, cuota Gemini agotada + fallback a proveedores sin visión. `api/agente.ts`: con imagen solo Gemini/OpenAI-visión/Anthropic + reintento 429; escaneo pausa ODYSSEUS en vivo, 8–12 muestras, 6s entre llamadas, JPEG reducido. Preferir 7 días.

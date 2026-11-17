@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Lock, ArrowRightLeft, TrendingDown, TrendingUp, PiggyBank, Building2, PlusCircle, History, AlertCircle, CheckCircle, BrainCircuit, Bot, Download, Upload } from 'lucide-react';
+import { Lock, ArrowRightLeft, TrendingDown, TrendingUp, PiggyBank, Building2, PlusCircle, History, AlertCircle, CheckCircle, BrainCircuit, Bot, Download, Upload, Pencil, Trash2, Check, X as XIcon, RefreshCw, Info } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,12 +14,14 @@ import {
   getBovedas, addBoveda,
   getMovimientosBoveda, addMovimientoBoveda,
   exportBovedaBackup, importBovedaBackup,
+  setBovedaSaldoReal, deleteBoveda, renameBoveda,
   type Boveda, type MovimientoBoveda, type TipoMovimientoBoveda 
 } from '@/lib/boveda-store';
 import { cn } from '@/lib/utils';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { consultarAgente } from '@/constants/agentes';
 import { FlujoCajaProyector } from '@/components/boveda/FlujoCaja';
+import { hoyLocal } from '@/lib/fecha-local';
 
 export default function BovedaPage() {
   const { usuario } = useAuth();
@@ -71,6 +73,11 @@ export default function BovedaPage() {
   /** Detalle al tocar una cuenta (movimientos de esa bóveda) */
   const [bovedaDetalle, setBovedaDetalle] = useState<Boveda | null>(null);
 
+  // Edición inline de saldo real por bóveda: bovedaId → valor de texto del input
+  const [editandoSaldo, setEditandoSaldo] = useState<Record<string, string>>({});
+  // Renombrar bóveda inline
+  const [editandoNombre, setEditandoNombre] = useState<Record<string, string>>({});
+
   // Tabs
   const [activeTab, setActiveTab] = useState('cuentas');
 
@@ -91,7 +98,7 @@ export default function BovedaPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `boveda-respaldo-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `boveda-respaldo-${hoyLocal()}.json`;
       a.click();
       URL.revokeObjectURL(url);
       toast.success('Respaldo descargado — guárdalo en otro lugar seguro');
@@ -282,6 +289,41 @@ export default function BovedaPage() {
     toast.info(`Conciliación realizada: ${tipo} de ${formatCurrency(monto)}`);
   };
 
+  /** Guardar el saldo real ingresado para una bóveda */
+  const handleGuardarSaldoReal = (boveda: Boveda) => {
+    const raw = editandoSaldo[boveda.id];
+    const nuevo = parseFloat(raw?.replace(/,/g, '') ?? '');
+    if (isNaN(nuevo) || nuevo < 0) { toast.error('Monto inválido'); return; }
+    setBovedaSaldoReal(boveda.id, nuevo, usuario?.nombre || 'Administrador');
+    setEditandoSaldo(prev => { const n = { ...prev }; delete n[boveda.id]; return n; });
+    loadData();
+    const diff = nuevo - boveda.saldo;
+    if (diff === 0) toast.success('El saldo ya estaba correcto ✓');
+    else toast.success(`Saldo actualizado: ${diff > 0 ? '+' : ''}${formatCurrency(diff)} de ajuste`);
+  };
+
+  /** Guardar nombre editado */
+  const handleGuardarNombre = (boveda: Boveda) => {
+    const nuevo = editandoNombre[boveda.id]?.trim();
+    if (!nuevo) { toast.error('El nombre no puede estar vacío'); return; }
+    renameBoveda(boveda.id, nuevo);
+    setEditandoNombre(prev => { const n = { ...prev }; delete n[boveda.id]; return n; });
+    loadData();
+    toast.success('Nombre actualizado');
+  };
+
+  /** Eliminar bóveda */
+  const handleEliminarBoveda = (boveda: Boveda) => {
+    if (boveda.saldo !== 0) {
+      toast.error(`No se puede eliminar: tiene saldo de ${formatCurrency(boveda.saldo)}. Pásalo a otra bóveda primero.`);
+      return;
+    }
+    if (!window.confirm(`¿Eliminar la bóveda "${boveda.nombre}"? Esta acción no se puede deshacer.`)) return;
+    deleteBoveda(boveda.id);
+    loadData();
+    toast.success('Bóveda eliminada');
+  };
+
   const getIcon = (tipo: string) => {
     switch(tipo) {
       case 'Caja Fuerte': return <Lock className="w-5 h-5" />;
@@ -387,44 +429,143 @@ export default function BovedaPage() {
           <TabsContent value="cuentas" className="mt-0 space-y-8">
             {/* GRILLA DE BÓVEDAS */}
             <div>
-              <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 mb-4 ml-2">Cuentas Internas</h3>
+              <div className="flex items-center justify-between mb-4 ml-1">
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-400">Cuentas Internas</h3>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                  <Pencil className="w-3 h-3" /> Toca ✏️ para actualizar el saldo físico real
+                </span>
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bovedas.map(boveda => (
-                  <Card key={boveda.id} className="rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group">
-                    <CardContent className="p-5 flex flex-col justify-between h-full">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className={cn(
-                            "w-10 h-10 rounded-xl flex items-center justify-center relative",
-                            boveda.tipo === 'Caja Fuerte' ? "bg-amber-100 text-amber-600" :
-                            boveda.tipo === 'Banco' ? "bg-blue-100 text-blue-600" : 
-                            boveda.tipo === 'Provisión' ? "bg-purple-100 text-purple-600" : "bg-emerald-100 text-emerald-600"
-                          )}>
-                            {boveda.saldo < 100000 && boveda.tipo === 'Base' && (
-                              <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full animate-pulse border-2 border-white dark:border-slate-900"></span>
-                            )}
-                            {getIcon(boveda.tipo)}
+                {bovedas.map(boveda => {
+                  const editandoEste = editandoSaldo[boveda.id] !== undefined;
+                  const editandoNombreEste = editandoNombre[boveda.id] !== undefined;
+                  const colorIcon = boveda.tipo === 'Caja Fuerte' ? "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+                    : boveda.tipo === 'Banco' ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                    : boveda.tipo === 'Provisión' ? "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+                    : "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400";
+                  return (
+                    <Card key={boveda.id} className={cn(
+                      "rounded-3xl border shadow-sm transition-all",
+                      editandoEste
+                        ? "border-indigo-400 dark:border-indigo-600 shadow-indigo-100 dark:shadow-indigo-900/20"
+                        : "border-slate-100 dark:border-slate-800 hover:shadow-md"
+                    )}>
+                      <CardContent className="p-5 flex flex-col gap-3">
+                        {/* Cabecera: icono + nombre (editable) + acciones */}
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center shrink-0 relative", colorIcon)}>
+                              {boveda.saldo < 100000 && boveda.tipo === 'Base' && (
+                                <span className="absolute -top-1 -right-1 w-3 h-3 bg-rose-500 rounded-full animate-pulse border-2 border-white dark:border-slate-900" />
+                              )}
+                              {getIcon(boveda.tipo)}
+                            </div>
+                            <div className="min-w-0">
+                              {editandoNombreEste ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    autoFocus
+                                    value={editandoNombre[boveda.id]}
+                                    onChange={e => setEditandoNombre(p => ({ ...p, [boveda.id]: e.target.value }))}
+                                    onKeyDown={e => { if (e.key === 'Enter') handleGuardarNombre(boveda); if (e.key === 'Escape') setEditandoNombre(p => { const n={...p}; delete n[boveda.id]; return n; }); }}
+                                    className="text-sm font-black border border-indigo-300 rounded-lg px-2 py-0.5 w-32 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-800 dark:text-white"
+                                  />
+                                  <button onClick={() => handleGuardarNombre(boveda)} className="p-1 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600"><Check className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => setEditandoNombre(p => { const n={...p}; delete n[boveda.id]; return n; })} className="p-1 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-300"><XIcon className="w-3.5 h-3.5" /></button>
+                                </div>
+                              ) : (
+                                <p className="font-black text-slate-900 dark:text-white leading-tight truncate">{boveda.nombre}</p>
+                              )}
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                {boveda.tipo}{boveda.saldo < 100000 && boveda.tipo === 'Base' && <span className="text-rose-500 ml-1">· Alerta liquidez</span>}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-black text-slate-900 dark:text-white leading-tight">{boveda.nombre}</p>
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1">
-                              {boveda.tipo} 
-                              {boveda.saldo < 100000 && boveda.tipo === 'Base' && <span className="text-rose-500">- Alerta Liquidez</span>}
-                            </p>
+                          {/* Botones de acción */}
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              title="Renombrar"
+                              onClick={() => setEditandoNombre(p => ({ ...p, [boveda.id]: boveda.nombre }))}
+                              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
+                            ><Pencil className="w-3.5 h-3.5" /></button>
+                            <button
+                              title="Eliminar bóveda"
+                              onClick={() => handleEliminarBoveda(boveda)}
+                              className="p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 text-slate-400 hover:text-rose-500 transition-colors"
+                            ><Trash2 className="w-3.5 h-3.5" /></button>
                           </div>
                         </div>
-                      </div>
-                      <div className="mt-2">
-                        <p className="text-2xl font-black text-slate-700 dark:text-slate-200 tabular-nums">{formatCurrency(boveda.saldo)}</p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+
+                        {/* Saldo (editable inline) */}
+                        {editandoEste ? (
+                          <div className="space-y-2">
+                            <p className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-widest">
+                              💵 Ingresa el dinero REAL en esta caja:
+                            </p>
+                            <div className="flex items-center gap-1">
+                              <span className="text-slate-400 font-bold text-sm">$</span>
+                              <input
+                                autoFocus
+                                type="number"
+                                min="0"
+                                value={editandoSaldo[boveda.id]}
+                                onChange={e => setEditandoSaldo(p => ({ ...p, [boveda.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') handleGuardarSaldoReal(boveda); if (e.key === 'Escape') setEditandoSaldo(p => { const n={...p}; delete n[boveda.id]; return n; }); }}
+                                className="flex-1 text-lg font-black border border-indigo-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-800 dark:text-white"
+                                placeholder={String(boveda.saldo)}
+                              />
+                            </div>
+                            <p className="text-[10px] text-slate-400">Sistema dice: {formatCurrency(boveda.saldo)}</p>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleGuardarSaldoReal(boveda)}
+                                className="flex-1 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black flex items-center justify-center gap-1 active:scale-95"
+                              ><Check className="w-3.5 h-3.5" /> Guardar</button>
+                              <button
+                                onClick={() => setEditandoSaldo(p => { const n={...p}; delete n[boveda.id]; return n; })}
+                                className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-black active:scale-95"
+                              ><XIcon className="w-3.5 h-3.5" /></button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-end justify-between">
+                            <div>
+                              <p className="text-2xl font-black text-slate-700 dark:text-slate-200 tabular-nums">{formatCurrency(boveda.saldo)}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Saldo en sistema</p>
+                            </div>
+                            <button
+                              onClick={() => setEditandoSaldo(p => ({ ...p, [boveda.id]: String(boveda.saldo) }))}
+                              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 text-[11px] font-black hover:bg-indigo-100 dark:hover:bg-indigo-900/40 transition-colors active:scale-95"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" /> Actualizar
+                            </button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
           </TabsContent>
 
-          <TabsContent value="proyeccion" className="mt-0">
+          <TabsContent value="proyeccion" className="mt-0 space-y-4">
+            {/* Panel explicativo: para qué sirve y cómo aprovecharlo */}
+            <div className="rounded-2xl border border-indigo-100 dark:border-indigo-800/50 bg-indigo-50/70 dark:bg-indigo-950/30 px-4 py-3 flex gap-3">
+              <Info className="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" />
+              <div className="text-sm space-y-1.5">
+                <p className="font-black text-indigo-800 dark:text-indigo-200">¿Para qué sirve el Flujo de Provisiones?</p>
+                <ul className="text-xs text-indigo-700/80 dark:text-indigo-300/80 space-y-1 list-disc list-inside">
+                  <li><strong>Proyectar compromisos futuros</strong>: nóminas, proveedores, servicios — para saber si habrá plata cuando toque pagar.</li>
+                  <li><strong>Reservar dinero con anticipación</strong>: crear una "provisión" es apartar fondos antes de que llegue el gasto.</li>
+                  <li><strong>Ver el calendario de caja</strong>: semana a semana, ¿qué sale y qué entra? ¿Queda saldo positivo?</li>
+                  <li><strong>Detectar semanas críticas</strong>: si el saldo proyectado cae a negativo, hay que actuar antes.</li>
+                </ul>
+                <p className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold pt-1">
+                  💡 Ejemplo: si el viernes hay que pagar nómina ($650.000) y el sistema detecta que en las bóvedas solo hay $420.000, esta pestaña te avisa con días de anticipación.
+                </p>
+              </div>
+            </div>
             <FlujoCajaProyector bovedas={bovedas} />
           </TabsContent>
         </Tabs>
